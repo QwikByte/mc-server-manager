@@ -36,6 +36,10 @@ version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's fl
 The agent creates the container again with the same data; the old container is only removed once the new one
 exists.
 
+Each node has settings for its servers: the storage location preselected for new servers, a port range (new
+servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
+the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
+
 ## Networks
 
 A network puts Paper or Purpur servers behind a Velocity proxy, on one node or spread across nodes. The master stores

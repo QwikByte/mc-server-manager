@@ -30,13 +30,7 @@ function CopyCommand({ command }: { command: string }) {
 
   return (
     <InputGroup>
-      <InputGroupInput
-        readOnly
-        value={command}
-        aria-label="Command"
-        className="font-mono text-xs"
-        onFocus={(e) => e.target.select()}
-      />
+      <InputGroupInput readOnly value={command} aria-label="Command" className="font-mono text-xs" onFocus={(e) => e.target.select()} />
       <InputGroupAddon align="inline-end">
         <InputGroupButton size="icon-xs" aria-label={copied ? "Copied" : "Copy command"} onClick={copy}>
           {copied ? <CheckIcon /> : <CopyIcon />}

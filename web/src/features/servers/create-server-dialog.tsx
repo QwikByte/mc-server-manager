@@ -28,18 +28,26 @@ import {
 } from "@/components/ui/select"
 import { nodeQuery } from "@/features/nodes/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
-import { type NewServer, useCreateServer } from "./api"
-import { defaults, memoryOptionsMb, serverType, serverTypes } from "./server-types"
+import { type NewServer, serversQuery, useCreateServer } from "./api"
+import { defaults, memoryOptionsMb, serverType, serverTypes, suggestPort } from "./server-types"
 
-const initial: NewServer = { name: "", type: "paper", version: "", ...defaults("paper"), acceptEula: false, storage: "default" }
+// Port and storage stay unset until chosen, so that the node's suggestions apply.
+type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string }
+
+const initial: Form = { name: "", type: "paper", version: "", memoryMb: defaults("paper").memoryMb, acceptEula: false }
 
 export function CreateServerDialog({ nodeId }: { nodeId: string }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(initial)
   const create = useCreateServer(nodeId)
   const { data: node } = useQuery(nodeQuery(nodeId))
+  const { data: servers } = useQuery(serversQuery(nodeId))
   const locations = node?.info?.storage ?? []
   const proxy = serverType(form.type).proxy
+  const port =
+    form.port ??
+    suggestPort(servers?.map((s) => s.port) ?? [], defaults(form.type).port, node?.portMin ?? undefined, node?.portMax ?? undefined)
+  const storage = form.storage ?? locations.find((l) => l.name === node?.defaultStorage)?.name ?? "default"
 
   function onOpenChange(next: boolean) {
     setOpen(next)
@@ -49,22 +57,16 @@ export function CreateServerDialog({ nodeId }: { nodeId: string }) {
     }
   }
 
-  // Switching between game server and proxy updates port and memory unless they were changed.
+  // Switching between game server and proxy updates the memory unless it was changed.
   function changeType(type: string) {
-    const before = defaults(form.type)
-    const after = defaults(type)
-    setForm({
-      ...form,
-      type,
-      port: form.port === before.port ? after.port : form.port,
-      memoryMb: form.memoryMb === before.memoryMb ? after.memoryMb : form.memoryMb,
-    })
+    const before = defaults(form.type).memoryMb
+    setForm({ ...form, type, memoryMb: form.memoryMb === before ? defaults(type).memoryMb : form.memoryMb })
   }
 
   function submit(event: FormEvent) {
     event.preventDefault()
     create.mutate(
-      { ...form, version: proxy ? "" : form.version.trim() },
+      { ...form, port, storage, version: proxy ? "" : form.version.trim() },
       {
         onSuccess: (server) => {
           toast.success(`Created ${server.name}`)
@@ -169,7 +171,7 @@ export function CreateServerDialog({ nodeId }: { nodeId: string }) {
                   max={65535}
                   required
                   className="font-mono"
-                  value={form.port}
+                  value={port}
                   onChange={(e) => setForm({ ...form, port: e.target.valueAsNumber || 0 })}
                 />
               </Field>
@@ -177,7 +179,7 @@ export function CreateServerDialog({ nodeId }: { nodeId: string }) {
             {locations.length > 1 && (
               <Field>
                 <FieldLabel htmlFor="server-storage">Storage</FieldLabel>
-                <Select value={form.storage} onValueChange={(storage) => setForm({ ...form, storage })}>
+                <Select value={storage} onValueChange={(storage) => setForm({ ...form, storage })}>
                   <SelectTrigger id="server-storage" className="w-full">
                     <SelectValue />
                   </SelectTrigger>

@@ -23,9 +23,10 @@ const (
 	createTimeout = 10 * time.Minute // includes pulling the server image
 )
 
-// Nodes provides connections to node agents.
+// Nodes provides the nodes and connections to their agents.
 type Nodes interface {
 	List(ctx context.Context) ([]node.Node, error)
+	Get(ctx context.Context, id string) (node.Node, error)
 	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
 }
 
@@ -188,6 +189,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout)
 	defer cancel()
 	c, err := h.client(ctx, r)
+	if err == nil {
+		err = h.checkLimits(ctx, r.PathValue("node"), "", req.Port, req.MemoryMB)
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -232,6 +236,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // a new Java version pulls an image
 	defer cancel()
 	c, err := h.client(ctx, r)
+	if err == nil {
+		err = h.checkLimits(ctx, r.PathValue("node"), r.PathValue("id"), req.Port, req.MemoryMB)
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return

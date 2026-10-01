@@ -19,6 +19,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/nodes", h.list)
 	mux.HandleFunc("POST /api/nodes", h.create)
 	mux.HandleFunc("GET /api/nodes/{id}", h.get)
+	mux.HandleFunc("PUT /api/nodes/{id}", h.update)
 	mux.HandleFunc("DELETE /api/nodes/{id}", h.delete)
 	mux.HandleFunc("POST /api/nodes/{id}/join-token", h.joinToken)
 	mux.HandleFunc("POST /api/nodes/{id}/certificate", h.renewCertificate)
@@ -109,6 +110,24 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, map[string]any{"node": view{Node: n, Status: "pending"}, "joinToken": token.String()})
+}
+
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name    string `json:"name"`
+		Address string `json:"address"`
+		Settings
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	n, err := h.svc.Update(r.Context(), Node{ID: r.PathValue("id"), Name: req.Name, Address: req.Address, Settings: req.Settings})
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, h.probe(r.Context(), n))
 }
 
 func (h *Handler) joinToken(w http.ResponseWriter, r *http.Request) {

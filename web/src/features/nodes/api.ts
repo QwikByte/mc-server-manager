@@ -21,7 +21,18 @@ export interface StorageLocation {
   totalBytes: number
 }
 
-export interface Node {
+/** Settings that apply to the servers of a node. */
+export interface NodeSettings {
+  /** Storage location preselected for new servers. */
+  defaultStorage: string
+  /** Port range of servers; null allows any port. */
+  portMin: number | null
+  portMax: number | null
+  /** Memory kept free for the system; null allows assigning more than the node has. */
+  memoryReserveMb: number | null
+}
+
+export interface Node extends NodeSettings {
   id: string
   name: string
   address: string
@@ -30,6 +41,12 @@ export interface Node {
   status: NodeStatus
   info?: NodeInfo
   certificateExpiresAt?: string
+}
+
+/** Memory in MB that servers on a node can get, or undefined if it isn't limited or known. */
+export function memoryLimitMb(node: Node): number | undefined {
+  if (node.memoryReserveMb === null || !node.info?.memoryBytes) return undefined
+  return Math.max(0, Math.floor(node.info.memoryBytes / 1024 ** 2) - node.memoryReserveMb)
 }
 
 export const nodesQuery = queryOptions({
@@ -49,6 +66,14 @@ export function useCreateNode() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: { name: string; address: string }) => api<{ node: Node; joinToken: string }>("/nodes", { body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey }),
+  })
+}
+
+export function useUpdateNode(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: NodeSettings & { name: string; address: string }) => api<Node>(`/nodes/${id}`, { method: "PUT", body: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey }),
   })
 }

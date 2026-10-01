@@ -191,6 +191,7 @@ func (m *master) panel(t *testing.T) *httptest.Server {
 	network.NewHandler(networks).Register(mux)
 	files.NewHandler(m.nodes).Register(mux)
 	properties.NewHandler(m.nodes).Register(mux)
+	node.NewHandler(m.nodes).Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -294,7 +295,7 @@ type fakeRuntime struct {
 }
 
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
-	return runtime.Info{Name: "fake"}, nil
+	return runtime.Info{Name: "fake", CPUs: 4, MemoryBytes: 8 << 30}, nil
 }
 
 func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) {

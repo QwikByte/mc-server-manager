@@ -5,9 +5,11 @@ import type { ReactNode } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ServerList } from "@/features/servers/server-list"
-import { formatBytes, formatDate } from "@/lib/format"
-import { type Node, nodeQuery } from "./api"
+import { serversQuery } from "@/features/servers/api"
+import { formatBytes, formatDate, formatMegabytes } from "@/lib/format"
+import { memoryLimitMb, type Node, nodeQuery } from "./api"
 import { NewJoinTokenButton, RemoveNodeButton, RenewCertificateButton } from "./node-actions"
+import { NodeSettingsDialog } from "./node-settings-dialog"
 import { NodeStatusLabel } from "./node-status"
 import { StorageList } from "./storage-list"
 
@@ -36,6 +38,7 @@ export function NodePage() {
             description={<span className="font-mono">{node.address}</span>}
             actions={
               <>
+                <NodeSettingsDialog node={node} />
                 {node.status === "online" && <RenewCertificateButton node={node} />}
                 {node.enrolledAt && <NewJoinTokenButton node={node} />}
                 <RemoveNodeButton node={node} />
@@ -52,18 +55,25 @@ export function NodePage() {
 
 function NodeFacts({ node }: { node: Node }) {
   const info = node.info
+  const { data: servers } = useQuery({ ...serversQuery(node.id), enabled: node.status === "online" })
+  const assigned = servers?.reduce((sum, s) => sum + s.memoryMb, 0)
+  const limit = memoryLimitMb(node)
   const facts: [string, ReactNode][] = [
     ["Status", <NodeStatusLabel key="status" status={node.status} />],
     ["Hostname", info?.hostname],
     ["System", info?.os],
     ["CPUs", info?.cpuCount || undefined],
     ["Memory", info?.memoryBytes ? formatBytes(info.memoryBytes) : undefined],
+    [
+      "Assigned to servers",
+      assigned === undefined ? undefined : `${formatMegabytes(assigned)}${limit === undefined ? "" : ` of ${formatMegabytes(limit)}`}`,
+    ],
     ["Runtime", info?.runtime],
     ["Agent", info?.agentVersion],
     ["Certificate valid until", node.certificateExpiresAt && formatDate(node.certificateExpiresAt)],
   ]
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-y py-4 sm:grid-cols-4 lg:grid-cols-8">
+    <dl className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-6 gap-y-4 border-y py-4">
       {facts
         .filter(([, value]) => value !== undefined && value !== "")
         .map(([term, value]) => (

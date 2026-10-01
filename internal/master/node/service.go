@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -39,7 +40,24 @@ type Node struct {
 	Address    string     `json:"address"`
 	EnrolledAt *time.Time `json:"enrolledAt,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
+	Settings
 }
+
+// Settings apply to the servers of a node.
+type Settings struct {
+	// DefaultStorage is the storage location preselected for new servers.
+	DefaultStorage string `json:"defaultStorage"`
+	// PortMin and PortMax limit the ports of servers; nil allows any port.
+	PortMin *uint32 `json:"portMin"`
+	PortMax *uint32 `json:"portMax"`
+	// MemoryReserveMB is kept free of server memory for the system; nil allows
+	// assigning more memory than the node has.
+	MemoryReserveMB *uint32 `json:"memoryReserveMb"`
+}
+
+const nodeColumns = `id, name, address, enrolled_at, created_at, default_storage, port_min, port_max, memory_reserve_mb`
+
+var storageName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 type Service struct {
 	mcsmv1.UnimplementedEnrollmentServiceServer
@@ -61,22 +79,70 @@ func NewService(db *sql.DB, ca *pki.CA, cert *pki.Holder, enrollAddr string) *Se
 // Create registers a node and returns the join token its agent enrolls with.
 func (s *Service) Create(ctx context.Context, name, address string) (Node, enrollment.Token, error) {
 	n := Node{ID: strings.ToLower(rand.Text()), Name: strings.TrimSpace(name), Address: strings.TrimSpace(address), CreatedAt: time.Now()}
-	if n.Name == "" || len(n.Name) > 64 {
-		return n, enrollment.Token{}, httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
-	}
-	if _, _, err := net.SplitHostPort(n.Address); err != nil {
-		return n, enrollment.Token{}, httpapi.Errorf(http.StatusBadRequest, "Enter the agent address as host:port, for example 203.0.113.10:7443.")
+	if err := validate(n); err != nil {
+		return n, enrollment.Token{}, err
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO nodes (id, name, address, created_at) VALUES (?, ?, ?, ?)`,
 		n.ID, n.Name, n.Address, n.CreatedAt.Unix())
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			err = httpapi.Errorf(http.StatusConflict, "A node named %q already exists.", n.Name)
-		}
-		return n, enrollment.Token{}, err
+		return n, enrollment.Token{}, uniqueName(err, n.Name)
 	}
 	token, err := s.NewJoinToken(ctx, n.ID)
 	return n, token, err
+}
+
+// Update changes the name, address and settings of a node. A new address applies to
+// the next connection; the node keeps its identity.
+func (s *Service) Update(ctx context.Context, n Node) (Node, error) {
+	n.Name, n.Address = strings.TrimSpace(n.Name), strings.TrimSpace(n.Address)
+	if err := validate(n); err != nil {
+		return n, err
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE nodes SET name = ?, address = ?, default_storage = ?, port_min = ?, port_max = ?, memory_reserve_mb = ?
+		WHERE id = ?`, n.Name, n.Address, n.DefaultStorage, n.PortMin, n.PortMax, n.MemoryReserveMB, n.ID)
+	if err == nil && rowsAffected(res) == 0 {
+		err = errNotFound
+	}
+	if err != nil {
+		return n, uniqueName(err, n.Name)
+	}
+	s.mu.Lock()
+	if conn, ok := s.conns[n.ID]; ok && conn.Target() != n.Address {
+		conn.Close()
+		delete(s.conns, n.ID)
+	}
+	s.mu.Unlock()
+	return s.Get(ctx, n.ID)
+}
+
+func validate(n Node) error {
+	switch {
+	case n.Name == "" || len(n.Name) > 64:
+		return httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
+	case !validAddress(n.Address):
+		return httpapi.Errorf(http.StatusBadRequest, "Enter the agent address as host:port, for example 203.0.113.10:7443.")
+	case n.DefaultStorage != "" && !storageName.MatchString(n.DefaultStorage):
+		return httpapi.Errorf(http.StatusBadRequest, "Choose a storage location of the node.")
+	case (n.PortMin == nil) != (n.PortMax == nil),
+		n.PortMin != nil && (*n.PortMin < 1024 || *n.PortMax > 65535 || *n.PortMin > *n.PortMax):
+		return httpapi.Errorf(http.StatusBadRequest, "Enter a port range from 1024 to 65535, or none.")
+	case n.MemoryReserveMB != nil && *n.MemoryReserveMB > 1<<20:
+		return httpapi.Errorf(http.StatusBadRequest, "Enter the memory to keep free in MB.")
+	}
+	return nil
+}
+
+func validAddress(address string) bool {
+	_, _, err := net.SplitHostPort(address)
+	return err == nil
+}
+
+func uniqueName(err error, name string) error {
+	if strings.Contains(err.Error(), "UNIQUE") {
+		return httpapi.Errorf(http.StatusConflict, "A node named %q already exists.", name)
+	}
+	return err
 }
 
 // NewJoinToken replaces the pending join token of a node, e.g. to reinstall its agent.
@@ -112,7 +178,7 @@ func (s *Service) Enroll(ctx context.Context, req *mcsmv1.EnrollRequest) (*mcsmv
 }
 
 func (s *Service) List(ctx context.Context) ([]Node, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, address, enrolled_at, created_at FROM nodes ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+nodeColumns+` FROM nodes ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +195,7 @@ func (s *Service) List(ctx context.Context) ([]Node, error) {
 }
 
 func (s *Service) Get(ctx context.Context, id string) (Node, error) {
-	n, err := scanNode(s.db.QueryRowContext(ctx, `SELECT id, name, address, enrolled_at, created_at FROM nodes WHERE id = ?`, id))
+	n, err := scanNode(s.db.QueryRowContext(ctx, `SELECT `+nodeColumns+` FROM nodes WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		err = errNotFound
 	}
@@ -190,14 +256,23 @@ func scanNode(row scanner) (Node, error) {
 	var n Node
 	var enrolledAt sql.NullInt64
 	var createdAt int64
-	if err := row.Scan(&n.ID, &n.Name, &n.Address, &enrolledAt, &createdAt); err != nil {
+	var portMin, portMax, reserve sql.Null[uint32]
+	if err := row.Scan(&n.ID, &n.Name, &n.Address, &enrolledAt, &createdAt, &n.DefaultStorage, &portMin, &portMax, &reserve); err != nil {
 		return n, err
 	}
 	n.CreatedAt = time.Unix(createdAt, 0)
+	n.PortMin, n.PortMax, n.MemoryReserveMB = nullable(portMin), nullable(portMax), nullable(reserve)
 	if enrolledAt.Valid {
 		n.EnrolledAt = new(time.Unix(enrolledAt.Int64, 0))
 	}
 	return n, nil
+}
+
+func nullable[T any](v sql.Null[T]) *T {
+	if !v.Valid {
+		return nil
+	}
+	return &v.V
 }
 
 func rowsAffected(res sql.Result) int64 {
