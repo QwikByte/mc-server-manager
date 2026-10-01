@@ -1,16 +1,6 @@
 import { PlayIcon, StopIcon, TrashIcon } from "@phosphor-icons/react"
 import { toast } from "sonner"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { type Server, type ServerAction, useServerAction } from "./api"
 
@@ -45,27 +35,18 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
           Start
         </Button>
       )}
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
+      <ConfirmDialog
+        trigger={
           <Button size="icon-sm" variant="ghost" aria-label={`Delete ${server.name}`} disabled={mutation.isPending}>
             <TrashIcon />
           </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {server.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This stops the server and permanently deletes it with all worlds, plugins and settings. This can't be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => run("delete", `Deleted ${server.name}`, onDeleted)}>
-              Delete server
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        }
+        title={`Delete ${server.name}?`}
+        description="This stops the server and permanently deletes it with all worlds, plugins and settings. This can't be undone."
+        action="Delete server"
+        destructive
+        onConfirm={() => run("delete", `Deleted ${server.name}`, onDeleted)}
+      />
     </div>
   )
 }

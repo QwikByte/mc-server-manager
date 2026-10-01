@@ -3,6 +3,7 @@ package e2e
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"iter"
@@ -24,50 +25,24 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
 	agentnode "github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
 func TestEnrollAndControlNode(t *testing.T) {
-	ctx, dir := t.Context(), t.TempDir()
-
-	// Master with its enrollment endpoint.
-	db, err := database.Open(filepath.Join(dir, "master.db"))
-	check(t, err)
-	t.Cleanup(func() { db.Close() })
-	ca, err := pki.LoadOrCreateCA(filepath.Join(dir, "master"))
-	check(t, err)
-	cert, err := ca.MasterCertificate()
-	check(t, err)
-	masterCert, err := pki.NewHolder(cert)
-	check(t, err)
-	enrollListener := listen(t)
-	nodes := node.NewService(db, ca, masterCert, enrollListener.Addr().String())
-	t.Cleanup(nodes.Close)
-	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
-	mcsmv1.RegisterEnrollmentServiceServer(enrollServer, nodes)
-	serve(t, enrollServer, enrollListener)
-
-	// Register the node and enroll its agent; the join token works only once.
-	agentListener := listen(t)
-	n, token, err := nodes.Create(ctx, "node-1", agentListener.Addr().String())
-	check(t, err)
-	agentDir := filepath.Join(dir, "agent")
-	check(t, enroll.Run(ctx, token.String(), agentDir))
-	if err := enroll.Run(ctx, token.String(), t.TempDir()); status.Code(err) != codes.PermissionDenied {
+	ctx := t.Context()
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	if err := enroll.Run(ctx, a.token.String(), t.TempDir()); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("reused join token: got %v, want PermissionDenied", err)
 	}
 
-	// Agent serving with its new credentials.
-	identity, err := agentnode.LoadIdentity(agentDir)
-	check(t, err)
-	agentTLS := credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))
-	serve(t, app.NewGRPCServer(&fakeRuntime{}, identity, grpc.Creds(agentTLS)), agentListener)
-
 	// The master controls the node.
-	conn, err := nodes.Conn(ctx, n.ID)
+	conn, err := m.nodes.Conn(ctx, a.node.ID)
 	check(t, err)
 	info, err := mcsmv1.NewNodeServiceClient(conn).GetInfo(ctx, &mcsmv1.GetInfoRequest{})
 	check(t, err)
@@ -110,11 +85,7 @@ func TestEnrollAndControlNode(t *testing.T) {
 	}
 
 	// The master relays the console to the browser as Server-Sent Events.
-	mux := http.NewServeMux()
-	server.NewHandler(nodes).Register(mux)
-	panel := httptest.NewServer(mux)
-	t.Cleanup(panel.Close)
-	res, err := http.Get(panel.URL + "/api/nodes/" + n.ID + "/servers/" + id + "/logs")
+	res, err := http.Get(m.panel(t).URL + "/api/nodes/" + a.node.ID + "/servers/" + id + "/logs")
 	check(t, err)
 	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
@@ -153,12 +124,12 @@ func TestEnrollAndControlNode(t *testing.T) {
 
 	// The master renews the node certificate: the agent stores it and presents it to
 	// new connections without a restart.
-	enrolled := identity.Get().Leaf
-	renewed, err := nodes.RenewCertificate(ctx, n.ID)
+	enrolled := a.identity.Get().Leaf
+	renewed, err := m.nodes.RenewCertificate(ctx, a.node.ID)
 	check(t, err)
-	_, presented, err := nodes.Status(ctx, n.ID)
+	_, presented, err := m.nodes.Status(ctx, a.node.ID)
 	check(t, err)
-	stored, err := pki.LoadKeyPair(agentDir, enroll.NodeCert)
+	stored, err := pki.LoadKeyPair(a.dir, enroll.NodeCert)
 	check(t, err)
 	if renewed.Equal(enrolled) || !presented.Equal(renewed) || !stored.Leaf.Equal(renewed) {
 		t.Fatal("the renewed certificate is not in use")
@@ -170,11 +141,73 @@ func TestEnrollAndControlNode(t *testing.T) {
 	check(t, err)
 	foreignCSR, err := pki.NewCSR(pki.NewKey())
 	check(t, err)
-	foreign, err := ca.SignNodeCSR(foreignCSR, n.ID)
+	foreign, err := m.ca.SignNodeCSR(foreignCSR, a.node.ID)
 	check(t, err)
 	if _, err := nodeClient.InstallCertificate(ctx, &mcsmv1.InstallCertificateRequest{CertificateDer: foreign}); status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("foreign certificate: got %v, want FailedPrecondition", err)
 	}
+}
+
+// master is a master with its enrollment endpoint.
+type master struct {
+	db         *sql.DB
+	ca         *pki.CA
+	nodes      *node.Service
+	enrollAddr string
+}
+
+func startMaster(t *testing.T) *master {
+	dir := t.TempDir()
+	db, err := database.Open(filepath.Join(dir, "master.db"))
+	check(t, err)
+	t.Cleanup(func() { db.Close() })
+	ca, err := pki.LoadOrCreateCA(filepath.Join(dir, "pki"))
+	check(t, err)
+	cert, err := ca.MasterCertificate()
+	check(t, err)
+	masterCert, err := pki.NewHolder(cert)
+	check(t, err)
+	ln := listen(t)
+	nodes := node.NewService(db, ca, masterCert, ln.Addr().String())
+	t.Cleanup(nodes.Close)
+	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
+	mcsmv1.RegisterEnrollmentServiceServer(enrollServer, nodes)
+	serve(t, enrollServer, ln)
+	return &master{db: db, ca: ca, nodes: nodes, enrollAddr: ln.Addr().String()}
+}
+
+// panel serves the REST API of the master without authentication.
+func (m *master) panel(t *testing.T) *httptest.Server {
+	networks := network.NewService(m.db, m.nodes)
+	mux := http.NewServeMux()
+	server.NewHandler(m.nodes, networks).Register(mux)
+	network.NewHandler(networks).Register(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// agent is an enrolled agent that serves a fake runtime.
+type agent struct {
+	node     node.Node
+	token    enrollment.Token
+	dir      string
+	identity *agentnode.Identity
+	runtime  *fakeRuntime
+}
+
+// startAgent registers a node and enrolls its agent with a join token.
+func (m *master) startAgent(t *testing.T, name string) agent {
+	ln := listen(t)
+	n, token, err := m.nodes.Create(t.Context(), name, ln.Addr().String())
+	check(t, err)
+	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{}}
+	check(t, enroll.Run(t.Context(), token.String(), a.dir))
+	a.identity, err = agentnode.LoadIdentity(a.dir)
+	check(t, err)
+	creds := credentials.NewTLS(pki.AgentServerTLS(a.identity.Holder, a.identity.CA))
+	serve(t, app.NewGRPCServer(a.runtime, a.identity, grpc.Creds(creds)), ln)
+	return a
 }
 
 func check(t *testing.T, err error) {
@@ -196,10 +229,11 @@ func serve(t *testing.T, s *grpc.Server, ln net.Listener) {
 	t.Cleanup(s.Stop)
 }
 
-// fakeRuntime keeps servers in memory.
+// fakeRuntime keeps servers and their network configuration in memory.
 type fakeRuntime struct {
-	mu      sync.Mutex
-	servers []runtime.Server
+	mu       sync.Mutex
+	servers  []runtime.Server
+	networks map[string]runtime.Network
 }
 
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
@@ -241,6 +275,22 @@ func (f *fakeRuntime) Logs(context.Context, string, int) iter.Seq2[string, error
 
 func (f *fakeRuntime) SendCommand(_ context.Context, _, command string) (string, error) {
 	return "§6ran " + command, nil
+}
+
+func (f *fakeRuntime) Configure(_ context.Context, id string, network runtime.Network) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.networks == nil {
+		f.networks = map[string]runtime.Network{}
+	}
+	f.networks[id] = network
+	return nil
+}
+
+func (f *fakeRuntime) network(id string) runtime.Network {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.networks[id]
 }
 
 func (f *fakeRuntime) setState(id string, state mcsmv1.ServerState) error {

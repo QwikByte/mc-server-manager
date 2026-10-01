@@ -19,13 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ServerService_ListServers_FullMethodName  = "/mcsm.v1.ServerService/ListServers"
-	ServerService_CreateServer_FullMethodName = "/mcsm.v1.ServerService/CreateServer"
-	ServerService_StartServer_FullMethodName  = "/mcsm.v1.ServerService/StartServer"
-	ServerService_StopServer_FullMethodName   = "/mcsm.v1.ServerService/StopServer"
-	ServerService_DeleteServer_FullMethodName = "/mcsm.v1.ServerService/DeleteServer"
-	ServerService_StreamLogs_FullMethodName   = "/mcsm.v1.ServerService/StreamLogs"
-	ServerService_SendCommand_FullMethodName  = "/mcsm.v1.ServerService/SendCommand"
+	ServerService_ListServers_FullMethodName      = "/mcsm.v1.ServerService/ListServers"
+	ServerService_CreateServer_FullMethodName     = "/mcsm.v1.ServerService/CreateServer"
+	ServerService_StartServer_FullMethodName      = "/mcsm.v1.ServerService/StartServer"
+	ServerService_StopServer_FullMethodName       = "/mcsm.v1.ServerService/StopServer"
+	ServerService_DeleteServer_FullMethodName     = "/mcsm.v1.ServerService/DeleteServer"
+	ServerService_StreamLogs_FullMethodName       = "/mcsm.v1.ServerService/StreamLogs"
+	ServerService_SendCommand_FullMethodName      = "/mcsm.v1.ServerService/SendCommand"
+	ServerService_ConfigureNetwork_FullMethodName = "/mcsm.v1.ServerService/ConfigureNetwork"
 )
 
 // ServerServiceClient is the client API for ServerService service.
@@ -44,6 +45,10 @@ type ServerServiceClient interface {
 	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error)
+	// ConfigureNetwork gives a server its role in a network behind a Velocity proxy and
+	// restarts it if it runs: a proxy gets its backends, a backend accepts only players
+	// forwarded by the proxy, and an empty secret makes a game server standalone again.
+	ConfigureNetwork(ctx context.Context, in *ConfigureNetworkRequest, opts ...grpc.CallOption) (*ConfigureNetworkResponse, error)
 }
 
 type serverServiceClient struct {
@@ -133,6 +138,16 @@ func (c *serverServiceClient) SendCommand(ctx context.Context, in *SendCommandRe
 	return out, nil
 }
 
+func (c *serverServiceClient) ConfigureNetwork(ctx context.Context, in *ConfigureNetworkRequest, opts ...grpc.CallOption) (*ConfigureNetworkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigureNetworkResponse)
+	err := c.cc.Invoke(ctx, ServerService_ConfigureNetwork_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ServerServiceServer is the server API for ServerService service.
 // All implementations must embed UnimplementedServerServiceServer
 // for forward compatibility.
@@ -149,6 +164,10 @@ type ServerServiceServer interface {
 	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
 	// SendCommand runs a console command and returns its output.
 	SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error)
+	// ConfigureNetwork gives a server its role in a network behind a Velocity proxy and
+	// restarts it if it runs: a proxy gets its backends, a backend accepts only players
+	// forwarded by the proxy, and an empty secret makes a game server standalone again.
+	ConfigureNetwork(context.Context, *ConfigureNetworkRequest) (*ConfigureNetworkResponse, error)
 	mustEmbedUnimplementedServerServiceServer()
 }
 
@@ -179,6 +198,9 @@ func (UnimplementedServerServiceServer) StreamLogs(*StreamLogsRequest, grpc.Serv
 }
 func (UnimplementedServerServiceServer) SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendCommand not implemented")
+}
+func (UnimplementedServerServiceServer) ConfigureNetwork(context.Context, *ConfigureNetworkRequest) (*ConfigureNetworkResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigureNetwork not implemented")
 }
 func (UnimplementedServerServiceServer) mustEmbedUnimplementedServerServiceServer() {}
 func (UnimplementedServerServiceServer) testEmbeddedByValue()                       {}
@@ -320,6 +342,24 @@ func _ServerService_SendCommand_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ServerService_ConfigureNetwork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigureNetworkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServerServiceServer).ConfigureNetwork(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ServerService_ConfigureNetwork_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServerServiceServer).ConfigureNetwork(ctx, req.(*ConfigureNetworkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ServerService_ServiceDesc is the grpc.ServiceDesc for ServerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -350,6 +390,10 @@ var ServerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendCommand",
 			Handler:    _ServerService_SendCommand_Handler,
+		},
+		{
+			MethodName: "ConfigureNetwork",
+			Handler:    _ServerService_ConfigureNetwork_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

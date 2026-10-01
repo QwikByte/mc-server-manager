@@ -2,17 +2,7 @@ import { KeyIcon, ShieldCheckIcon, TrashIcon } from "@phosphor-icons/react"
 import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 import { toast } from "sonner"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatDate } from "@/lib/format"
@@ -67,28 +57,19 @@ export function RemoveNodeButton({ node }: { node: Node }) {
   }
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
+    <ConfirmDialog
+      trigger={
         <Button variant="destructive">
           <TrashIcon />
           Remove node
         </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Remove {node.name}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            The panel stops managing this node. Its servers keep running until you stop them on the node or uninstall the agent.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={confirm}>
-            Remove node
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      }
+      title={`Remove ${node.name}?`}
+      description="The panel stops managing this node. Its servers keep running until you stop them on the node or uninstall the agent."
+      action="Remove node"
+      destructive
+      onConfirm={confirm}
+    />
   )
 }
 

@@ -23,6 +23,23 @@ Servers run as containers based on [itzg/minecraft-server](https://github.com/it
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
 through the RCON connection the server image provides.
 
+## Networks
+
+A network puts Paper or Purpur servers behind a Velocity proxy, on one node or spread across nodes. The master stores
+the network and configures each server through its agent; changes are applied to all servers of the network.
+
+- The proxy's `velocity.toml` lists the servers and enables modern player forwarding. Players join the first server
+  and switch with `/server <name>`. Other settings are kept, but comments in the file are not.
+- Backends turn on Velocity forwarding in `config/paper-global.yml` and run with `online-mode=false`, as the proxy
+  authenticates the players. They turn away anyone who doesn't come through the proxy.
+- On its own node, the proxy reaches a server by container name over the Docker network `mcsm`. A server on another
+  node is reached at that node's host and the server's port, which must be open for the proxy's node.
+- Servers only restart if their configuration changed. Changing the servers of a network restarts the proxy, which
+  disconnects all players. If a node is offline, the change is saved and **Apply again** configures its servers later.
+- Proxies created by earlier versions are recreated on their first network change, because they used the wrong data
+  directory and port inside the container.
+- New Minecraft servers start with a whitelist: add players with `whitelist add <name>` in each server's console.
+
 ## Security model
 
 - **Own CA.** The master creates an Ed25519 certificate authority on first start. All master ↔ agent traffic is
@@ -43,6 +60,9 @@ through the RCON connection the server image provides.
   (`HttpOnly`, `Secure`, `SameSite=Strict`), cross-origin request protection, sign-in rate limiting, a strict
   Content Security Policy and self-hosted fonts. The panel must be served over HTTPS (reverse proxy or
   `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt).
+- **Networks.** Only Velocity's modern forwarding is supported: it signs the forwarded player data with a random
+  secret per network. BungeeCord's forwarding can be spoofed by anyone who reaches a backend. The secret is stored in
+  the master's database and on the network's servers; the API never returns it.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), containers run with `no-new-privileges` and memory and PID limits, and servers are only created
   after the operator accepts the Minecraft EULA.
@@ -62,6 +82,7 @@ internal/master/
   auth/                 administrators, sessions, sign-in
   node/                 node registry, enrollment, agent connections
   server/               server API, forwarded to the node's agent
+  network/              networks of servers behind a proxy, applied through the agents
   database/             SQLite and embedded migrations
   httpapi/              JSON helpers
 internal/agent/
@@ -69,10 +90,11 @@ internal/agent/
   enroll/               enrollment client
   node/                 machine info
   server/               server lifecycle and input validation
+  network/              proxy and backend configuration for networks
   runtime/              runtime interface; docker/ implements it
-internal/e2e/           end-to-end test: enrollment and control over real mTLS
+internal/e2e/           end-to-end tests: enrollment, control and networks over real mTLS
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
-  src/features/         auth, nodes, servers
+  src/features/         auth, nodes, servers, networks
 deploy/systemd/         service units
 ```
 
@@ -124,9 +146,8 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 
 ## Roadmap
 
-- Console commands for proxies
+- Console commands for proxies, so that network changes reload the proxy instead of restarting it
 - File manager and backups
-- Networks: register backend servers with their Velocity/BungeeCord proxy automatically
 - More runtimes (plain processes) and Java version selection per server
 - Roles, two-factor authentication and an audit log
 - German translation of the panel

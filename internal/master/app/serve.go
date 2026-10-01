@@ -16,6 +16,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
+	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
@@ -60,7 +61,7 @@ func serve(ctx context.Context, cfg config) error {
 	}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
-	httpServer := &http.Server{Addr: cfg.httpAddr, Handler: routes(users, nodes), ReadHeaderTimeout: 10 * time.Second}
+	httpServer := &http.Server{Addr: cfg.httpAddr, Handler: routes(users, nodes, network.NewService(db, nodes)), ReadHeaderTimeout: 10 * time.Second}
 
 	errc := make(chan error, 2)
 	go func() { errc <- grpcServer.Serve(enrollListener) }()
@@ -84,12 +85,13 @@ func serve(ctx context.Context, cfg config) error {
 	return errors.Join(err, httpServer.Shutdown(shutdownCtx))
 }
 
-func routes(users *auth.Service, nodes *node.Service) http.Handler {
+func routes(users *auth.Service, nodes *node.Service, networks *network.Service) http.Handler {
 	authHandler := auth.NewHandler(users)
 	api := http.NewServeMux()
 	authHandler.Register(api)
 	node.NewHandler(nodes).Register(api)
-	server.NewHandler(nodes).Register(api)
+	server.NewHandler(nodes, networks).Register(api)
+	network.NewHandler(networks).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)

@@ -5,15 +5,18 @@ package server
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
 
 const (
+	probeTimeout  = 3 * time.Second // for listing the servers of all nodes
 	queryTimeout  = 10 * time.Second
 	actionTimeout = 2 * time.Minute
 	createTimeout = 10 * time.Minute // includes pulling the server image
@@ -21,14 +24,26 @@ const (
 
 // Nodes provides connections to node agents.
 type Nodes interface {
+	List(ctx context.Context) ([]node.Node, error)
 	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
 }
 
-type Handler struct{ nodes Nodes }
+// Networks tells whether a server can be deleted without breaking a network.
+type Networks interface {
+	CheckRemovable(ctx context.Context, nodeID, serverID string) error
+}
 
-func NewHandler(nodes Nodes) *Handler { return &Handler{nodes: nodes} }
+type Handler struct {
+	nodes    Nodes
+	networks Networks
+}
+
+func NewHandler(nodes Nodes, networks Networks) *Handler {
+	return &Handler{nodes: nodes, networks: networks}
+}
 
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/servers", h.listAll)
 	mux.HandleFunc("GET /api/nodes/{node}/servers", h.list)
 	mux.HandleFunc("POST /api/nodes/{node}/servers", h.create)
 	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/start", h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
@@ -39,10 +54,17 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		_, err := c.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
 		return err
 	}))
-	mux.HandleFunc("DELETE /api/nodes/{node}/servers/{id}", h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
+	deleteServer := h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
 		_, err := c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
 		return err
-	}))
+	})
+	mux.HandleFunc("DELETE /api/nodes/{node}/servers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if err := h.networks.CheckRemovable(r.Context(), r.PathValue("node"), r.PathValue("id")); err != nil {
+			httpapi.WriteError(w, r, err)
+			return
+		}
+		deleteServer(w, r)
+	})
 	mux.HandleFunc("GET /api/nodes/{node}/servers/{id}/logs", h.logs)
 	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/command", h.command)
 }
@@ -62,6 +84,50 @@ func toView(s *mcsmv1.Server) view {
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
 		Type: s.GetType().Slug(), State: s.GetState().Slug(),
 	}
+}
+
+// nodeServer is a server with the node it runs on.
+type nodeServer struct {
+	view
+	NodeID   string `json:"nodeId"`
+	NodeName string `json:"nodeName"`
+}
+
+// listAll returns the servers of all reachable nodes, e.g. to choose the servers of a network.
+func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
+	nodes, err := h.nodes.List(r.Context())
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	perNode := make([][]nodeServer, len(nodes))
+	var wg sync.WaitGroup
+	for i, n := range nodes {
+		if n.EnrolledAt == nil {
+			continue
+		}
+		wg.Go(func() {
+			ctx, cancel := context.WithTimeout(r.Context(), probeTimeout)
+			defer cancel()
+			conn, err := h.nodes.Conn(ctx, n.ID)
+			if err != nil {
+				return
+			}
+			res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+			if err != nil {
+				return // offline nodes are left out
+			}
+			for _, s := range res.GetServers() {
+				perNode[i] = append(perNode[i], nodeServer{toView(s), n.ID, n.Name})
+			}
+		})
+	}
+	wg.Wait()
+	all := []nodeServer{}
+	for _, servers := range perNode {
+		all = append(all, servers...)
+	}
+	httpapi.WriteJSON(w, http.StatusOK, all)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

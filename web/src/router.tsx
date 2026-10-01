@@ -80,8 +80,22 @@ const serverRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/servers/server-page"), "ServerPage"),
 })
 
+const networksRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/networks",
+  component: lazyRouteComponent(() => import("@/features/networks/networks-page"), "NetworksPage"),
+})
+const networkRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/networks/$networkId",
+  component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkPage"),
+})
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([loginRoute, appRoute.addChildren([indexRoute, nodesRoute, nodeRoute, serverRoute])]),
+  routeTree: rootRoute.addChildren([
+    loginRoute,
+    appRoute.addChildren([indexRoute, nodesRoute, nodeRoute, serverRoute, networksRoute, networkRoute]),
+  ]),
   context: { queryClient },
   defaultPreload: "intent",
 })

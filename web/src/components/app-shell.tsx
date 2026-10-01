@@ -1,11 +1,14 @@
-import { HardDrivesIcon, SignOutIcon } from "@phosphor-icons/react"
+import { GraphIcon, HardDrivesIcon, SignOutIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { Lamp } from "@/components/lamp"
 import { Button } from "@/components/ui/button"
 import { meQuery, useLogout } from "@/features/auth/api"
 
-const navigation = [{ to: "/nodes", label: "Nodes", icon: HardDrivesIcon }] as const
+const navigation = [
+  { to: "/nodes", label: "Nodes", icon: HardDrivesIcon },
+  { to: "/networks", label: "Networks", icon: GraphIcon },
+] as const
 
 export function AppShell() {
   const { data: user } = useQuery(meQuery)
@@ -17,7 +20,7 @@ export function AppShell() {
       <aside className="flex shrink-0 items-center gap-6 border-b bg-rail px-4 py-3 md:sticky md:top-0 md:h-svh md:w-56 md:flex-col md:items-stretch md:border-r md:border-b-0 md:py-5">
         <Link to="/nodes" className="flex items-center gap-2.5">
           <Lamp state="on" />
-          <span className="heading text-sm">MC Server Manager</span>
+          <span className="heading text-sm max-md:sr-only">MC Server Manager</span>
         </Link>
         <nav className="flex gap-1 md:flex-col" aria-label="Main">
           {navigation.map(({ to, label, icon: Icon }) => (

@@ -27,12 +27,31 @@ type Spec struct {
 	Version  string            `json:"version"`
 	MemoryMB uint32            `json:"memoryMb"`
 	Port     uint32            `json:"port"`
+	// BehindProxy makes a game server accept only players forwarded by its proxy.
+	BehindProxy bool `json:"behindProxy,omitempty"`
 }
 
 // Server is a server managed by a runtime.
 type Server struct {
 	Spec
 	State mcsmv1.ServerState
+}
+
+// Network is the role of a server in a network behind a Velocity proxy.
+type Network struct {
+	// ForwardingSecret lets backends verify the players the proxy forwards. An empty
+	// secret makes a game server standalone again; a proxy always needs one.
+	ForwardingSecret string
+	// Backends is set for the proxy, in the order players are sent to them.
+	Backends []NetworkBackend
+}
+
+// NetworkBackend is a server behind the proxy, either on the same node (ServerID) or
+// on another node (Address).
+type NetworkBackend struct {
+	Name     string
+	ServerID string
+	Address  string
 }
 
 // Info describes the runtime and the machine it runs on.
@@ -56,4 +75,6 @@ type Runtime interface {
 	Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error]
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, id, command string) (string, error)
+	// Configure gives a server its role in a network and restarts it if it runs.
+	Configure(ctx context.Context, id string, network Network) error
 }

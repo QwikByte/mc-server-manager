@@ -29,6 +29,9 @@ import (
 const (
 	labelManaged = "io.mcsm.managed"
 	labelSpec    = "io.mcsm.spec"
+	// networkName is a Docker network shared by all servers of the node, so a proxy can
+	// reach backends on the same node by container name.
+	networkName = "mcsm"
 
 	serverImage = "itzg/minecraft-server:latest"
 	proxyImage  = "itzg/mc-proxy:latest"
@@ -43,17 +46,18 @@ type image struct {
 	ref  string
 	typ  string // value of the TYPE variable
 	port int    // port inside the container
+	data string // data directory inside the container
 }
 
 var images = map[mcsmv1.ServerType]image{
-	mcsmv1.ServerType_SERVER_TYPE_VANILLA:    {serverImage, "VANILLA", 25565},
-	mcsmv1.ServerType_SERVER_TYPE_PAPER:      {serverImage, "PAPER", 25565},
-	mcsmv1.ServerType_SERVER_TYPE_PURPUR:     {serverImage, "PURPUR", 25565},
-	mcsmv1.ServerType_SERVER_TYPE_FABRIC:     {serverImage, "FABRIC", 25565},
-	mcsmv1.ServerType_SERVER_TYPE_FORGE:      {serverImage, "FORGE", 25565},
-	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {serverImage, "NEOFORGE", 25565},
-	mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   {proxyImage, "VELOCITY", 25577},
-	mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: {proxyImage, "BUNGEECORD", 25577},
+	mcsmv1.ServerType_SERVER_TYPE_VANILLA:    {serverImage, "VANILLA", 25565, "/data"},
+	mcsmv1.ServerType_SERVER_TYPE_PAPER:      {serverImage, "PAPER", 25565, "/data"},
+	mcsmv1.ServerType_SERVER_TYPE_PURPUR:     {serverImage, "PURPUR", 25565, "/data"},
+	mcsmv1.ServerType_SERVER_TYPE_FABRIC:     {serverImage, "FABRIC", 25565, "/data"},
+	mcsmv1.ServerType_SERVER_TYPE_FORGE:      {serverImage, "FORGE", 25565, "/data"},
+	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {serverImage, "NEOFORGE", 25565, "/data"},
+	mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   {proxyImage, "VELOCITY", 25565, "/server"},
+	mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: {proxyImage, "BUNGEECORD", 25577, "/server"},
 }
 
 // Docker implements runtime.Runtime. Container labels are the only state:
@@ -134,22 +138,36 @@ func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {
 	if err := d.root.MkdirAll(spec.ID, 0o750); err != nil {
 		return err
 	}
+	return d.createContainer(ctx, spec)
+}
+
+// createContainer creates the container of a server whose image and data directory exist.
+func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
+	if err := d.ensureNetwork(ctx); err != nil {
+		return err
+	}
+	img := images[spec.Type]
 	specJSON, err := json.Marshal(spec)
 	if err != nil {
 		return err
+	}
+	// EULA=TRUE is only set because the operator accepted the EULA when creating the server.
+	env := []string{"EULA=TRUE", "TYPE=" + img.typ, "VERSION=" + spec.Version, fmt.Sprintf("MEMORY=%dM", spec.MemoryMB)}
+	if spec.BehindProxy {
+		env = append(env, "ONLINE_MODE=FALSE") // the proxy authenticates players
 	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", img.port))
 	_, err = d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: containerName(spec.ID),
 		Config: &container.Config{
-			Image: img.ref,
-			// EULA=TRUE is only set because the operator accepted the EULA when creating the server.
-			Env:          []string{"EULA=TRUE", "TYPE=" + img.typ, "VERSION=" + spec.Version, fmt.Sprintf("MEMORY=%dM", spec.MemoryMB)},
+			Image:        img.ref,
+			Env:          env,
 			Labels:       map[string]string{labelManaged: "true", labelSpec: string(specJSON)},
 			ExposedPorts: network.PortSet{port: {}},
 		},
+		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{networkName: {}}},
 		HostConfig: &container.HostConfig{
-			Binds:         []string{filepath.Join(d.dataDir, spec.ID) + ":/data"},
+			Binds:         []string{filepath.Join(d.dataDir, spec.ID) + ":" + img.data},
 			PortBindings:  network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}},
 			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 			SecurityOpt:   []string{"no-new-privileges:true"},

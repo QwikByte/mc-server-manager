@@ -16,6 +16,10 @@ service ServerService {
   rpc StreamLogs(StreamLogsRequest) returns (stream StreamLogsResponse);
   // SendCommand runs a console command and returns its output.
   rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
+  // ConfigureNetwork gives a server its role in a network behind a Velocity proxy and
+  // restarts it if it runs: a proxy gets its backends, a backend accepts only players
+  // forwarded by the proxy, and an empty secret makes a game server standalone again.
+  rpc ConfigureNetwork(ConfigureNetworkRequest) returns (ConfigureNetworkResponse);
 }
 
 enum ServerType {
@@ -106,3 +110,24 @@ message SendCommandRequest {
 message SendCommandResponse {
   string output = 1;
 }
+
+message ConfigureNetworkRequest {
+  string id = 1;
+  // Shared secret of Velocity's modern forwarding. Required for proxies.
+  string forwarding_secret = 2;
+  // Backends of a proxy, in the order players are sent to them.
+  repeated NetworkBackend backends = 3;
+}
+
+message NetworkBackend {
+  // Name players use, e.g. in /server lobby.
+  string name = 1;
+  oneof target {
+    // A server on the same node as the proxy.
+    string server_id = 2;
+    // host:port of a server on another node.
+    string address = 3;
+  }
+}
+
+message ConfigureNetworkResponse {}

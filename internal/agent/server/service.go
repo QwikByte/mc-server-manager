@@ -8,8 +8,10 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"net"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -33,6 +35,10 @@ var (
 	idPattern      = regexp.MustCompile(`^[a-z2-7]{26}$`) // lower-cased crypto/rand.Text
 	namePattern    = regexp.MustCompile(`^[\pL\pN][\pL\pN _.-]{0,31}$`)
 	versionPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
+	secretPattern  = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
+	// Names of backends a proxy sends players to; "try" is the list of these names.
+	backendPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+	hostPattern    = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
 	// Terminal escape sequences and Minecraft formatting codes (§a, §l, ...).
 	formatting = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|§[0-9a-fk-orxA-FK-ORX]|\r`)
 )
@@ -117,10 +123,60 @@ func (s *Service) SendCommand(ctx context.Context, req *mcsmv1.SendCommandReques
 		return nil, status.Errorf(codes.InvalidArgument, "Enter a single command with up to %d characters.", maxCommand)
 	}
 	output, err := s.rt.SendCommand(ctx, req.GetId(), command)
+	if errors.Is(err, runtime.ErrUnsupported) {
+		return nil, status.Error(codes.FailedPrecondition, "Proxies don't accept console commands yet.")
+	}
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	return &mcsmv1.SendCommandResponse{Output: plain(output)}, nil
+}
+
+func (s *Service) ConfigureNetwork(ctx context.Context, req *mcsmv1.ConfigureNetworkRequest) (*mcsmv1.ConfigureNetworkResponse, error) {
+	network, msg := networkOf(req)
+	if msg != "" {
+		return nil, status.Error(codes.InvalidArgument, msg)
+	}
+	err := s.rt.Configure(ctx, req.GetId(), network)
+	if errors.Is(err, runtime.ErrUnsupported) {
+		return nil, status.Error(codes.FailedPrecondition, "Only Velocity proxies and Paper or Purpur servers can be part of a network.")
+	}
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &mcsmv1.ConfigureNetworkResponse{}, nil
+}
+
+// networkOf validates a network configuration, which ends up in configuration files.
+func networkOf(req *mcsmv1.ConfigureNetworkRequest) (runtime.Network, string) {
+	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret()}
+	if !idPattern.MatchString(req.GetId()) {
+		return network, "invalid server ID"
+	}
+	if network.ForwardingSecret != "" && !secretPattern.MatchString(network.ForwardingSecret) {
+		return network, "invalid forwarding secret"
+	}
+	seen := map[string]bool{}
+	for _, b := range req.GetBackends() {
+		backend := runtime.NetworkBackend{Name: b.GetName(), ServerID: b.GetServerId(), Address: b.GetAddress()}
+		switch {
+		case !backendPattern.MatchString(backend.Name) || backend.Name == "try" || seen[backend.Name]:
+			return network, fmt.Sprintf("invalid or duplicate backend name %q", backend.Name)
+		case backend.ServerID != "" && !idPattern.MatchString(backend.ServerID):
+			return network, "invalid backend server ID"
+		case backend.ServerID == "" && !validAddress(backend.Address):
+			return network, fmt.Sprintf("invalid backend address %q", backend.Address)
+		}
+		seen[backend.Name] = true
+		network.Backends = append(network.Backends, backend)
+	}
+	return network, ""
+}
+
+func validAddress(address string) bool {
+	host, port, err := net.SplitHostPort(address)
+	n, perr := strconv.Atoi(port)
+	return err == nil && perr == nil && hostPattern.MatchString(host) && n > 0 && n <= maxPort
 }
 
 // plain removes colours and formatting so that console output reads as plain text.
@@ -166,7 +222,7 @@ func toStatus(err error) error {
 	case errors.Is(err, runtime.ErrNotRunning):
 		return status.Error(codes.FailedPrecondition, "Start the server to send commands.")
 	case errors.Is(err, runtime.ErrUnsupported):
-		return status.Error(codes.FailedPrecondition, "Proxies don't accept console commands yet.")
+		return status.Error(codes.FailedPrecondition, "This type of server does not support that.")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()
 	default:

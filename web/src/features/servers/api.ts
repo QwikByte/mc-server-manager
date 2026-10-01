@@ -13,6 +13,12 @@ export interface Server {
   state: ServerState
 }
 
+/** A server together with the node it runs on. */
+export interface NodeServer extends Server {
+  nodeId: string
+  nodeName: string
+}
+
 export interface NewServer {
   name: string
   type: string
@@ -28,6 +34,13 @@ export const serversQuery = (nodeId: string) =>
     queryFn: () => api<Server[]>(`/nodes/${nodeId}/servers`),
     refetchInterval: 5_000,
   })
+
+/** The servers of all reachable nodes; servers of offline nodes are missing. */
+export const allServersQuery = queryOptions({
+  queryKey: ["servers"],
+  queryFn: () => api<NodeServer[]>("/servers"),
+  refetchInterval: 5_000,
+})
 
 export function useCreateServer(nodeId: string) {
   const queryClient = useQueryClient()
