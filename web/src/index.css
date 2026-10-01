@@ -1,0 +1,149 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/archivo/standard.css";
+@import "@fontsource-variable/jetbrains-mono";
+
+/* The panel follows the operating system's colour scheme. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme inline {
+  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-rail: var(--rail);
+  --color-console: var(--console);
+  --color-console-foreground: var(--console-foreground);
+  --color-console-muted: var(--console-muted);
+  --color-console-command: var(--console-command);
+  --color-console-warn: var(--console-warn);
+  --color-console-error: var(--console-error);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --animate-lamp-flicker: lamp-flicker 1.2s steps(2, jump-none) infinite;
+
+  @keyframes lamp-flicker {
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
+/*
+ * Palette taken from Minecraft materials: calcite and deepslate surfaces,
+ * oxidised copper (verdigris) for actions, redstone for destructive actions
+ * and the redstone lamp, reserved for "running".
+ */
+:root {
+  --radius: 0;
+  --background: #eef0f1; /* calcite */
+  --foreground: #1e2227;
+  --card: #ffffff;
+  --card-foreground: #1e2227;
+  --popover: #ffffff;
+  --popover-foreground: #1e2227;
+  --primary: #237561; /* verdigris */
+  --primary-foreground: #ffffff;
+  --secondary: #e2e5e8;
+  --secondary-foreground: #1e2227;
+  --muted: #e6e9eb;
+  --muted-foreground: #59606b;
+  --accent: #e2e5e8;
+  --accent-foreground: #1e2227;
+  --destructive: #b8322a; /* redstone */
+  --border: #d3d7db;
+  --input: #c9ced3;
+  --ring: #237561;
+  --rail: #e3e6e9;
+
+  --lamp-on: #ffd77a;
+  --lamp-on-frame: #b36b14;
+  --lamp-glow: rgb(240 168 48 / 0.55);
+  --lamp-off: #8c6c4e;
+  --lamp-off-frame: #5e4630;
+
+  /* The console stays dark in both themes, like a terminal. */
+  --console: #1b1e23;
+  --console-foreground: #d5d9de;
+  --console-muted: #8b929c;
+  --console-command: #6cc7ac;
+  --console-warn: #e3b341;
+  --console-error: #f0786c;
+  /* Syntax colours of the file editor, which shares the console's dark surface. */
+  --code-string: #e2c98a;
+  --code-literal: #9fb7f0;
+  --code-keyword: #e79fd0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #24272d; /* deepslate */
+    --foreground: #e7e9ec;
+    --card: #2d3138;
+    --card-foreground: #e7e9ec;
+    --popover: #2d3138;
+    --popover-foreground: #e7e9ec;
+    --primary: #4fae94;
+    --primary-foreground: #10241e;
+    --secondary: #343941;
+    --secondary-foreground: #e7e9ec;
+    --muted: #2f333a;
+    --muted-foreground: #9aa0aa;
+    --accent: #343941;
+    --accent-foreground: #e7e9ec;
+    --destructive: #e0564a;
+    --border: #3c414a;
+    --input: #464c56;
+    --ring: #4fae94;
+    --rail: #1f2227;
+
+    --lamp-glow: rgb(255 196 92 / 0.5);
+    --lamp-off: #4a3424;
+    --lamp-off-frame: #2e2018;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Expanded, heavy Archivo gives headings the weight of stacked blocks. */
+@utility heading {
+  font-family: var(--font-heading);
+  font-stretch: 118%;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}

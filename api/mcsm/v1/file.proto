@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package mcsm.v1;
+
+option go_package = "github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1";
+
+// FileService is served by every agent and gives access to the files of a server.
+// Paths are relative to the server's data directory and use forward slashes; an empty
+// path is the directory itself. Paths can't leave the directory.
+service FileService {
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  // ReadFile sends a file in chunks. The first message carries the file size.
+  rpc ReadFile(ReadFileRequest) returns (stream ReadFileResponse);
+  // WriteFile creates or replaces a file. The first message names the file, the others
+  // carry its content. The file only appears once it has been written completely.
+  rpc WriteFile(stream WriteFileRequest) returns (WriteFileResponse);
+  // ArchiveDirectory sends a directory as a ZIP archive in chunks.
+  rpc ArchiveDirectory(ArchiveDirectoryRequest) returns (stream ArchiveDirectoryResponse);
+  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse);
+  // MoveFile renames or moves a file or directory. It never replaces an existing one.
+  rpc MoveFile(MoveFileRequest) returns (MoveFileResponse);
+  // DeleteFile deletes a file, or a directory with everything in it.
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+}
+
+message FileInfo {
+  string name = 1;
+  bool directory = 2;
+  int64 size = 3;
+  int64 modified_unix = 4;
+}
+
+message ListFilesRequest {
+  string server_id = 1;
+  string path = 2;
+}
+
+message ListFilesResponse {
+  // Directories first, then files, each sorted by name.
+  repeated FileInfo files = 1;
+  // Set if the directory has more entries than the agent lists.
+  bool truncated = 2;
+}
+
+message ReadFileRequest {
+  string server_id = 1;
+  string path = 2;
+}
+
+message ReadFileResponse {
+  int64 size = 1;
+  bytes data = 2;
+}
+
+message WriteFileRequest {
+  oneof content {
+    WriteFileHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message WriteFileHeader {
+  string server_id = 1;
+  string path = 2;
+  // Replace an existing file; otherwise writing to an existing file fails.
+  bool overwrite = 3;
+}
+
+message WriteFileResponse {
+  FileInfo file = 1;
+}
+
+message ArchiveDirectoryRequest {
+  string server_id = 1;
+  string path = 2;
+}
+
+message ArchiveDirectoryResponse {
+  bytes data = 1;
+}
+
+message CreateDirectoryRequest {
+  string server_id = 1;
+  string path = 2;
+}
+
+message CreateDirectoryResponse {}
+
+message MoveFileRequest {
+  string server_id = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message MoveFileResponse {}
+
+message DeleteFileRequest {
+  string server_id = 1;
+  string path = 2;
+}
+
+message DeleteFileResponse {}
