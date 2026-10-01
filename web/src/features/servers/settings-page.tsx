@@ -4,7 +4,7 @@ import { type FormEvent, type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -67,8 +67,8 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   }
 
   return (
-    <form onSubmit={submit} className="max-w-3xl">
-      <Section title="General">
+    <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
+      <Section title="General" description="Name, version and resources of the server.">
         <Field>
           <FieldLabel htmlFor="settings-name">Name</FieldLabel>
           <Input id="settings-name" required maxLength={32} value={form.name} onChange={(e) => set("name", e.target.value)} />
@@ -121,25 +121,28 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
         )}
       </Section>
 
-      <Section title="Starting">
+      <Section title="Starting" description="When the server starts on its own.">
         <RadioGroup
           value={form.restartPolicy}
           onValueChange={(v) => set("restartPolicy", v as RestartPolicy)}
           aria-label="When the server starts"
+          className="gap-3 sm:grid-cols-3"
         >
           {restartPolicies.map(([value, label, description]) => (
-            <Field key={value} orientation="horizontal">
-              <RadioGroupItem id={`restart-${value}`} value={value} />
-              <FieldContent>
-                <FieldLabel htmlFor={`restart-${value}`}>{label}</FieldLabel>
-                <FieldDescription>{description}</FieldDescription>
-              </FieldContent>
-            </Field>
+            <FieldLabel key={value} htmlFor={`restart-${value}`}>
+              <Field orientation="horizontal" className="items-start">
+                <FieldContent>
+                  <FieldTitle>{label}</FieldTitle>
+                  <FieldDescription>{description}</FieldDescription>
+                </FieldContent>
+                <RadioGroupItem id={`restart-${value}`} value={value} />
+              </Field>
+            </FieldLabel>
           ))}
         </RadioGroup>
       </Section>
 
-      <Section title="Java">
+      <Section title="Java" description="The Java runtime and the options it starts with.">
         {game && (
           <>
             <Field>
@@ -183,7 +186,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
         </Field>
       </Section>
 
-      <Section title="Resources">
+      <Section title="Resources" description="Limits and where the data is kept.">
         <Field>
           <FieldLabel htmlFor="settings-cpu">CPU limit</FieldLabel>
           <Input
@@ -205,13 +208,13 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
         </p>
       </Section>
 
-      <div className="flex flex-wrap items-center gap-4 border-t pt-6">
-        <Button type="submit" disabled={!dirty || update.isPending}>
-          {update.isPending ? "Saving…" : "Save settings"}
-        </Button>
+      <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">
         <p className="text-sm text-muted-foreground">
           The server's container is created again with the same data{server.state === "stopped" ? "." : ", so the server restarts."}
         </p>
+        <Button type="submit" disabled={!dirty || update.isPending}>
+          {update.isPending ? "Saving…" : "Save settings"}
+        </Button>
       </div>
       <ConfirmDialog
         open={blocker.status === "blocked"}
@@ -226,10 +229,14 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** A group of settings, titled on the left on wide screens. */
+function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <section className="mb-10" aria-label={title}>
-      <h2 className="heading mb-5 border-b pb-2 text-lg">{title}</h2>
+    <section className="grid gap-x-10 gap-y-5 border-b py-8 lg:grid-cols-[14rem_1fr]" aria-label={title}>
+      <div className="space-y-1">
+        <h2 className="heading text-base">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
       <FieldGroup>{children}</FieldGroup>
     </section>
   )

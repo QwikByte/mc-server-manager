@@ -82,7 +82,7 @@ export function MotdField({
             aria-label={`Insert colour ${name}`}
             disabled={disabled}
             onClick={() => insert(code)}
-            className="size-5 border border-border outline-ring focus-visible:outline-2 disabled:opacity-50"
+            className="size-6 rounded-md ring-1 ring-foreground/15 ring-inset outline-ring transition-transform hover:scale-110 focus-visible:outline-2 disabled:opacity-50 disabled:hover:scale-100"
             style={{ backgroundColor: color }}
           />
         ))}
@@ -113,7 +113,7 @@ export function MotdField({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value.split("\n").slice(0, 2).join("\n"))}
       />
-      <div className="bg-console px-3 py-2 font-mono text-sm leading-5 text-[#AAAAAA]" aria-label="Preview">
+      <div className="rounded-lg bg-console px-3 py-2.5 font-mono text-sm leading-5 text-[#AAAAAA]" aria-label="Preview">
         {value.split("\n").map((line, i) => (
           <div key={i} className="min-h-5 whitespace-pre-wrap">
             {runs(line).map((run, j) => (

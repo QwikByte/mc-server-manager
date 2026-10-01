@@ -16,8 +16,8 @@ export function FileTypeIcon({ entry }: { entry: FileEntry }) {
   const Icon = entry.directory ? FolderIcon : (kinds[entry.name.split(".").pop()?.toLowerCase() ?? ""] ?? FileIcon)
   return (
     <Icon
-      className={entry.directory ? "size-4 shrink-0 text-primary" : "size-4 shrink-0 text-muted-foreground"}
-      weight={entry.directory ? "fill" : "regular"}
+      className={entry.directory ? "size-5 shrink-0 text-warning" : "size-5 shrink-0 text-muted-foreground"}
+      weight={entry.directory ? "fill" : "duotone"}
     />
   )
 }

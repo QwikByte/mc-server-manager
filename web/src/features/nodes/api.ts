@@ -49,6 +49,11 @@ export function memoryLimitMb(node: Node): number | undefined {
   return Math.max(0, Math.floor(node.info.memoryBytes / 1024 ** 2) - node.memoryReserveMb)
 }
 
+/** Memory in MB that servers on a node can get in total: the limit, or else all of the node's memory. */
+export function memoryCapacityMb(node: Node): number | undefined {
+  return memoryLimitMb(node) ?? (node.info?.memoryBytes ? Math.floor(node.info.memoryBytes / 1024 ** 2) : undefined)
+}
+
 export const nodesQuery = queryOptions({
   queryKey: ["nodes"],
   queryFn: () => api<Node[]>("/nodes"),

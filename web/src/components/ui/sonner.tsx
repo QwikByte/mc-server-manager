@@ -1,26 +1,29 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CheckCircleIcon, InfoIcon, WarningIcon, XCircleIcon, SpinnerIcon } from "@phosphor-icons/react"
+import { useTheme } from "@/lib/theme"
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const theme = useTheme()
+
   return (
     <Sonner
-      theme="system"
+      theme={theme}
       className="toaster group"
       icons={{
         success: (
-          <CheckCircleIcon className="size-4" />
+          <CheckCircleIcon className="size-4 text-success" weight="fill" />
         ),
         info: (
-          <InfoIcon className="size-4" />
+          <InfoIcon className="size-4 text-info" weight="fill" />
         ),
         warning: (
-          <WarningIcon className="size-4" />
+          <WarningIcon className="size-4 text-warning" weight="fill" />
         ),
         error: (
-          <XCircleIcon className="size-4" />
+          <XCircleIcon className="size-4 text-destructive" weight="fill" />
         ),
         loading: (
-          <SpinnerIcon className="size-4 animate-spin" />
+          <SpinnerIcon className="size-4 animate-spin text-muted-foreground" />
         ),
       }}
       style={
@@ -33,7 +36,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast",
+          toast: "cn-toast shadow-lg",
         },
       }}
       {...props}

@@ -6,13 +6,13 @@ import type { Upload } from "./use-uploads"
 export function UploadList({ uploads, onCancel }: { uploads: Upload[]; onCancel: (id: number) => void }) {
   if (uploads.length === 0) return null
   return (
-    <ul className="mb-4 divide-y border bg-card" aria-label="Uploads">
+    <ul className="surface mb-4 divide-y overflow-hidden rounded-xl" aria-label="Uploads">
       {uploads.map((u) => (
-        <li key={u.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+        <li key={u.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
           {u.state === "done" ? (
-            <CheckCircleIcon className="size-4 shrink-0 text-primary" />
+            <CheckCircleIcon className="size-4 shrink-0 text-success" weight="fill" />
           ) : u.state === "failed" ? (
-            <WarningCircleIcon className="size-4 shrink-0 text-destructive" />
+            <WarningCircleIcon className="size-4 shrink-0 text-destructive" weight="fill" />
           ) : null}
           <span className="min-w-0 flex-1 truncate font-mono text-xs">{u.name}</span>
           {u.state === "failed" ? (

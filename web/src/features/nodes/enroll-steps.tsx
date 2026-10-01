@@ -1,21 +1,31 @@
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
-import { useState } from "react"
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { type ReactNode, useState } from "react"
 
 /** Explains how to connect the agent of a node, using a freshly issued join token. */
 export function EnrollSteps({ joinToken }: { joinToken: string }) {
   return (
-    <ol className="list-decimal space-y-4 pl-5 text-sm marker:text-muted-foreground">
-      <li>Install mcsm-agent on the node.</li>
-      <li className="space-y-2">
+    <ol className="space-y-5">
+      <Step number={1}>Install mcsm-agent on the node.</Step>
+      <Step number={2}>
         <p>Run this command on the node within one hour. The token works only once.</p>
         <CopyCommand command={`mcsm-agent enroll ${joinToken}`} />
-      </li>
-      <li className="space-y-2">
+      </Step>
+      <Step number={3}>
         <p>Start the agent. The node appears as online a few seconds later.</p>
         <CopyCommand command="mcsm-agent serve" />
-      </li>
+      </Step>
     </ol>
+  )
+}
+
+function Step({ number, children }: { number: number; children: ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+        {number}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2 pt-0.5 text-sm">{children}</div>
+    </li>
   )
 }
 
@@ -29,13 +39,25 @@ function CopyCommand({ command }: { command: string }) {
   }
 
   return (
-    <InputGroup>
-      <InputGroupInput readOnly value={command} aria-label="Command" className="font-mono text-xs" onFocus={(e) => e.target.select()} />
-      <InputGroupAddon align="inline-end">
-        <InputGroupButton size="icon-xs" aria-label={copied ? "Copied" : "Copy command"} onClick={copy}>
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </InputGroupButton>
-      </InputGroupAddon>
-    </InputGroup>
+    <div className="flex items-center gap-2 rounded-lg bg-console py-1 pr-1 pl-3 text-console-foreground focus-within:ring-2 focus-within:ring-ring">
+      <span aria-hidden className="font-mono text-xs text-console-command">
+        $
+      </span>
+      <input
+        readOnly
+        value={command}
+        aria-label="Command"
+        onFocus={(e) => e.target.select()}
+        className="h-8 min-w-0 flex-1 bg-transparent font-mono text-xs outline-none"
+      />
+      <button
+        type="button"
+        aria-label={copied ? "Copied" : "Copy command"}
+        onClick={copy}
+        className="grid size-7 shrink-0 place-items-center rounded-md text-console-muted transition-colors hover:bg-white/10 hover:text-console-foreground"
+      >
+        {copied ? <CheckIcon className="size-4 text-console-command" /> : <CopyIcon className="size-4" />}
+      </button>
+    </div>
   )
 }

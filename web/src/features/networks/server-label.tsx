@@ -1,4 +1,4 @@
-import { Lamp } from "@/components/lamp"
+import { StatusDot } from "@/components/status"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { NodeServer } from "@/features/servers/api"
 import { serverStates } from "@/features/servers/server-types"
@@ -12,16 +12,16 @@ export function ServerLabel({ server }: { server: NodeServer | null | undefined 
   if (!server) {
     return (
       <span className="inline-flex items-center gap-2 text-muted-foreground">
-        <Lamp state="unset" />
+        <StatusDot status={{ tone: "neutral", label: "Unreachable" }} />
         Unreachable
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <Lamp state={serverStates[server.state].lamp} label={serverStates[server.state].label} />
-      {server.name}
-      <span className="hidden text-muted-foreground sm:inline">{server.nodeName}</span>
+    <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
+      <StatusDot status={serverStates[server.state]} label={serverStates[server.state].label} />
+      <span className="truncate font-medium">{server.name}</span>
+      <span className="hidden truncate text-muted-foreground sm:inline">{server.nodeName}</span>
     </span>
   )
 }

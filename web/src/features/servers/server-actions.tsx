@@ -23,7 +23,7 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
   }
 
   return (
-    <div className="flex justify-end gap-1">
+    <div className="flex flex-wrap items-center gap-2">
       {running ? (
         <>
           <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("restart", `Restarted ${server.name}`)}>
@@ -36,14 +36,21 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
           </Button>
         </>
       ) : (
-        <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("start", `Started ${server.name}`)}>
+        <Button size="sm" disabled={mutation.isPending} onClick={() => run("start", `Started ${server.name}`)}>
           <PlayIcon />
           Start
         </Button>
       )}
       <ConfirmDialog
         trigger={
-          <Button size="icon-sm" variant="ghost" aria-label={`Delete ${server.name}`} disabled={mutation.isPending}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`Delete ${server.name}`}
+            title="Delete server"
+            disabled={mutation.isPending}
+            className="ml-auto text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
             <TrashIcon />
           </Button>
         }

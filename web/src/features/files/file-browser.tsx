@@ -1,9 +1,11 @@
-import { ArrowUpIcon, FolderPlusIcon, UploadSimpleIcon } from "@phosphor-icons/react"
+import { ArrowUpIcon, FolderPlusIcon, UploadSimpleIcon, WarningIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { type AnchorHTMLAttributes, type DragEvent, Fragment, useRef, useState } from "react"
 import { toast } from "sonner"
+import { Callout, ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
+import { IconTile } from "@/components/icon-tile"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -68,95 +70,96 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
       <h2 id="files-heading" className="sr-only">
         Files
       </h2>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <PathBreadcrumb files={files} path={path} root={server.name} />
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setCreating(true)}>
-            <FolderPlusIcon />
-            New folder
-          </Button>
-          <Button onClick={() => picker.current?.click()}>
-            <UploadSimpleIcon />
-            Upload
-          </Button>
-          <input
-            ref={picker}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => {
-              start([...(e.target.files ?? [])])
-              e.target.value = ""
-            }}
-          />
-        </div>
-      </div>
       {server.state !== "stopped" && (
-        <p className="mb-4 text-sm text-muted-foreground">
+        <Callout tone="warning" icon={WarningIcon} className="mb-4">
           The server is running. Stop it before you replace worlds or plugins, as it may overwrite or still use them.
-        </p>
+        </Callout>
       )}
       <UploadList uploads={uploads} onCancel={cancel} />
-      {isPending ? (
-        <Skeleton className="h-64" />
-      ) : error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error.message}
-        </p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden w-28 text-right sm:table-cell">Size</TableHead>
-              <TableHead className="hidden w-48 md:table-cell">Modified</TableHead>
-              <TableHead className="w-12">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {path && (
+      <div className="surface overflow-hidden rounded-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+          <PathBreadcrumb files={files} path={path} root={server.name} />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setCreating(true)}>
+              <FolderPlusIcon />
+              New folder
+            </Button>
+            <Button onClick={() => picker.current?.click()}>
+              <UploadSimpleIcon />
+              Upload
+            </Button>
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                start([...(e.target.files ?? [])])
+                e.target.value = ""
+              }}
+            />
+          </div>
+        </div>
+        {isPending ? (
+          <Skeleton className="m-4 h-64" />
+        ) : error ? (
+          <ErrorCallout error={error} className="m-4" />
+        ) : (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={4}>
-                  <FolderLink
-                    files={files}
-                    path={path.split("/").slice(0, -1).join("/")}
-                    className="inline-flex items-center gap-2.5 text-muted-foreground hover:text-foreground"
-                  >
-                    <ArrowUpIcon className="size-4" />
-                    Parent folder
-                  </FolderLink>
-                </TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden w-28 text-right sm:table-cell">Size</TableHead>
+                <TableHead className="hidden w-48 md:table-cell">Modified</TableHead>
+                <TableHead className="w-12">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
-            )}
-            {data.files.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
-                  This folder is empty. Drop files here to upload them.
-                </TableCell>
-              </TableRow>
-            )}
-            {data.files.map((entry) => (
-              <TableRow key={entry.name}>
-                <TableCell className="max-w-0 w-full">
-                  <EntryLink files={files} dir={path} entry={entry} />
-                </TableCell>
-                <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
-                  {entry.directory ? "–" : formatBytes(entry.size)}
-                </TableCell>
-                <TableCell className="hidden text-muted-foreground md:table-cell">{formatDateTime(entry.modified)}</TableCell>
-                <TableCell>
-                  <FileActions files={files} dir={path} entry={entry} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+            </TableHeader>
+            <TableBody>
+              {path && (
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    <FolderLink
+                      files={files}
+                      path={path.split("/").slice(0, -1).join("/")}
+                      className="inline-flex items-center gap-2.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <ArrowUpIcon className="size-4" />
+                      Parent folder
+                    </FolderLink>
+                  </TableCell>
+                </TableRow>
+              )}
+              {data.files.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-14 text-center text-muted-foreground">
+                    This folder is empty. Drop files here to upload them.
+                  </TableCell>
+                </TableRow>
+              )}
+              {data.files.map((entry) => (
+                <TableRow key={entry.name}>
+                  <TableCell className="max-w-0 w-full">
+                    <EntryLink files={files} dir={path} entry={entry} />
+                  </TableCell>
+                  <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
+                    {entry.directory ? "–" : formatBytes(entry.size)}
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground md:table-cell">{formatDateTime(entry.modified)}</TableCell>
+                  <TableCell>
+                    <FileActions files={files} dir={path} entry={entry} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
       {data?.truncated && <p className="mt-3 text-sm text-muted-foreground">This folder has more entries than can be listed here.</p>}
       {dragging && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-primary bg-background/85">
+        <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
+          <IconTile icon={UploadSimpleIcon} size="lg" />
           <p className="heading text-lg">Drop to upload to {folder}</p>
         </div>
       )}
@@ -206,7 +209,7 @@ function EntryLink({ files, dir, entry }: { files: ServerFiles; dir: string; ent
       <span className="truncate">{entry.name}</span>
     </>
   )
-  const className = "flex min-w-0 items-center gap-2.5 font-medium hover:underline"
+  const className = "flex min-w-0 items-center gap-3 font-medium hover:text-primary"
   if (entry.directory)
     return (
       <FolderLink files={files} path={path} className={className}>

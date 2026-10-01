@@ -1,4 +1,4 @@
-import { PaperPlaneRightIcon } from "@phosphor-icons/react"
+import { PaperPlaneRightIcon, TerminalIcon } from "@phosphor-icons/react"
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { type Server, useSendCommand } from "./api"
@@ -16,12 +16,12 @@ interface Line {
 const maxLines = 1000
 const historySteps: Partial<Record<string, number>> = { ArrowUp: -1, ArrowDown: 1 }
 
-const connectionText: Record<Connection, string> = {
-  connecting: "Connecting…",
-  live: "Live",
-  ended: "Showing the last output",
-  lost: "Connection lost, reconnecting…",
-  failed: "The console is not available right now.",
+const connections: Record<Connection, { text: string; dot: string }> = {
+  connecting: { text: "Connecting…", dot: "bg-console-warn animate-pulse" },
+  live: { text: "Live", dot: "bg-console-command shadow-[0_0_8px_var(--console-command)]" },
+  ended: { text: "Showing the last output", dot: "bg-console-muted" },
+  lost: { text: "Connection lost, reconnecting…", dot: "bg-console-warn animate-pulse" },
+  failed: { text: "The console is not available right now.", dot: "bg-console-error" },
 }
 
 function lineClass({ kind, text }: Line) {
@@ -108,67 +108,70 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
   const disabledReason = proxy ? "Proxies don't accept console commands yet" : !live ? "Start the server to send commands" : undefined
 
   return (
-    <section aria-labelledby="console-heading">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-        <h2 id="console-heading" className="heading text-xl">
+    <section
+      aria-labelledby="console-heading"
+      className="overflow-hidden rounded-2xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-white/10 px-4 py-3">
+        <h2 id="console-heading" className="flex items-center gap-2 text-sm font-semibold">
+          <TerminalIcon className="size-4 text-console-command" weight="duotone" />
           Console
         </h2>
-        <p role="status" className="text-sm text-muted-foreground">
-          {connectionText[connection]}
+        <p role="status" className="flex items-center gap-2 text-xs text-console-muted">
+          <span aria-hidden className={cn("size-2 rounded-full", connections[connection].dot)} />
+          {connections[connection].text}
         </p>
       </div>
       {/* Ligatures are off so that output like "<--" shows exactly what the server printed. */}
-      <div className="border bg-console text-console-foreground [font-variant-ligatures:none]">
-        <div
-          ref={viewport}
-          role="log"
-          aria-label={`Console output of ${server.name}`}
-          tabIndex={0}
-          onScroll={(e) => {
-            const el = e.currentTarget
-            stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32
-          }}
-          className="h-[60vh] min-h-72 overflow-y-auto p-3 font-mono text-xs leading-5 focus-visible:outline-1 focus-visible:outline-ring"
-        >
-          {lines.length === 0 ? (
-            <p className="text-console-muted">{connection === "connecting" ? "Loading output…" : "No output yet."}</p>
-          ) : (
-            lines.map((line) => (
-              <div key={line.id} className={cn("break-words whitespace-pre-wrap", lineClass(line))}>
-                {line.text}
-              </div>
-            ))
-          )}
-        </div>
-        <form
-          onSubmit={submit}
-          className="flex items-center gap-2 border-t border-white/10 py-1 pr-1 pl-3 focus-within:ring-1 focus-within:ring-ring"
-        >
-          <span aria-hidden className="font-mono text-xs text-console-command">
-            &gt;
-          </span>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={browseHistory}
-            disabled={disabledReason !== undefined}
-            placeholder={disabledReason ?? "Type a command, e.g. say Hello"}
-            aria-label="Console command"
-            autoComplete="off"
-            spellCheck={false}
-            maxLength={1000}
-            className="h-8 min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-console-muted disabled:cursor-not-allowed"
-          />
-          <button
-            type="submit"
-            aria-label="Send command"
-            disabled={disabledReason !== undefined || !input.trim()}
-            className="grid size-8 place-items-center text-console-muted hover:bg-white/10 hover:text-console-foreground disabled:pointer-events-none disabled:opacity-40"
-          >
-            <PaperPlaneRightIcon className="size-4" />
-          </button>
-        </form>
+      <div
+        ref={viewport}
+        role="log"
+        aria-label={`Console output of ${server.name}`}
+        tabIndex={0}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32
+        }}
+        className="h-[60vh] min-h-72 overflow-y-auto px-4 py-3 font-mono text-xs leading-5 [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      >
+        {lines.length === 0 ? (
+          <p className="text-console-muted">{connection === "connecting" ? "Loading output…" : "No output yet."}</p>
+        ) : (
+          lines.map((line) => (
+            <div key={line.id} className={cn("break-words whitespace-pre-wrap", lineClass(line))}>
+              {line.text}
+            </div>
+          ))
+        )}
       </div>
+      <form
+        onSubmit={submit}
+        className="flex items-center gap-2 border-t border-white/10 bg-white/[0.03] py-1.5 pr-1.5 pl-4 focus-within:bg-white/[0.06]"
+      >
+        <span aria-hidden className="font-mono text-xs font-bold text-console-command">
+          &gt;
+        </span>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={browseHistory}
+          disabled={disabledReason !== undefined}
+          placeholder={disabledReason ?? "Type a command, e.g. say Hello"}
+          aria-label="Console command"
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={1000}
+          className="h-9 min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-console-muted disabled:cursor-not-allowed"
+        />
+        <button
+          type="submit"
+          aria-label="Send command"
+          disabled={disabledReason !== undefined || !input.trim()}
+          className="grid size-9 place-items-center rounded-lg bg-console-command/15 text-console-command transition-colors hover:bg-console-command/25 disabled:pointer-events-none disabled:opacity-30"
+        >
+          <PaperPlaneRightIcon className="size-4" weight="fill" />
+        </button>
+      </form>
     </section>
   )
 }

@@ -1,7 +1,9 @@
-import { CaretLeftIcon, FolderIcon, GearIcon, SlidersHorizontalIcon, TerminalIcon } from "@phosphor-icons/react"
+import { FolderIcon, GearIcon, HardDrivesIcon, HashIcon, MemoryIcon, SlidersHorizontalIcon, TerminalIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link, Outlet, useNavigate } from "@tanstack/react-router"
-import { Lamp } from "@/components/lamp"
+import { ErrorCallout } from "@/components/callout"
+import { Chip } from "@/components/chip"
+import { BackLink } from "@/components/back-link"
 import { PageHeader } from "@/components/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { nodeQuery } from "@/features/nodes/api"
@@ -9,8 +11,8 @@ import { formatMegabytes } from "@/lib/format"
 import { useServer } from "./api"
 import { Console } from "./console"
 import { ServerActions } from "./server-actions"
-import { ServerStateLabel } from "./server-state"
-import { displayVersion, serverStates, serverType } from "./server-types"
+import { ServerStateBadge } from "./server-state"
+import { displayVersion, serverLook, serverType } from "./server-types"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
 
@@ -30,45 +32,38 @@ export function ServerPage() {
 
   return (
     <>
-      <Link
-        to="/nodes/$nodeId"
-        params={{ nodeId }}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <CaretLeftIcon className="size-3.5" />
+      <BackLink to="/nodes/$nodeId" params={{ nodeId }}>
         {node?.name ?? "Node"}
-      </Link>
+      </BackLink>
       {isPending ? (
-        <Skeleton className="h-96" />
+        <Skeleton className="h-96 rounded-xl" />
       ) : error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error.message}
-        </p>
+        <ErrorCallout error={error} />
       ) : !server ? (
         <p className="text-sm text-muted-foreground">This server no longer exists.</p>
       ) : (
         <>
           <PageHeader
-            title={
-              <span className="inline-flex items-center gap-3">
-                <Lamp state={serverStates[server.state].lamp} className="size-6" />
-                {server.name}
-              </span>
-            }
+            {...serverLook(server.type)}
+            title={server.name}
+            badge={<ServerStateBadge state={server.state} />}
             description={
-              <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <ServerStateLabel state={server.state} />
-                <span>
-                  {serverType(server.type).label} {displayVersion(server.version)} on port {server.port} with{" "}
-                  {formatMegabytes(server.memoryMb)} memory
-                </span>
+              <span className="mt-1 flex flex-wrap gap-2 text-foreground">
+                <Chip>
+                  {serverType(server.type).label} {displayVersion(server.version)}
+                </Chip>
+                <Chip icon={HashIcon}>
+                  <span className="font-mono">{server.port}</span>
+                </Chip>
+                <Chip icon={MemoryIcon}>{formatMegabytes(server.memoryMb)}</Chip>
+                {node && <Chip icon={HardDrivesIcon}>{node.name}</Chip>}
               </span>
             }
             actions={
               <ServerActions nodeId={nodeId} server={server} onDeleted={() => navigate({ to: "/nodes/$nodeId", params: { nodeId } })} />
             }
           />
-          <nav aria-label="Server" className="mb-8 flex gap-1 overflow-x-auto border-b">
+          <nav aria-label="Server" className="mb-8 flex max-w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:w-fit">
             {tabs
               .filter((tab) => !("game" in tab && serverType(server.type).proxy))
               .map(({ to, label, icon: Icon, exact }) => (
@@ -77,9 +72,9 @@ export function ServerPage() {
                   to={to}
                   params={{ nodeId, serverId }}
                   activeOptions={{ exact, includeSearch: false }}
-                  className="-mb-px flex items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground"
+                  className="flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground data-[status=active]:bg-card data-[status=active]:text-foreground data-[status=active]:shadow-sm"
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-4" weight="duotone" />
                   {label}
                 </Link>
               ))}

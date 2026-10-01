@@ -4,7 +4,7 @@ import { useBlocker } from "@tanstack/react-router"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
-import { Badge } from "@/components/ui/badge"
+import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { contentUrl, readText, type ServerFiles, upload } from "./api"
@@ -65,7 +65,7 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
           <h2 id="editor-heading" className="truncate font-mono text-sm">
             {path}
           </h2>
-          {dirty && <Badge variant="secondary">Unsaved</Badge>}
+          {dirty && <Pill tone="warning">Unsaved</Pill>}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
@@ -81,18 +81,19 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
         </div>
       </div>
       {isPending ? (
-        <Skeleton className="h-[65vh] min-h-80" />
+        <Skeleton className="h-[65vh] min-h-80 rounded-xl" />
       ) : error ? (
-        <p role="alert" className="border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+        <p role="alert" className="rounded-xl border border-dashed px-4 py-14 text-center text-sm text-muted-foreground">
           {error.message}
         </p>
       ) : (
-        <Suspense fallback={<Skeleton className="h-[65vh] min-h-80" />}>
+        <Suspense fallback={<Skeleton className="h-[65vh] min-h-80 rounded-xl" />}>
           <CodeEditor ref={editor} value={text} filename={name} onChange={() => setDirty(true)} />
         </Suspense>
       )}
-      <p className="mt-2 text-xs text-muted-foreground">
-        Ctrl+S saves. Servers read most settings when they start, so restart the server to apply your changes.
+      <p className="mt-3 text-xs text-muted-foreground">
+        <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem]">Ctrl+S</kbd> saves. Servers read most settings
+        when they start, so restart the server to apply your changes.
       </p>
       <ConfirmDialog
         open={blocker.status === "blocked"}
