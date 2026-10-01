@@ -34,6 +34,8 @@ var grpcStatus = map[codes.Code]int{
 	codes.NotFound:           http.StatusNotFound,
 	codes.AlreadyExists:      http.StatusConflict,
 	codes.FailedPrecondition: http.StatusConflict,
+	codes.PermissionDenied:   http.StatusForbidden,
+	codes.ResourceExhausted:  http.StatusRequestEntityTooLarge,
 	codes.Internal:           http.StatusBadGateway,
 	codes.Unavailable:        http.StatusBadGateway,
 	codes.DeadlineExceeded:   http.StatusGatewayTimeout,

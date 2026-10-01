@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 
 export type ServerState = "stopped" | "starting" | "running"
@@ -36,6 +36,12 @@ export const serversQuery = (nodeId: string) =>
     queryFn: () => api<Server[]>(`/nodes/${nodeId}/servers`),
     refetchInterval: 5_000,
   })
+
+/** A server of a node, looked up in the list of the node's servers. */
+export function useServer(nodeId: string, serverId: string) {
+  const query = useQuery(serversQuery(nodeId))
+  return { ...query, server: query.data?.find((s) => s.id === serverId) }
+}
 
 /** The servers of all reachable nodes; servers of offline nodes are missing. */
 export const allServersQuery = queryOptions({

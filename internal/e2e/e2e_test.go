@@ -2,8 +2,10 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"iter"
@@ -30,6 +32,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/mc-server-manager/internal/master/files"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
@@ -185,6 +188,7 @@ func (m *master) panel(t *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
 	server.NewHandler(m.nodes, networks).Register(mux)
 	network.NewHandler(networks).Register(mux)
+	files.NewHandler(m.nodes).Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -211,6 +215,52 @@ func (m *master) startAgent(t *testing.T, name string) agent {
 	creds := credentials.NewTLS(pki.AgentServerTLS(a.identity.Holder, a.identity.CA))
 	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), grpc.Creds(creds)), ln)
 	return a
+}
+
+// createServer creates a server on the agent of a node.
+func (m *master) createServer(t *testing.T, a agent, name string, typ mcsmv1.ServerType, port uint32) network.Ref {
+	conn, err := m.nodes.Conn(t.Context(), a.node.ID)
+	check(t, err)
+	res, err := mcsmv1.NewServerServiceClient(conn).CreateServer(t.Context(), &mcsmv1.CreateServerRequest{
+		Name: name, Type: typ, MemoryMb: 1024, Port: port, AcceptEula: true,
+	})
+	check(t, err)
+	return network.Ref{NodeID: a.node.ID, ServerID: res.GetServer().GetId()}
+}
+
+type apiClient struct {
+	t   *testing.T
+	url string
+}
+
+// do sends a request with an optional body, JSON unless it is []byte, checks the status and decodes the
+// response into out unless it is nil. It returns the response body.
+func (c apiClient) do(method, path string, in any, wantStatus int, out any) string {
+	c.t.Helper()
+	var body io.Reader
+	switch in := in.(type) {
+	case nil:
+	case []byte: // sent as is, e.g. an uploaded file
+		body = bytes.NewReader(in)
+	default:
+		data, err := json.Marshal(in)
+		check(c.t, err)
+		body = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(c.t.Context(), method, c.url+path, body)
+	check(c.t, err)
+	res, err := http.DefaultClient.Do(req)
+	check(c.t, err)
+	defer res.Body.Close()
+	data, err := io.ReadAll(res.Body)
+	check(c.t, err)
+	if res.StatusCode != wantStatus {
+		c.t.Fatalf("%s %s: status %d, want %d: %s", method, path, res.StatusCode, wantStatus, data)
+	}
+	if out != nil {
+		check(c.t, json.Unmarshal(data, out))
+	}
+	return string(data)
 }
 
 func check(t *testing.T, err error) {

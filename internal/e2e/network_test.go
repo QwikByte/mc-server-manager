@@ -1,9 +1,6 @@
 package e2e
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
 	"net"
 	"net/http"
 	"slices"
@@ -77,46 +74,4 @@ func TestNetwork(t *testing.T) {
 	if body := api.do("GET", "/api/networks", nil, http.StatusOK, nil); body != "[]\n" {
 		t.Fatalf("networks after delete = %s", body)
 	}
-}
-
-// createServer creates a server on the agent of a node.
-func (m *master) createServer(t *testing.T, a agent, name string, typ mcsmv1.ServerType, port uint32) network.Ref {
-	conn, err := m.nodes.Conn(t.Context(), a.node.ID)
-	check(t, err)
-	res, err := mcsmv1.NewServerServiceClient(conn).CreateServer(t.Context(), &mcsmv1.CreateServerRequest{
-		Name: name, Type: typ, MemoryMb: 1024, Port: port, AcceptEula: true,
-	})
-	check(t, err)
-	return network.Ref{NodeID: a.node.ID, ServerID: res.GetServer().GetId()}
-}
-
-type apiClient struct {
-	t   *testing.T
-	url string
-}
-
-// do sends a request with an optional JSON body, checks the status and decodes the
-// response into out unless it is nil. It returns the response body.
-func (c apiClient) do(method, path string, in any, wantStatus int, out any) string {
-	c.t.Helper()
-	var body io.Reader
-	if in != nil {
-		data, err := json.Marshal(in)
-		check(c.t, err)
-		body = bytes.NewReader(data)
-	}
-	req, err := http.NewRequestWithContext(c.t.Context(), method, c.url+path, body)
-	check(c.t, err)
-	res, err := http.DefaultClient.Do(req)
-	check(c.t, err)
-	defer res.Body.Close()
-	data, err := io.ReadAll(res.Body)
-	check(c.t, err)
-	if res.StatusCode != wantStatus {
-		c.t.Fatalf("%s %s: status %d, want %d: %s", method, path, res.StatusCode, wantStatus, data)
-	}
-	if out != nil {
-		check(c.t, json.Unmarshal(data, out))
-	}
-	return string(data)
 }

@@ -79,6 +79,21 @@ const serverRoute = createRoute({
   path: "/nodes/$nodeId/servers/$serverId",
   component: lazyRouteComponent(() => import("@/features/servers/server-page"), "ServerPage"),
 })
+const serverConsoleRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "/",
+  component: lazyRouteComponent(() => import("@/features/servers/server-page"), "ServerConsole"),
+})
+const serverFilesRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "files",
+  // path is the folder shown, edit the file open in the editor.
+  validateSearch: (search: Record<string, unknown>): { path?: string; edit?: string } => ({
+    path: typeof search.path === "string" && search.path ? search.path : undefined,
+    edit: typeof search.edit === "string" && search.edit ? search.edit : undefined,
+  }),
+  component: lazyRouteComponent(() => import("@/features/files/files-page"), "FilesPage"),
+})
 
 const networksRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -94,7 +109,14 @@ const networkRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
-    appRoute.addChildren([indexRoute, nodesRoute, nodeRoute, serverRoute, networksRoute, networkRoute]),
+    appRoute.addChildren([
+      indexRoute,
+      nodesRoute,
+      nodeRoute,
+      serverRoute.addChildren([serverConsoleRoute, serverFilesRoute]),
+      networksRoute,
+      networkRoute,
+    ]),
   ]),
   context: { queryClient },
   defaultPreload: "intent",

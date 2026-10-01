@@ -5,7 +5,6 @@ package server
 import (
 	"cmp"
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"net"
@@ -33,7 +32,6 @@ const (
 )
 
 var (
-	idPattern      = regexp.MustCompile(`^[a-z2-7]{26}$`) // lower-cased crypto/rand.Text
 	namePattern    = regexp.MustCompile(`^[\pL\pN][\pL\pN _.-]{0,31}$`)
 	versionPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
 	secretPattern  = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
@@ -75,7 +73,7 @@ func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequ
 		return nil, status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another port.", req.GetPort(), existing[i].Name)
 	}
 	spec := runtime.Spec{
-		ID:       strings.ToLower(rand.Text()),
+		ID:       runtime.NewID(),
 		Name:     req.GetName(),
 		Type:     req.GetType(),
 		Version:  cmp.Or(req.GetVersion(), "LATEST"),
@@ -102,7 +100,7 @@ func (s *Service) DeleteServer(ctx context.Context, req *mcsmv1.DeleteServerRequ
 }
 
 func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.ServerService_StreamLogsServer) error {
-	if !idPattern.MatchString(req.GetId()) {
+	if !runtime.ValidID(req.GetId()) {
 		return status.Error(codes.InvalidArgument, "invalid server ID")
 	}
 	for line, err := range s.rt.Logs(stream.Context(), req.GetId(), int(min(req.GetTail(), maxTail))) {
@@ -117,7 +115,7 @@ func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.Server
 }
 
 func (s *Service) SendCommand(ctx context.Context, req *mcsmv1.SendCommandRequest) (*mcsmv1.SendCommandResponse, error) {
-	if !idPattern.MatchString(req.GetId()) {
+	if !runtime.ValidID(req.GetId()) {
 		return nil, status.Error(codes.InvalidArgument, "invalid server ID")
 	}
 	command := strings.TrimPrefix(strings.TrimSpace(req.GetCommand()), "/")
@@ -152,7 +150,7 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *mcsmv1.ConfigureNet
 // networkOf validates a network configuration, which ends up in configuration files.
 func networkOf(req *mcsmv1.ConfigureNetworkRequest) (runtime.Network, string) {
 	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret()}
-	if !idPattern.MatchString(req.GetId()) {
+	if !runtime.ValidID(req.GetId()) {
 		return network, "invalid server ID"
 	}
 	if network.ForwardingSecret != "" && !secretPattern.MatchString(network.ForwardingSecret) {
@@ -164,7 +162,7 @@ func networkOf(req *mcsmv1.ConfigureNetworkRequest) (runtime.Network, string) {
 		switch {
 		case !backendPattern.MatchString(backend.Name) || backend.Name == "try" || seen[backend.Name]:
 			return network, fmt.Sprintf("invalid or duplicate backend name %q", backend.Name)
-		case backend.ServerID != "" && !idPattern.MatchString(backend.ServerID):
+		case backend.ServerID != "" && !runtime.ValidID(backend.ServerID):
 			return network, "invalid backend server ID"
 		case backend.ServerID == "" && !validAddress(backend.Address):
 			return network, fmt.Sprintf("invalid backend address %q", backend.Address)
@@ -185,7 +183,7 @@ func validAddress(address string) bool {
 func plain(text string) string { return formatting.ReplaceAllString(text, "") }
 
 func (s *Service) apply(ctx context.Context, id string, op func(context.Context, string) error) error {
-	if !idPattern.MatchString(id) {
+	if !runtime.ValidID(id) {
 		return status.Error(codes.InvalidArgument, "invalid server ID")
 	}
 	return toStatus(op(ctx, id))

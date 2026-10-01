@@ -23,6 +23,9 @@ Servers run as containers based on [itzg/minecraft-server](https://github.com/it
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
 through the RCON connection the server image provides.
 
+The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
+the master), edits configuration files in the browser and downloads files or whole folders as ZIP archives.
+
 ## Networks
 
 A network puts Paper or Purpur servers behind a Velocity proxy, on one node or spread across nodes. The master stores
@@ -66,6 +69,9 @@ the network and configures each server through its agent; changes are applied to
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), containers run with `no-new-privileges` and memory and PID limits, and servers are only created
   after the operator accepts the Minecraft EULA.
+- **File manager.** The agent confines every path to the server's data directory, including through symbolic
+  links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
+  uploaded HTML file can't run scripts in the panel.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
@@ -86,6 +92,7 @@ internal/master/
   node/                 node registry, enrollment, agent connections
   server/               server API, forwarded to the node's agent
   network/              networks of servers behind a proxy, applied through the agents
+  files/                file manager, streamed between the browser and the agent
   database/             SQLite and embedded migrations
   httpapi/              JSON helpers
 internal/agent/
@@ -96,10 +103,11 @@ internal/agent/
   storage/              storage locations allowed for server data
   datadir/              confined access to a server's data, owned by the server's user
   network/              proxy and backend configuration for networks
+  files/                file access for the file manager
   runtime/              runtime interface; docker/ implements it
-internal/e2e/           end-to-end tests: enrollment, control and networks over real mTLS
+internal/e2e/           end-to-end tests: enrollment, control, files and networks over real mTLS
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
-  src/features/         auth, nodes, servers, networks
+  src/features/         auth, nodes, servers, files, networks
 deploy/systemd/         service units
 ```
 
@@ -154,7 +162,7 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 ## Roadmap
 
 - Console commands for proxies, so that network changes reload the proxy instead of restarting it
-- File manager and backups
+- Backups
 - More runtimes (plain processes) and Java version selection per server
 - Roles, two-factor authentication and an audit log
 - German translation of the panel

@@ -4,12 +4,24 @@ package runtime
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"iter"
+	"regexp"
+	"strings"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 )
+
+// idPattern matches server IDs, which also name directories and containers.
+var idPattern = regexp.MustCompile(`^[a-z2-7]{26}$`)
+
+// NewID returns a random server ID.
+func NewID() string { return strings.ToLower(rand.Text()) }
+
+// ValidID reports whether id is a well-formed server ID.
+func ValidID(id string) bool { return idPattern.MatchString(id) }
 
 var (
 	// ErrNotFound is returned for operations on unknown servers.

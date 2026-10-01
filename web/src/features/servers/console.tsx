@@ -105,14 +105,10 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
     setInput(history.current[historyIndex.current] ?? "")
   }
 
-  const disabledReason = proxy
-    ? "Proxies don't accept console commands yet"
-    : !live
-      ? "Start the server to send commands"
-      : undefined
+  const disabledReason = proxy ? "Proxies don't accept console commands yet" : !live ? "Start the server to send commands" : undefined
 
   return (
-    <section aria-labelledby="console-heading" className="mt-10">
+    <section aria-labelledby="console-heading">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <h2 id="console-heading" className="heading text-xl">
           Console
@@ -144,7 +140,10 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
             ))
           )}
         </div>
-        <form onSubmit={submit} className="flex items-center gap-2 border-t border-white/10 py-1 pr-1 pl-3 focus-within:ring-1 focus-within:ring-ring">
+        <form
+          onSubmit={submit}
+          className="flex items-center gap-2 border-t border-white/10 py-1 pr-1 pl-3 focus-within:ring-1 focus-within:ring-ring"
+        >
           <span aria-hidden className="font-mono text-xs text-console-command">
             &gt;
           </span>

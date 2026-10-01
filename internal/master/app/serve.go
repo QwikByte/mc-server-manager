@@ -16,6 +16,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
+	"github.com/QwikByte/mc-server-manager/internal/master/files"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
@@ -92,6 +93,7 @@ func routes(users *auth.Service, nodes *node.Service, networks *network.Service)
 	node.NewHandler(nodes).Register(api)
 	server.NewHandler(nodes, networks).Register(api)
 	network.NewHandler(networks).Register(api)
+	files.NewHandler(nodes).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)

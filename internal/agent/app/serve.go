@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/local"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/files"
 	"github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime/docker"
@@ -82,5 +83,6 @@ func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *stora
 	s := grpc.NewServer(opts...)
 	mcsmv1.RegisterNodeServiceServer(s, node.NewService(rt, identity, locations))
 	mcsmv1.RegisterServerServiceServer(s, server.NewService(rt))
+	mcsmv1.RegisterFileServiceServer(s, files.NewService(rt))
 	return s
 }

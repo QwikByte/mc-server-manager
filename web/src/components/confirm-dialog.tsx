@@ -11,16 +11,23 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
-/** Asks for confirmation before an action that can't be undone or disrupts players. */
+/**
+ * Asks for confirmation before an action that can't be undone or disrupts players. It
+ * opens through its trigger, or is controlled with open and onOpenChange.
+ */
 export function ConfirmDialog({
   trigger,
+  open,
+  onOpenChange,
   title,
   description,
   action,
   destructive = false,
   onConfirm,
 }: {
-  trigger: ReactElement
+  trigger?: ReactElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   title: ReactNode
   description: ReactNode
   action: string
@@ -28,8 +35,8 @@ export function ConfirmDialog({
   onConfirm: () => void
 }) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

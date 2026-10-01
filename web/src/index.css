@@ -89,6 +89,10 @@
   --console-command: #6cc7ac;
   --console-warn: #e3b341;
   --console-error: #f0786c;
+  /* Syntax colours of the file editor, which shares the console's dark surface. */
+  --code-string: #e2c98a;
+  --code-literal: #9fb7f0;
+  --code-keyword: #e79fd0;
 }
 
 @media (prefers-color-scheme: dark) {
