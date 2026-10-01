@@ -31,6 +31,11 @@ MOTD editor with colour codes and preview, and a search. Only properties of the 
 shown, comments in the file are kept, and properties the manager relies on (container port, RCON) are locked.
 Secrets such as the RCON password never reach the panel.
 
+The settings of a server can be changed after it was created: name, Minecraft version, memory, port, Java
+version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
+The agent creates the container again with the same data; the old container is only removed once the new one
+exists.
+
 ## Networks
 
 A network puts Paper or Purpur servers behind a Velocity proxy, on one node or spread across nodes. The master stores
@@ -73,7 +78,8 @@ the network and configures each server through its agent; changes are applied to
   the master's database and on the network's servers; the API never returns it.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), containers run with `no-new-privileges` and memory and PID limits, and servers are only created
-  after the operator accepts the Minecraft EULA.
+  after the operator accepts the Minecraft EULA. JVM options may only contain characters that the image's start
+  script can't interpret as shell syntax, and can't override the memory limit.
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
   uploaded HTML file can't run scripts in the panel.
@@ -170,6 +176,6 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 
 - Console commands for proxies, so that network changes reload the proxy instead of restarting it
 - Backups
-- More runtimes (plain processes) and Java version selection per server
+- More runtimes (plain processes)
 - Roles, two-factor authentication and an audit log
 - German translation of the panel

@@ -327,6 +327,18 @@ func (f *fakeRuntime) Stop(_ context.Context, id string) error {
 	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_STOPPED)
 }
 
+func (f *fakeRuntime) Update(_ context.Context, spec runtime.Spec) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.servers {
+		if f.servers[i].ID == spec.ID {
+			f.servers[i].Spec = spec
+			return nil
+		}
+	}
+	return runtime.ErrNotFound
+}
+
 func (f *fakeRuntime) Restart(_ context.Context, id string) error {
 	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_RUNNING)
 }

@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -69,6 +70,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		}
 		deleteServer(w, r)
 	})
+	mux.HandleFunc("PUT /api/nodes/{node}/servers/{id}", h.update)
 	mux.HandleFunc("GET /api/nodes/{node}/servers/{id}/logs", h.logs)
 	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/command", h.command)
 }
@@ -82,12 +84,26 @@ type view struct {
 	Port     uint32 `json:"port"`
 	State    string `json:"state"`
 	Storage  string `json:"storage"`
+	settings
+}
+
+// settings are the settings of a server that can be changed after it was created.
+type settings struct {
+	Java          string   `json:"java"`
+	RestartPolicy string   `json:"restartPolicy"`
+	AikarFlags    bool     `json:"aikarFlags"`
+	JVMOptions    []string `json:"jvmOptions"`
+	CPULimit      float64  `json:"cpuLimit"` // in cores, 0 means no limit
 }
 
 func toView(s *mcsmv1.Server) view {
 	return view{
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
 		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(),
+		settings: settings{
+			Java: s.GetJava(), RestartPolicy: s.GetRestartPolicy().Slug(), AikarFlags: s.GetAikarFlags(),
+			JVMOptions: append([]string{}, s.GetJvmOptions()...), CPULimit: float64(s.GetCpuMillis()) / 1000,
+		},
 	}
 }
 
@@ -190,6 +206,46 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetServer()))
+}
+
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name     string `json:"name"`
+		Version  string `json:"version"`
+		MemoryMB uint32 `json:"memoryMb"`
+		Port     uint32 `json:"port"`
+		settings
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	policy := mcsmv1.ParseRestartPolicy(req.RestartPolicy)
+	switch {
+	case req.CPULimit < 0 || req.CPULimit > 1024:
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Enter a CPU limit in cores, or 0 for no limit."))
+		return
+	case policy == mcsmv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED:
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose when the server starts on its own."))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // a new Java version pulls an image
+	defer cancel()
+	c, err := h.client(ctx, r)
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	res, err := c.UpdateServer(ctx, &mcsmv1.UpdateServerRequest{
+		Id: r.PathValue("id"), Name: req.Name, Version: req.Version, MemoryMb: req.MemoryMB, Port: req.Port,
+		Java: req.Java, RestartPolicy: policy, AikarFlags: req.AikarFlags,
+		JvmOptions: req.JVMOptions, CpuMillis: uint32(math.Round(req.CPULimit * 1000)),
+	})
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, toView(res.GetServer()))
 }
 
 // lifecycle wraps an operation on a single server that returns no data.

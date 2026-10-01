@@ -89,6 +89,63 @@ func (ServerType) EnumDescriptor() ([]byte, []int) {
 	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{0}
 }
 
+// RestartPolicy decides when the node starts a server on its own.
+type RestartPolicy int32
+
+const (
+	// Same as RESTART_POLICY_ALWAYS.
+	RestartPolicy_RESTART_POLICY_UNSPECIFIED RestartPolicy = 0
+	// Start with the node and after a crash, unless the server was stopped.
+	RestartPolicy_RESTART_POLICY_ALWAYS RestartPolicy = 1
+	// Start again after a crash.
+	RestartPolicy_RESTART_POLICY_ON_CRASH RestartPolicy = 2
+	// Only start when asked to.
+	RestartPolicy_RESTART_POLICY_NEVER RestartPolicy = 3
+)
+
+// Enum value maps for RestartPolicy.
+var (
+	RestartPolicy_name = map[int32]string{
+		0: "RESTART_POLICY_UNSPECIFIED",
+		1: "RESTART_POLICY_ALWAYS",
+		2: "RESTART_POLICY_ON_CRASH",
+		3: "RESTART_POLICY_NEVER",
+	}
+	RestartPolicy_value = map[string]int32{
+		"RESTART_POLICY_UNSPECIFIED": 0,
+		"RESTART_POLICY_ALWAYS":      1,
+		"RESTART_POLICY_ON_CRASH":    2,
+		"RESTART_POLICY_NEVER":       3,
+	}
+)
+
+func (x RestartPolicy) Enum() *RestartPolicy {
+	p := new(RestartPolicy)
+	*p = x
+	return p
+}
+
+func (x RestartPolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RestartPolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_mcsm_v1_server_proto_enumTypes[1].Descriptor()
+}
+
+func (RestartPolicy) Type() protoreflect.EnumType {
+	return &file_mcsm_v1_server_proto_enumTypes[1]
+}
+
+func (x RestartPolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RestartPolicy.Descriptor instead.
+func (RestartPolicy) EnumDescriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{1}
+}
+
 type ServerState int32
 
 const (
@@ -125,11 +182,11 @@ func (x ServerState) String() string {
 }
 
 func (ServerState) Descriptor() protoreflect.EnumDescriptor {
-	return file_mcsm_v1_server_proto_enumTypes[1].Descriptor()
+	return file_mcsm_v1_server_proto_enumTypes[2].Descriptor()
 }
 
 func (ServerState) Type() protoreflect.EnumType {
-	return &file_mcsm_v1_server_proto_enumTypes[1]
+	return &file_mcsm_v1_server_proto_enumTypes[2]
 }
 
 func (x ServerState) Number() protoreflect.EnumNumber {
@@ -138,7 +195,7 @@ func (x ServerState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ServerState.Descriptor instead.
 func (ServerState) EnumDescriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{1}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{2}
 }
 
 type Server struct {
@@ -152,7 +209,16 @@ type Server struct {
 	Port     uint32      `protobuf:"varint,6,opt,name=port,proto3" json:"port,omitempty"`
 	State    ServerState `protobuf:"varint,7,opt,name=state,proto3,enum=mcsm.v1.ServerState" json:"state,omitempty"`
 	// Storage location of the server's data on the node.
-	Storage       string `protobuf:"bytes,8,opt,name=storage,proto3" json:"storage,omitempty"`
+	Storage string `protobuf:"bytes,8,opt,name=storage,proto3" json:"storage,omitempty"`
+	// Java version of game servers, e.g. "21"; empty for the newest.
+	Java          string        `protobuf:"bytes,9,opt,name=java,proto3" json:"java,omitempty"`
+	RestartPolicy RestartPolicy `protobuf:"varint,10,opt,name=restart_policy,json=restartPolicy,proto3,enum=mcsm.v1.RestartPolicy" json:"restart_policy,omitempty"`
+	// Use the JVM flags recommended by Aikar for Paper and its forks.
+	AikarFlags bool `protobuf:"varint,11,opt,name=aikar_flags,json=aikarFlags,proto3" json:"aikar_flags,omitempty"`
+	// Additional JVM options, e.g. "-Dfile.encoding=UTF-8".
+	JvmOptions []string `protobuf:"bytes,12,rep,name=jvm_options,json=jvmOptions,proto3" json:"jvm_options,omitempty"`
+	// CPU limit in thousandths of a core; 0 means no limit.
+	CpuMillis     uint32 `protobuf:"varint,13,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -241,6 +307,41 @@ func (x *Server) GetStorage() string {
 		return x.Storage
 	}
 	return ""
+}
+
+func (x *Server) GetJava() string {
+	if x != nil {
+		return x.Java
+	}
+	return ""
+}
+
+func (x *Server) GetRestartPolicy() RestartPolicy {
+	if x != nil {
+		return x.RestartPolicy
+	}
+	return RestartPolicy_RESTART_POLICY_UNSPECIFIED
+}
+
+func (x *Server) GetAikarFlags() bool {
+	if x != nil {
+		return x.AikarFlags
+	}
+	return false
+}
+
+func (x *Server) GetJvmOptions() []string {
+	if x != nil {
+		return x.JvmOptions
+	}
+	return nil
+}
+
+func (x *Server) GetCpuMillis() uint32 {
+	if x != nil {
+		return x.CpuMillis
+	}
+	return 0
 }
 
 type ListServersRequest struct {
@@ -701,6 +802,166 @@ func (*RestartServerResponse) Descriptor() ([]byte, []int) {
 	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{10}
 }
 
+type UpdateServerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	MemoryMb      uint32                 `protobuf:"varint,4,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
+	Port          uint32                 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`
+	Java          string                 `protobuf:"bytes,6,opt,name=java,proto3" json:"java,omitempty"`
+	RestartPolicy RestartPolicy          `protobuf:"varint,7,opt,name=restart_policy,json=restartPolicy,proto3,enum=mcsm.v1.RestartPolicy" json:"restart_policy,omitempty"`
+	AikarFlags    bool                   `protobuf:"varint,8,opt,name=aikar_flags,json=aikarFlags,proto3" json:"aikar_flags,omitempty"`
+	JvmOptions    []string               `protobuf:"bytes,9,rep,name=jvm_options,json=jvmOptions,proto3" json:"jvm_options,omitempty"`
+	CpuMillis     uint32                 `protobuf:"varint,10,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateServerRequest) Reset() {
+	*x = UpdateServerRequest{}
+	mi := &file_mcsm_v1_server_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateServerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateServerRequest) ProtoMessage() {}
+
+func (x *UpdateServerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_server_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateServerRequest.ProtoReflect.Descriptor instead.
+func (*UpdateServerRequest) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateServerRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateServerRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpdateServerRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *UpdateServerRequest) GetMemoryMb() uint32 {
+	if x != nil {
+		return x.MemoryMb
+	}
+	return 0
+}
+
+func (x *UpdateServerRequest) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *UpdateServerRequest) GetJava() string {
+	if x != nil {
+		return x.Java
+	}
+	return ""
+}
+
+func (x *UpdateServerRequest) GetRestartPolicy() RestartPolicy {
+	if x != nil {
+		return x.RestartPolicy
+	}
+	return RestartPolicy_RESTART_POLICY_UNSPECIFIED
+}
+
+func (x *UpdateServerRequest) GetAikarFlags() bool {
+	if x != nil {
+		return x.AikarFlags
+	}
+	return false
+}
+
+func (x *UpdateServerRequest) GetJvmOptions() []string {
+	if x != nil {
+		return x.JvmOptions
+	}
+	return nil
+}
+
+func (x *UpdateServerRequest) GetCpuMillis() uint32 {
+	if x != nil {
+		return x.CpuMillis
+	}
+	return 0
+}
+
+type UpdateServerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Server        *Server                `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateServerResponse) Reset() {
+	*x = UpdateServerResponse{}
+	mi := &file_mcsm_v1_server_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateServerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateServerResponse) ProtoMessage() {}
+
+func (x *UpdateServerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_server_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateServerResponse.ProtoReflect.Descriptor instead.
+func (*UpdateServerResponse) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *UpdateServerResponse) GetServer() *Server {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
 type DeleteServerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -710,7 +971,7 @@ type DeleteServerRequest struct {
 
 func (x *DeleteServerRequest) Reset() {
 	*x = DeleteServerRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[11]
+	mi := &file_mcsm_v1_server_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -722,7 +983,7 @@ func (x *DeleteServerRequest) String() string {
 func (*DeleteServerRequest) ProtoMessage() {}
 
 func (x *DeleteServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[11]
+	mi := &file_mcsm_v1_server_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -735,7 +996,7 @@ func (x *DeleteServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteServerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteServerRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{11}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteServerRequest) GetId() string {
@@ -753,7 +1014,7 @@ type DeleteServerResponse struct {
 
 func (x *DeleteServerResponse) Reset() {
 	*x = DeleteServerResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[12]
+	mi := &file_mcsm_v1_server_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -765,7 +1026,7 @@ func (x *DeleteServerResponse) String() string {
 func (*DeleteServerResponse) ProtoMessage() {}
 
 func (x *DeleteServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[12]
+	mi := &file_mcsm_v1_server_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -778,7 +1039,7 @@ func (x *DeleteServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteServerResponse.ProtoReflect.Descriptor instead.
 func (*DeleteServerResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{12}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{14}
 }
 
 type StreamLogsRequest struct {
@@ -792,7 +1053,7 @@ type StreamLogsRequest struct {
 
 func (x *StreamLogsRequest) Reset() {
 	*x = StreamLogsRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[13]
+	mi := &file_mcsm_v1_server_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -804,7 +1065,7 @@ func (x *StreamLogsRequest) String() string {
 func (*StreamLogsRequest) ProtoMessage() {}
 
 func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[13]
+	mi := &file_mcsm_v1_server_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -817,7 +1078,7 @@ func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLogsRequest.ProtoReflect.Descriptor instead.
 func (*StreamLogsRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{13}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StreamLogsRequest) GetId() string {
@@ -843,7 +1104,7 @@ type StreamLogsResponse struct {
 
 func (x *StreamLogsResponse) Reset() {
 	*x = StreamLogsResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[14]
+	mi := &file_mcsm_v1_server_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -855,7 +1116,7 @@ func (x *StreamLogsResponse) String() string {
 func (*StreamLogsResponse) ProtoMessage() {}
 
 func (x *StreamLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[14]
+	mi := &file_mcsm_v1_server_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -868,7 +1129,7 @@ func (x *StreamLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLogsResponse.ProtoReflect.Descriptor instead.
 func (*StreamLogsResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{14}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *StreamLogsResponse) GetLine() string {
@@ -889,7 +1150,7 @@ type SendCommandRequest struct {
 
 func (x *SendCommandRequest) Reset() {
 	*x = SendCommandRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[15]
+	mi := &file_mcsm_v1_server_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -901,7 +1162,7 @@ func (x *SendCommandRequest) String() string {
 func (*SendCommandRequest) ProtoMessage() {}
 
 func (x *SendCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[15]
+	mi := &file_mcsm_v1_server_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -914,7 +1175,7 @@ func (x *SendCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendCommandRequest.ProtoReflect.Descriptor instead.
 func (*SendCommandRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{15}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SendCommandRequest) GetId() string {
@@ -940,7 +1201,7 @@ type SendCommandResponse struct {
 
 func (x *SendCommandResponse) Reset() {
 	*x = SendCommandResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[16]
+	mi := &file_mcsm_v1_server_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -952,7 +1213,7 @@ func (x *SendCommandResponse) String() string {
 func (*SendCommandResponse) ProtoMessage() {}
 
 func (x *SendCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[16]
+	mi := &file_mcsm_v1_server_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -965,7 +1226,7 @@ func (x *SendCommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendCommandResponse.ProtoReflect.Descriptor instead.
 func (*SendCommandResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{16}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SendCommandResponse) GetOutput() string {
@@ -988,7 +1249,7 @@ type ConfigureNetworkRequest struct {
 
 func (x *ConfigureNetworkRequest) Reset() {
 	*x = ConfigureNetworkRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[17]
+	mi := &file_mcsm_v1_server_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1000,7 +1261,7 @@ func (x *ConfigureNetworkRequest) String() string {
 func (*ConfigureNetworkRequest) ProtoMessage() {}
 
 func (x *ConfigureNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[17]
+	mi := &file_mcsm_v1_server_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1013,7 +1274,7 @@ func (x *ConfigureNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureNetworkRequest.ProtoReflect.Descriptor instead.
 func (*ConfigureNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{17}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ConfigureNetworkRequest) GetId() string {
@@ -1052,7 +1313,7 @@ type NetworkBackend struct {
 
 func (x *NetworkBackend) Reset() {
 	*x = NetworkBackend{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[18]
+	mi := &file_mcsm_v1_server_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1064,7 +1325,7 @@ func (x *NetworkBackend) String() string {
 func (*NetworkBackend) ProtoMessage() {}
 
 func (x *NetworkBackend) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[18]
+	mi := &file_mcsm_v1_server_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1077,7 +1338,7 @@ func (x *NetworkBackend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkBackend.ProtoReflect.Descriptor instead.
 func (*NetworkBackend) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{18}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *NetworkBackend) GetName() string {
@@ -1138,7 +1399,7 @@ type ConfigureNetworkResponse struct {
 
 func (x *ConfigureNetworkResponse) Reset() {
 	*x = ConfigureNetworkResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[19]
+	mi := &file_mcsm_v1_server_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1150,7 +1411,7 @@ func (x *ConfigureNetworkResponse) String() string {
 func (*ConfigureNetworkResponse) ProtoMessage() {}
 
 func (x *ConfigureNetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[19]
+	mi := &file_mcsm_v1_server_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1163,14 +1424,14 @@ func (x *ConfigureNetworkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureNetworkResponse.ProtoReflect.Descriptor instead.
 func (*ConfigureNetworkResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{19}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{21}
 }
 
 var File_mcsm_v1_server_proto protoreflect.FileDescriptor
 
 const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x14mcsm/v1/server.proto\x12\amcsm.v1\"\xe6\x01\n" +
+	"\x14mcsm/v1/server.proto\x12\amcsm.v1\"\x9a\x03\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
@@ -1179,7 +1440,16 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\tmemory_mb\x18\x05 \x01(\rR\bmemoryMb\x12\x12\n" +
 	"\x04port\x18\x06 \x01(\rR\x04port\x12*\n" +
 	"\x05state\x18\a \x01(\x0e2\x14.mcsm.v1.ServerStateR\x05state\x12\x18\n" +
-	"\astorage\x18\b \x01(\tR\astorage\"\x14\n" +
+	"\astorage\x18\b \x01(\tR\astorage\x12\x12\n" +
+	"\x04java\x18\t \x01(\tR\x04java\x12=\n" +
+	"\x0erestart_policy\x18\n" +
+	" \x01(\x0e2\x16.mcsm.v1.RestartPolicyR\rrestartPolicy\x12\x1f\n" +
+	"\vaikar_flags\x18\v \x01(\bR\n" +
+	"aikarFlags\x12\x1f\n" +
+	"\vjvm_options\x18\f \x03(\tR\n" +
+	"jvmOptions\x12\x1d\n" +
+	"\n" +
+	"cpu_millis\x18\r \x01(\rR\tcpuMillis\"\x14\n" +
 	"\x12ListServersRequest\"@\n" +
 	"\x13ListServersResponse\x12)\n" +
 	"\aservers\x18\x01 \x03(\v2\x0f.mcsm.v1.ServerR\aservers\"\xd8\x01\n" +
@@ -1202,7 +1472,24 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x12StopServerResponse\"&\n" +
 	"\x14RestartServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15RestartServerResponse\"%\n" +
+	"\x15RestartServerResponse\"\xb8\x02\n" +
+	"\x13UpdateServerRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12\x1b\n" +
+	"\tmemory_mb\x18\x04 \x01(\rR\bmemoryMb\x12\x12\n" +
+	"\x04port\x18\x05 \x01(\rR\x04port\x12\x12\n" +
+	"\x04java\x18\x06 \x01(\tR\x04java\x12=\n" +
+	"\x0erestart_policy\x18\a \x01(\x0e2\x16.mcsm.v1.RestartPolicyR\rrestartPolicy\x12\x1f\n" +
+	"\vaikar_flags\x18\b \x01(\bR\n" +
+	"aikarFlags\x12\x1f\n" +
+	"\vjvm_options\x18\t \x03(\tR\n" +
+	"jvmOptions\x12\x1d\n" +
+	"\n" +
+	"cpu_millis\x18\n" +
+	" \x01(\rR\tcpuMillis\"?\n" +
+	"\x14UpdateServerResponse\x12'\n" +
+	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server\"%\n" +
 	"\x13DeleteServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x16\n" +
 	"\x14DeleteServerResponse\"7\n" +
@@ -1236,12 +1523,17 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x11SERVER_TYPE_FORGE\x10\x05\x12\x18\n" +
 	"\x14SERVER_TYPE_NEOFORGE\x10\x06\x12\x18\n" +
 	"\x14SERVER_TYPE_VELOCITY\x10\a\x12\x1a\n" +
-	"\x16SERVER_TYPE_BUNGEECORD\x10\b*z\n" +
+	"\x16SERVER_TYPE_BUNGEECORD\x10\b*\x81\x01\n" +
+	"\rRestartPolicy\x12\x1e\n" +
+	"\x1aRESTART_POLICY_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15RESTART_POLICY_ALWAYS\x10\x01\x12\x1b\n" +
+	"\x17RESTART_POLICY_ON_CRASH\x10\x02\x12\x18\n" +
+	"\x14RESTART_POLICY_NEVER\x10\x03*z\n" +
 	"\vServerState\x12\x1c\n" +
 	"\x18SERVER_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SERVER_STATE_STOPPED\x10\x01\x12\x19\n" +
 	"\x15SERVER_STATE_STARTING\x10\x02\x12\x18\n" +
-	"\x14SERVER_STATE_RUNNING\x10\x032\xc0\x05\n" +
+	"\x14SERVER_STATE_RUNNING\x10\x032\x8d\x06\n" +
 	"\rServerService\x12H\n" +
 	"\vListServers\x12\x1b.mcsm.v1.ListServersRequest\x1a\x1c.mcsm.v1.ListServersResponse\x12K\n" +
 	"\fCreateServer\x12\x1c.mcsm.v1.CreateServerRequest\x1a\x1d.mcsm.v1.CreateServerResponse\x12H\n" +
@@ -1249,7 +1541,8 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\n" +
 	"StopServer\x12\x1a.mcsm.v1.StopServerRequest\x1a\x1b.mcsm.v1.StopServerResponse\x12N\n" +
 	"\rRestartServer\x12\x1d.mcsm.v1.RestartServerRequest\x1a\x1e.mcsm.v1.RestartServerResponse\x12K\n" +
-	"\fDeleteServer\x12\x1c.mcsm.v1.DeleteServerRequest\x1a\x1d.mcsm.v1.DeleteServerResponse\x12G\n" +
+	"\fDeleteServer\x12\x1c.mcsm.v1.DeleteServerRequest\x1a\x1d.mcsm.v1.DeleteServerResponse\x12K\n" +
+	"\fUpdateServer\x12\x1c.mcsm.v1.UpdateServerRequest\x1a\x1d.mcsm.v1.UpdateServerResponse\x12G\n" +
 	"\n" +
 	"StreamLogs\x12\x1a.mcsm.v1.StreamLogsRequest\x1a\x1b.mcsm.v1.StreamLogsResponse0\x01\x12H\n" +
 	"\vSendCommand\x12\x1b.mcsm.v1.SendCommandRequest\x1a\x1c.mcsm.v1.SendCommandResponse\x12W\n" +
@@ -1267,62 +1560,70 @@ func file_mcsm_v1_server_proto_rawDescGZIP() []byte {
 	return file_mcsm_v1_server_proto_rawDescData
 }
 
-var file_mcsm_v1_server_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_mcsm_v1_server_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_mcsm_v1_server_proto_goTypes = []any{
 	(ServerType)(0),                  // 0: mcsm.v1.ServerType
-	(ServerState)(0),                 // 1: mcsm.v1.ServerState
-	(*Server)(nil),                   // 2: mcsm.v1.Server
-	(*ListServersRequest)(nil),       // 3: mcsm.v1.ListServersRequest
-	(*ListServersResponse)(nil),      // 4: mcsm.v1.ListServersResponse
-	(*CreateServerRequest)(nil),      // 5: mcsm.v1.CreateServerRequest
-	(*CreateServerResponse)(nil),     // 6: mcsm.v1.CreateServerResponse
-	(*StartServerRequest)(nil),       // 7: mcsm.v1.StartServerRequest
-	(*StartServerResponse)(nil),      // 8: mcsm.v1.StartServerResponse
-	(*StopServerRequest)(nil),        // 9: mcsm.v1.StopServerRequest
-	(*StopServerResponse)(nil),       // 10: mcsm.v1.StopServerResponse
-	(*RestartServerRequest)(nil),     // 11: mcsm.v1.RestartServerRequest
-	(*RestartServerResponse)(nil),    // 12: mcsm.v1.RestartServerResponse
-	(*DeleteServerRequest)(nil),      // 13: mcsm.v1.DeleteServerRequest
-	(*DeleteServerResponse)(nil),     // 14: mcsm.v1.DeleteServerResponse
-	(*StreamLogsRequest)(nil),        // 15: mcsm.v1.StreamLogsRequest
-	(*StreamLogsResponse)(nil),       // 16: mcsm.v1.StreamLogsResponse
-	(*SendCommandRequest)(nil),       // 17: mcsm.v1.SendCommandRequest
-	(*SendCommandResponse)(nil),      // 18: mcsm.v1.SendCommandResponse
-	(*ConfigureNetworkRequest)(nil),  // 19: mcsm.v1.ConfigureNetworkRequest
-	(*NetworkBackend)(nil),           // 20: mcsm.v1.NetworkBackend
-	(*ConfigureNetworkResponse)(nil), // 21: mcsm.v1.ConfigureNetworkResponse
+	(RestartPolicy)(0),               // 1: mcsm.v1.RestartPolicy
+	(ServerState)(0),                 // 2: mcsm.v1.ServerState
+	(*Server)(nil),                   // 3: mcsm.v1.Server
+	(*ListServersRequest)(nil),       // 4: mcsm.v1.ListServersRequest
+	(*ListServersResponse)(nil),      // 5: mcsm.v1.ListServersResponse
+	(*CreateServerRequest)(nil),      // 6: mcsm.v1.CreateServerRequest
+	(*CreateServerResponse)(nil),     // 7: mcsm.v1.CreateServerResponse
+	(*StartServerRequest)(nil),       // 8: mcsm.v1.StartServerRequest
+	(*StartServerResponse)(nil),      // 9: mcsm.v1.StartServerResponse
+	(*StopServerRequest)(nil),        // 10: mcsm.v1.StopServerRequest
+	(*StopServerResponse)(nil),       // 11: mcsm.v1.StopServerResponse
+	(*RestartServerRequest)(nil),     // 12: mcsm.v1.RestartServerRequest
+	(*RestartServerResponse)(nil),    // 13: mcsm.v1.RestartServerResponse
+	(*UpdateServerRequest)(nil),      // 14: mcsm.v1.UpdateServerRequest
+	(*UpdateServerResponse)(nil),     // 15: mcsm.v1.UpdateServerResponse
+	(*DeleteServerRequest)(nil),      // 16: mcsm.v1.DeleteServerRequest
+	(*DeleteServerResponse)(nil),     // 17: mcsm.v1.DeleteServerResponse
+	(*StreamLogsRequest)(nil),        // 18: mcsm.v1.StreamLogsRequest
+	(*StreamLogsResponse)(nil),       // 19: mcsm.v1.StreamLogsResponse
+	(*SendCommandRequest)(nil),       // 20: mcsm.v1.SendCommandRequest
+	(*SendCommandResponse)(nil),      // 21: mcsm.v1.SendCommandResponse
+	(*ConfigureNetworkRequest)(nil),  // 22: mcsm.v1.ConfigureNetworkRequest
+	(*NetworkBackend)(nil),           // 23: mcsm.v1.NetworkBackend
+	(*ConfigureNetworkResponse)(nil), // 24: mcsm.v1.ConfigureNetworkResponse
 }
 var file_mcsm_v1_server_proto_depIdxs = []int32{
 	0,  // 0: mcsm.v1.Server.type:type_name -> mcsm.v1.ServerType
-	1,  // 1: mcsm.v1.Server.state:type_name -> mcsm.v1.ServerState
-	2,  // 2: mcsm.v1.ListServersResponse.servers:type_name -> mcsm.v1.Server
-	0,  // 3: mcsm.v1.CreateServerRequest.type:type_name -> mcsm.v1.ServerType
-	2,  // 4: mcsm.v1.CreateServerResponse.server:type_name -> mcsm.v1.Server
-	20, // 5: mcsm.v1.ConfigureNetworkRequest.backends:type_name -> mcsm.v1.NetworkBackend
-	3,  // 6: mcsm.v1.ServerService.ListServers:input_type -> mcsm.v1.ListServersRequest
-	5,  // 7: mcsm.v1.ServerService.CreateServer:input_type -> mcsm.v1.CreateServerRequest
-	7,  // 8: mcsm.v1.ServerService.StartServer:input_type -> mcsm.v1.StartServerRequest
-	9,  // 9: mcsm.v1.ServerService.StopServer:input_type -> mcsm.v1.StopServerRequest
-	11, // 10: mcsm.v1.ServerService.RestartServer:input_type -> mcsm.v1.RestartServerRequest
-	13, // 11: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
-	15, // 12: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
-	17, // 13: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
-	19, // 14: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
-	4,  // 15: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
-	6,  // 16: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
-	8,  // 17: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
-	10, // 18: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
-	12, // 19: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
-	14, // 20: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
-	16, // 21: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
-	18, // 22: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
-	21, // 23: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
-	15, // [15:24] is the sub-list for method output_type
-	6,  // [6:15] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	2,  // 1: mcsm.v1.Server.state:type_name -> mcsm.v1.ServerState
+	1,  // 2: mcsm.v1.Server.restart_policy:type_name -> mcsm.v1.RestartPolicy
+	3,  // 3: mcsm.v1.ListServersResponse.servers:type_name -> mcsm.v1.Server
+	0,  // 4: mcsm.v1.CreateServerRequest.type:type_name -> mcsm.v1.ServerType
+	3,  // 5: mcsm.v1.CreateServerResponse.server:type_name -> mcsm.v1.Server
+	1,  // 6: mcsm.v1.UpdateServerRequest.restart_policy:type_name -> mcsm.v1.RestartPolicy
+	3,  // 7: mcsm.v1.UpdateServerResponse.server:type_name -> mcsm.v1.Server
+	23, // 8: mcsm.v1.ConfigureNetworkRequest.backends:type_name -> mcsm.v1.NetworkBackend
+	4,  // 9: mcsm.v1.ServerService.ListServers:input_type -> mcsm.v1.ListServersRequest
+	6,  // 10: mcsm.v1.ServerService.CreateServer:input_type -> mcsm.v1.CreateServerRequest
+	8,  // 11: mcsm.v1.ServerService.StartServer:input_type -> mcsm.v1.StartServerRequest
+	10, // 12: mcsm.v1.ServerService.StopServer:input_type -> mcsm.v1.StopServerRequest
+	12, // 13: mcsm.v1.ServerService.RestartServer:input_type -> mcsm.v1.RestartServerRequest
+	16, // 14: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
+	14, // 15: mcsm.v1.ServerService.UpdateServer:input_type -> mcsm.v1.UpdateServerRequest
+	18, // 16: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
+	20, // 17: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
+	22, // 18: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
+	5,  // 19: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
+	7,  // 20: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
+	9,  // 21: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
+	11, // 22: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
+	13, // 23: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
+	17, // 24: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
+	15, // 25: mcsm.v1.ServerService.UpdateServer:output_type -> mcsm.v1.UpdateServerResponse
+	19, // 26: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
+	21, // 27: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
+	24, // 28: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
+	19, // [19:29] is the sub-list for method output_type
+	9,  // [9:19] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_mcsm_v1_server_proto_init() }
@@ -1330,7 +1631,7 @@ func file_mcsm_v1_server_proto_init() {
 	if File_mcsm_v1_server_proto != nil {
 		return
 	}
-	file_mcsm_v1_server_proto_msgTypes[18].OneofWrappers = []any{
+	file_mcsm_v1_server_proto_msgTypes[20].OneofWrappers = []any{
 		(*NetworkBackend_ServerId)(nil),
 		(*NetworkBackend_Address)(nil),
 	}
@@ -1339,8 +1640,8 @@ func file_mcsm_v1_server_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_server_proto_rawDesc), len(file_mcsm_v1_server_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   20,
+			NumEnums:      3,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

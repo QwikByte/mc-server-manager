@@ -25,6 +25,7 @@ const (
 	ServerService_StopServer_FullMethodName       = "/mcsm.v1.ServerService/StopServer"
 	ServerService_RestartServer_FullMethodName    = "/mcsm.v1.ServerService/RestartServer"
 	ServerService_DeleteServer_FullMethodName     = "/mcsm.v1.ServerService/DeleteServer"
+	ServerService_UpdateServer_FullMethodName     = "/mcsm.v1.ServerService/UpdateServer"
 	ServerService_StreamLogs_FullMethodName       = "/mcsm.v1.ServerService/StreamLogs"
 	ServerService_SendCommand_FullMethodName      = "/mcsm.v1.ServerService/SendCommand"
 	ServerService_ConfigureNetwork_FullMethodName = "/mcsm.v1.ServerService/ConfigureNetwork"
@@ -43,6 +44,9 @@ type ServerServiceClient interface {
 	// RestartServer stops a server gracefully and starts it again.
 	RestartServer(ctx context.Context, in *RestartServerRequest, opts ...grpc.CallOption) (*RestartServerResponse, error)
 	DeleteServer(ctx context.Context, in *DeleteServerRequest, opts ...grpc.CallOption) (*DeleteServerResponse, error)
+	// UpdateServer changes the settings of a server. Its container is created again with
+	// the same data, and a running server restarts.
+	UpdateServer(ctx context.Context, in *UpdateServerRequest, opts ...grpc.CallOption) (*UpdateServerResponse, error)
 	// StreamLogs sends the last lines of the server console, then follows it until the
 	// server stops or the client disconnects.
 	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
@@ -122,6 +126,16 @@ func (c *serverServiceClient) DeleteServer(ctx context.Context, in *DeleteServer
 	return out, nil
 }
 
+func (c *serverServiceClient) UpdateServer(ctx context.Context, in *UpdateServerRequest, opts ...grpc.CallOption) (*UpdateServerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateServerResponse)
+	err := c.cc.Invoke(ctx, ServerService_UpdateServer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *serverServiceClient) StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &ServerService_ServiceDesc.Streams[0], ServerService_StreamLogs_FullMethodName, cOpts...)
@@ -174,6 +188,9 @@ type ServerServiceServer interface {
 	// RestartServer stops a server gracefully and starts it again.
 	RestartServer(context.Context, *RestartServerRequest) (*RestartServerResponse, error)
 	DeleteServer(context.Context, *DeleteServerRequest) (*DeleteServerResponse, error)
+	// UpdateServer changes the settings of a server. Its container is created again with
+	// the same data, and a running server restarts.
+	UpdateServer(context.Context, *UpdateServerRequest) (*UpdateServerResponse, error)
 	// StreamLogs sends the last lines of the server console, then follows it until the
 	// server stops or the client disconnects.
 	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
@@ -210,6 +227,9 @@ func (UnimplementedServerServiceServer) RestartServer(context.Context, *RestartS
 }
 func (UnimplementedServerServiceServer) DeleteServer(context.Context, *DeleteServerRequest) (*DeleteServerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteServer not implemented")
+}
+func (UnimplementedServerServiceServer) UpdateServer(context.Context, *UpdateServerRequest) (*UpdateServerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateServer not implemented")
 }
 func (UnimplementedServerServiceServer) StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamLogs not implemented")
@@ -349,6 +369,24 @@ func _ServerService_DeleteServer_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ServerService_UpdateServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateServerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServerServiceServer).UpdateServer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ServerService_UpdateServer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServerServiceServer).UpdateServer(ctx, req.(*UpdateServerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ServerService_StreamLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(StreamLogsRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -426,6 +464,10 @@ var ServerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteServer",
 			Handler:    _ServerService_DeleteServer_Handler,
+		},
+		{
+			MethodName: "UpdateServer",
+			Handler:    _ServerService_UpdateServer_Handler,
 		},
 		{
 			MethodName: "SendCommand",

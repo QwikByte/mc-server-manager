@@ -13,6 +13,20 @@ func (t ServerType) Proxy() bool {
 // Slug returns the short lower-case name, e.g. "running" for SERVER_STATE_RUNNING.
 func (s ServerState) Slug() string { return slug(s.String(), "SERVER_STATE_") }
 
+// Slug returns the short lower-case name, e.g. "on_crash" for RESTART_POLICY_ON_CRASH.
+// The unspecified policy behaves like RESTART_POLICY_ALWAYS and is named alike.
+func (p RestartPolicy) Slug() string {
+	if p == RestartPolicy_RESTART_POLICY_UNSPECIFIED {
+		p = RestartPolicy_RESTART_POLICY_ALWAYS
+	}
+	return slug(p.String(), "RESTART_POLICY_")
+}
+
+// ParseRestartPolicy returns the policy with the given slug, or RESTART_POLICY_UNSPECIFIED.
+func ParseRestartPolicy(slug string) RestartPolicy {
+	return RestartPolicy(RestartPolicy_value["RESTART_POLICY_"+strings.ToUpper(slug)])
+}
+
 // ParseServerType returns the type with the given slug, or SERVER_TYPE_UNSPECIFIED.
 func ParseServerType(slug string) ServerType {
 	return ServerType(ServerType_value["SERVER_TYPE_"+strings.ToUpper(slug)])

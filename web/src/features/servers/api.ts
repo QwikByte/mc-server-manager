@@ -12,7 +12,21 @@ export interface Server {
   port: number
   state: ServerState
   storage: string
+  java: string
+  restartPolicy: RestartPolicy
+  aikarFlags: boolean
+  jvmOptions: string[]
+  /** CPU cores the server may use; 0 means no limit. */
+  cpuLimit: number
 }
+
+export type RestartPolicy = "always" | "on_crash" | "never"
+
+/** Settings of a server that can be changed after it was created. */
+export type ServerSettings = Pick<
+  Server,
+  "name" | "version" | "memoryMb" | "port" | "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit"
+>
 
 /** A server together with the node it runs on. */
 export interface NodeServer extends Server {
@@ -67,6 +81,14 @@ export function useServerAction(nodeId: string) {
       action === "delete"
         ? api(`/nodes/${nodeId}/servers/${id}`, { method: "DELETE" })
         : api(`/nodes/${nodeId}/servers/${id}/${action}`, { method: "POST" }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
+  })
+}
+
+export function useUpdateServer(nodeId: string, serverId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (settings: ServerSettings) => api<Server>(`/nodes/${nodeId}/servers/${serverId}`, { method: "PUT", body: settings }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
   })
 }

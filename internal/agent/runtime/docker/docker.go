@@ -13,6 +13,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -35,8 +36,8 @@ const (
 	// reach backends on the same node by container name.
 	networkName = "mcsm"
 
-	serverImage = "itzg/minecraft-server:latest"
-	proxyImage  = "itzg/mc-proxy:latest"
+	serverImage = "itzg/minecraft-server"
+	proxyImage  = "itzg/mc-proxy"
 
 	stopTimeoutSeconds = 60 // time for the server to save its worlds
 	pidsLimit          = 1024
@@ -45,7 +46,7 @@ const (
 
 // image describes how a server type maps onto the itzg images.
 type image struct {
-	ref  string
+	ref  string // without tag
 	typ  string // value of the TYPE variable
 	port int    // port inside the container
 	data string // data directory inside the container
@@ -97,7 +98,8 @@ func (d *Docker) List(ctx context.Context) ([]runtime.Server, error) {
 	}
 	servers := make([]runtime.Server, 0, len(res.Items))
 	for _, c := range res.Items {
-		if spec, ok := specOf(c.Labels); ok {
+		// The name check skips the old container while a server is being recreated.
+		if spec, ok := specOf(c.Labels); ok && slices.Contains(c.Names, "/"+containerName(spec.ID)) {
 			servers = append(servers, runtime.Server{Spec: spec, State: state(c)})
 		}
 	}
@@ -122,16 +124,15 @@ func state(c container.Summary) mcsmv1.ServerState {
 }
 
 func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {
-	img, ok := images[spec.Type]
-	if !ok {
+	if _, ok := images[spec.Type]; !ok {
 		return fmt.Errorf("server type %s is not supported by the docker runtime", spec.Type)
 	}
 	path, err := d.dataPath(spec)
 	if err != nil {
 		return err
 	}
-	if err := d.pull(ctx, img.ref); err != nil {
-		return fmt.Errorf("pull %s: %w", img.ref, err)
+	if err := d.pull(ctx, imageRef(spec)); err != nil {
+		return err
 	}
 	if err := os.Mkdir(path, 0o750); err != nil {
 		return err
@@ -171,6 +172,23 @@ func (d *Docker) Data(ctx context.Context, id string) (*datadir.Dir, error) {
 }
 
 // createContainer creates the container of a server whose image and data directory exist.
+// imageRef returns the image of a server. The tags of the server image select the
+// Java version; latest has the newest.
+func imageRef(spec runtime.Spec) string {
+	img := images[spec.Type]
+	if spec.Java != "" && img.ref == serverImage {
+		return img.ref + ":java" + spec.Java
+	}
+	return img.ref + ":latest"
+}
+
+var restartPolicies = map[mcsmv1.RestartPolicy]container.RestartPolicyMode{
+	mcsmv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED: container.RestartPolicyUnlessStopped,
+	mcsmv1.RestartPolicy_RESTART_POLICY_ALWAYS:      container.RestartPolicyUnlessStopped,
+	mcsmv1.RestartPolicy_RESTART_POLICY_ON_CRASH:    container.RestartPolicyOnFailure,
+	mcsmv1.RestartPolicy_RESTART_POLICY_NEVER:       container.RestartPolicyDisabled,
+}
+
 func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
 	path, err := d.dataPath(spec)
 	if err != nil {
@@ -189,11 +207,17 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
 	if spec.BehindProxy {
 		env = append(env, "ONLINE_MODE=FALSE") // the proxy authenticates players
 	}
+	if spec.AikarFlags {
+		env = append(env, "USE_AIKAR_FLAGS=TRUE")
+	}
+	if len(spec.JVMOptions) > 0 {
+		env = append(env, "JVM_OPTS="+strings.Join(spec.JVMOptions, " "))
+	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", img.port))
 	_, err = d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: containerName(spec.ID),
 		Config: &container.Config{
-			Image:        img.ref,
+			Image:        imageRef(spec),
 			Env:          env,
 			Labels:       map[string]string{labelManaged: "true", labelSpec: string(specJSON)},
 			ExposedPorts: network.PortSet{port: {}},
@@ -202,11 +226,12 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
 		HostConfig: &container.HostConfig{
 			Binds:         []string{path + ":" + img.data},
 			PortBindings:  network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}},
-			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
+			RestartPolicy: container.RestartPolicy{Name: restartPolicies[spec.RestartPolicy]},
 			SecurityOpt:   []string{"no-new-privileges:true"},
 			Resources: container.Resources{
 				// The JVM needs memory beyond its heap, so the hard limit gets some headroom.
 				Memory:    int64(spec.MemoryMB*5/4+256) << 20,
+				NanoCPUs:  int64(spec.CPUMillis) * 1e6,
 				PidsLimit: new(int64(pidsLimit)),
 			},
 		},
@@ -222,6 +247,20 @@ func (d *Docker) Start(ctx context.Context, id string) error {
 func (d *Docker) Stop(ctx context.Context, id string) error {
 	_, err := d.cli.ContainerStop(ctx, containerName(id), client.ContainerStopOptions{Timeout: new(stopTimeoutSeconds)})
 	return notFound(err)
+}
+
+func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
+	c, current, err := d.inspect(ctx, spec.ID)
+	if err != nil {
+		return err
+	}
+	spec.Type, spec.Storage, spec.BehindProxy = current.Type, current.Storage, current.BehindProxy
+	if imageRef(spec) != imageRef(current) {
+		if err := d.pull(ctx, imageRef(spec)); err != nil {
+			return err
+		}
+	}
+	return d.recreate(ctx, spec, c.State.Running)
 }
 
 func (d *Docker) Restart(ctx context.Context, id string) error {
@@ -319,11 +358,14 @@ func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, e
 
 func (d *Docker) pull(ctx context.Context, ref string) error {
 	res, err := d.cli.ImagePull(ctx, ref, client.ImagePullOptions{})
-	if err != nil {
-		return err
+	if err == nil {
+		defer res.Close()
+		err = res.Wait(ctx)
 	}
-	defer res.Close()
-	return res.Wait(ctx)
+	if err != nil {
+		return fmt.Errorf("pull %s: %w", ref, err)
+	}
+	return nil
 }
 
 func containerName(id string) string { return "mcsm-" + id }

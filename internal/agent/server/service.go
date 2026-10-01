@@ -29,6 +29,9 @@ const (
 	maxPort     = 65535
 	maxTail     = 1000
 	maxCommand  = 1000
+	// Limits of the JVM options and the CPU limit.
+	maxJVMOptions = 32
+	minCPUMillis  = 100
 )
 
 var (
@@ -38,6 +41,12 @@ var (
 	// Names of backends a proxy sends players to; "try" is the list of these names.
 	backendPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 	hostPattern    = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
+	// JVM options end up in a shell variable that the image splits at spaces, so they
+	// have no spaces, quotes or glob characters.
+	jvmOptionPattern = regexp.MustCompile(`^-[A-Za-z0-9:._+=,/@%-]{1,200}$`)
+	// memoryOption matches options that would override the memory the agent manages.
+	memoryOption = regexp.MustCompile(`^-(Xm[sx]|XX:(Max|Min|Initial)RAM)`)
+	javaVersions = []string{"", "8", "11", "17", "21", "25"}
 	// Terminal escape sequences and Minecraft formatting codes (§a, §l, ...).
 	formatting = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|§[0-9a-fk-orxA-FK-ORX]|\r`)
 )
@@ -62,16 +71,7 @@ func (s *Service) ListServers(ctx context.Context, _ *mcsmv1.ListServersRequest)
 }
 
 func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequest) (*mcsmv1.CreateServerResponse, error) {
-	if msg := validate(req); msg != "" {
-		return nil, status.Error(codes.InvalidArgument, msg)
-	}
-	existing, err := s.rt.List(ctx)
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	if i := slices.IndexFunc(existing, func(srv runtime.Server) bool { return srv.Port == req.GetPort() }); i >= 0 {
-		return nil, status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another port.", req.GetPort(), existing[i].Name)
-	}
+	_, knownType := mcsmv1.ServerType_name[int32(req.GetType())]
 	spec := runtime.Spec{
 		ID:       runtime.NewID(),
 		Name:     req.GetName(),
@@ -81,10 +81,63 @@ func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequ
 		Port:     req.GetPort(),
 		Storage:  req.GetStorage(),
 	}
+	switch {
+	case !req.GetAcceptEula():
+		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a server.")
+	case !knownType || req.GetType() == mcsmv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+		return nil, status.Error(codes.InvalidArgument, "Choose a server type.")
+	}
+	if err := s.check(ctx, spec); err != nil {
+		return nil, err
+	}
 	if err := s.rt.Create(ctx, spec); err != nil {
 		return nil, toStatus(err)
 	}
 	return &mcsmv1.CreateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})}, nil
+}
+
+func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequest) (*mcsmv1.UpdateServerResponse, error) {
+	if !runtime.ValidID(req.GetId()) {
+		return nil, status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	servers, err := s.rt.List(ctx)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.ID == req.GetId() })
+	if i < 0 {
+		return nil, toStatus(runtime.ErrNotFound)
+	}
+	srv := servers[i]
+	srv.Name, srv.Version, srv.MemoryMB, srv.Port = req.GetName(), cmp.Or(req.GetVersion(), "LATEST"), req.GetMemoryMb(), req.GetPort()
+	srv.Java, srv.RestartPolicy, srv.AikarFlags = req.GetJava(), req.GetRestartPolicy(), req.GetAikarFlags()
+	srv.JVMOptions, srv.CPUMillis = req.GetJvmOptions(), req.GetCpuMillis()
+	if err := s.check(ctx, srv.Spec); err != nil {
+		return nil, err
+	}
+	if err := s.rt.Update(ctx, srv.Spec); err != nil {
+		return nil, toStatus(err)
+	}
+	return &mcsmv1.UpdateServerResponse{Server: toProto(srv)}, nil
+}
+
+// check validates the settings of a server and that no other server uses its port.
+func (s *Service) check(ctx context.Context, spec runtime.Spec) error {
+	var cpus uint32
+	if info, err := s.rt.Info(ctx); err == nil {
+		cpus = info.CPUs
+	}
+	if msg := checkSettings(spec, cpus); msg != "" {
+		return status.Error(codes.InvalidArgument, msg)
+	}
+	servers, err := s.rt.List(ctx)
+	if err != nil {
+		return toStatus(err)
+	}
+	if i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.Port == spec.Port && srv.ID != spec.ID }); i >= 0 {
+		return status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another port.", spec.Port, servers[i].Name)
+	}
+	return nil
 }
 
 func (s *Service) StartServer(ctx context.Context, req *mcsmv1.StartServerRequest) (*mcsmv1.StartServerResponse, error) {
@@ -193,22 +246,39 @@ func (s *Service) apply(ctx context.Context, id string, op func(context.Context,
 	return toStatus(op(ctx, id))
 }
 
-// validate returns a message for the operator if the request is invalid.
-func validate(req *mcsmv1.CreateServerRequest) string {
-	_, knownType := mcsmv1.ServerType_name[int32(req.GetType())]
+// checkSettings returns a message for the operator if a setting is invalid. cpus is
+// the number of CPU cores of the node, or 0 if unknown.
+func checkSettings(spec runtime.Spec, cpus uint32) string {
+	_, knownPolicy := mcsmv1.RestartPolicy_name[int32(spec.RestartPolicy)]
 	switch {
-	case !req.GetAcceptEula():
-		return "Accept the Minecraft EULA to create a server."
-	case !namePattern.MatchString(req.GetName()):
+	case !namePattern.MatchString(spec.Name):
 		return "Use 1-32 letters, digits, spaces, '.', '_' or '-' for the name."
-	case !knownType || req.GetType() == mcsmv1.ServerType_SERVER_TYPE_UNSPECIFIED:
-		return "Choose a server type."
-	case req.GetVersion() != "" && !versionPattern.MatchString(req.GetVersion()):
+	case !versionPattern.MatchString(spec.Version):
 		return "Enter a Minecraft version like 1.21.4, or leave it empty for the latest."
-	case req.GetMemoryMb() < minMemoryMB || req.GetMemoryMb() > maxMemoryMB:
+	case spec.MemoryMB < minMemoryMB || spec.MemoryMB > maxMemoryMB:
 		return fmt.Sprintf("Memory must be between %d and %d MB.", minMemoryMB, maxMemoryMB)
-	case req.GetPort() < minPort || req.GetPort() > maxPort:
+	case spec.Port < minPort || spec.Port > maxPort:
 		return fmt.Sprintf("Port must be between %d and %d.", minPort, maxPort)
+	case !slices.Contains(javaVersions, spec.Java):
+		return "Choose Java 8, 11, 17, 21 or 25, or the newest."
+	case spec.Type.Proxy() && (spec.Java != "" || spec.AikarFlags):
+		return "The Java version and Aikar's flags can only be set for game servers."
+	case !knownPolicy:
+		return "Choose when the server starts on its own."
+	case len(spec.JVMOptions) > maxJVMOptions:
+		return fmt.Sprintf("Use at most %d JVM options.", maxJVMOptions)
+	case spec.CPUMillis != 0 && spec.CPUMillis < minCPUMillis:
+		return "Give the server at least 0.1 CPU cores, or no limit."
+	case cpus > 0 && spec.CPUMillis > cpus*1000:
+		return fmt.Sprintf("The node has %d CPU cores.", cpus)
+	}
+	for _, option := range spec.JVMOptions {
+		switch {
+		case !jvmOptionPattern.MatchString(option):
+			return fmt.Sprintf("The JVM option %q is invalid. Options start with '-' and contain no spaces or quotes.", option)
+		case memoryOption.MatchString(option):
+			return fmt.Sprintf("Set the memory in the settings instead of with %s.", option)
+		}
 	}
 	return ""
 }
@@ -216,7 +286,8 @@ func validate(req *mcsmv1.CreateServerRequest) string {
 func toProto(s runtime.Server) *mcsmv1.Server {
 	return &mcsmv1.Server{
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
-		Storage: cmp.Or(s.Storage, storage.Default),
+		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
+		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis,
 	}
 }
 

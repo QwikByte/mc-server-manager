@@ -13,6 +13,9 @@ service ServerService {
   // RestartServer stops a server gracefully and starts it again.
   rpc RestartServer(RestartServerRequest) returns (RestartServerResponse);
   rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
+  // UpdateServer changes the settings of a server. Its container is created again with
+  // the same data, and a running server restarts.
+  rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
   // StreamLogs sends the last lines of the server console, then follows it until the
   // server stops or the client disconnects.
   rpc StreamLogs(StreamLogsRequest) returns (stream StreamLogsResponse);
@@ -37,6 +40,18 @@ enum ServerType {
   SERVER_TYPE_BUNGEECORD = 8;
 }
 
+// RestartPolicy decides when the node starts a server on its own.
+enum RestartPolicy {
+  // Same as RESTART_POLICY_ALWAYS.
+  RESTART_POLICY_UNSPECIFIED = 0;
+  // Start with the node and after a crash, unless the server was stopped.
+  RESTART_POLICY_ALWAYS = 1;
+  // Start again after a crash.
+  RESTART_POLICY_ON_CRASH = 2;
+  // Only start when asked to.
+  RESTART_POLICY_NEVER = 3;
+}
+
 enum ServerState {
   SERVER_STATE_UNSPECIFIED = 0;
   SERVER_STATE_STOPPED = 1;
@@ -55,6 +70,15 @@ message Server {
   ServerState state = 7;
   // Storage location of the server's data on the node.
   string storage = 8;
+  // Java version of game servers, e.g. "21"; empty for the newest.
+  string java = 9;
+  RestartPolicy restart_policy = 10;
+  // Use the JVM flags recommended by Aikar for Paper and its forks.
+  bool aikar_flags = 11;
+  // Additional JVM options, e.g. "-Dfile.encoding=UTF-8".
+  repeated string jvm_options = 12;
+  // CPU limit in thousandths of a core; 0 means no limit.
+  uint32 cpu_millis = 13;
 }
 
 message ListServersRequest {}
@@ -96,6 +120,23 @@ message RestartServerRequest {
 }
 
 message RestartServerResponse {}
+
+message UpdateServerRequest {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  uint32 memory_mb = 4;
+  uint32 port = 5;
+  string java = 6;
+  RestartPolicy restart_policy = 7;
+  bool aikar_flags = 8;
+  repeated string jvm_options = 9;
+  uint32 cpu_millis = 10;
+}
+
+message UpdateServerResponse {
+  Server server = 1;
+}
 
 message DeleteServerRequest {
   string id = 1;

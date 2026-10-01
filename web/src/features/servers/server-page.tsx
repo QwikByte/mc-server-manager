@@ -1,4 +1,4 @@
-import { CaretLeftIcon, FolderIcon, SlidersHorizontalIcon, TerminalIcon } from "@phosphor-icons/react"
+import { CaretLeftIcon, FolderIcon, GearIcon, SlidersHorizontalIcon, TerminalIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { Lamp } from "@/components/lamp"
@@ -18,6 +18,7 @@ const tabs = [
   { to: "/nodes/$nodeId/servers/$serverId", label: "Console", icon: TerminalIcon, exact: true },
   { to: "/nodes/$nodeId/servers/$serverId/files", label: "Files", icon: FolderIcon, exact: false },
   { to: "/nodes/$nodeId/servers/$serverId/properties", label: "Properties", icon: SlidersHorizontalIcon, exact: false, game: true },
+  { to: "/nodes/$nodeId/servers/$serverId/settings", label: "Settings", icon: GearIcon, exact: false },
 ] as const
 
 /** Header and tabs of a server; the tabs are child routes. */

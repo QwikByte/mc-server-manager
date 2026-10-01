@@ -164,18 +164,27 @@ func (d *Docker) ensureNetwork(ctx context.Context) error {
 	return err
 }
 
-// recreate replaces the container of a server to change its environment. The data on
-// the host is kept; a running server is stopped gracefully and started again.
+// recreate replaces the container of a server to change its settings; the data on the
+// host stays. The old container is kept until the new one exists, so that a failure
+// leaves the server as it was. A running server is stopped gracefully and started again.
 func (d *Docker) recreate(ctx context.Context, spec runtime.Spec, running bool) error {
 	if running {
 		if err := d.Stop(ctx, spec.ID); err != nil {
 			return err
 		}
 	}
-	if _, err := d.cli.ContainerRemove(ctx, containerName(spec.ID), client.ContainerRemoveOptions{}); err != nil {
+	name, old := containerName(spec.ID), containerName(spec.ID)+"-old"
+	if _, err := d.cli.ContainerRename(ctx, name, client.ContainerRenameOptions{NewName: old}); err != nil {
 		return err
 	}
 	if err := d.createContainer(ctx, spec); err != nil {
+		_, renameErr := d.cli.ContainerRename(ctx, old, client.ContainerRenameOptions{NewName: name})
+		if renameErr == nil && running {
+			renameErr = d.Start(ctx, spec.ID)
+		}
+		return errors.Join(err, renameErr)
+	}
+	if _, err := d.cli.ContainerRemove(ctx, old, client.ContainerRemoveOptions{}); err != nil {
 		return err
 	}
 	if !running {

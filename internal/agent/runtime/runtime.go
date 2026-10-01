@@ -44,6 +44,13 @@ type Spec struct {
 	BehindProxy bool `json:"behindProxy,omitempty"`
 	// Storage is the storage location of the server's data; empty means the default.
 	Storage string `json:"storage,omitempty"`
+	// Java selects the Java version of a game server, e.g. "21"; empty means the newest.
+	Java          string               `json:"java,omitempty"`
+	RestartPolicy mcsmv1.RestartPolicy `json:"restartPolicy,omitempty"`
+	AikarFlags    bool                 `json:"aikarFlags,omitempty"`
+	JVMOptions    []string             `json:"jvmOptions,omitempty"`
+	// CPUMillis limits the CPU time in thousandths of a core; 0 means no limit.
+	CPUMillis uint32 `json:"cpuMillis,omitempty"`
 }
 
 // Server is a server managed by a runtime.
@@ -90,6 +97,9 @@ type Runtime interface {
 	Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error]
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, id, command string) (string, error)
+	// Update replaces the settings of a server, keeping its type, data and network role.
+	// A running server restarts.
+	Update(ctx context.Context, spec Spec) error
 	// Restart stops a server gracefully and starts it again.
 	Restart(ctx context.Context, id string) error
 	// Configure gives a server its role in a network and restarts it if it runs.
