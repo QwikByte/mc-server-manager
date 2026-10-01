@@ -1,4 +1,4 @@
-import { GraphIcon, HardDrivesIcon, SignOutIcon } from "@phosphor-icons/react"
+import { GraphIcon, HardDrivesIcon, PuzzlePieceIcon, SignOutIcon, StackIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { Logo } from "@/components/logo"
@@ -9,6 +9,8 @@ import { meQuery, useLogout } from "@/features/auth/api"
 const navigation = [
   { to: "/nodes", label: "Nodes", icon: HardDrivesIcon },
   { to: "/networks", label: "Networks", icon: GraphIcon },
+  { to: "/templates", label: "Templates", icon: StackIcon },
+  { to: "/plugins", label: "Plugins", icon: PuzzlePieceIcon },
 ] as const
 
 /** A sidebar on large screens, a bar at the top on small ones. */

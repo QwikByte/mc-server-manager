@@ -36,9 +36,31 @@ version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's fl
 The agent creates the container again with the same data; the old container is only removed once the new one
 exists.
 
+A server can be duplicated on its node: the copy gets all files, worlds and settings under a new name and port, and
+starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
+players stay connected. The copy doesn't take over the original's place in a network.
+
 Each node has settings for its servers: the storage location preselected for new servers, a port range (new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
 the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
+
+## Templates
+
+A template preconfigures new servers: software, Minecraft version, memory, the settings above, `server.properties`
+and a list of plugins or mods from Modrinth. When a server is created from a template, only the node, name, port and
+storage are chosen; `server.properties` is written before the first start and each plugin is installed in the newest
+release that suits the server, so templates don't go stale. Templates are created from scratch or from an existing
+server ("Save as template"), which takes its settings, its properties (except those the manager sets) and the plugins
+that come from Modrinth. Worlds and plugin configurations are not part of templates.
+
+## Plugins and mods
+
+Plugins (Paper, Purpur, Velocity, BungeeCord) and mods (Fabric, Forge, NeoForge) are installed from
+[Modrinth](https://modrinth.com), either on any number of servers at once from the **Plugins** page or from the
+**Plugins**/**Mods** tab of a server. The master picks the newest release for each server's software and Minecraft
+version, installs the projects it requires, and replaces an older version of the same project. Installed files are
+recognised by their hash, so the tab shows their project, version and available updates, also for files uploaded
+by hand. Own `.jar` files can be uploaded too. Servers load changes when they restart.
 
 ## Networks
 
@@ -87,6 +109,13 @@ the network and configures each server through its agent; changes are applied to
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
   uploaded HTML file can't run scripts in the panel.
+- **Plugins.** The master downloads only from Modrinth's CDN, up to 256 MB, and only uses a file whose SHA-512 hash
+  matches the one Modrinth's API lists. The agent decides the folder from the server type and only accepts plain
+  `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth and the
+  Content Security Policy stays unchanged.
+- **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
+  directory. A copied proxy loses its forwarding secret and a copied backend stops trusting the proxy, so a copy
+  can't impersonate a server of a network.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
@@ -96,7 +125,7 @@ the network and configures each server through its agent; changes are applied to
 The code is organised by feature, not by layer.
 
 ```
-api/mcsm/v1/            gRPC contract (enrollment, node, server) and generated code
+api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, plugins) and generated code
 cmd/mcsm-master/        master binary
 cmd/mcsm-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -109,6 +138,9 @@ internal/master/
   network/              networks of servers behind a proxy, applied through the agents
   files/                file manager, streamed between the browser and the agent
   properties/           server.properties editor
+  plugin/               installs, lists and removes plugins and mods of servers
+  modrinth/             client for the Modrinth API and CDN
+  template/             templates for new servers
   database/             SQLite and embedded migrations
   httpapi/              JSON helpers
 internal/agent/
@@ -121,10 +153,11 @@ internal/agent/
   network/              proxy and backend configuration for networks
   files/                file access for the file manager
   properties/           reads and updates server.properties, keeping comments
+  plugin/               plugin and mod files of servers
   runtime/              runtime interface; docker/ implements it
-internal/e2e/           end-to-end tests: enrollment, control, files, properties and networks over real mTLS
+internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
-  src/features/         auth, nodes, servers, files, properties, networks
+  src/features/         auth, nodes, servers, files, properties, networks, plugins, templates
 deploy/systemd/         service units
 ```
 
@@ -166,6 +199,7 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
    Set `--public-enroll-addr` to the host and port agents use to reach the master.
 2. `sudo -u mcsm mcsm-master --data-dir /var/lib/mcsm-master user add admin`
 3. Put a TLS reverse proxy in front of `127.0.0.1:8080` and open port 9443 for the agents.
+   For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and `cdn.modrinth.com`.
 
 **Agent** (on every node)
 

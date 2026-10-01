@@ -17,10 +17,13 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
+	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
 	"github.com/QwikByte/mc-server-manager/internal/master/properties"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
+	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 	"github.com/QwikByte/mc-server-manager/web"
 )
@@ -63,7 +66,12 @@ func serve(ctx context.Context, cfg config) error {
 	}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
-	httpServer := &http.Server{Addr: cfg.httpAddr, Handler: routes(users, nodes, network.NewService(db, nodes)), ReadHeaderTimeout: 10 * time.Second}
+	plugins := plugin.NewService(nodes, modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN))
+	httpServer := &http.Server{
+		Addr:              cfg.httpAddr,
+		Handler:           routes(users, nodes, network.NewService(db, nodes), plugins, template.NewService(db, plugins)),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	errc := make(chan error, 2)
 	go func() { errc <- grpcServer.Serve(enrollListener) }()
@@ -87,7 +95,7 @@ func serve(ctx context.Context, cfg config) error {
 	return errors.Join(err, httpServer.Shutdown(shutdownCtx))
 }
 
-func routes(users *auth.Service, nodes *node.Service, networks *network.Service) http.Handler {
+func routes(users *auth.Service, nodes *node.Service, networks *network.Service, plugins *plugin.Service, templates *template.Service) http.Handler {
 	authHandler := auth.NewHandler(users)
 	api := http.NewServeMux()
 	authHandler.Register(api)
@@ -96,6 +104,8 @@ func routes(users *auth.Service, nodes *node.Service, networks *network.Service)
 	network.NewHandler(networks).Register(api)
 	files.NewHandler(nodes).Register(api)
 	properties.NewHandler(nodes).Register(api)
+	plugin.NewHandler(plugins).Register(api)
+	template.NewHandler(templates).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)

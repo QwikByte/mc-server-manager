@@ -99,6 +99,11 @@ const serverPropertiesRoute = createRoute({
   path: "properties",
   component: lazyRouteComponent(() => import("@/features/properties/properties-page"), "PropertiesPage"),
 })
+const serverPluginsRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "plugins",
+  component: lazyRouteComponent(() => import("@/features/plugins/server-plugins-page"), "ServerPluginsPage"),
+})
 const serverSettingsRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "settings",
@@ -116,6 +121,28 @@ const networkRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkPage"),
 })
 
+const templatesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/templates",
+  component: lazyRouteComponent(() => import("@/features/templates/templates-page"), "TemplatesPage"),
+})
+const newTemplateRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/templates/new",
+  component: lazyRouteComponent(() => import("@/features/templates/template-page"), "NewTemplatePage"),
+})
+const templateRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/templates/$templateId",
+  component: lazyRouteComponent(() => import("@/features/templates/template-page"), "TemplatePage"),
+})
+
+const pluginsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/plugins",
+  component: lazyRouteComponent(() => import("@/features/plugins/plugins-page"), "PluginsPage"),
+})
+
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
@@ -123,9 +150,13 @@ export const router = createRouter({
       indexRoute,
       nodesRoute,
       nodeRoute,
-      serverRoute.addChildren([serverConsoleRoute, serverFilesRoute, serverPropertiesRoute, serverSettingsRoute]),
+      serverRoute.addChildren([serverConsoleRoute, serverFilesRoute, serverPropertiesRoute, serverPluginsRoute, serverSettingsRoute]),
       networksRoute,
       networkRoute,
+      templatesRoute,
+      newTemplateRoute,
+      templateRoute,
+      pluginsRoute,
     ]),
   ]),
   context: { queryClient },

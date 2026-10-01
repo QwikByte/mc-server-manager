@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"regexp"
 	"slices"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
@@ -73,13 +75,18 @@ func (s *Service) ListServers(ctx context.Context, _ *mcsmv1.ListServersRequest)
 func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequest) (*mcsmv1.CreateServerResponse, error) {
 	_, knownType := mcsmv1.ServerType_name[int32(req.GetType())]
 	spec := runtime.Spec{
-		ID:       runtime.NewID(),
-		Name:     req.GetName(),
-		Type:     req.GetType(),
-		Version:  cmp.Or(req.GetVersion(), "LATEST"),
-		MemoryMB: req.GetMemoryMb(),
-		Port:     req.GetPort(),
-		Storage:  req.GetStorage(),
+		ID:            runtime.NewID(),
+		Name:          req.GetName(),
+		Type:          req.GetType(),
+		Version:       cmp.Or(req.GetVersion(), "LATEST"),
+		MemoryMB:      req.GetMemoryMb(),
+		Port:          req.GetPort(),
+		Storage:       req.GetStorage(),
+		Java:          req.GetJava(),
+		RestartPolicy: req.GetRestartPolicy(),
+		AikarFlags:    req.GetAikarFlags(),
+		JVMOptions:    req.GetJvmOptions(),
+		CPUMillis:     req.GetCpuMillis(),
 	}
 	switch {
 	case !req.GetAcceptEula():
@@ -87,28 +94,66 @@ func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequ
 	case !knownType || req.GetType() == mcsmv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return nil, status.Error(codes.InvalidArgument, "Choose a server type.")
 	}
+	if msg := properties.Check(spec, req.GetProperties()); msg != "" {
+		return nil, status.Error(codes.InvalidArgument, msg)
+	}
 	if err := s.check(ctx, spec); err != nil {
 		return nil, err
 	}
 	if err := s.rt.Create(ctx, spec); err != nil {
 		return nil, toStatus(err)
 	}
+	if len(req.GetProperties()) > 0 {
+		if err := s.writeProperties(ctx, spec.ID, req.GetProperties()); err != nil {
+			return nil, toStatus(errors.Join(err, s.rt.Remove(ctx, spec.ID)))
+		}
+	}
 	return &mcsmv1.CreateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})}, nil
 }
 
-func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequest) (*mcsmv1.UpdateServerResponse, error) {
-	if !runtime.ValidID(req.GetId()) {
-		return nil, status.Error(codes.InvalidArgument, "invalid server ID")
-	}
-	servers, err := s.rt.List(ctx)
+func (s *Service) writeProperties(ctx context.Context, id string, changes map[string]string) error {
+	dir, err := s.rt.Data(ctx, id)
 	if err != nil {
+		return err
+	}
+	return errors.Join(properties.Write(dir, changes), dir.Close())
+}
+
+func (s *Service) DuplicateServer(ctx context.Context, req *mcsmv1.DuplicateServerRequest) (*mcsmv1.DuplicateServerResponse, error) {
+	source, err := s.find(ctx, req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	spec := source.Spec
+	spec.ID, spec.Name, spec.Port, spec.BehindProxy = runtime.NewID(), req.GetName(), req.GetPort(), false
+	if err := s.check(ctx, spec); err != nil {
+		return nil, err
+	}
+	if source.State != mcsmv1.ServerState_SERVER_STATE_STOPPED && !source.Type.Proxy() {
+		// The server writes everything to disk and pauses saving while its data is copied.
+		if _, err := s.rt.SendCommand(ctx, source.ID, "save-off"); err != nil {
+			return nil, status.Error(codes.FailedPrecondition, "Wait until the server has started, or stop it, to duplicate it.")
+		}
+		defer func() {
+			if _, err := s.rt.SendCommand(context.WithoutCancel(ctx), source.ID, "save-on"); err != nil {
+				slog.Warn("can't turn saving on again after duplicating", "server", source.ID, "err", err)
+			}
+		}()
+		if _, err := s.rt.SendCommand(ctx, source.ID, "save-all flush"); err != nil {
+			return nil, toStatus(err)
+		}
+	}
+	if err := s.rt.Duplicate(ctx, source.ID, spec); err != nil {
 		return nil, toStatus(err)
 	}
-	i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.ID == req.GetId() })
-	if i < 0 {
-		return nil, toStatus(runtime.ErrNotFound)
+	return &mcsmv1.DuplicateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})}, nil
+}
+
+func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequest) (*mcsmv1.UpdateServerResponse, error) {
+	srv, err := s.find(ctx, req.GetId())
+	if err != nil {
+		return nil, err
 	}
-	srv := servers[i]
 	srv.Name, srv.Version, srv.MemoryMB, srv.Port = req.GetName(), cmp.Or(req.GetVersion(), "LATEST"), req.GetMemoryMb(), req.GetPort()
 	srv.Java, srv.RestartPolicy, srv.AikarFlags = req.GetJava(), req.GetRestartPolicy(), req.GetAikarFlags()
 	srv.JVMOptions, srv.CPUMillis = req.GetJvmOptions(), req.GetCpuMillis()
@@ -119,6 +164,15 @@ func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequ
 		return nil, toStatus(err)
 	}
 	return &mcsmv1.UpdateServerResponse{Server: toProto(srv)}, nil
+}
+
+// find returns the server with the given ID.
+func (s *Service) find(ctx context.Context, id string) (runtime.Server, error) {
+	if !runtime.ValidID(id) {
+		return runtime.Server{}, status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	srv, err := runtime.Find(ctx, s.rt, id)
+	return srv, toStatus(err)
 }
 
 // check validates the settings of a server and that no other server uses its port.

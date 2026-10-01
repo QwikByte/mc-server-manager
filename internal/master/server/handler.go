@@ -6,6 +6,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -72,6 +73,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		deleteServer(w, r)
 	})
 	mux.HandleFunc("PUT /api/nodes/{node}/servers/{id}", h.update)
+	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/duplicate", h.duplicate)
 	mux.HandleFunc("GET /api/nodes/{node}/servers/{id}/logs", h.logs)
 	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/command", h.command)
 }
@@ -95,6 +97,19 @@ type settings struct {
 	AikarFlags    bool     `json:"aikarFlags"`
 	JVMOptions    []string `json:"jvmOptions"`
 	CPULimit      float64  `json:"cpuLimit"` // in cores, 0 means no limit
+}
+
+// check validates the settings that the agent can't, and converts the restart policy
+// and CPU limit; an empty restart policy means the default.
+func (s settings) check() (mcsmv1.RestartPolicy, uint32, error) {
+	policy := mcsmv1.ParseRestartPolicy(s.RestartPolicy)
+	switch {
+	case s.CPULimit < 0 || s.CPULimit > 1024:
+		return policy, 0, httpapi.Errorf(http.StatusBadRequest, "Enter a CPU limit in cores, or 0 for no limit.")
+	case policy == mcsmv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED && s.RestartPolicy != "":
+		return policy, 0, httpapi.Errorf(http.StatusBadRequest, "Choose when the server starts on its own.")
+	}
+	return policy, uint32(math.Round(s.CPULimit * 1000)), nil
 }
 
 func toView(s *mcsmv1.Server) view {
@@ -172,6 +187,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, views)
 }
 
+// create creates a server. Besides the basics, it takes the settings and server.properties
+// a template provides.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name       string `json:"name"`
@@ -181,6 +198,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Port       uint32 `json:"port"`
 		AcceptEULA bool   `json:"acceptEula"`
 		Storage    string `json:"storage"`
+		settings
+		Properties map[string]string `json:"properties"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
@@ -188,7 +207,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout)
 	defer cancel()
-	c, err := h.client(ctx, r)
+	policy, cpuMillis, err := req.check()
+	var c mcsmv1.ServerServiceClient
+	if err == nil {
+		c, err = h.client(ctx, r)
+	}
 	if err == nil {
 		err = h.checkLimits(ctx, r.PathValue("node"), "", req.Port, req.MemoryMB)
 	}
@@ -197,14 +220,58 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := c.CreateServer(ctx, &mcsmv1.CreateServerRequest{
-		Name:       req.Name,
-		Type:       mcsmv1.ParseServerType(req.Type),
-		Version:    req.Version,
-		MemoryMb:   req.MemoryMB,
-		Port:       req.Port,
-		AcceptEula: req.AcceptEULA,
-		Storage:    req.Storage,
+		Name:          req.Name,
+		Type:          mcsmv1.ParseServerType(req.Type),
+		Version:       req.Version,
+		MemoryMb:      req.MemoryMB,
+		Port:          req.Port,
+		AcceptEula:    req.AcceptEULA,
+		Storage:       req.Storage,
+		Java:          req.Java,
+		RestartPolicy: policy,
+		AikarFlags:    req.AikarFlags,
+		JvmOptions:    req.JVMOptions,
+		CpuMillis:     cpuMillis,
+		Properties:    req.Properties,
 	})
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetServer()))
+}
+
+// duplicate copies a server with its data into a new server on the same node.
+func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+		Port uint32 `json:"port"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // copying worlds takes a while
+	defer cancel()
+	c, err := h.client(ctx, r)
+	var list *mcsmv1.ListServersResponse
+	if err == nil {
+		list, err = c.ListServers(ctx, &mcsmv1.ListServersRequest{})
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	i := slices.IndexFunc(list.GetServers(), func(s *mcsmv1.Server) bool { return s.GetId() == r.PathValue("id") })
+	if i < 0 {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusNotFound, "Server not found."))
+		return
+	}
+	err = h.checkLimits(ctx, r.PathValue("node"), "", req.Port, list.GetServers()[i].GetMemoryMb())
+	var res *mcsmv1.DuplicateServerResponse
+	if err == nil {
+		res, err = c.DuplicateServer(ctx, &mcsmv1.DuplicateServerRequest{Id: r.PathValue("id"), Name: req.Name, Port: req.Port})
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -224,18 +291,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	policy := mcsmv1.ParseRestartPolicy(req.RestartPolicy)
-	switch {
-	case req.CPULimit < 0 || req.CPULimit > 1024:
-		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Enter a CPU limit in cores, or 0 for no limit."))
-		return
-	case policy == mcsmv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED:
-		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose when the server starts on its own."))
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // a new Java version pulls an image
 	defer cancel()
-	c, err := h.client(ctx, r)
+	policy, cpuMillis, err := req.check()
+	var c mcsmv1.ServerServiceClient
+	if err == nil {
+		c, err = h.client(ctx, r)
+	}
 	if err == nil {
 		err = h.checkLimits(ctx, r.PathValue("node"), r.PathValue("id"), req.Port, req.MemoryMB)
 	}
@@ -246,7 +308,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	res, err := c.UpdateServer(ctx, &mcsmv1.UpdateServerRequest{
 		Id: r.PathValue("id"), Name: req.Name, Version: req.Version, MemoryMb: req.MemoryMB, Port: req.Port,
 		Java: req.Java, RestartPolicy: policy, AikarFlags: req.AikarFlags,
-		JvmOptions: req.JVMOptions, CpuMillis: uint32(math.Round(req.CPULimit * 1000)),
+		JvmOptions: req.JVMOptions, CpuMillis: cpuMillis,
 	})
 	if err != nil {
 		httpapi.WriteError(w, r, err)
