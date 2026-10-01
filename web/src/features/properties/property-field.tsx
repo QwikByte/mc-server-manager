@@ -28,7 +28,7 @@ export function PropertyField({
     <FieldLabel htmlFor={id} className="flex-wrap gap-x-2">
       {label}
       {label !== name && <span className="font-mono text-xs font-normal text-muted-foreground">{name}</span>}
-      {changed && <span className="size-1.5 bg-primary" title="Changed" aria-label="Changed" />}
+      {changed && <span className="size-2 rounded-full bg-warning" title="Changed" aria-label="Changed" />}
       {locked && <LockSimpleIcon className="size-3.5 text-muted-foreground" aria-label="Managed by the panel" />}
     </FieldLabel>
   )

@@ -33,7 +33,7 @@ const languages: Record<string, () => Extension> = {
 const theme = EditorView.theme(
   {
     "&": { height: "100%", color: "var(--console-foreground)", backgroundColor: "var(--console)", fontSize: "12px" },
-    "&.cm-focused": { outline: "1px solid var(--ring)" },
+    "&.cm-focused": { outline: "none" },
     ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.6" },
     ".cm-content": { caretColor: "var(--console-foreground)", fontVariantLigatures: "none" },
     ".cm-cursor": { borderLeftColor: "var(--console-foreground)" },
@@ -95,5 +95,10 @@ export function CodeEditor({
     return () => editor.destroy()
   }, [value, filename])
 
-  return <div ref={parent} className="h-[65vh] min-h-80 overflow-hidden border" />
+  return (
+    <div
+      ref={parent}
+      className="h-[65vh] min-h-80 overflow-hidden rounded-xl shadow-xl ring-1 shadow-black/10 ring-black/5 focus-within:ring-2 focus-within:ring-ring dark:ring-white/10"
+    />
+  )
 }

@@ -1,6 +1,7 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { type FormEvent, useState } from "react"
-import { Lamp } from "@/components/lamp"
+import { Logo } from "@/components/logo"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -20,44 +21,52 @@ export function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center gap-10 px-6 py-12">
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <Lamp state="on" className="size-6" />
-          <h1 className="heading text-2xl">MC Server Manager</h1>
+    <main className="relative grid min-h-svh place-items-center overflow-hidden px-4 py-16">
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-blocks" />
+      <ThemeToggle className="absolute top-4 right-4 w-28" />
+      <div className="relative w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center gap-5 text-center">
+          <Logo className="size-14" />
+          <div className="space-y-1.5">
+            <h1 className="heading text-2xl">Welcome back</h1>
+            <p className="text-sm text-muted-foreground">Sign in to manage your nodes, servers and networks.</p>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground">Sign in to manage your nodes and servers.</p>
+        <form
+          onSubmit={submit}
+          noValidate
+          className="rounded-2xl bg-card/80 p-6 shadow-xl ring-1 ring-foreground/8 backdrop-blur-xl dark:shadow-black/40"
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="username">Username</FieldLabel>
+              <Input
+                id="username"
+                autoComplete="username"
+                autoFocus
+                required
+                value={credentials.username}
+                onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={credentials.password}
+                onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
+              />
+            </Field>
+            {login.error && <FieldError>{login.error.message}</FieldError>}
+            <Button type="submit" size="lg" className="w-full" disabled={login.isPending}>
+              {login.isPending ? "Signing in…" : "Sign in"}
+            </Button>
+          </FieldGroup>
+        </form>
       </div>
-      <form onSubmit={submit} noValidate>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="username">Username</FieldLabel>
-            <Input
-              id="username"
-              autoComplete="username"
-              autoFocus
-              required
-              value={credentials.username}
-              onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="password">Password</FieldLabel>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={credentials.password}
-              onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-            />
-          </Field>
-          {login.error && <FieldError>{login.error.message}</FieldError>}
-          <Button type="submit" size="lg" disabled={login.isPending}>
-            {login.isPending ? "Signing in…" : "Sign in"}
-          </Button>
-        </FieldGroup>
-      </form>
     </main>
   )
 }

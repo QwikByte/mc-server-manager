@@ -1,7 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7 7" shape-rendering="crispEdges">
-  <rect width="7" height="7" fill="#b36b14"/>
-  <rect x="1" y="1" width="2" height="2" fill="#ffd77a"/>
-  <rect x="4" y="1" width="2" height="2" fill="#ffd77a"/>
-  <rect x="1" y="4" width="2" height="2" fill="#ffd77a"/>
-  <rect x="4" y="4" width="2" height="2" fill="#ffd77a"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="9" fill="url(#tile)"/>
+  <path d="M16 6.5 25 11.5 16 16.5 7 11.5Z" fill="#fff"/>
+  <path d="M7 11.5 16 16.5V26.5L7 21.5Z" fill="#fff" fill-opacity=".72"/>
+  <path d="M25 11.5 16 16.5V26.5L25 21.5Z" fill="#fff" fill-opacity=".5"/>
 </svg>

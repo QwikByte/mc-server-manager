@@ -1,18 +1,12 @@
-import { Lamp, type LampState } from "@/components/lamp"
+import { type Status, StatusBadge } from "@/components/status"
 import type { NodeStatus } from "./api"
 
-const statuses: Record<NodeStatus, { lamp: LampState; label: string }> = {
-  online: { lamp: "on", label: "Online" },
-  offline: { lamp: "off", label: "Offline" },
-  pending: { lamp: "unset", label: "Waiting for agent" },
+const statuses: Record<NodeStatus, Status> = {
+  online: { tone: "success", label: "Online" },
+  offline: { tone: "destructive", label: "Offline" },
+  pending: { tone: "warning", label: "Waiting for agent", pulse: true },
 }
 
-export function NodeStatusLabel({ status }: { status: NodeStatus }) {
-  const { lamp, label } = statuses[status]
-  return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <Lamp state={lamp} />
-      {label}
-    </span>
-  )
+export function NodeStatusBadge({ status }: { status: NodeStatus }) {
+  return <StatusBadge status={statuses[status]} />
 }

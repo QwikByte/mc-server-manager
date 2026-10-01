@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useBlocker } from "@tanstack/react-router"
 import { useState } from "react"
 import { toast } from "sonner"
+import { ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
+import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type Server, useServer, useServerAction } from "@/features/servers/api"
@@ -22,26 +23,16 @@ export function PropertiesPage() {
   const { server } = useServer(nodeId, serverId)
   const { data, isPending, error } = useQuery(propertiesQuery(nodeId, serverId))
 
-  if (!server || isPending) return <Skeleton className="h-96" />
-  if (error)
-    return (
-      <p role="alert" className="text-sm text-destructive">
-        {error.message}
-      </p>
-    )
+  if (!server || isPending) return <Skeleton className="h-96 rounded-xl" />
+  if (error) return <ErrorCallout error={error} />
   if (!data.exists)
     return (
-      <Empty className="border border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <FileTextIcon />
-          </EmptyMedia>
-          <EmptyTitle>No server.properties yet</EmptyTitle>
-          <EmptyDescription>
-            The server creates it when it starts for the first time. Start the server once, then come back.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyState
+        icon={FileTextIcon}
+        tone="neutral"
+        title="No server.properties yet"
+        description="The server creates it when it starts for the first time. Start the server once, then come back."
+      />
     )
   return <PropertiesForm nodeId={nodeId} server={server} data={data} />
 }
@@ -89,7 +80,7 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
   return (
     <div className="pb-24">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <InputGroup className="max-w-xs">
+        <InputGroup className="w-full sm:max-w-xs">
           <InputGroupAddon>
             <MagnifyingGlassIcon />
           </InputGroupAddon>
@@ -107,8 +98,8 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
         const inGroup = keys.filter((key) => definition(key).group === group)
         if (inGroup.length === 0) return null
         return (
-          <section key={group} className="mb-10" aria-label={group}>
-            <h2 className="heading mb-5 border-b pb-2 text-lg">{group}</h2>
+          <section key={group} className="surface mb-6 rounded-xl p-5 sm:p-6" aria-label={group}>
+            <h2 className="heading mb-5 text-base">{group}</h2>
             <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
               {inGroup.map((key) => (
                 <PropertyField
@@ -126,8 +117,9 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
         )
       })}
       {count > 0 && (
-        <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 border bg-card px-4 py-3 shadow-lg">
-          <p className="text-sm">
+        <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-popover/90 px-4 py-3 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-xl">
+          <p className="flex items-center gap-2.5 text-sm font-medium">
+            <span aria-hidden className="size-2 rounded-full bg-warning" />
             {count} unsaved {count === 1 ? "change" : "changes"}
           </p>
           <div className="flex gap-2">

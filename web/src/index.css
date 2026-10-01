@@ -1,15 +1,15 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/archivo/standard.css";
+@import "@fontsource-variable/plus-jakarta-sans";
 @import "@fontsource-variable/jetbrains-mono";
 
-/* The panel follows the operating system's colour scheme. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* The theme is a class on <html>; public/theme.js sets it before the first paint. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Archivo Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -29,7 +29,11 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --color-rail: var(--rail);
+  --color-sidebar: var(--sidebar);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-violet: var(--violet);
   --color-console: var(--console);
   --color-console-foreground: var(--console-foreground);
   --color-console-muted: var(--console-muted);
@@ -40,87 +44,82 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
-  --animate-lamp-flicker: lamp-flicker 1.2s steps(2, jump-none) infinite;
-
-  @keyframes lamp-flicker {
-    50% {
-      opacity: 0.4;
-    }
-  }
+  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
 /*
- * Palette taken from Minecraft materials: calcite and deepslate surfaces,
- * oxidised copper (verdigris) for actions, redstone for destructive actions
- * and the redstone lamp, reserved for "running".
+ * Emerald for actions and running servers, sky for nodes, violet for networks,
+ * amber for anything in between and rose for destructive actions.
  */
 :root {
-  --radius: 0;
-  --background: #eef0f1; /* calcite */
-  --foreground: #1e2227;
+  color-scheme: light;
+  --radius: 0.75rem;
+  --background: #f6f7fb;
+  --foreground: #0f1524;
   --card: #ffffff;
-  --card-foreground: #1e2227;
+  --card-foreground: #0f1524;
   --popover: #ffffff;
-  --popover-foreground: #1e2227;
-  --primary: #237561; /* verdigris */
+  --popover-foreground: #0f1524;
+  --primary: #047857;
   --primary-foreground: #ffffff;
-  --secondary: #e2e5e8;
-  --secondary-foreground: #1e2227;
-  --muted: #e6e9eb;
-  --muted-foreground: #59606b;
-  --accent: #e2e5e8;
-  --accent-foreground: #1e2227;
-  --destructive: #b8322a; /* redstone */
-  --border: #d3d7db;
-  --input: #c9ced3;
-  --ring: #237561;
-  --rail: #e3e6e9;
-
-  --lamp-on: #ffd77a;
-  --lamp-on-frame: #b36b14;
-  --lamp-glow: rgb(240 168 48 / 0.55);
-  --lamp-off: #8c6c4e;
-  --lamp-off-frame: #5e4630;
+  --secondary: #eceff5;
+  --secondary-foreground: #0f1524;
+  --muted: #eef0f5;
+  --muted-foreground: #5b6478;
+  --accent: #eceff5;
+  --accent-foreground: #0f1524;
+  --destructive: #e11d48;
+  --border: #e2e5ee;
+  --input: #d6dbe6;
+  --ring: #10b981;
+  --sidebar: #ffffff;
+  --success: #047857;
+  --warning: #b45309;
+  --info: #0369a1;
+  --violet: #6d28d9;
+  --glow-1: rgb(16 185 129 / 0.13);
+  --glow-2: rgb(139 92 246 / 0.1);
 
   /* The console stays dark in both themes, like a terminal. */
-  --console: #1b1e23;
-  --console-foreground: #d5d9de;
-  --console-muted: #8b929c;
-  --console-command: #6cc7ac;
-  --console-warn: #e3b341;
-  --console-error: #f0786c;
+  --console: #0b0f17;
+  --console-foreground: #d7dce6;
+  --console-muted: #7d8699;
+  --console-command: #34d399;
+  --console-warn: #fbbf24;
+  --console-error: #fb7185;
   /* Syntax colours of the file editor, which shares the console's dark surface. */
-  --code-string: #e2c98a;
-  --code-literal: #9fb7f0;
-  --code-keyword: #e79fd0;
+  --code-string: #fcd34d;
+  --code-literal: #93c5fd;
+  --code-keyword: #f0abfc;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #24272d; /* deepslate */
-    --foreground: #e7e9ec;
-    --card: #2d3138;
-    --card-foreground: #e7e9ec;
-    --popover: #2d3138;
-    --popover-foreground: #e7e9ec;
-    --primary: #4fae94;
-    --primary-foreground: #10241e;
-    --secondary: #343941;
-    --secondary-foreground: #e7e9ec;
-    --muted: #2f333a;
-    --muted-foreground: #9aa0aa;
-    --accent: #343941;
-    --accent-foreground: #e7e9ec;
-    --destructive: #e0564a;
-    --border: #3c414a;
-    --input: #464c56;
-    --ring: #4fae94;
-    --rail: #1f2227;
-
-    --lamp-glow: rgb(255 196 92 / 0.5);
-    --lamp-off: #4a3424;
-    --lamp-off-frame: #2e2018;
-  }
+.dark {
+  color-scheme: dark;
+  --background: #0a0d14;
+  --foreground: #e9ecf3;
+  --card: #11151f;
+  --card-foreground: #e9ecf3;
+  --popover: #151a25;
+  --popover-foreground: #e9ecf3;
+  --primary: #34d399;
+  --primary-foreground: #04241a;
+  --secondary: #1b2130;
+  --secondary-foreground: #e9ecf3;
+  --muted: #171c28;
+  --muted-foreground: #8b93a7;
+  --accent: #1b2130;
+  --accent-foreground: #e9ecf3;
+  --destructive: #fb7185;
+  --border: #1f2533;
+  --input: #2a3141;
+  --ring: #34d399;
+  --sidebar: #0d1119;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --info: #38bdf8;
+  --violet: #a78bfa;
+  --glow-1: rgb(52 211 153 / 0.1);
+  --glow-2: rgb(167 139 250 / 0.09);
 }
 
 @layer base {
@@ -130,8 +129,14 @@
   html {
     @apply font-sans antialiased;
   }
+  /* Two soft glows behind the content keep the large surfaces from looking flat. */
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(56rem 28rem at 0% -8rem, var(--glow-1), transparent 70%),
+      radial-gradient(48rem 26rem at 100% -10rem, var(--glow-2), transparent 70%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -139,11 +144,22 @@
   }
 }
 
-/* Expanded, heavy Archivo gives headings the weight of stacked blocks. */
 @utility heading {
   font-family: var(--font-heading);
-  font-stretch: 118%;
-  font-weight: 760;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* A faint grid of blocks that fades out towards the edges. */
+@utility bg-blocks {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 2.5rem 2.5rem;
+  mask-image: radial-gradient(ellipse at center, black 15%, transparent 70%);
+}
+
+/* The raised surface of cards, lists and panels. */
+@utility surface {
+  @apply bg-card shadow-xs ring-1 ring-foreground/8 dark:shadow-none;
 }

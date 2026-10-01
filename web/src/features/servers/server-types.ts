@@ -1,4 +1,5 @@
-import type { LampState } from "@/components/lamp"
+import { ArrowsSplitIcon, CubeIcon } from "@phosphor-icons/react"
+import type { Status } from "@/components/status"
 import type { ServerState } from "./api"
 
 export interface ServerType {
@@ -43,8 +44,13 @@ export function displayVersion(version: string) {
   return version === "LATEST" ? "latest" : version
 }
 
-export const serverStates: Record<ServerState, { lamp: LampState; label: string }> = {
-  running: { lamp: "on", label: "Running" },
-  starting: { lamp: "starting", label: "Starting" },
-  stopped: { lamp: "off", label: "Stopped" },
+export const serverStates: Record<ServerState, Status> = {
+  running: { tone: "success", label: "Running" },
+  starting: { tone: "warning", label: "Starting", pulse: true },
+  stopped: { tone: "neutral", label: "Stopped" },
+}
+
+/** Game servers are emerald blocks, proxies violet forks. */
+export function serverLook(type: string) {
+  return serverType(type).proxy ? ({ icon: ArrowsSplitIcon, tone: "violet" } as const) : ({ icon: CubeIcon, tone: "success" } as const)
 }

@@ -1,7 +1,9 @@
-import { SignInIcon, TrashIcon } from "@phosphor-icons/react"
+import { CubeIcon, SignInIcon, TrashIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { ConfirmDialog } from "@/components/confirm-dialog"
-import { Badge } from "@/components/ui/badge"
+import { IconTile } from "@/components/icon-tile"
+import { Section } from "@/components/section"
+import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { NodeServer } from "@/features/servers/api"
@@ -16,31 +18,37 @@ const disconnects = "The proxy restarts to apply this, which disconnects all pla
 /** The game servers behind the proxy; players join the first one. */
 export function BackendList({ network, servers }: { network: Network; servers?: NodeServer[] }) {
   return (
-    <section className="mt-10" aria-labelledby="backends-heading">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <h2 id="backends-heading" className="heading text-xl">
-          Servers
-        </h2>
-        <AddBackendDialog network={network} />
+    <Section
+      title="Servers"
+      description="Players switch between them with /server and the name."
+      actions={<AddBackendDialog network={network} />}
+    >
+      <div className="surface overflow-hidden rounded-xl">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Server</TableHead>
+              <TableHead className="hidden sm:table-cell">Switch with</TableHead>
+              <TableHead className="hidden md:table-cell">Port</TableHead>
+              <TableHead>
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {network.backends.map((backend, i) => (
+              <BackendRow
+                key={backend.serverId}
+                network={network}
+                backend={backend}
+                server={findServer(servers, backend)}
+                first={i === 0}
+              />
+            ))}
+          </TableBody>
+        </Table>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Server</TableHead>
-            <TableHead className="hidden sm:table-cell">Switch with</TableHead>
-            <TableHead className="hidden md:table-cell">Port</TableHead>
-            <TableHead>
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {network.backends.map((backend, i) => (
-            <BackendRow key={backend.serverId} network={network} backend={backend} server={findServer(servers, backend)} first={i === 0} />
-          ))}
-        </TableBody>
-      </Table>
-    </section>
+    </Section>
   )
 }
 
@@ -63,6 +71,7 @@ function BackendRow({
     <TableRow>
       <TableCell>
         <span className="inline-flex items-center gap-3">
+          <IconTile icon={CubeIcon} size="sm" />
           <Link
             to="/nodes/$nodeId/servers/$serverId"
             params={{ nodeId: backend.nodeId, serverId: backend.serverId }}
@@ -70,7 +79,7 @@ function BackendRow({
           >
             <ServerLabel server={server} />
           </Link>
-          {first && <Badge variant="secondary">Players join here</Badge>}
+          {first && <Pill tone="info">Players join here</Pill>}
         </span>
       </TableCell>
       <TableCell className="hidden font-mono sm:table-cell">/server {backend.name}</TableCell>
@@ -82,7 +91,7 @@ function BackendRow({
               trigger={
                 <Button size="sm" variant="outline" disabled={isPending}>
                   <SignInIcon />
-                  Join here
+                  <span className="max-sm:sr-only">Join here</span>
                 </Button>
               }
               title={`Let players join ${name}?`}
@@ -101,6 +110,7 @@ function BackendRow({
               <Button
                 size="icon-sm"
                 variant="ghost"
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 aria-label={`Remove ${name} from the network`}
                 title={last ? "A network needs at least one server" : undefined}
                 disabled={isPending || last}
