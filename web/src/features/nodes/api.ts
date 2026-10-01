@@ -20,6 +20,7 @@ export interface Node {
   createdAt: string
   status: NodeStatus
   info?: NodeInfo
+  certificateExpiresAt?: string
 }
 
 export const nodesQuery = queryOptions({
@@ -53,6 +54,14 @@ export function useDeleteNode() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api(`/nodes/${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey }),
+  })
+}
+
+export function useRenewCertificate(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<{ certificateExpiresAt: string }>(`/nodes/${id}/certificate`, { method: "POST" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey }),
   })
 }

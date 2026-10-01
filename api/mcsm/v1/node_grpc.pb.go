@@ -19,7 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NodeService_GetInfo_FullMethodName = "/mcsm.v1.NodeService/GetInfo"
+	NodeService_GetInfo_FullMethodName            = "/mcsm.v1.NodeService/GetInfo"
+	NodeService_CreateCSR_FullMethodName          = "/mcsm.v1.NodeService/CreateCSR"
+	NodeService_InstallCertificate_FullMethodName = "/mcsm.v1.NodeService/InstallCertificate"
 )
 
 // NodeServiceClient is the client API for NodeService service.
@@ -29,6 +31,12 @@ const (
 // NodeService is served by every agent and describes the machine it runs on.
 type NodeServiceClient interface {
 	GetInfo(ctx context.Context, in *GetInfoRequest, opts ...grpc.CallOption) (*GetInfoResponse, error)
+	// CreateCSR makes the agent generate a new key pair and returns a certificate
+	// signing request for it. The private key never leaves the node.
+	CreateCSR(ctx context.Context, in *CreateCSRRequest, opts ...grpc.CallOption) (*CreateCSRResponse, error)
+	// InstallCertificate activates a certificate issued for the key of the latest
+	// CreateCSR call. New connections use it right away; no restart is needed.
+	InstallCertificate(ctx context.Context, in *InstallCertificateRequest, opts ...grpc.CallOption) (*InstallCertificateResponse, error)
 }
 
 type nodeServiceClient struct {
@@ -49,6 +57,26 @@ func (c *nodeServiceClient) GetInfo(ctx context.Context, in *GetInfoRequest, opt
 	return out, nil
 }
 
+func (c *nodeServiceClient) CreateCSR(ctx context.Context, in *CreateCSRRequest, opts ...grpc.CallOption) (*CreateCSRResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateCSRResponse)
+	err := c.cc.Invoke(ctx, NodeService_CreateCSR_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nodeServiceClient) InstallCertificate(ctx context.Context, in *InstallCertificateRequest, opts ...grpc.CallOption) (*InstallCertificateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InstallCertificateResponse)
+	err := c.cc.Invoke(ctx, NodeService_InstallCertificate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NodeServiceServer is the server API for NodeService service.
 // All implementations must embed UnimplementedNodeServiceServer
 // for forward compatibility.
@@ -56,6 +84,12 @@ func (c *nodeServiceClient) GetInfo(ctx context.Context, in *GetInfoRequest, opt
 // NodeService is served by every agent and describes the machine it runs on.
 type NodeServiceServer interface {
 	GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error)
+	// CreateCSR makes the agent generate a new key pair and returns a certificate
+	// signing request for it. The private key never leaves the node.
+	CreateCSR(context.Context, *CreateCSRRequest) (*CreateCSRResponse, error)
+	// InstallCertificate activates a certificate issued for the key of the latest
+	// CreateCSR call. New connections use it right away; no restart is needed.
+	InstallCertificate(context.Context, *InstallCertificateRequest) (*InstallCertificateResponse, error)
 	mustEmbedUnimplementedNodeServiceServer()
 }
 
@@ -68,6 +102,12 @@ type UnimplementedNodeServiceServer struct{}
 
 func (UnimplementedNodeServiceServer) GetInfo(context.Context, *GetInfoRequest) (*GetInfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetInfo not implemented")
+}
+func (UnimplementedNodeServiceServer) CreateCSR(context.Context, *CreateCSRRequest) (*CreateCSRResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateCSR not implemented")
+}
+func (UnimplementedNodeServiceServer) InstallCertificate(context.Context, *InstallCertificateRequest) (*InstallCertificateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InstallCertificate not implemented")
 }
 func (UnimplementedNodeServiceServer) mustEmbedUnimplementedNodeServiceServer() {}
 func (UnimplementedNodeServiceServer) testEmbeddedByValue()                     {}
@@ -108,6 +148,42 @@ func _NodeService_GetInfo_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NodeService_CreateCSR_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCSRRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeServiceServer).CreateCSR(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeService_CreateCSR_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeServiceServer).CreateCSR(ctx, req.(*CreateCSRRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NodeService_InstallCertificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InstallCertificateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeServiceServer).InstallCertificate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeService_InstallCertificate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeServiceServer).InstallCertificate(ctx, req.(*InstallCertificateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NodeService_ServiceDesc is the grpc.ServiceDesc for NodeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -118,6 +194,14 @@ var NodeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetInfo",
 			Handler:    _NodeService_GetInfo_Handler,
+		},
+		{
+			MethodName: "CreateCSR",
+			Handler:    _NodeService_CreateCSR_Handler,
+		},
+		{
+			MethodName: "InstallCertificate",
+			Handler:    _NodeService_InstallCertificate_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

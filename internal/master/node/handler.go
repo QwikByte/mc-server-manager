@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -22,12 +21,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/nodes/{id}", h.get)
 	mux.HandleFunc("DELETE /api/nodes/{id}", h.delete)
 	mux.HandleFunc("POST /api/nodes/{id}/join-token", h.joinToken)
+	mux.HandleFunc("POST /api/nodes/{id}/certificate", h.renewCertificate)
 }
 
 type view struct {
 	Node
-	Status string `json:"status"` // pending, online or offline
-	Info   *info  `json:"info,omitempty"`
+	Status               string     `json:"status"` // pending, online or offline
+	Info                 *info      `json:"info,omitempty"`
+	CertificateExpiresAt *time.Time `json:"certificateExpiresAt,omitempty"`
 }
 
 type info struct {
@@ -46,18 +47,15 @@ func (h *Handler) probe(ctx context.Context, n Node) view {
 		return v
 	}
 	v.Status = "offline"
-	conn, err := h.svc.Conn(ctx, n.ID)
-	if err != nil {
-		return v
-	}
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
-	res, err := mcsmv1.NewNodeServiceClient(conn).GetInfo(ctx, &mcsmv1.GetInfoRequest{})
+	res, cert, err := h.svc.Status(ctx, n.ID)
 	if err != nil {
 		return v
 	}
 	v.Status = "online"
 	v.Info = &info{res.GetAgentVersion(), res.GetHostname(), res.GetOs(), res.GetCpuCount(), res.GetMemoryBytes(), res.GetRuntime()}
+	v.CertificateExpiresAt = &cert.NotAfter
 	return v
 }
 
@@ -117,4 +115,15 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) renewCertificate(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), renewTimeout)
+	defer cancel()
+	cert, err := h.svc.RenewCertificate(ctx, r.PathValue("id"))
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]time.Time{"certificateExpiresAt": cert.NotAfter})
 }

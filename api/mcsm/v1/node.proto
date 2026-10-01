@@ -7,6 +7,12 @@ option go_package = "github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1";
 // NodeService is served by every agent and describes the machine it runs on.
 service NodeService {
   rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+  // CreateCSR makes the agent generate a new key pair and returns a certificate
+  // signing request for it. The private key never leaves the node.
+  rpc CreateCSR(CreateCSRRequest) returns (CreateCSRResponse);
+  // InstallCertificate activates a certificate issued for the key of the latest
+  // CreateCSR call. New connections use it right away; no restart is needed.
+  rpc InstallCertificate(InstallCertificateRequest) returns (InstallCertificateResponse);
 }
 
 message GetInfoRequest {}
@@ -20,3 +26,15 @@ message GetInfoResponse {
   // Container runtime driving the servers, e.g. "docker 29.0.0".
   string runtime = 6;
 }
+
+message CreateCSRRequest {}
+
+message CreateCSRResponse {
+  bytes csr_der = 1;
+}
+
+message InstallCertificateRequest {
+  bytes certificate_der = 1;
+}
+
+message InstallCertificateResponse {}

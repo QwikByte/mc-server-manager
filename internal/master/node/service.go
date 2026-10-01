@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/tls"
 	"database/sql"
 	"errors"
 	"net"
@@ -47,14 +46,15 @@ type Service struct {
 
 	db         *sql.DB
 	ca         *pki.CA
-	cert       tls.Certificate
-	enrollAddr string // published in join tokens
+	cert       *pki.Holder // the master's own certificate
+	enrollAddr string      // published in join tokens
 
-	mu    sync.Mutex
-	conns map[string]*grpc.ClientConn
+	mu      sync.Mutex
+	conns   map[string]*grpc.ClientConn
+	renewMu sync.Mutex // one certificate renewal at a time
 }
 
-func NewService(db *sql.DB, ca *pki.CA, cert tls.Certificate, enrollAddr string) *Service {
+func NewService(db *sql.DB, ca *pki.CA, cert *pki.Holder, enrollAddr string) *Service {
 	return &Service{db: db, ca: ca, cert: cert, enrollAddr: enrollAddr, conns: make(map[string]*grpc.ClientConn)}
 }
 

@@ -1,9 +1,15 @@
 package pki
 
 import (
+	"crypto"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadOrCreateCAIsStable(t *testing.T) {
@@ -22,16 +28,10 @@ func TestLoadOrCreateCAIsStable(t *testing.T) {
 }
 
 func TestMutualTLS(t *testing.T) {
-	ca, err := LoadOrCreateCA(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	master, err := ca.MasterCertificate()
-	if err != nil {
-		t.Fatal(err)
-	}
+	ca := newCA(t)
+	master := holder(t, must(ca.MasterCertificate()))
 	node1, node2 := enrollNode(t, ca, "node-1"), enrollNode(t, ca, "node-2")
-	agent := AgentServerTLS(node1, ca.Cert)
+	agent := AgentServerTLS(holder(t, node1), ca.Cert)
 	fingerprint := Fingerprint(ca.Cert)
 
 	tests := []struct {
@@ -40,33 +40,92 @@ func TestMutualTLS(t *testing.T) {
 		wantErr        bool
 	}{
 		{"master reaches agent", NodeClientTLS(master, ca.Cert, "node-1"), agent, false},
-		{"node cannot command agent", NodeClientTLS(node2, ca.Cert, "node-1"), agent, true},
+		{"node cannot command agent", NodeClientTLS(holder(t, node2), ca.Cert, "node-1"), agent, true},
 		{"master rejects wrong node identity", NodeClientTLS(master, ca.Cert, "node-2"), agent, true},
 		{"enrollment with pinned CA", PinnedMasterTLS(fingerprint), MasterServerTLS(master), false},
 		{"enrollment rejects other CA", PinnedMasterTLS(fingerprint[1:] + "0"), MasterServerTLS(master), true},
-		{"enrollment rejects node posing as master", PinnedMasterTLS(fingerprint), MasterServerTLS(withCA(node2, ca)), true},
+		{"enrollment rejects node posing as master", PinnedMasterTLS(fingerprint), MasterServerTLS(holder(t, withCA(node2, ca))), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := handshake(t, tt.client, tt.server); (err != nil) != tt.wantErr {
+			if _, err := handshake(t, tt.client, tt.server); (err != nil) != tt.wantErr {
 				t.Fatalf("handshake error = %v, want error %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
+func TestRenewedCertificateIsUsedWithoutRestart(t *testing.T) {
+	ca := newCA(t)
+	node := holder(t, enrollNode(t, ca, "node-1"))
+	client, server := NodeClientTLS(holder(t, must(ca.MasterCertificate())), ca.Cert, "node-1"), AgentServerTLS(node, ca.Cert)
+
+	before, err := handshake(t, client, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := node.Set(enrollNode(t, ca, "node-1")); err != nil {
+		t.Fatal(err)
+	}
+	after, err := handshake(t, client, server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.SerialNumber.Cmp(after.SerialNumber) == 0 || after.SerialNumber.Cmp(node.Get().Leaf.SerialNumber) != 0 {
+		t.Fatal("the agent did not present its renewed certificate")
+	}
+}
+
+func TestNeedsRenewal(t *testing.T) {
+	start := time.Now()
+	cert := &x509.Certificate{NotBefore: start, NotAfter: start.Add(90 * 24 * time.Hour)}
+	if NeedsRenewal(cert, start.Add(59*24*time.Hour)) {
+		t.Error("renewal due with two thirds of the lifetime left")
+	}
+	if !NeedsRenewal(cert, start.Add(61*24*time.Hour)) {
+		t.Error("renewal not due with less than a third of the lifetime left")
+	}
+}
+
+func TestKeyPairStorage(t *testing.T) {
+	ca, dir := newCA(t), t.TempDir()
+	old := enrollNode(t, ca, "node-1")
+	// Earlier versions stored certificate and key in two files.
+	keyDER, err := x509.MarshalPKCS8PrivateKey(old.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writePEMFile(t, filepath.Join(dir, "node.crt"), "CERTIFICATE", old.Certificate[0])
+	writePEMFile(t, filepath.Join(dir, "node.key"), "PRIVATE KEY", keyDER)
+	if loaded, err := LoadKeyPair(dir, "node"); err != nil || loaded.Leaf.SerialNumber.Cmp(old.Leaf.SerialNumber) != 0 {
+		t.Fatalf("legacy key pair not loaded: %v", err)
+	}
+
+	renewed := enrollNode(t, ca, "node-1")
+	if err := SaveKeyPair(dir, "node", renewed.Certificate[0], renewed.PrivateKey.(crypto.Signer)); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, err := LoadKeyPair(dir, "node"); err != nil || loaded.Leaf.SerialNumber.Cmp(renewed.Leaf.SerialNumber) != 0 {
+		t.Fatalf("renewed key pair not loaded: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "node.key")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the replaced private key is still on disk")
+	}
+}
+
+func newCA(t *testing.T) *CA {
+	t.Helper()
+	return must(LoadOrCreateCA(t.TempDir()))
+}
+
 func enrollNode(t *testing.T, ca *CA, nodeID string) tls.Certificate {
 	t.Helper()
 	key := NewKey()
-	csr, err := NewCSR(key)
+	der, err := ca.SignNodeCSR(must(NewCSR(key)), nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	der, err := ca.SignNodeCSR(csr, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: must(x509.ParseCertificate(der))}
 }
 
 func withCA(cert tls.Certificate, ca *CA) tls.Certificate {
@@ -74,8 +133,28 @@ func withCA(cert tls.Certificate, ca *CA) tls.Certificate {
 	return cert
 }
 
-// handshake runs a TLS handshake over loopback and returns the errors of both sides.
-func handshake(t *testing.T, client, server *tls.Config) error {
+func holder(t *testing.T, cert tls.Certificate) *Holder {
+	t.Helper()
+	return must(NewHolder(cert))
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func writePEMFile(t *testing.T, path, blockType string, der []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// handshake runs a TLS handshake over loopback. It returns the certificate the server
+// presented and the errors of both sides.
+func handshake(t *testing.T, client, server *tls.Config) (*x509.Certificate, error) {
 	t.Helper()
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", server)
 	if err != nil {
@@ -94,9 +173,11 @@ func handshake(t *testing.T, client, server *tls.Config) error {
 		serverErr <- conn.(*tls.Conn).Handshake()
 	}()
 
+	var presented *x509.Certificate
 	conn, err := tls.Dial("tcp", ln.Addr().String(), client)
 	if err == nil {
+		presented = conn.ConnectionState().PeerCertificates[0]
 		conn.Close()
 	}
-	return errors.Join(err, <-serverErr)
+	return presented, errors.Join(err, <-serverErr)
 }

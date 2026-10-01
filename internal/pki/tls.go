@@ -7,15 +7,18 @@ import (
 	"slices"
 )
 
+// The configurations read certificates from a Holder, so renewed certificates are used
+// for new handshakes without restarting anything.
+
 // AgentServerTLS is used by agents and only admits clients that present a master
 // certificate issued by ca. Node certificates are rejected, so agents can never
 // command each other.
-func AgentServerTLS(node tls.Certificate, ca *x509.Certificate) *tls.Config {
+func AgentServerTLS(node *Holder, ca *x509.Certificate) *tls.Config {
 	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{node},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    pool(ca),
+		MinVersion:     tls.VersionTLS13,
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return node.Get(), nil },
+		ClientAuth:     tls.RequireAndVerifyClientCert,
+		ClientCAs:      pool(ca),
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			return cs.PeerCertificates[0].VerifyHostname(MasterName)
 		},
@@ -23,19 +26,22 @@ func AgentServerTLS(node tls.Certificate, ca *x509.Certificate) *tls.Config {
 }
 
 // NodeClientTLS lets the master connect to the agent of the node with the given ID.
-func NodeClientTLS(master tls.Certificate, ca *x509.Certificate, nodeID string) *tls.Config {
+func NodeClientTLS(master *Holder, ca *x509.Certificate, nodeID string) *tls.Config {
 	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{master},
-		RootCAs:      pool(ca),
-		ServerName:   NodeName(nodeID),
+		MinVersion:           tls.VersionTLS13,
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return master.Get(), nil },
+		RootCAs:              pool(ca),
+		ServerName:           NodeName(nodeID),
 	}
 }
 
 // MasterServerTLS serves the enrollment endpoint of the master. Clients do not
 // have a certificate yet; they authenticate with their join token instead.
-func MasterServerTLS(master tls.Certificate) *tls.Config {
-	return &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{master}}
+func MasterServerTLS(master *Holder) *tls.Config {
+	return &tls.Config{
+		MinVersion:     tls.VersionTLS13,
+		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return master.Get(), nil },
+	}
 }
 
 // PinnedMasterTLS is used by an agent during enrollment, before it holds the CA

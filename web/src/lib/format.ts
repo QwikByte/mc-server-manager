@@ -9,3 +9,8 @@ export function formatMegabytes(mb: number): string {
 export function formatBytes(bytes: number): string {
   return formatMegabytes(Math.round(bytes / 2 ** 20))
 }
+
+/** Formats an ISO timestamp as a date in the viewer's locale, e.g. "30 Dec 2026". */
+export function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" })
+}

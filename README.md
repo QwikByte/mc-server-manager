@@ -28,6 +28,10 @@ through the RCON connection the server image provides.
 - **Own CA.** The master creates an Ed25519 certificate authority on first start. All master ↔ agent traffic is
   TLS 1.3 with mutual authentication. Identities are names, not IPs (`master.mcsm.internal`,
   `<node-id>.node.mcsm.internal`), so nodes can change their address without re-enrolling.
+- **Short-lived certificates.** Master and node certificates are valid for 90 days and renewed automatically once
+  a third of their lifetime is left. For a node, the agent creates the new key and only sends a signing request; it
+  installs the signed certificate after checking it, without a restart. The panel can renew a node on demand.
+  A node that stays offline until its certificate expires has to be enrolled again with a new join token.
 - **Enrollment.** Adding a node creates a single-use join token (valid for one hour, stored only as a hash). It
   contains the master address, the node ID, the secret and the CA fingerprint. The agent creates its key pair
   locally, sends a CSR and pins the CA fingerprint, so the exchange can't be intercepted. Private keys never leave
@@ -123,7 +127,6 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 - Console commands for proxies
 - File manager and backups
 - Networks: register backend servers with their Velocity/BungeeCord proxy automatically
-- Automatic rotation of node certificates (currently valid for one year)
 - More runtimes (plain processes) and Java version selection per server
 - Roles, two-factor authentication and an audit log
 - German translation of the panel

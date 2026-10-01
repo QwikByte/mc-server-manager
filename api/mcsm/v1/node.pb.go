@@ -142,6 +142,166 @@ func (x *GetInfoResponse) GetRuntime() string {
 	return ""
 }
 
+type CreateCSRRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateCSRRequest) Reset() {
+	*x = CreateCSRRequest{}
+	mi := &file_mcsm_v1_node_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateCSRRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateCSRRequest) ProtoMessage() {}
+
+func (x *CreateCSRRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_node_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateCSRRequest.ProtoReflect.Descriptor instead.
+func (*CreateCSRRequest) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{2}
+}
+
+type CreateCSRResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CsrDer        []byte                 `protobuf:"bytes,1,opt,name=csr_der,json=csrDer,proto3" json:"csr_der,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateCSRResponse) Reset() {
+	*x = CreateCSRResponse{}
+	mi := &file_mcsm_v1_node_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateCSRResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateCSRResponse) ProtoMessage() {}
+
+func (x *CreateCSRResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_node_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateCSRResponse.ProtoReflect.Descriptor instead.
+func (*CreateCSRResponse) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CreateCSRResponse) GetCsrDer() []byte {
+	if x != nil {
+		return x.CsrDer
+	}
+	return nil
+}
+
+type InstallCertificateRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	CertificateDer []byte                 `protobuf:"bytes,1,opt,name=certificate_der,json=certificateDer,proto3" json:"certificate_der,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *InstallCertificateRequest) Reset() {
+	*x = InstallCertificateRequest{}
+	mi := &file_mcsm_v1_node_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallCertificateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallCertificateRequest) ProtoMessage() {}
+
+func (x *InstallCertificateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_node_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallCertificateRequest.ProtoReflect.Descriptor instead.
+func (*InstallCertificateRequest) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *InstallCertificateRequest) GetCertificateDer() []byte {
+	if x != nil {
+		return x.CertificateDer
+	}
+	return nil
+}
+
+type InstallCertificateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallCertificateResponse) Reset() {
+	*x = InstallCertificateResponse{}
+	mi := &file_mcsm_v1_node_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallCertificateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallCertificateResponse) ProtoMessage() {}
+
+func (x *InstallCertificateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_node_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallCertificateResponse.ProtoReflect.Descriptor instead.
+func (*InstallCertificateResponse) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{5}
+}
+
 var File_mcsm_v1_node_proto protoreflect.FileDescriptor
 
 const file_mcsm_v1_node_proto_rawDesc = "" +
@@ -154,9 +314,17 @@ const file_mcsm_v1_node_proto_rawDesc = "" +
 	"\x02os\x18\x03 \x01(\tR\x02os\x12\x1b\n" +
 	"\tcpu_count\x18\x04 \x01(\rR\bcpuCount\x12!\n" +
 	"\fmemory_bytes\x18\x05 \x01(\x04R\vmemoryBytes\x12\x18\n" +
-	"\aruntime\x18\x06 \x01(\tR\aruntime2K\n" +
+	"\aruntime\x18\x06 \x01(\tR\aruntime\"\x12\n" +
+	"\x10CreateCSRRequest\",\n" +
+	"\x11CreateCSRResponse\x12\x17\n" +
+	"\acsr_der\x18\x01 \x01(\fR\x06csrDer\"D\n" +
+	"\x19InstallCertificateRequest\x12'\n" +
+	"\x0fcertificate_der\x18\x01 \x01(\fR\x0ecertificateDer\"\x1c\n" +
+	"\x1aInstallCertificateResponse2\xee\x01\n" +
 	"\vNodeService\x12<\n" +
-	"\aGetInfo\x12\x17.mcsm.v1.GetInfoRequest\x1a\x18.mcsm.v1.GetInfoResponseB:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
+	"\aGetInfo\x12\x17.mcsm.v1.GetInfoRequest\x1a\x18.mcsm.v1.GetInfoResponse\x12B\n" +
+	"\tCreateCSR\x12\x19.mcsm.v1.CreateCSRRequest\x1a\x1a.mcsm.v1.CreateCSRResponse\x12]\n" +
+	"\x12InstallCertificate\x12\".mcsm.v1.InstallCertificateRequest\x1a#.mcsm.v1.InstallCertificateResponseB:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
 
 var (
 	file_mcsm_v1_node_proto_rawDescOnce sync.Once
@@ -170,16 +338,24 @@ func file_mcsm_v1_node_proto_rawDescGZIP() []byte {
 	return file_mcsm_v1_node_proto_rawDescData
 }
 
-var file_mcsm_v1_node_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_mcsm_v1_node_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_mcsm_v1_node_proto_goTypes = []any{
-	(*GetInfoRequest)(nil),  // 0: mcsm.v1.GetInfoRequest
-	(*GetInfoResponse)(nil), // 1: mcsm.v1.GetInfoResponse
+	(*GetInfoRequest)(nil),             // 0: mcsm.v1.GetInfoRequest
+	(*GetInfoResponse)(nil),            // 1: mcsm.v1.GetInfoResponse
+	(*CreateCSRRequest)(nil),           // 2: mcsm.v1.CreateCSRRequest
+	(*CreateCSRResponse)(nil),          // 3: mcsm.v1.CreateCSRResponse
+	(*InstallCertificateRequest)(nil),  // 4: mcsm.v1.InstallCertificateRequest
+	(*InstallCertificateResponse)(nil), // 5: mcsm.v1.InstallCertificateResponse
 }
 var file_mcsm_v1_node_proto_depIdxs = []int32{
 	0, // 0: mcsm.v1.NodeService.GetInfo:input_type -> mcsm.v1.GetInfoRequest
-	1, // 1: mcsm.v1.NodeService.GetInfo:output_type -> mcsm.v1.GetInfoResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: mcsm.v1.NodeService.CreateCSR:input_type -> mcsm.v1.CreateCSRRequest
+	4, // 2: mcsm.v1.NodeService.InstallCertificate:input_type -> mcsm.v1.InstallCertificateRequest
+	1, // 3: mcsm.v1.NodeService.GetInfo:output_type -> mcsm.v1.GetInfoResponse
+	3, // 4: mcsm.v1.NodeService.CreateCSR:output_type -> mcsm.v1.CreateCSRResponse
+	5, // 5: mcsm.v1.NodeService.InstallCertificate:output_type -> mcsm.v1.InstallCertificateResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -196,7 +372,7 @@ func file_mcsm_v1_node_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_node_proto_rawDesc), len(file_mcsm_v1_node_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

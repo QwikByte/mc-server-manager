@@ -22,6 +22,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/app"
 	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
+	agentnode "github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
@@ -38,7 +39,9 @@ func TestEnrollAndControlNode(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	ca, err := pki.LoadOrCreateCA(filepath.Join(dir, "master"))
 	check(t, err)
-	masterCert, err := ca.MasterCertificate()
+	cert, err := ca.MasterCertificate()
+	check(t, err)
+	masterCert, err := pki.NewHolder(cert)
 	check(t, err)
 	enrollListener := listen(t)
 	nodes := node.NewService(db, ca, masterCert, enrollListener.Addr().String())
@@ -58,11 +61,10 @@ func TestEnrollAndControlNode(t *testing.T) {
 	}
 
 	// Agent serving with its new credentials.
-	nodeCert, err := pki.LoadKeyPair(agentDir, enroll.NodeCert)
+	identity, err := agentnode.LoadIdentity(agentDir)
 	check(t, err)
-	agentCA, err := pki.LoadCert(agentDir, enroll.CACert)
-	check(t, err)
-	serve(t, app.NewGRPCServer(&fakeRuntime{}, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(nodeCert, agentCA)))), agentListener)
+	agentTLS := credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))
+	serve(t, app.NewGRPCServer(&fakeRuntime{}, identity, grpc.Creds(agentTLS)), agentListener)
 
 	// The master controls the node.
 	conn, err := nodes.Conn(ctx, n.ID)
@@ -147,6 +149,31 @@ func TestEnrollAndControlNode(t *testing.T) {
 		if got := status.Code(tc.call()); got != tc.want {
 			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
 		}
+	}
+
+	// The master renews the node certificate: the agent stores it and presents it to
+	// new connections without a restart.
+	enrolled := identity.Get().Leaf
+	renewed, err := nodes.RenewCertificate(ctx, n.ID)
+	check(t, err)
+	_, presented, err := nodes.Status(ctx, n.ID)
+	check(t, err)
+	stored, err := pki.LoadKeyPair(agentDir, enroll.NodeCert)
+	check(t, err)
+	if renewed.Equal(enrolled) || !presented.Equal(renewed) || !stored.Leaf.Equal(renewed) {
+		t.Fatal("the renewed certificate is not in use")
+	}
+
+	// A certificate for a key the agent did not create is rejected.
+	nodeClient := mcsmv1.NewNodeServiceClient(conn)
+	_, err = nodeClient.CreateCSR(ctx, &mcsmv1.CreateCSRRequest{})
+	check(t, err)
+	foreignCSR, err := pki.NewCSR(pki.NewKey())
+	check(t, err)
+	foreign, err := ca.SignNodeCSR(foreignCSR, n.ID)
+	check(t, err)
+	if _, err := nodeClient.InstallCertificate(ctx, &mcsmv1.InstallCertificateRequest{CertificateDer: foreign}); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("foreign certificate: got %v, want FailedPrecondition", err)
 	}
 }
 

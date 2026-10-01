@@ -36,14 +36,20 @@ func serve(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
+	masterCert, err := pki.NewHolder(cert)
+	if err != nil {
+		return err
+	}
 	publicAddr, err := cfg.publicEnrollAddr()
 	if err != nil {
 		return err
 	}
 
 	users := auth.NewService(db)
-	nodes := node.NewService(db, ca, cert, publicAddr)
+	nodes := node.NewService(db, ca, masterCert, publicAddr)
 	defer nodes.Close()
+	go masterCert.Maintain(ctx, time.Hour, ca.MasterCertificate)
+	go nodes.MaintainCertificates(ctx, 6*time.Hour)
 	if ok, err := users.HasUsers(ctx); err == nil && !ok {
 		slog.Warn("no administrator account exists yet, create one with: mcsm-master user add <username>")
 	}
@@ -52,7 +58,7 @@ func serve(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(cert))))
+	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	httpServer := &http.Server{Addr: cfg.httpAddr, Handler: routes(users, nodes), ReadHeaderTimeout: 10 * time.Second}
 

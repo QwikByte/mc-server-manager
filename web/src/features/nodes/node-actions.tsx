@@ -1,4 +1,4 @@
-import { KeyIcon, TrashIcon } from "@phosphor-icons/react"
+import { KeyIcon, ShieldCheckIcon, TrashIcon } from "@phosphor-icons/react"
 import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { type Node, useDeleteNode, useNewJoinToken } from "./api"
+import { formatDate } from "@/lib/format"
+import { type Node, useDeleteNode, useNewJoinToken, useRenewCertificate } from "./api"
 import { EnrollSteps } from "./enroll-steps"
 
 /** Issues a new join token, e.g. for a node whose agent was reinstalled. */
@@ -88,5 +89,26 @@ export function RemoveNodeButton({ node }: { node: Node }) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/** Renews the node certificate right away, e.g. when its key may have leaked. */
+export function RenewCertificateButton({ node }: { node: Node }) {
+  const renew = useRenewCertificate(node.id)
+  return (
+    <Button
+      variant="outline"
+      disabled={renew.isPending}
+      onClick={() =>
+        renew.mutate(undefined, {
+          onSuccess: ({ certificateExpiresAt }) =>
+            toast.success(`Renewed the certificate of ${node.name}`, { description: `Valid until ${formatDate(certificateExpiresAt)}` }),
+          onError: (e) => toast.error(e.message),
+        })
+      }
+    >
+      <ShieldCheckIcon />
+      {renew.isPending ? "Renewing…" : "Renew certificate"}
+    </Button>
   )
 }

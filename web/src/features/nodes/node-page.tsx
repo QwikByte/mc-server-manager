@@ -5,9 +5,9 @@ import type { ReactNode } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ServerList } from "@/features/servers/server-list"
-import { formatBytes } from "@/lib/format"
+import { formatBytes, formatDate } from "@/lib/format"
 import { type Node, nodeQuery } from "./api"
-import { NewJoinTokenButton, RemoveNodeButton } from "./node-actions"
+import { NewJoinTokenButton, RemoveNodeButton, RenewCertificateButton } from "./node-actions"
 import { NodeStatusLabel } from "./node-status"
 
 const route = getRouteApi("/_app/nodes/$nodeId")
@@ -35,6 +35,7 @@ export function NodePage() {
             description={<span className="font-mono">{node.address}</span>}
             actions={
               <>
+                {node.status === "online" && <RenewCertificateButton node={node} />}
                 {node.enrolledAt && <NewJoinTokenButton node={node} />}
                 <RemoveNodeButton node={node} />
               </>
@@ -58,9 +59,10 @@ function NodeFacts({ node }: { node: Node }) {
     ["Memory", info?.memoryBytes ? formatBytes(info.memoryBytes) : undefined],
     ["Runtime", info?.runtime],
     ["Agent", info?.agentVersion],
+    ["Certificate valid until", node.certificateExpiresAt && formatDate(node.certificateExpiresAt)],
   ]
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-y py-4 sm:grid-cols-4 lg:grid-cols-7">
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-y py-4 sm:grid-cols-4 lg:grid-cols-8">
       {facts
         .filter(([, value]) => value !== undefined && value !== "")
         .map(([term, value]) => (

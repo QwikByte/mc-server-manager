@@ -17,6 +17,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
+	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
 const localTimeout = 2 * time.Minute
@@ -32,8 +34,12 @@ func statusCommand(cfg *config) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				fmt.Printf("Node     %s\nAgent    %s\nRuntime  %s\nSystem   %s, %d CPUs, %.1f GiB\n\n",
+				fmt.Printf("Node     %s\nAgent    %s\nRuntime  %s\nSystem   %s, %d CPUs, %.1f GiB\n",
 					info.GetHostname(), info.GetAgentVersion(), info.GetRuntime(), info.GetOs(), info.GetCpuCount(), float64(info.GetMemoryBytes())/(1<<30))
+				if cert, err := pki.LoadKeyPair(cfg.pkiDir(), enroll.NodeCert); err == nil {
+					fmt.Printf("Cert     valid until %s, renewed by the master\n", cert.Leaf.NotAfter.Local().Format(time.DateOnly))
+				}
+				fmt.Println()
 				return printServers(ctx, conn)
 			})
 		},

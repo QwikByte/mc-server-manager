@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/credentials/local"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
 	"github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime/docker"
@@ -27,14 +26,10 @@ func serve(ctx context.Context, cfg config) error {
 	if err := ensureDataDir(cfg); err != nil {
 		return err
 	}
-	cert, err := pki.LoadKeyPair(cfg.pkiDir(), enroll.NodeCert)
+	identity, err := node.LoadIdentity(cfg.pkiDir())
 	if errors.Is(err, fs.ErrNotExist) {
 		return errors.New("this agent is not enrolled yet, run: mcsm-agent enroll <join-token>")
 	}
-	if err != nil {
-		return err
-	}
-	ca, err := pki.LoadCert(cfg.pkiDir(), enroll.CACert)
 	if err != nil {
 		return err
 	}
@@ -45,8 +40,8 @@ func serve(ctx context.Context, cfg config) error {
 	defer rt.Close()
 
 	// The master connects via mutual TLS, the local CLI via the Unix socket.
-	remote := NewGRPCServer(rt, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(cert, ca))))
-	localSrv := NewGRPCServer(rt, grpc.Creds(local.NewCredentials()))
+	remote := NewGRPCServer(rt, identity, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
+	localSrv := NewGRPCServer(rt, identity, grpc.Creds(local.NewCredentials()))
 
 	tcpListener, err := net.Listen("tcp", cfg.listenAddr)
 	if err != nil {
@@ -67,7 +62,8 @@ func serve(ctx context.Context, cfg config) error {
 	go func() { errc <- remote.Serve(tcpListener) }()
 	go func() { errc <- localSrv.Serve(unixListener) }()
 	slog.Info("agent started", "version", buildinfo.Version, "listen", cfg.listenAddr, "socket", cfg.socket(),
-		"node", cert.Leaf.Subject.CommonName, "ca_fingerprint", pki.Fingerprint(ca))
+		"node", identity.Get().Leaf.Subject.CommonName, "certificate_not_after", identity.Get().Leaf.NotAfter,
+		"ca_fingerprint", pki.Fingerprint(identity.CA))
 
 	select {
 	case err = <-errc:
@@ -80,9 +76,9 @@ func serve(ctx context.Context, cfg config) error {
 }
 
 // NewGRPCServer registers all agent services on a new gRPC server.
-func NewGRPCServer(rt runtime.Runtime, opts ...grpc.ServerOption) *grpc.Server {
+func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, opts ...grpc.ServerOption) *grpc.Server {
 	s := grpc.NewServer(opts...)
-	mcsmv1.RegisterNodeServiceServer(s, node.NewService(rt))
+	mcsmv1.RegisterNodeServiceServer(s, node.NewService(rt, identity))
 	mcsmv1.RegisterServerServiceServer(s, server.NewService(rt))
 	return s
 }

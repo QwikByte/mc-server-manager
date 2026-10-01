@@ -14,11 +14,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -26,8 +22,9 @@ import (
 const MasterName = "master.mcsm.internal"
 
 const (
-	caValidity   = 10 * 365 * 24 * time.Hour
-	leafValidity = 365 * 24 * time.Hour
+	caValidity = 10 * 365 * 24 * time.Hour
+	// Short-lived leaves limit the damage of a leaked key; they are renewed automatically.
+	leafValidity = 90 * 24 * time.Hour
 )
 
 // NodeName is the identity carried by the certificate of the node with the given ID.
@@ -41,7 +38,7 @@ type CA struct {
 
 // LoadOrCreateCA loads the CA stored in dir, creating it on first start.
 func LoadOrCreateCA(dir string) (*CA, error) {
-	if _, err := os.Stat(filepath.Join(dir, "ca.crt")); errors.Is(err, fs.ErrNotExist) {
+	if !hasKeyPair(dir, "ca") {
 		return createCA(dir)
 	}
 	pair, err := LoadKeyPair(dir, "ca")
