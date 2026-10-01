@@ -1,0 +1,21 @@
+[Unit]
+Description=MC Server Manager agent
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+# Access to the Docker socket is equivalent to root, so the agent runs as root.
+ExecStart=/usr/local/bin/mcsm-agent serve --data-dir /var/lib/mcsm-agent
+StateDirectory=mcsm-agent
+StateDirectoryMode=0700
+Restart=on-failure
+
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

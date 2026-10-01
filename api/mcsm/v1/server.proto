@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package mcsm.v1;
+
+option go_package = "github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1";
+
+// ServerService is served by every agent and manages the Minecraft servers on its node.
+service ServerService {
+  rpc ListServers(ListServersRequest) returns (ListServersResponse);
+  rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
+  rpc StartServer(StartServerRequest) returns (StartServerResponse);
+  rpc StopServer(StopServerRequest) returns (StopServerResponse);
+  rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
+}
+
+enum ServerType {
+  SERVER_TYPE_UNSPECIFIED = 0;
+  SERVER_TYPE_VANILLA = 1;
+  SERVER_TYPE_PAPER = 2;
+  SERVER_TYPE_PURPUR = 3;
+  SERVER_TYPE_FABRIC = 4;
+  SERVER_TYPE_FORGE = 5;
+  SERVER_TYPE_NEOFORGE = 6;
+  // Proxies connect several servers to one network.
+  SERVER_TYPE_VELOCITY = 7;
+  SERVER_TYPE_BUNGEECORD = 8;
+}
+
+enum ServerState {
+  SERVER_STATE_UNSPECIFIED = 0;
+  SERVER_STATE_STOPPED = 1;
+  SERVER_STATE_STARTING = 2;
+  SERVER_STATE_RUNNING = 3;
+}
+
+message Server {
+  string id = 1;
+  string name = 2;
+  ServerType type = 3;
+  // Minecraft version, e.g. "1.21.4" or "LATEST".
+  string version = 4;
+  uint32 memory_mb = 5;
+  uint32 port = 6;
+  ServerState state = 7;
+}
+
+message ListServersRequest {}
+
+message ListServersResponse {
+  repeated Server servers = 1;
+}
+
+message CreateServerRequest {
+  string name = 1;
+  ServerType type = 2;
+  string version = 3;
+  uint32 memory_mb = 4;
+  uint32 port = 5;
+  // The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA).
+  bool accept_eula = 6;
+}
+
+message CreateServerResponse {
+  Server server = 1;
+}
+
+message StartServerRequest {
+  string id = 1;
+}
+
+message StartServerResponse {}
+
+message StopServerRequest {
+  string id = 1;
+}
+
+message StopServerResponse {}
+
+message DeleteServerRequest {
+  string id = 1;
+}
+
+message DeleteServerResponse {}

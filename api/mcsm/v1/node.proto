@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package mcsm.v1;
+
+option go_package = "github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1";
+
+// NodeService is served by every agent and describes the machine it runs on.
+service NodeService {
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+}
+
+message GetInfoRequest {}
+
+message GetInfoResponse {
+  string agent_version = 1;
+  string hostname = 2;
+  string os = 3;
+  uint32 cpu_count = 4;
+  uint64 memory_bytes = 5;
+  // Container runtime driving the servers, e.g. "docker 29.0.0".
+  string runtime = 6;
+}

@@ -1,0 +1,31 @@
+[Unit]
+Description=MC Server Manager master
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Create the user once with: useradd --system --no-create-home mcsm
+User=mcsm
+Group=mcsm
+ExecStart=/usr/local/bin/mcsm-master serve --data-dir /var/lib/mcsm-master --public-enroll-addr panel.example.com:9443
+StateDirectory=mcsm-master
+StateDirectoryMode=0700
+Restart=on-failure
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

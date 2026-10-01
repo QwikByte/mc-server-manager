@@ -1,0 +1,92 @@
+import { KeyIcon, TrashIcon } from "@phosphor-icons/react"
+import { useNavigate } from "@tanstack/react-router"
+import { useState } from "react"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { type Node, useDeleteNode, useNewJoinToken } from "./api"
+import { EnrollSteps } from "./enroll-steps"
+
+/** Issues a new join token, e.g. for a node whose agent was reinstalled. */
+export function NewJoinTokenButton({ node, variant = "outline" }: { node: Node; variant?: "outline" | "default" }) {
+  const issue = useNewJoinToken(node.id)
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <Button
+        variant={variant}
+        disabled={issue.isPending}
+        onClick={() => issue.mutate(undefined, { onSuccess: () => setOpen(true), onError: (e) => toast.error(e.message) })}
+      >
+        <KeyIcon />
+        New join token
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Connect {node.name}</DialogTitle>
+            <DialogDescription>Any earlier join token of this node no longer works.</DialogDescription>
+          </DialogHeader>
+          {issue.data && <EnrollSteps joinToken={issue.data.joinToken} />}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button>Done</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+export function RemoveNodeButton({ node }: { node: Node }) {
+  const remove = useDeleteNode()
+  const navigate = useNavigate()
+
+  function confirm() {
+    remove.mutate(node.id, {
+      onSuccess: () => {
+        toast.success(`Removed ${node.name}`)
+        navigate({ to: "/nodes" })
+      },
+      onError: (e) => toast.error(e.message),
+    })
+  }
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="destructive">
+          <TrashIcon />
+          Remove node
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove {node.name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            The panel stops managing this node. Its servers keep running until you stop them on the node or uninstall the agent.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={confirm}>
+            Remove node
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
