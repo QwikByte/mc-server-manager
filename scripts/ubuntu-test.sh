@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Sets up a complete MC Server Manager test environment on WSL (Ubuntu): installs Go,
-# Node.js and Docker when missing, builds both programs, starts the master, enrolls a
-# local agent and optionally creates a Paper test server.
+# Sets up a complete MC Server Manager test environment on Ubuntu (desktop, server or WSL):
+# installs Go, Node.js and Docker when missing, builds both programs, starts the master,
+# enrolls a local agent and optionally creates a Paper test server.
 #
-#   scripts/wsl-test.sh [setup]   install, build and start everything (default)
-#   scripts/wsl-test.sh start     start master and agent again, e.g. after a WSL restart
-#   scripts/wsl-test.sh stop      stop master and agent; Minecraft servers keep running
-#   scripts/wsl-test.sh reset     stop everything and delete all test data and servers
+#   scripts/ubuntu-test.sh [setup]   install, build and start everything (default)
+#   scripts/ubuntu-test.sh start     start master and agent again, e.g. after a reboot
+#   scripts/ubuntu-test.sh stop      stop master and agent; Minecraft servers keep running
+#   scripts/ubuntu-test.sh reset     stop everything and delete all test data and servers
 set -Eeuo pipefail
 
 REPO_URL=https://github.com/QwikByte/mc-server-manager.git
@@ -16,8 +16,9 @@ NODE_MAJOR=22
 BASE=http://localhost:8080
 AGENT_PORT=7443
 
+SELF=scripts/ubuntu-test.sh
 REPO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-DATA=$REPO_DIR/.data/wsl-test
+DATA=$REPO_DIR/.data/test
 JAR=$DATA/cookies.txt
 SUDO=sudo
 [ "$(id -u)" -ne 0 ] || SUDO=
@@ -33,6 +34,7 @@ py() {
 }
 port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 docker_up() { $SUDO docker info >/dev/null 2>&1; }
+is_wsl() { grep -qi microsoft /proc/version; }
 
 wait_for() {
   local tries=$1 i
@@ -60,10 +62,10 @@ install_packages() {
   $SUDO apt-get install -y -qq git curl ca-certificates make python3 xz-utils >/dev/null
 }
 
-# relocate re-runs the script from a clone in the Linux file system: the agent needs Unix
-# sockets and file permissions, which /mnt/c does not provide.
+# relocate re-runs the script from a clone when it was started on its own, or on WSL from a
+# Windows drive: the agent needs Unix sockets and file permissions, which /mnt/c lacks.
 relocate() {
-  [[ "$REPO_DIR" != /mnt/* && -f "$REPO_DIR/go.mod" ]] && return
+  if [ -f "$REPO_DIR/go.mod" ] && ! { is_wsl && [[ "$REPO_DIR" == /mnt/* ]]; }; then return; fi
   local target=$HOME/mc-server-manager
   log "Using a clone in $target"
   if [ -d "$target/.git" ]; then
@@ -73,7 +75,7 @@ relocate() {
   else
     git clone -q --branch "$BRANCH" "$REPO_URL" "$target"
   fi
-  exec bash "$target/scripts/wsl-test.sh" "$@"
+  exec bash "$target/$SELF" "$@"
 }
 
 install_go() {
@@ -114,7 +116,7 @@ install_docker() {
   local docker_bin
   docker_bin=$(command -v docker || true)
   if [[ -n "$docker_bin" && "$(readlink -f "$docker_bin")" == *docker-desktop* ]]; then
-    docker info >/dev/null 2>&1 || die "Docker Desktop is installed but not reachable. Start it, enable the WSL integration for this distribution and run the script again."
+    docker info >/dev/null 2>&1 || die "Docker Desktop is installed but not reachable. Start it (with the WSL integration for this distribution) and run the script again."
     return
   fi
   [ -z "$docker_bin" ] || return 0
@@ -179,7 +181,7 @@ initialise() {
   api -o /dev/null -d "{\"username\":\"admin\",\"password\":\"$password\"}" "$BASE/api/auth/login"
 
   log "Registering this machine as node and enrolling its agent"
-  read -r node_id token < <(api -d "{\"name\":\"WSL\",\"address\":\"127.0.0.1:$AGENT_PORT\"}" "$BASE/api/nodes" |
+  read -r node_id token < <(api -d "{\"name\":\"$(hostname)\",\"address\":\"127.0.0.1:$AGENT_PORT\"}" "$BASE/api/nodes" |
     py 'print(d["node"]["id"], d["joinToken"])')
   $SUDO "$REPO_DIR/bin/mcsm-agent" --data-dir "$DATA/agent" enroll "$token"
   start_agent
@@ -205,24 +207,34 @@ offer_test_server() {
 }
 
 summary() {
+  local hint="open it in your browser" minecraft=localhost:25565 ip
+  if is_wsl; then
+    hint="open it in your Windows browser"
+  elif [ -n "${SSH_CONNECTION:-}" ]; then
+    # The panel listens on localhost only; an SSH tunnel brings it to the operator's computer.
+    read -r _ _ ip _ <<<"$SSH_CONNECTION"
+    hint="on your computer run: ssh -L 8080:localhost:8080 $USER@$ip"
+    minecraft=$ip:25565
+    if [[ "$ip" == *:* ]]; then minecraft="[$ip]:25565"; fi
+  fi
   cat <<EOF
 
 MC Server Manager is running.
 
-  Panel      $BASE  (open it in your Windows browser)
+  Panel      $BASE  ($hint)
   Login      admin / $(cat "$DATA/admin-password")
-  Minecraft  localhost:25565
+  Minecraft  $minecraft
   Logs       $DATA/master.log
              $DATA/agent.log
 
-  scripts/wsl-test.sh stop    stop master and agent
-  scripts/wsl-test.sh start   start them again, e.g. after a WSL restart
-  scripts/wsl-test.sh reset   delete all test data and servers
+  $SELF stop    stop master and agent
+  $SELF start   start them again, e.g. after a reboot
+  $SELF reset   delete all test data and servers
 EOF
 }
 
 cmd_start() {
-  [ -x "$REPO_DIR/bin/mcsm-master" ] || die "Nothing is built yet, run: scripts/wsl-test.sh setup"
+  [ -x "$REPO_DIR/bin/mcsm-master" ] || die "Nothing is built yet, run: $SELF setup"
   [ -z "$SUDO" ] || sudo -v
   start_docker
   if [ -f "$DATA/initialised" ]; then
@@ -230,7 +242,7 @@ cmd_start() {
     start_master
     start_agent
   elif [ -d "$DATA" ]; then
-    die "A previous setup did not finish. Run: scripts/wsl-test.sh reset"
+    die "A previous setup did not finish. Run: $SELF reset"
   else
     initialise
   fi
@@ -265,10 +277,10 @@ cmd_reset() {
 }
 
 main() {
-  trap 'warn "Something failed. The logs are in $DATA; \"scripts/wsl-test.sh reset\" starts over."' ERR
+  trap 'warn "Something failed. The logs are in $DATA; \"$SELF reset\" starts over."' ERR
   case "${1:-setup}" in
     setup)
-      grep -qi microsoft /proc/version || warn "This does not look like WSL, continuing anyway."
+      command -v apt-get >/dev/null || die "This script needs Ubuntu or another Debian-based system."
       [ -z "$SUDO" ] || sudo -v
       install_packages
       relocate "$@"
@@ -282,7 +294,7 @@ main() {
     start) cmd_start ;;
     stop) cmd_stop ;;
     reset) cmd_reset ;;
-    *) die "Usage: scripts/wsl-test.sh [setup|start|stop|reset]" ;;
+    *) die "Usage: $SELF [setup|start|stop|reset]" ;;
   esac
 }
 
