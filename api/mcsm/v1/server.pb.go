@@ -147,10 +147,12 @@ type Server struct {
 	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Type  ServerType             `protobuf:"varint,3,opt,name=type,proto3,enum=mcsm.v1.ServerType" json:"type,omitempty"`
 	// Minecraft version, e.g. "1.21.4" or "LATEST".
-	Version       string      `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	MemoryMb      uint32      `protobuf:"varint,5,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
-	Port          uint32      `protobuf:"varint,6,opt,name=port,proto3" json:"port,omitempty"`
-	State         ServerState `protobuf:"varint,7,opt,name=state,proto3,enum=mcsm.v1.ServerState" json:"state,omitempty"`
+	Version  string      `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	MemoryMb uint32      `protobuf:"varint,5,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
+	Port     uint32      `protobuf:"varint,6,opt,name=port,proto3" json:"port,omitempty"`
+	State    ServerState `protobuf:"varint,7,opt,name=state,proto3,enum=mcsm.v1.ServerState" json:"state,omitempty"`
+	// Storage location of the server's data on the node.
+	Storage       string `protobuf:"bytes,8,opt,name=storage,proto3" json:"storage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,6 +234,13 @@ func (x *Server) GetState() ServerState {
 		return x.State
 	}
 	return ServerState_SERVER_STATE_UNSPECIFIED
+}
+
+func (x *Server) GetStorage() string {
+	if x != nil {
+		return x.Storage
+	}
+	return ""
 }
 
 type ListServersRequest struct {
@@ -322,7 +331,9 @@ type CreateServerRequest struct {
 	MemoryMb uint32                 `protobuf:"varint,4,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
 	Port     uint32                 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`
 	// The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA).
-	AcceptEula    bool `protobuf:"varint,6,opt,name=accept_eula,json=acceptEula,proto3" json:"accept_eula,omitempty"`
+	AcceptEula bool `protobuf:"varint,6,opt,name=accept_eula,json=acceptEula,proto3" json:"accept_eula,omitempty"`
+	// Storage location for the server's data; empty means the default location.
+	Storage       string `protobuf:"bytes,7,opt,name=storage,proto3" json:"storage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -397,6 +408,13 @@ func (x *CreateServerRequest) GetAcceptEula() bool {
 		return x.AcceptEula
 	}
 	return false
+}
+
+func (x *CreateServerRequest) GetStorage() string {
+	if x != nil {
+		return x.Storage
+	}
+	return ""
 }
 
 type CreateServerResponse struct {
@@ -1072,7 +1090,7 @@ var File_mcsm_v1_server_proto protoreflect.FileDescriptor
 
 const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x14mcsm/v1/server.proto\x12\amcsm.v1\"\xcc\x01\n" +
+	"\x14mcsm/v1/server.proto\x12\amcsm.v1\"\xe6\x01\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
@@ -1080,10 +1098,11 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\aversion\x18\x04 \x01(\tR\aversion\x12\x1b\n" +
 	"\tmemory_mb\x18\x05 \x01(\rR\bmemoryMb\x12\x12\n" +
 	"\x04port\x18\x06 \x01(\rR\x04port\x12*\n" +
-	"\x05state\x18\a \x01(\x0e2\x14.mcsm.v1.ServerStateR\x05state\"\x14\n" +
+	"\x05state\x18\a \x01(\x0e2\x14.mcsm.v1.ServerStateR\x05state\x12\x18\n" +
+	"\astorage\x18\b \x01(\tR\astorage\"\x14\n" +
 	"\x12ListServersRequest\"@\n" +
 	"\x13ListServersResponse\x12)\n" +
-	"\aservers\x18\x01 \x03(\v2\x0f.mcsm.v1.ServerR\aservers\"\xbe\x01\n" +
+	"\aservers\x18\x01 \x03(\v2\x0f.mcsm.v1.ServerR\aservers\"\xd8\x01\n" +
 	"\x13CreateServerRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x13.mcsm.v1.ServerTypeR\x04type\x12\x18\n" +
@@ -1091,7 +1110,8 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\tmemory_mb\x18\x04 \x01(\rR\bmemoryMb\x12\x12\n" +
 	"\x04port\x18\x05 \x01(\rR\x04port\x12\x1f\n" +
 	"\vaccept_eula\x18\x06 \x01(\bR\n" +
-	"acceptEula\"?\n" +
+	"acceptEula\x12\x18\n" +
+	"\astorage\x18\a \x01(\tR\astorage\"?\n" +
 	"\x14CreateServerResponse\x12'\n" +
 	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server\"$\n" +
 	"\x12StartServerRequest\x12\x0e\n" +

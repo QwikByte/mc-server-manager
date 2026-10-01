@@ -8,6 +8,7 @@ import (
 	"iter"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 )
 
 var (
@@ -29,6 +30,8 @@ type Spec struct {
 	Port     uint32            `json:"port"`
 	// BehindProxy makes a game server accept only players forwarded by its proxy.
 	BehindProxy bool `json:"behindProxy,omitempty"`
+	// Storage is the storage location of the server's data; empty means the default.
+	Storage string `json:"storage,omitempty"`
 }
 
 // Server is a server managed by a runtime.
@@ -77,4 +80,6 @@ type Runtime interface {
 	SendCommand(ctx context.Context, id, command string) (string, error)
 	// Configure gives a server its role in a network and restarts it if it runs.
 	Configure(ctx context.Context, id string, network Network) error
+	// Data opens the data directory of a server; the caller closes it.
+	Data(ctx context.Context, id string) (*datadir.Dir, error)
 }

@@ -66,6 +66,9 @@ the network and configures each server through its agent; changes are applied to
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), containers run with `no-new-privileges` and memory and PID limits, and servers are only created
   after the operator accepts the Minecraft EULA.
+- **Storage locations.** Only the node's administrator decides where server data may be stored
+  (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
+  mount other host directories into containers.
 
 ## Repository layout
 
@@ -90,6 +93,8 @@ internal/agent/
   enroll/               enrollment client
   node/                 machine info
   server/               server lifecycle and input validation
+  storage/              storage locations allowed for server data
+  datadir/              confined access to a server's data, owned by the server's user
   network/              proxy and backend configuration for networks
   runtime/              runtime interface; docker/ implements it
 internal/e2e/           end-to-end tests: enrollment, control and networks over real mTLS
@@ -143,6 +148,8 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 2. Add the node in the panel and run `sudo mcsm-agent enroll <join-token>`.
 3. Start the service and allow port 7443 only from the master's IP.
 4. Check the node locally with `sudo mcsm-agent status`; `sudo mcsm-agent server logs <id>` follows a console.
+5. Optionally allow more directories for server data, e.g. on a faster disk:
+   `sudo mcsm-agent storage add ssd /mnt/ssd/mcsm`. New servers can then be created there from the panel.
 
 ## Roadmap
 

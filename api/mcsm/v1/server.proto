@@ -51,6 +51,8 @@ message Server {
   uint32 memory_mb = 5;
   uint32 port = 6;
   ServerState state = 7;
+  // Storage location of the server's data on the node.
+  string storage = 8;
 }
 
 message ListServersRequest {}
@@ -67,6 +69,8 @@ message CreateServerRequest {
   uint32 port = 5;
   // The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA).
   bool accept_eula = 6;
+  // Storage location for the server's data; empty means the default location.
+  string storage = 7;
 }
 
 message CreateServerResponse {

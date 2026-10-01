@@ -23,7 +23,9 @@ import (
 	"github.com/moby/moby/client"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
 
 const (
@@ -64,27 +66,19 @@ var images = map[mcsmv1.ServerType]image{
 // the agent itself stores nothing besides the server data directories.
 type Docker struct {
 	cli     *client.Client
-	dataDir string
-	root    *os.Root // confines file operations to dataDir
+	storage *storage.Locations
 }
 
 // New connects to the Docker daemon configured by the standard DOCKER_* variables.
-func New(dataDir string) (*Docker, error) {
-	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return nil, err
-	}
-	root, err := os.OpenRoot(dataDir)
-	if err != nil {
-		return nil, err
-	}
+func New(locations *storage.Locations) (*Docker, error) {
 	cli, err := client.New(client.FromEnv)
 	if err != nil {
-		return nil, errors.Join(err, root.Close())
+		return nil, err
 	}
-	return &Docker{cli: cli, dataDir: dataDir, root: root}, nil
+	return &Docker{cli: cli, storage: locations}, nil
 }
 
-func (d *Docker) Close() error { return errors.Join(d.cli.Close(), d.root.Close()) }
+func (d *Docker) Close() error { return d.cli.Close() }
 
 func (d *Docker) Info(ctx context.Context) (runtime.Info, error) {
 	res, err := d.cli.Info(ctx, client.InfoOptions{})
@@ -132,17 +126,56 @@ func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {
 	if !ok {
 		return fmt.Errorf("server type %s is not supported by the docker runtime", spec.Type)
 	}
+	path, err := d.dataPath(spec)
+	if err != nil {
+		return err
+	}
 	if err := d.pull(ctx, img.ref); err != nil {
 		return fmt.Errorf("pull %s: %w", img.ref, err)
 	}
-	if err := d.root.MkdirAll(spec.ID, 0o750); err != nil {
+	if err := os.Mkdir(path, 0o750); err != nil {
 		return err
 	}
 	return d.createContainer(ctx, spec)
 }
 
+// dataPath returns the host directory with the data of a server.
+func (d *Docker) dataPath(spec runtime.Spec) (string, error) {
+	location, err := d.storage.Path(spec.Storage)
+	return filepath.Join(location, spec.ID), err
+}
+
+// inspect returns a container created by the agent and the spec of its server.
+func (d *Docker) inspect(ctx context.Context, id string) (container.InspectResponse, runtime.Spec, error) {
+	res, err := d.cli.ContainerInspect(ctx, containerName(id), client.ContainerInspectOptions{})
+	if err != nil {
+		return container.InspectResponse{}, runtime.Spec{}, notFound(err)
+	}
+	spec, ok := specOf(res.Container.Config.Labels)
+	if !ok || spec.ID != id {
+		return container.InspectResponse{}, runtime.Spec{}, runtime.ErrNotFound
+	}
+	return res.Container, spec, nil
+}
+
+func (d *Docker) Data(ctx context.Context, id string) (*datadir.Dir, error) {
+	_, spec, err := d.inspect(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	path, err := d.dataPath(spec)
+	if err != nil {
+		return nil, err
+	}
+	return datadir.Open(path)
+}
+
 // createContainer creates the container of a server whose image and data directory exist.
 func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
+	path, err := d.dataPath(spec)
+	if err != nil {
+		return err
+	}
 	if err := d.ensureNetwork(ctx); err != nil {
 		return err
 	}
@@ -167,7 +200,7 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
 		},
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{networkName: {}}},
 		HostConfig: &container.HostConfig{
-			Binds:         []string{filepath.Join(d.dataDir, spec.ID) + ":" + img.data},
+			Binds:         []string{path + ":" + img.data},
 			PortBindings:  network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}},
 			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 			SecurityOpt:   []string{"no-new-privileges:true"},
@@ -193,10 +226,22 @@ func (d *Docker) Stop(ctx context.Context, id string) error {
 
 // Remove deletes the container and all server data.
 func (d *Docker) Remove(ctx context.Context, id string) error {
+	_, spec, err := d.inspect(ctx, id)
+	if err != nil {
+		return err
+	}
+	location, err := d.storage.Path(spec.Storage)
+	if err != nil {
+		return err
+	}
 	if _, err := d.cli.ContainerRemove(ctx, containerName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
 		return notFound(err)
 	}
-	return d.root.RemoveAll(id)
+	root, err := os.OpenRoot(location)
+	if err != nil {
+		return err
+	}
+	return errors.Join(root.RemoveAll(spec.ID), root.Close())
 }
 
 func (d *Docker) Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error] {
@@ -232,14 +277,14 @@ func (d *Docker) Logs(ctx context.Context, id string, tail int) iter.Seq2[string
 // SendCommand runs the command through rcon-cli, which the itzg server image ships
 // together with a preconfigured RCON connection. Proxies have no RCON.
 func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, error) {
-	inspect, err := d.cli.ContainerInspect(ctx, containerName(id), client.ContainerInspectOptions{})
+	c, spec, err := d.inspect(ctx, id)
 	if err != nil {
-		return "", notFound(err)
+		return "", err
 	}
-	if spec, ok := specOf(inspect.Container.Config.Labels); !ok || images[spec.Type].ref != serverImage {
+	if images[spec.Type].ref != serverImage {
 		return "", runtime.ErrUnsupported
 	}
-	if !inspect.Container.State.Running {
+	if !c.State.Running {
 		return "", runtime.ErrNotRunning
 	}
 	exec, err := d.cli.ExecCreate(ctx, containerName(id), client.ExecCreateOptions{

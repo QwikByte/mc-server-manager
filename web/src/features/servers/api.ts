@@ -11,6 +11,7 @@ export interface Server {
   memoryMb: number
   port: number
   state: ServerState
+  storage: string
 }
 
 /** A server together with the node it runs on. */
@@ -26,6 +27,7 @@ export interface NewServer {
   memoryMb: number
   port: number
   acceptEula: boolean
+  storage: string
 }
 
 export const serversQuery = (nodeId: string) =>

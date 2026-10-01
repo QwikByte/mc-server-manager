@@ -1,4 +1,5 @@
 import { PlusIcon } from "@phosphor-icons/react"
+import { useQuery } from "@tanstack/react-query"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -15,17 +16,29 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatMegabytes } from "@/lib/format"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { nodeQuery } from "@/features/nodes/api"
+import { formatBytes, formatMegabytes } from "@/lib/format"
 import { type NewServer, useCreateServer } from "./api"
 import { defaults, memoryOptionsMb, serverType, serverTypes } from "./server-types"
 
-const initial: NewServer = { name: "", type: "paper", version: "", ...defaults("paper"), acceptEula: false }
+const initial: NewServer = { name: "", type: "paper", version: "", ...defaults("paper"), acceptEula: false, storage: "default" }
 
 export function CreateServerDialog({ nodeId }: { nodeId: string }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(initial)
   const create = useCreateServer(nodeId)
+  const { data: node } = useQuery(nodeQuery(nodeId))
+  const locations = node?.info?.storage ?? []
   const proxy = serverType(form.type).proxy
 
   function onOpenChange(next: boolean) {
@@ -97,20 +110,24 @@ export function CreateServerDialog({ nodeId }: { nodeId: string }) {
                   <SelectContent>
                     <SelectGroup>
                       <SelectLabel>Game servers</SelectLabel>
-                      {serverTypes.filter((t) => !t.proxy).map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
+                      {serverTypes
+                        .filter((t) => !t.proxy)
+                        .map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
                     </SelectGroup>
                     <SelectSeparator />
                     <SelectGroup>
                       <SelectLabel>Proxies for networks</SelectLabel>
-                      {serverTypes.filter((t) => t.proxy).map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
+                      {serverTypes
+                        .filter((t) => t.proxy)
+                        .map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -157,6 +174,24 @@ export function CreateServerDialog({ nodeId }: { nodeId: string }) {
                 />
               </Field>
             </div>
+            {locations.length > 1 && (
+              <Field>
+                <FieldLabel htmlFor="server-storage">Storage</FieldLabel>
+                <Select value={form.storage} onValueChange={(storage) => setForm({ ...form, storage })}>
+                  <SelectTrigger id="server-storage" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((l) => (
+                      <SelectItem key={l.name} value={l.name}>
+                        {l.name}
+                        <span className="text-muted-foreground">{formatBytes(l.freeBytes)} free</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
             <Field orientation="horizontal">
               <Checkbox id="server-eula" checked={form.acceptEula} onCheckedChange={(v) => setForm({ ...form, acceptEula: v === true })} />
               <FieldLabel htmlFor="server-eula" className="font-normal">

@@ -25,6 +25,16 @@ message GetInfoResponse {
   uint64 memory_bytes = 5;
   // Container runtime driving the servers, e.g. "docker 29.0.0".
   string runtime = 6;
+  // Where servers can keep their data; the default location comes first.
+  repeated StorageLocation storage = 7;
+}
+
+// StorageLocation is a directory the node's administrator allowed for server data.
+message StorageLocation {
+  string name = 1;
+  string path = 2;
+  uint64 free_bytes = 3;
+  uint64 total_bytes = 4;
 }
 
 message CreateCSRRequest {}

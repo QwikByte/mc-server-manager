@@ -9,6 +9,7 @@ import { formatBytes, formatDate } from "@/lib/format"
 import { type Node, nodeQuery } from "./api"
 import { NewJoinTokenButton, RemoveNodeButton, RenewCertificateButton } from "./node-actions"
 import { NodeStatusLabel } from "./node-status"
+import { StorageList } from "./storage-list"
 
 const route = getRouteApi("/_app/nodes/$nodeId")
 
@@ -76,7 +77,13 @@ function NodeFacts({ node }: { node: Node }) {
 }
 
 function NodeBody({ node }: { node: Node }) {
-  if (node.status === "online") return <ServerList nodeId={node.id} />
+  if (node.status === "online")
+    return (
+      <>
+        <ServerList nodeId={node.id} />
+        {node.info?.storage && <StorageList locations={node.info.storage} />}
+      </>
+    )
   return (
     <section className="mt-10 max-w-2xl space-y-4">
       <h2 className="heading text-xl">{node.status === "pending" ? "Connect the agent" : "The agent can't be reached"}</h2>

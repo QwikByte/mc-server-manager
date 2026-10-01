@@ -32,12 +32,20 @@ type view struct {
 }
 
 type info struct {
-	AgentVersion string `json:"agentVersion"`
-	Hostname     string `json:"hostname"`
-	OS           string `json:"os"`
-	CPUCount     uint32 `json:"cpuCount"`
-	MemoryBytes  uint64 `json:"memoryBytes"`
-	Runtime      string `json:"runtime"`
+	AgentVersion string            `json:"agentVersion"`
+	Hostname     string            `json:"hostname"`
+	OS           string            `json:"os"`
+	CPUCount     uint32            `json:"cpuCount"`
+	MemoryBytes  uint64            `json:"memoryBytes"`
+	Runtime      string            `json:"runtime"`
+	Storage      []storageLocation `json:"storage"`
+}
+
+type storageLocation struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	FreeBytes  uint64 `json:"freeBytes"`
+	TotalBytes uint64 `json:"totalBytes"`
 }
 
 // probe asks the agent for its machine info, which also tells whether it is reachable.
@@ -54,7 +62,10 @@ func (h *Handler) probe(ctx context.Context, n Node) view {
 		return v
 	}
 	v.Status = "online"
-	v.Info = &info{res.GetAgentVersion(), res.GetHostname(), res.GetOs(), res.GetCpuCount(), res.GetMemoryBytes(), res.GetRuntime()}
+	v.Info = &info{res.GetAgentVersion(), res.GetHostname(), res.GetOs(), res.GetCpuCount(), res.GetMemoryBytes(), res.GetRuntime(), []storageLocation{}}
+	for _, l := range res.GetStorage() {
+		v.Info.Storage = append(v.Info.Storage, storageLocation{l.GetName(), l.GetPath(), l.GetFreeBytes(), l.GetTotalBytes()})
+	}
 	v.CertificateExpiresAt = &cert.NotAfter
 	return v
 }

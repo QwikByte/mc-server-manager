@@ -18,6 +18,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime/docker"
 	"github.com/QwikByte/mc-server-manager/internal/agent/server"
+	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
@@ -33,15 +34,16 @@ func serve(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	rt, err := docker.New(cfg.serversDir())
+	locations := storage.New(cfg.dataDir)
+	rt, err := docker.New(locations)
 	if err != nil {
 		return err
 	}
 	defer rt.Close()
 
 	// The master connects via mutual TLS, the local CLI via the Unix socket.
-	remote := NewGRPCServer(rt, identity, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
-	localSrv := NewGRPCServer(rt, identity, grpc.Creds(local.NewCredentials()))
+	remote := NewGRPCServer(rt, identity, locations, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
+	localSrv := NewGRPCServer(rt, identity, locations, grpc.Creds(local.NewCredentials()))
 
 	tcpListener, err := net.Listen("tcp", cfg.listenAddr)
 	if err != nil {
@@ -76,9 +78,9 @@ func serve(ctx context.Context, cfg config) error {
 }
 
 // NewGRPCServer registers all agent services on a new gRPC server.
-func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, opts ...grpc.ServerOption) *grpc.Server {
+func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, opts ...grpc.ServerOption) *grpc.Server {
 	s := grpc.NewServer(opts...)
-	mcsmv1.RegisterNodeServiceServer(s, node.NewService(rt, identity))
+	mcsmv1.RegisterNodeServiceServer(s, node.NewService(rt, identity, locations))
 	mcsmv1.RegisterServerServiceServer(s, server.NewService(rt))
 	return s
 }

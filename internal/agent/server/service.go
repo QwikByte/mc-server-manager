@@ -20,6 +20,7 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
 
 const (
@@ -80,6 +81,7 @@ func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequ
 		Version:  cmp.Or(req.GetVersion(), "LATEST"),
 		MemoryMB: req.GetMemoryMb(),
 		Port:     req.GetPort(),
+		Storage:  req.GetStorage(),
 	}
 	if err := s.rt.Create(ctx, spec); err != nil {
 		return nil, toStatus(err)
@@ -210,7 +212,10 @@ func validate(req *mcsmv1.CreateServerRequest) string {
 }
 
 func toProto(s runtime.Server) *mcsmv1.Server {
-	return &mcsmv1.Server{Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State}
+	return &mcsmv1.Server{
+		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
+		Storage: cmp.Or(s.Storage, storage.Default),
+	}
 }
 
 func toStatus(err error) error {
@@ -223,6 +228,8 @@ func toStatus(err error) error {
 		return status.Error(codes.FailedPrecondition, "Start the server to send commands.")
 	case errors.Is(err, runtime.ErrUnsupported):
 		return status.Error(codes.FailedPrecondition, "This type of server does not support that.")
+	case errors.Is(err, storage.ErrUnknown):
+		return status.Errorf(codes.InvalidArgument, "%s. Add it on the node with: mcsm-agent storage add", err)
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()
 	default:

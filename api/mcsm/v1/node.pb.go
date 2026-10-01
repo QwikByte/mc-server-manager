@@ -65,7 +65,9 @@ type GetInfoResponse struct {
 	CpuCount     uint32                 `protobuf:"varint,4,opt,name=cpu_count,json=cpuCount,proto3" json:"cpu_count,omitempty"`
 	MemoryBytes  uint64                 `protobuf:"varint,5,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
 	// Container runtime driving the servers, e.g. "docker 29.0.0".
-	Runtime       string `protobuf:"bytes,6,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Runtime string `protobuf:"bytes,6,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	// Where servers can keep their data; the default location comes first.
+	Storage       []*StorageLocation `protobuf:"bytes,7,rep,name=storage,proto3" json:"storage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,6 +144,82 @@ func (x *GetInfoResponse) GetRuntime() string {
 	return ""
 }
 
+func (x *GetInfoResponse) GetStorage() []*StorageLocation {
+	if x != nil {
+		return x.Storage
+	}
+	return nil
+}
+
+// StorageLocation is a directory the node's administrator allowed for server data.
+type StorageLocation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	FreeBytes     uint64                 `protobuf:"varint,3,opt,name=free_bytes,json=freeBytes,proto3" json:"free_bytes,omitempty"`
+	TotalBytes    uint64                 `protobuf:"varint,4,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StorageLocation) Reset() {
+	*x = StorageLocation{}
+	mi := &file_mcsm_v1_node_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StorageLocation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StorageLocation) ProtoMessage() {}
+
+func (x *StorageLocation) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_node_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StorageLocation.ProtoReflect.Descriptor instead.
+func (*StorageLocation) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *StorageLocation) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *StorageLocation) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *StorageLocation) GetFreeBytes() uint64 {
+	if x != nil {
+		return x.FreeBytes
+	}
+	return 0
+}
+
+func (x *StorageLocation) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
 type CreateCSRRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -150,7 +228,7 @@ type CreateCSRRequest struct {
 
 func (x *CreateCSRRequest) Reset() {
 	*x = CreateCSRRequest{}
-	mi := &file_mcsm_v1_node_proto_msgTypes[2]
+	mi := &file_mcsm_v1_node_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -162,7 +240,7 @@ func (x *CreateCSRRequest) String() string {
 func (*CreateCSRRequest) ProtoMessage() {}
 
 func (x *CreateCSRRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_node_proto_msgTypes[2]
+	mi := &file_mcsm_v1_node_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -175,7 +253,7 @@ func (x *CreateCSRRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCSRRequest.ProtoReflect.Descriptor instead.
 func (*CreateCSRRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{2}
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{3}
 }
 
 type CreateCSRResponse struct {
@@ -187,7 +265,7 @@ type CreateCSRResponse struct {
 
 func (x *CreateCSRResponse) Reset() {
 	*x = CreateCSRResponse{}
-	mi := &file_mcsm_v1_node_proto_msgTypes[3]
+	mi := &file_mcsm_v1_node_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -199,7 +277,7 @@ func (x *CreateCSRResponse) String() string {
 func (*CreateCSRResponse) ProtoMessage() {}
 
 func (x *CreateCSRResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_node_proto_msgTypes[3]
+	mi := &file_mcsm_v1_node_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -212,7 +290,7 @@ func (x *CreateCSRResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCSRResponse.ProtoReflect.Descriptor instead.
 func (*CreateCSRResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{3}
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateCSRResponse) GetCsrDer() []byte {
@@ -231,7 +309,7 @@ type InstallCertificateRequest struct {
 
 func (x *InstallCertificateRequest) Reset() {
 	*x = InstallCertificateRequest{}
-	mi := &file_mcsm_v1_node_proto_msgTypes[4]
+	mi := &file_mcsm_v1_node_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +321,7 @@ func (x *InstallCertificateRequest) String() string {
 func (*InstallCertificateRequest) ProtoMessage() {}
 
 func (x *InstallCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_node_proto_msgTypes[4]
+	mi := &file_mcsm_v1_node_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,7 +334,7 @@ func (x *InstallCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallCertificateRequest.ProtoReflect.Descriptor instead.
 func (*InstallCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{4}
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *InstallCertificateRequest) GetCertificateDer() []byte {
@@ -274,7 +352,7 @@ type InstallCertificateResponse struct {
 
 func (x *InstallCertificateResponse) Reset() {
 	*x = InstallCertificateResponse{}
-	mi := &file_mcsm_v1_node_proto_msgTypes[5]
+	mi := &file_mcsm_v1_node_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -286,7 +364,7 @@ func (x *InstallCertificateResponse) String() string {
 func (*InstallCertificateResponse) ProtoMessage() {}
 
 func (x *InstallCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_node_proto_msgTypes[5]
+	mi := &file_mcsm_v1_node_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -299,7 +377,7 @@ func (x *InstallCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallCertificateResponse.ProtoReflect.Descriptor instead.
 func (*InstallCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{5}
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{6}
 }
 
 var File_mcsm_v1_node_proto protoreflect.FileDescriptor
@@ -307,14 +385,22 @@ var File_mcsm_v1_node_proto protoreflect.FileDescriptor
 const file_mcsm_v1_node_proto_rawDesc = "" +
 	"\n" +
 	"\x12mcsm/v1/node.proto\x12\amcsm.v1\"\x10\n" +
-	"\x0eGetInfoRequest\"\xbc\x01\n" +
+	"\x0eGetInfoRequest\"\xf0\x01\n" +
 	"\x0fGetInfoResponse\x12#\n" +
 	"\ragent_version\x18\x01 \x01(\tR\fagentVersion\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x12\x0e\n" +
 	"\x02os\x18\x03 \x01(\tR\x02os\x12\x1b\n" +
 	"\tcpu_count\x18\x04 \x01(\rR\bcpuCount\x12!\n" +
 	"\fmemory_bytes\x18\x05 \x01(\x04R\vmemoryBytes\x12\x18\n" +
-	"\aruntime\x18\x06 \x01(\tR\aruntime\"\x12\n" +
+	"\aruntime\x18\x06 \x01(\tR\aruntime\x122\n" +
+	"\astorage\x18\a \x03(\v2\x18.mcsm.v1.StorageLocationR\astorage\"y\n" +
+	"\x0fStorageLocation\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1d\n" +
+	"\n" +
+	"free_bytes\x18\x03 \x01(\x04R\tfreeBytes\x12\x1f\n" +
+	"\vtotal_bytes\x18\x04 \x01(\x04R\n" +
+	"totalBytes\"\x12\n" +
 	"\x10CreateCSRRequest\",\n" +
 	"\x11CreateCSRResponse\x12\x17\n" +
 	"\acsr_der\x18\x01 \x01(\fR\x06csrDer\"D\n" +
@@ -338,27 +424,29 @@ func file_mcsm_v1_node_proto_rawDescGZIP() []byte {
 	return file_mcsm_v1_node_proto_rawDescData
 }
 
-var file_mcsm_v1_node_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_mcsm_v1_node_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_mcsm_v1_node_proto_goTypes = []any{
 	(*GetInfoRequest)(nil),             // 0: mcsm.v1.GetInfoRequest
 	(*GetInfoResponse)(nil),            // 1: mcsm.v1.GetInfoResponse
-	(*CreateCSRRequest)(nil),           // 2: mcsm.v1.CreateCSRRequest
-	(*CreateCSRResponse)(nil),          // 3: mcsm.v1.CreateCSRResponse
-	(*InstallCertificateRequest)(nil),  // 4: mcsm.v1.InstallCertificateRequest
-	(*InstallCertificateResponse)(nil), // 5: mcsm.v1.InstallCertificateResponse
+	(*StorageLocation)(nil),            // 2: mcsm.v1.StorageLocation
+	(*CreateCSRRequest)(nil),           // 3: mcsm.v1.CreateCSRRequest
+	(*CreateCSRResponse)(nil),          // 4: mcsm.v1.CreateCSRResponse
+	(*InstallCertificateRequest)(nil),  // 5: mcsm.v1.InstallCertificateRequest
+	(*InstallCertificateResponse)(nil), // 6: mcsm.v1.InstallCertificateResponse
 }
 var file_mcsm_v1_node_proto_depIdxs = []int32{
-	0, // 0: mcsm.v1.NodeService.GetInfo:input_type -> mcsm.v1.GetInfoRequest
-	2, // 1: mcsm.v1.NodeService.CreateCSR:input_type -> mcsm.v1.CreateCSRRequest
-	4, // 2: mcsm.v1.NodeService.InstallCertificate:input_type -> mcsm.v1.InstallCertificateRequest
-	1, // 3: mcsm.v1.NodeService.GetInfo:output_type -> mcsm.v1.GetInfoResponse
-	3, // 4: mcsm.v1.NodeService.CreateCSR:output_type -> mcsm.v1.CreateCSRResponse
-	5, // 5: mcsm.v1.NodeService.InstallCertificate:output_type -> mcsm.v1.InstallCertificateResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: mcsm.v1.GetInfoResponse.storage:type_name -> mcsm.v1.StorageLocation
+	0, // 1: mcsm.v1.NodeService.GetInfo:input_type -> mcsm.v1.GetInfoRequest
+	3, // 2: mcsm.v1.NodeService.CreateCSR:input_type -> mcsm.v1.CreateCSRRequest
+	5, // 3: mcsm.v1.NodeService.InstallCertificate:input_type -> mcsm.v1.InstallCertificateRequest
+	1, // 4: mcsm.v1.NodeService.GetInfo:output_type -> mcsm.v1.GetInfoResponse
+	4, // 5: mcsm.v1.NodeService.CreateCSR:output_type -> mcsm.v1.CreateCSRResponse
+	6, // 6: mcsm.v1.NodeService.InstallCertificate:output_type -> mcsm.v1.InstallCertificateResponse
+	4, // [4:7] is the sub-list for method output_type
+	1, // [1:4] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_mcsm_v1_node_proto_init() }
@@ -372,7 +460,7 @@ func file_mcsm_v1_node_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_node_proto_rawDesc), len(file_mcsm_v1_node_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

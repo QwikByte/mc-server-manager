@@ -3,9 +3,7 @@ package docker
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"net"
-	"path/filepath"
 	"slices"
 	"strconv"
 
@@ -14,6 +12,7 @@ import (
 	"github.com/moby/moby/client"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -22,15 +21,20 @@ import (
 // servers are recreated when they join or leave a network, because the online mode
 // is part of the container's environment. Running servers restart to apply it.
 func (d *Docker) Configure(ctx context.Context, id string, network runtime.Network) error {
-	inspect, err := d.cli.ContainerInspect(ctx, containerName(id), client.ContainerInspectOptions{})
+	c, spec, err := d.inspect(ctx, id)
 	if err != nil {
-		return notFound(err)
+		return err
 	}
-	spec, ok := specOf(inspect.Container.Config.Labels)
-	if !ok {
-		return runtime.ErrNotFound
+	path, err := d.dataPath(spec)
+	if err != nil {
+		return err
 	}
-	running := inspect.Container.State.Running
+	data, err := datadir.Open(path)
+	if err != nil {
+		return err
+	}
+	defer data.Close()
+	running := c.State.Running
 	var changed bool
 
 	switch spec.Type {
@@ -41,19 +45,19 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 		if err := d.ensureNetwork(ctx); err != nil {
 			return err
 		}
-		if err := d.join(ctx, inspect.Container); err != nil {
+		if err := d.join(ctx, c); err != nil {
 			return err
 		}
-		changed, err = d.writeProxyConfig(ctx, id, network)
+		changed, err = d.writeProxyConfig(ctx, data, network)
 		if err != nil {
 			return err
 		}
-		if !mounted(inspect.Container, images[spec.Type].data) {
+		if !mounted(c, images[spec.Type].data) {
 			// Created by an older agent that mounted the data and published the port wrongly.
 			return d.recreate(ctx, spec, running)
 		}
 	case mcsmv1.ServerType_SERVER_TYPE_PAPER, mcsmv1.ServerType_SERVER_TYPE_PURPUR:
-		changed, err = d.writeBackendConfig(id, network.ForwardingSecret)
+		changed, err = writeBackendConfig(data, network.ForwardingSecret)
 		if err != nil {
 			return err
 		}
@@ -73,7 +77,7 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 
 // writeProxyConfig writes velocity.toml and the forwarding secret. It reports whether
 // the network configuration changed.
-func (d *Docker) writeProxyConfig(ctx context.Context, id string, network runtime.Network) (bool, error) {
+func (d *Docker) writeProxyConfig(ctx context.Context, data *datadir.Dir, network runtime.Network) (bool, error) {
 	backends := make([]mcnet.Backend, 0, len(network.Backends))
 	for _, b := range network.Backends {
 		address, err := d.address(ctx, b)
@@ -82,8 +86,7 @@ func (d *Docker) writeProxyConfig(ctx context.Context, id string, network runtim
 		}
 		backends = append(backends, mcnet.Backend{Name: b.Name, Address: address})
 	}
-	path := filepath.Join(id, "velocity.toml")
-	current, err := d.readFile(path)
+	current, err := data.ReadOptional("velocity.toml")
 	if err != nil {
 		return false, err
 	}
@@ -91,23 +94,22 @@ func (d *Docker) writeProxyConfig(ctx context.Context, id string, network runtim
 	if err != nil {
 		return false, err
 	}
-	secretPath := filepath.Join(id, mcnet.ForwardingSecretFile)
-	oldSecret, err := d.readFile(secretPath)
+	oldSecret, err := data.ReadOptional(mcnet.ForwardingSecretFile)
 	if err != nil {
 		return false, err
 	}
 	changed = changed || string(oldSecret) != network.ForwardingSecret
-	if err := d.root.WriteFile(secretPath, []byte(network.ForwardingSecret), 0o600); err != nil {
+	if err := data.WriteFile(mcnet.ForwardingSecretFile, []byte(network.ForwardingSecret)); err != nil {
 		return false, err
 	}
-	return changed, d.root.WriteFile(path, config, 0o600)
+	return changed, data.WriteFile("velocity.toml", config)
 }
 
 // writeBackendConfig writes the forwarding settings of paper-global.yml. It reports
 // whether they changed.
-func (d *Docker) writeBackendConfig(id, secret string) (bool, error) {
-	dir := filepath.Join(id, "config")
-	current, err := d.readFile(filepath.Join(dir, "paper-global.yml"))
+func writeBackendConfig(data *datadir.Dir, secret string) (bool, error) {
+	const file = "config/paper-global.yml"
+	current, err := data.ReadOptional(file)
 	if err != nil {
 		return false, err
 	}
@@ -115,19 +117,10 @@ func (d *Docker) writeBackendConfig(id, secret string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if err := d.root.MkdirAll(dir, 0o750); err != nil {
+	if err := data.MkdirAll("config"); err != nil {
 		return false, err
 	}
-	return changed, d.root.WriteFile(filepath.Join(dir, "paper-global.yml"), config, 0o600)
-}
-
-// readFile reads a file of the server data; a missing file reads as empty.
-func (d *Docker) readFile(path string) ([]byte, error) {
-	data, err := d.root.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	return data, err
+	return changed, data.WriteFile(file, config)
 }
 
 // address returns where the proxy reaches a backend: by container name over the shared
@@ -136,15 +129,11 @@ func (d *Docker) address(ctx context.Context, b runtime.NetworkBackend) (string,
 	if b.ServerID == "" {
 		return b.Address, nil
 	}
-	inspect, err := d.cli.ContainerInspect(ctx, containerName(b.ServerID), client.ContainerInspectOptions{})
+	c, spec, err := d.inspect(ctx, b.ServerID)
 	if err != nil {
-		return "", notFound(err)
+		return "", err
 	}
-	spec, ok := specOf(inspect.Container.Config.Labels)
-	if !ok {
-		return "", runtime.ErrNotFound
-	}
-	if err := d.join(ctx, inspect.Container); err != nil {
+	if err := d.join(ctx, c); err != nil {
 		return "", err
 	}
 	return net.JoinHostPort(containerName(b.ServerID), strconv.Itoa(images[spec.Type].port)), nil

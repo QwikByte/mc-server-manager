@@ -77,12 +77,13 @@ type view struct {
 	MemoryMB uint32 `json:"memoryMb"`
 	Port     uint32 `json:"port"`
 	State    string `json:"state"`
+	Storage  string `json:"storage"`
 }
 
 func toView(s *mcsmv1.Server) view {
 	return view{
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
-		Type: s.GetType().Slug(), State: s.GetState().Slug(),
+		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(),
 	}
 }
 
@@ -158,6 +159,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		MemoryMB   uint32 `json:"memoryMb"`
 		Port       uint32 `json:"port"`
 		AcceptEULA bool   `json:"acceptEula"`
+		Storage    string `json:"storage"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
@@ -177,6 +179,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		MemoryMb:   req.MemoryMB,
 		Port:       req.Port,
 		AcceptEula: req.AcceptEULA,
+		Storage:    req.Storage,
 	})
 	if err != nil {
 		httpapi.WriteError(w, r, err)

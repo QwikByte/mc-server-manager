@@ -10,6 +10,15 @@ export interface NodeInfo {
   cpuCount: number
   memoryBytes: number
   runtime: string
+  /** Directories the node allows for server data, the default location first. */
+  storage: StorageLocation[]
+}
+
+export interface StorageLocation {
+  name: string
+  path: string
+  freeBytes: number
+  totalBytes: number
 }
 
 export interface Node {

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -22,9 +23,11 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/app"
+	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
 	agentnode "github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
@@ -201,12 +204,12 @@ func (m *master) startAgent(t *testing.T, name string) agent {
 	ln := listen(t)
 	n, token, err := m.nodes.Create(t.Context(), name, ln.Addr().String())
 	check(t, err)
-	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{}}
+	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{dir: t.TempDir()}}
 	check(t, enroll.Run(t.Context(), token.String(), a.dir))
 	a.identity, err = agentnode.LoadIdentity(a.dir)
 	check(t, err)
 	creds := credentials.NewTLS(pki.AgentServerTLS(a.identity.Holder, a.identity.CA))
-	serve(t, app.NewGRPCServer(a.runtime, a.identity, grpc.Creds(creds)), ln)
+	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), grpc.Creds(creds)), ln)
 	return a
 }
 
@@ -229,8 +232,10 @@ func serve(t *testing.T, s *grpc.Server, ln net.Listener) {
 	t.Cleanup(s.Stop)
 }
 
-// fakeRuntime keeps servers and their network configuration in memory.
+// fakeRuntime keeps servers and their network configuration in memory and their data
+// in a directory.
 type fakeRuntime struct {
+	dir      string
 	mu       sync.Mutex
 	servers  []runtime.Server
 	networks map[string]runtime.Network
@@ -250,7 +255,16 @@ func (f *fakeRuntime) Create(_ context.Context, spec runtime.Spec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.servers = append(f.servers, runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})
-	return nil
+	return os.Mkdir(filepath.Join(f.dir, spec.ID), 0o750)
+}
+
+func (f *fakeRuntime) Data(_ context.Context, id string) (*datadir.Dir, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !slices.ContainsFunc(f.servers, func(s runtime.Server) bool { return s.ID == id }) {
+		return nil, runtime.ErrNotFound
+	}
+	return datadir.Open(filepath.Join(f.dir, id))
 }
 
 func (f *fakeRuntime) Start(_ context.Context, id string) error {

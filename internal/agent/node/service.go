@@ -11,6 +11,7 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 )
 
@@ -18,10 +19,11 @@ type Service struct {
 	mcsmv1.UnimplementedNodeServiceServer
 	rt       runtime.Runtime
 	identity *Identity
+	storage  *storage.Locations
 }
 
-func NewService(rt runtime.Runtime, identity *Identity) *Service {
-	return &Service{rt: rt, identity: identity}
+func NewService(rt runtime.Runtime, identity *Identity, locations *storage.Locations) *Service {
+	return &Service{rt: rt, identity: identity, storage: locations}
 }
 
 // GetInfo succeeds even if the runtime is down, so the panel can tell an
@@ -31,6 +33,13 @@ func (s *Service) GetInfo(ctx context.Context, _ *mcsmv1.GetInfoRequest) (*mcsmv
 	res := &mcsmv1.GetInfoResponse{AgentVersion: buildinfo.Version, Hostname: hostname, Runtime: "unavailable"}
 	if info, err := s.rt.Info(ctx); err == nil {
 		res.Os, res.CpuCount, res.MemoryBytes, res.Runtime = info.OS, info.CPUs, info.MemoryBytes, info.Name
+	}
+	locations, err := s.storage.List()
+	if err != nil {
+		slog.Warn("can't read the storage locations", "err", err)
+	}
+	for _, l := range locations {
+		res.Storage = append(res.Storage, &mcsmv1.StorageLocation{Name: l.Name, Path: l.Path, FreeBytes: l.FreeBytes, TotalBytes: l.TotalBytes})
 	}
 	return res, nil
 }

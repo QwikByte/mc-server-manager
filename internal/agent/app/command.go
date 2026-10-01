@@ -21,9 +21,8 @@ type config struct {
 	listenAddr string
 }
 
-func (c config) pkiDir() string     { return filepath.Join(c.dataDir, "pki") }
-func (c config) serversDir() string { return filepath.Join(c.dataDir, "servers") }
-func (c config) socket() string     { return cmp.Or(c.socketPath, filepath.Join(c.dataDir, "agent.sock")) }
+func (c config) pkiDir() string { return filepath.Join(c.dataDir, "pki") }
+func (c config) socket() string { return cmp.Or(c.socketPath, filepath.Join(c.dataDir, "agent.sock")) }
 
 // Command returns the root command of mcsm-agent.
 func Command() *cobra.Command {
@@ -68,7 +67,7 @@ func Command() *cobra.Command {
 		},
 	}
 
-	root.AddCommand(serve, enrollCmd, statusCommand(&cfg), serverCommand(&cfg))
+	root.AddCommand(serve, enrollCmd, statusCommand(&cfg), serverCommand(&cfg), storageCommand(&cfg))
 	return root
 }
 
