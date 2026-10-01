@@ -71,6 +71,9 @@ deploy/systemd/         service units
 
 ## Development
 
+On Windows, `scripts/wsl-test.sh` sets up a complete test environment in WSL (Ubuntu): it installs Go,
+Node.js and Docker when missing, builds everything, starts master and agent and can create a Paper test server.
+
 Requirements: Go 1.27, Node.js 22. Nodes need Docker.
 
 ```sh
