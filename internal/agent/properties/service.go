@@ -84,20 +84,34 @@ func (s *Service) UpdateServerProperties(ctx context.Context, req *mcsmv1.Update
 		return nil, err
 	}
 	defer dir.Close()
-	if msg := validate(req.GetProperties(), locked(spec)); msg != "" {
+	if msg := Check(spec, req.GetProperties()); msg != "" {
 		return nil, status.Error(codes.InvalidArgument, msg)
 	}
-	data, err := dir.ReadFile(file)
-	if errors.Is(err, fs.ErrNotExist) {
+	if _, err := dir.Stat(file); errors.Is(err, fs.ErrNotExist) {
 		return nil, status.Error(codes.FailedPrecondition, "Start the server once to create server.properties.")
 	}
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if err := dir.WriteFile(file, []byte(update(parse(string(data)), req.GetProperties()))); err != nil {
+	if err := Write(dir, req.GetProperties()); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &mcsmv1.UpdateServerPropertiesResponse{}, nil
+}
+
+// Check returns a message for the operator if the properties can't be set on a server.
+func Check(spec runtime.Spec, changes map[string]string) string {
+	if spec.Type.Proxy() && len(changes) > 0 {
+		return "Proxies have no server.properties."
+	}
+	return validate(changes, locked(spec))
+}
+
+// Write sets properties in server.properties, which is created if it doesn't exist yet,
+// e.g. for a new server.
+func Write(dir *datadir.Dir, changes map[string]string) error {
+	data, err := dir.ReadOptional(file)
+	if err != nil {
+		return err
+	}
+	return dir.WriteFile(file, []byte(update(parse(string(data)), changes)))
 }
 
 // validate returns a message for the operator if the changes are invalid.
@@ -125,15 +139,14 @@ func (s *Service) open(ctx context.Context, id string) (runtime.Spec, *datadir.D
 	if !runtime.ValidID(id) {
 		return runtime.Spec{}, nil, status.Error(codes.InvalidArgument, "invalid server ID")
 	}
-	servers, err := s.rt.List(ctx)
+	srv, err := runtime.Find(ctx, s.rt, id)
+	if errors.Is(err, runtime.ErrNotFound) {
+		return runtime.Spec{}, nil, status.Error(codes.NotFound, "Server not found.")
+	}
 	if err != nil {
 		return runtime.Spec{}, nil, status.Error(codes.Internal, err.Error())
 	}
-	i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.ID == id })
-	if i < 0 {
-		return runtime.Spec{}, nil, status.Error(codes.NotFound, "Server not found.")
-	}
-	spec := servers[i].Spec
+	spec := srv.Spec
 	if spec.Type.Proxy() {
 		return spec, nil, status.Error(codes.FailedPrecondition, "Proxies have no server.properties.")
 	}

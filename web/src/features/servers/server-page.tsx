@@ -1,4 +1,13 @@
-import { FolderIcon, GearIcon, HardDrivesIcon, HashIcon, MemoryIcon, SlidersHorizontalIcon, TerminalIcon } from "@phosphor-icons/react"
+import {
+  FolderIcon,
+  GearIcon,
+  HardDrivesIcon,
+  HashIcon,
+  MemoryIcon,
+  PuzzlePieceIcon,
+  SlidersHorizontalIcon,
+  TerminalIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { ErrorCallout } from "@/components/callout"
@@ -16,11 +25,26 @@ import { displayVersion, serverLook, serverType } from "./server-types"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
 
+/** Tabs of a server; label is a function for tabs that some types of servers don't have. */
 const tabs = [
-  { to: "/nodes/$nodeId/servers/$serverId", label: "Console", icon: TerminalIcon, exact: true },
-  { to: "/nodes/$nodeId/servers/$serverId/files", label: "Files", icon: FolderIcon, exact: false },
-  { to: "/nodes/$nodeId/servers/$serverId/properties", label: "Properties", icon: SlidersHorizontalIcon, exact: false, game: true },
-  { to: "/nodes/$nodeId/servers/$serverId/settings", label: "Settings", icon: GearIcon, exact: false },
+  { to: "/nodes/$nodeId/servers/$serverId", label: () => "Console", icon: TerminalIcon, exact: true },
+  { to: "/nodes/$nodeId/servers/$serverId/files", label: () => "Files", icon: FolderIcon, exact: false },
+  {
+    to: "/nodes/$nodeId/servers/$serverId/properties",
+    label: (type: string) => (serverType(type).proxy ? undefined : "Properties"),
+    icon: SlidersHorizontalIcon,
+    exact: false,
+  },
+  {
+    to: "/nodes/$nodeId/servers/$serverId/plugins",
+    label: (type: string) => {
+      const kind = serverType(type).addons?.kind
+      return kind && (kind === "mods" ? "Mods" : "Plugins")
+    },
+    icon: PuzzlePieceIcon,
+    exact: false,
+  },
+  { to: "/nodes/$nodeId/servers/$serverId/settings", label: () => "Settings", icon: GearIcon, exact: false },
 ] as const
 
 /** Header and tabs of a server; the tabs are child routes. */
@@ -65,7 +89,8 @@ export function ServerPage() {
           />
           <nav aria-label="Server" className="mb-8 flex max-w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:w-fit">
             {tabs
-              .filter((tab) => !("game" in tab && serverType(server.type).proxy))
+              .map((tab) => ({ ...tab, label: tab.label(server.type) }))
+              .filter((tab) => tab.label)
               .map(({ to, label, icon: Icon, exact }) => (
                 <Link
                   key={to}

@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { installPlugins } from "@/features/plugins/api"
 import { api } from "@/lib/api"
 
 export type ServerState = "stopped" | "starting" | "running"
@@ -34,7 +35,7 @@ export interface NodeServer extends Server {
   nodeName: string
 }
 
-export interface NewServer {
+export interface NewServer extends Partial<Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit">> {
   name: string
   type: string
   version: string
@@ -42,6 +43,8 @@ export interface NewServer {
   port: number
   acceptEula: boolean
   storage: string
+  /** Written to server.properties before the first start. */
+  properties?: Record<string, string>
 }
 
 export const serversQuery = (nodeId: string) =>
@@ -64,10 +67,29 @@ export const allServersQuery = queryOptions({
   refetchInterval: 5_000,
 })
 
-export function useCreateServer(nodeId: string) {
+/**
+ * Creates a server, then installs Modrinth projects on it, e.g. the plugins of a template.
+ * pluginError tells why they couldn't be installed; the server exists anyway.
+ */
+export function useCreateServer() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (server: NewServer) => api<Server>(`/nodes/${nodeId}/servers`, { body: server }),
+    mutationFn: async ({ nodeId, server, plugins = [] }: { nodeId: string; server: NewServer; plugins?: string[] }) => {
+      const created = await api<Server>(`/nodes/${nodeId}/servers`, { body: server })
+      if (plugins.length === 0) return { server: created }
+      const [result] = await installPlugins(plugins, [{ nodeId, serverId: created.id }]).catch((e: Error) => [{ error: e.message }])
+      return { server: created, pluginError: result.error }
+    },
+    onSettled: (_data, _error, { nodeId }) => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
+  })
+}
+
+/** Copies a server with all its data into a new server on the same node. */
+export function useDuplicateServer(nodeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name, port }: { id: string; name: string; port: number }) =>
+      api<Server>(`/nodes/${nodeId}/servers/${id}/duplicate`, { body: { name, port } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
   })
 }

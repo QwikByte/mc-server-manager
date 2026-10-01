@@ -8,6 +8,7 @@ import (
 	"errors"
 	"iter"
 	"regexp"
+	"slices"
 	"strings"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
@@ -106,4 +107,21 @@ type Runtime interface {
 	Configure(ctx context.Context, id string, network Network) error
 	// Data opens the data directory of a server; the caller closes it.
 	Data(ctx context.Context, id string) (*datadir.Dir, error)
+	// Duplicate creates a stopped server with a copy of the data of the server from, in
+	// the same storage location. The copy is standalone: whatever ties the original to a
+	// network, such as the forwarding secret, is reset or left out.
+	Duplicate(ctx context.Context, from string, spec Spec) error
+}
+
+// Find returns the server with the given ID, or ErrNotFound.
+func Find(ctx context.Context, rt Runtime, id string) (Server, error) {
+	servers, err := rt.List(ctx)
+	if err != nil {
+		return Server{}, err
+	}
+	i := slices.IndexFunc(servers, func(s Server) bool { return s.ID == id })
+	if i < 0 {
+		return Server{}, ErrNotFound
+	}
+	return servers[i], nil
 }

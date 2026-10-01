@@ -274,12 +274,20 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	location, err := d.storage.Path(spec.Storage)
-	if err != nil {
+	if _, err := d.dataPath(spec); err != nil { // e.g. a removed storage location; nothing is deleted yet
 		return err
 	}
 	if _, err := d.cli.ContainerRemove(ctx, containerName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
 		return notFound(err)
+	}
+	return d.removeData(spec)
+}
+
+// removeData deletes the data directory of a server.
+func (d *Docker) removeData(spec runtime.Spec) error {
+	location, err := d.storage.Path(spec.Storage)
+	if err != nil {
+		return err
 	}
 	root, err := os.OpenRoot(location)
 	if err != nil {

@@ -1,36 +1,18 @@
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useBlocker } from "@tanstack/react-router"
-import { type FormEvent, type ReactNode, useState } from "react"
+import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
+import { FormSection } from "@/components/form-section"
 import { Button } from "@/components/ui/button"
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from "@/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import { nodeQuery } from "@/features/nodes/api"
-import { formatMegabytes } from "@/lib/format"
-import { type RestartPolicy, type Server, type ServerSettings, useServer, useUpdateServer } from "./api"
-import { memoryOptionsMb, serverType } from "./server-types"
+import { type Server, type ServerSettings, useServer, useUpdateServer } from "./api"
+import { serverType, splitOptions } from "./server-types"
+import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField } from "./settings-fields"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/settings")
-
-const javaVersions: [value: string, label: string][] = [
-  ["", "Newest"],
-  ["25", "Java 25"],
-  ["21", "Java 21"],
-  ["17", "Java 17"],
-  ["11", "Java 11"],
-  ["8", "Java 8"],
-]
-
-const restartPolicies: [RestartPolicy, string, string][] = [
-  ["always", "Always running", "Starts with the node and after a crash, unless you stopped it."],
-  ["on_crash", "After a crash", "Starts again when it crashes."],
-  ["never", "Only manually", "Starts only when you start it."],
-]
 
 /** The Settings tab of a server. */
 export function SettingsPage() {
@@ -50,12 +32,11 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   const [form, setForm] = useState({ ...initial, jvmOptions: initial.jvmOptions.join("\n") })
   const update = useUpdateServer(nodeId, server.id)
   const { data: node } = useQuery(nodeQuery(nodeId))
-  const cpus = node?.info?.cpuCount
   const game = !serverType(server.type).proxy
-  const settings: ServerSettings = { ...form, jvmOptions: form.jvmOptions.split(/\s+/).filter(Boolean) }
+  const settings: ServerSettings = { ...form, jvmOptions: splitOptions(form.jvmOptions) }
   const dirty = JSON.stringify(settings) !== JSON.stringify(initial)
   const blocker = useBlocker({ shouldBlockFn: () => dirty && !update.isPending, enableBeforeUnload: () => dirty, withResolver: true })
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm({ ...form, [key]: value })
+  const set = (change: Partial<typeof form>) => setForm({ ...form, ...change })
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -68,10 +49,10 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
 
   return (
     <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
-      <Section title="General" description="Name, version and resources of the server.">
+      <FormSection title="General" description="Name, version and resources of the server.">
         <Field>
           <FieldLabel htmlFor="settings-name">Name</FieldLabel>
-          <Input id="settings-name" required maxLength={32} value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <Input id="settings-name" required maxLength={32} value={form.name} onChange={(e) => set({ name: e.target.value })} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           {game && (
@@ -81,27 +62,11 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
                 id="settings-version"
                 placeholder="Latest"
                 value={form.version === "LATEST" ? "" : form.version}
-                onChange={(e) => set("version", e.target.value.trim() || "LATEST")}
+                onChange={(e) => set({ version: e.target.value.trim() || "LATEST" })}
               />
             </Field>
           )}
-          <Field>
-            <FieldLabel htmlFor="settings-memory">Memory</FieldLabel>
-            <Select value={String(form.memoryMb)} onValueChange={(v) => set("memoryMb", Number(v))}>
-              <SelectTrigger id="settings-memory" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[...new Set([...memoryOptionsMb, initial.memoryMb])]
-                  .sort((a, b) => a - b)
-                  .map((mb) => (
-                    <SelectItem key={mb} value={String(mb)}>
-                      {formatMegabytes(mb)}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <MemoryField id="settings-memory" value={form.memoryMb} onChange={(memoryMb) => set({ memoryMb })} />
           <Field>
             <FieldLabel htmlFor="settings-port">Port</FieldLabel>
             <Input
@@ -112,101 +77,30 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
               required
               className="font-mono"
               value={form.port}
-              onChange={(e) => set("port", e.target.valueAsNumber || 0)}
+              onChange={(e) => set({ port: e.target.valueAsNumber || 0 })}
             />
           </Field>
         </div>
         {game && form.version !== initial.version && (
           <FieldDescription>Worlds can't be opened by older Minecraft versions. Make a backup before you downgrade.</FieldDescription>
         )}
-      </Section>
+      </FormSection>
 
-      <Section title="Starting" description="When the server starts on its own.">
-        <RadioGroup
-          value={form.restartPolicy}
-          onValueChange={(v) => set("restartPolicy", v as RestartPolicy)}
-          aria-label="When the server starts"
-          className="gap-3 sm:grid-cols-3"
-        >
-          {restartPolicies.map(([value, label, description]) => (
-            <FieldLabel key={value} htmlFor={`restart-${value}`}>
-              <Field orientation="horizontal" className="items-start">
-                <FieldContent>
-                  <FieldTitle>{label}</FieldTitle>
-                  <FieldDescription>{description}</FieldDescription>
-                </FieldContent>
-                <RadioGroupItem id={`restart-${value}`} value={value} />
-              </Field>
-            </FieldLabel>
-          ))}
-        </RadioGroup>
-      </Section>
+      <FormSection title="Starting" description="When the server starts on its own.">
+        <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
+      </FormSection>
 
-      <Section title="Java" description="The Java runtime and the options it starts with.">
-        {game && (
-          <>
-            <Field>
-              <FieldLabel htmlFor="settings-java">Java version</FieldLabel>
-              <Select value={form.java || "newest"} onValueChange={(v) => set("java", v === "newest" ? "" : v)}>
-                <SelectTrigger id="settings-java" className="w-full sm:w-64">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {javaVersions.map(([value, label]) => (
-                    <SelectItem key={label} value={value || "newest"}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Minecraft 1.20.5 and newer needs Java 21 or newer, 1.18 to 1.20.4 Java 17, and versions up to 1.16 run best on Java 8 or 11.
-              </FieldDescription>
-            </Field>
-            <Field orientation="horizontal">
-              <Switch id="settings-aikar" checked={form.aikarFlags} onCheckedChange={(on) => set("aikarFlags", on)} />
-              <FieldContent>
-                <FieldLabel htmlFor="settings-aikar">Aikar's flags</FieldLabel>
-                <FieldDescription>Garbage collector tuning recommended for Paper and Purpur, which reduces lag spikes.</FieldDescription>
-              </FieldContent>
-            </Field>
-          </>
-        )}
-        <Field>
-          <FieldLabel htmlFor="settings-jvm">JVM options</FieldLabel>
-          <Textarea
-            id="settings-jvm"
-            rows={3}
-            className="font-mono"
-            placeholder="-Dfile.encoding=UTF-8"
-            value={form.jvmOptions}
-            onChange={(e) => set("jvmOptions", e.target.value)}
-          />
-          <FieldDescription>One option per line. The memory is set above, not here.</FieldDescription>
-        </Field>
-      </Section>
+      <FormSection title="Java" description="The Java runtime and the options it starts with.">
+        {game && <JavaFields java={form.java} aikarFlags={form.aikarFlags} onChange={set} />}
+        <JvmOptionsField value={form.jvmOptions} onChange={(jvmOptions) => set({ jvmOptions })} />
+      </FormSection>
 
-      <Section title="Resources" description="Limits and where the data is kept.">
-        <Field>
-          <FieldLabel htmlFor="settings-cpu">CPU limit</FieldLabel>
-          <Input
-            id="settings-cpu"
-            type="number"
-            min={0}
-            max={cpus}
-            step={0.5}
-            className="w-full font-mono sm:w-40"
-            value={form.cpuLimit}
-            onChange={(e) => set("cpuLimit", e.target.valueAsNumber || 0)}
-          />
-          <FieldDescription>
-            CPU cores the server may use{cpus ? ` of the node's ${cpus}` : ""}. 0 means no limit, which suits most servers.
-          </FieldDescription>
-        </Field>
+      <FormSection title="Resources" description="Limits and where the data is kept.">
+        <CpuLimitField value={form.cpuLimit} onChange={(cpuLimit) => set({ cpuLimit })} cpus={node?.info?.cpuCount} />
         <p className="text-sm text-muted-foreground">
           The data is kept in the storage location <span className="font-medium text-foreground">{server.storage}</span>.
         </p>
-      </Section>
+      </FormSection>
 
       <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">
         <p className="text-sm text-muted-foreground">
@@ -226,18 +120,5 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
         onConfirm={() => blocker.proceed?.()}
       />
     </form>
-  )
-}
-
-/** A group of settings, titled on the left on wide screens. */
-function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
-  return (
-    <section className="grid gap-x-10 gap-y-5 border-b py-8 lg:grid-cols-[14rem_1fr]" aria-label={title}>
-      <div className="space-y-1">
-        <h2 className="heading text-base">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      <FieldGroup>{children}</FieldGroup>
-    </section>
   )
 }

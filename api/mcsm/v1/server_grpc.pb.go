@@ -29,6 +29,7 @@ const (
 	ServerService_StreamLogs_FullMethodName       = "/mcsm.v1.ServerService/StreamLogs"
 	ServerService_SendCommand_FullMethodName      = "/mcsm.v1.ServerService/SendCommand"
 	ServerService_ConfigureNetwork_FullMethodName = "/mcsm.v1.ServerService/ConfigureNetwork"
+	ServerService_DuplicateServer_FullMethodName  = "/mcsm.v1.ServerService/DuplicateServer"
 )
 
 // ServerServiceClient is the client API for ServerService service.
@@ -56,6 +57,10 @@ type ServerServiceClient interface {
 	// restarts it if it runs: a proxy gets its backends, a backend accepts only players
 	// forwarded by the proxy, and an empty secret makes a game server standalone again.
 	ConfigureNetwork(ctx context.Context, in *ConfigureNetworkRequest, opts ...grpc.CallOption) (*ConfigureNetworkResponse, error)
+	// DuplicateServer creates a server on the same node with a copy of the data and the
+	// settings of another one. A running game server saves its worlds first. The copy is
+	// stopped and standalone: it doesn't take over the network role of the original.
+	DuplicateServer(ctx context.Context, in *DuplicateServerRequest, opts ...grpc.CallOption) (*DuplicateServerResponse, error)
 }
 
 type serverServiceClient struct {
@@ -175,6 +180,16 @@ func (c *serverServiceClient) ConfigureNetwork(ctx context.Context, in *Configur
 	return out, nil
 }
 
+func (c *serverServiceClient) DuplicateServer(ctx context.Context, in *DuplicateServerRequest, opts ...grpc.CallOption) (*DuplicateServerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DuplicateServerResponse)
+	err := c.cc.Invoke(ctx, ServerService_DuplicateServer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ServerServiceServer is the server API for ServerService service.
 // All implementations must embed UnimplementedServerServiceServer
 // for forward compatibility.
@@ -200,6 +215,10 @@ type ServerServiceServer interface {
 	// restarts it if it runs: a proxy gets its backends, a backend accepts only players
 	// forwarded by the proxy, and an empty secret makes a game server standalone again.
 	ConfigureNetwork(context.Context, *ConfigureNetworkRequest) (*ConfigureNetworkResponse, error)
+	// DuplicateServer creates a server on the same node with a copy of the data and the
+	// settings of another one. A running game server saves its worlds first. The copy is
+	// stopped and standalone: it doesn't take over the network role of the original.
+	DuplicateServer(context.Context, *DuplicateServerRequest) (*DuplicateServerResponse, error)
 	mustEmbedUnimplementedServerServiceServer()
 }
 
@@ -239,6 +258,9 @@ func (UnimplementedServerServiceServer) SendCommand(context.Context, *SendComman
 }
 func (UnimplementedServerServiceServer) ConfigureNetwork(context.Context, *ConfigureNetworkRequest) (*ConfigureNetworkResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ConfigureNetwork not implemented")
+}
+func (UnimplementedServerServiceServer) DuplicateServer(context.Context, *DuplicateServerRequest) (*DuplicateServerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DuplicateServer not implemented")
 }
 func (UnimplementedServerServiceServer) mustEmbedUnimplementedServerServiceServer() {}
 func (UnimplementedServerServiceServer) testEmbeddedByValue()                       {}
@@ -434,6 +456,24 @@ func _ServerService_ConfigureNetwork_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ServerService_DuplicateServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DuplicateServerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServerServiceServer).DuplicateServer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ServerService_DuplicateServer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServerServiceServer).DuplicateServer(ctx, req.(*DuplicateServerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ServerService_ServiceDesc is the grpc.ServiceDesc for ServerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -476,6 +516,10 @@ var ServerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ConfigureNetwork",
 			Handler:    _ServerService_ConfigureNetwork_Handler,
+		},
+		{
+			MethodName: "DuplicateServer",
+			Handler:    _ServerService_DuplicateServer_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

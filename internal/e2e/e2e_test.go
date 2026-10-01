@@ -33,10 +33,13 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
+	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
 	"github.com/QwikByte/mc-server-manager/internal/master/properties"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
+	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -161,6 +164,7 @@ type master struct {
 	ca         *pki.CA
 	nodes      *node.Service
 	enrollAddr string
+	modrinth   *fakeModrinth
 }
 
 func startMaster(t *testing.T) *master {
@@ -180,18 +184,21 @@ func startMaster(t *testing.T) *master {
 	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(enrollServer, nodes)
 	serve(t, enrollServer, ln)
-	return &master{db: db, ca: ca, nodes: nodes, enrollAddr: ln.Addr().String()}
+	return &master{db: db, ca: ca, nodes: nodes, enrollAddr: ln.Addr().String(), modrinth: startModrinth(t)}
 }
 
 // panel serves the REST API of the master without authentication.
 func (m *master) panel(t *testing.T) *httptest.Server {
 	networks := network.NewService(m.db, m.nodes)
+	plugins := plugin.NewService(m.nodes, modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/"))
 	mux := http.NewServeMux()
 	server.NewHandler(m.nodes, networks).Register(mux)
 	network.NewHandler(networks).Register(mux)
 	files.NewHandler(m.nodes).Register(mux)
 	properties.NewHandler(m.nodes).Register(mux)
 	node.NewHandler(m.nodes).Register(mux)
+	plugin.NewHandler(plugins).Register(mux)
+	template.NewHandler(template.NewService(m.db, plugins)).Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -292,6 +299,7 @@ type fakeRuntime struct {
 	mu       sync.Mutex
 	servers  []runtime.Server
 	networks map[string]runtime.Network
+	commands []string
 }
 
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
@@ -357,7 +365,37 @@ func (f *fakeRuntime) Logs(context.Context, string, int) iter.Seq2[string, error
 }
 
 func (f *fakeRuntime) SendCommand(_ context.Context, _, command string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.commands = append(f.commands, command)
 	return "§6ran " + command, nil
+}
+
+func (f *fakeRuntime) consoleCommands() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.commands)
+}
+
+func (f *fakeRuntime) Duplicate(ctx context.Context, from string, spec runtime.Spec) error {
+	if err := datadir.Copy(ctx, filepath.Join(f.dir, from), filepath.Join(f.dir, spec.ID)); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.servers = append(f.servers, runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})
+	return nil
+}
+
+func (f *fakeRuntime) spec(id string) runtime.Spec {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, s := range f.servers {
+		if s.ID == id {
+			return s.Spec
+		}
+	}
+	return runtime.Spec{}
 }
 
 func (f *fakeRuntime) Configure(_ context.Context, id string, network runtime.Network) error {

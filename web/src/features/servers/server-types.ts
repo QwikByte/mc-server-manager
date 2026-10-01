@@ -6,17 +6,21 @@ export interface ServerType {
   value: string
   label: string
   proxy: boolean
+  /** What the server loads from Modrinth, and the loaders those are made for; vanilla servers load nothing. */
+  addons?: { kind: "plugins" | "mods"; loaders: string[] }
 }
 
+const bukkit = ["paper", "spigot", "bukkit"]
+
 export const serverTypes: ServerType[] = [
-  { value: "paper", label: "Paper", proxy: false },
-  { value: "purpur", label: "Purpur", proxy: false },
+  { value: "paper", label: "Paper", proxy: false, addons: { kind: "plugins", loaders: bukkit } },
+  { value: "purpur", label: "Purpur", proxy: false, addons: { kind: "plugins", loaders: ["purpur", ...bukkit] } },
   { value: "vanilla", label: "Vanilla", proxy: false },
-  { value: "fabric", label: "Fabric", proxy: false },
-  { value: "forge", label: "Forge", proxy: false },
-  { value: "neoforge", label: "NeoForge", proxy: false },
-  { value: "velocity", label: "Velocity", proxy: true },
-  { value: "bungeecord", label: "BungeeCord", proxy: true },
+  { value: "fabric", label: "Fabric", proxy: false, addons: { kind: "mods", loaders: ["fabric"] } },
+  { value: "forge", label: "Forge", proxy: false, addons: { kind: "mods", loaders: ["forge"] } },
+  { value: "neoforge", label: "NeoForge", proxy: false, addons: { kind: "mods", loaders: ["neoforge"] } },
+  { value: "velocity", label: "Velocity", proxy: true, addons: { kind: "plugins", loaders: ["velocity"] } },
+  { value: "bungeecord", label: "BungeeCord", proxy: true, addons: { kind: "plugins", loaders: ["bungeecord", "waterfall"] } },
 ]
 
 export const memoryOptionsMb = [512, 1024, 2048, 4096, 6144, 8192, 12288, 16384]
@@ -39,6 +43,15 @@ export function suggestPort(used: number[], preferred: number, min = 1024, max =
   return start
 }
 
+/** Suggests a name for a copy, e.g. "Lobby" → "Lobby 2", "Lobby 2" → "Lobby 3". */
+export function nextName(name: string, taken: string[]): string {
+  const base = name.replace(/ \d+$/, "")
+  for (let n = 2; ; n++) {
+    const candidate = `${base.slice(0, 31 - String(n).length)} ${n}`
+    if (!taken.includes(candidate)) return candidate
+  }
+}
+
 /** Shows the version a server was created with; "LATEST" follows new releases. */
 export function displayVersion(version: string) {
   return version === "LATEST" ? "latest" : version
@@ -54,3 +67,6 @@ export const serverStates: Record<ServerState, Status> = {
 export function serverLook(type: string) {
   return serverType(type).proxy ? ({ icon: ArrowsSplitIcon, tone: "violet" } as const) : ({ icon: CubeIcon, tone: "success" } as const)
 }
+
+/** Splits JVM options entered one per line. */
+export const splitOptions = (lines: string) => lines.split(/\s+/).filter(Boolean)

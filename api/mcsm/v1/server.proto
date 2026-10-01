@@ -25,6 +25,10 @@ service ServerService {
   // restarts it if it runs: a proxy gets its backends, a backend accepts only players
   // forwarded by the proxy, and an empty secret makes a game server standalone again.
   rpc ConfigureNetwork(ConfigureNetworkRequest) returns (ConfigureNetworkResponse);
+  // DuplicateServer creates a server on the same node with a copy of the data and the
+  // settings of another one. A running game server saves its worlds first. The copy is
+  // stopped and standalone: it doesn't take over the network role of the original.
+  rpc DuplicateServer(DuplicateServerRequest) returns (DuplicateServerResponse);
 }
 
 enum ServerType {
@@ -97,6 +101,14 @@ message CreateServerRequest {
   bool accept_eula = 6;
   // Storage location for the server's data; empty means the default location.
   string storage = 7;
+  // Settings as in UpdateServerRequest.
+  string java = 8;
+  RestartPolicy restart_policy = 9;
+  bool aikar_flags = 10;
+  repeated string jvm_options = 11;
+  uint32 cpu_millis = 12;
+  // Properties of server.properties for a game server, written before its first start.
+  map<string, string> properties = 13;
 }
 
 message CreateServerResponse {
@@ -184,3 +196,14 @@ message NetworkBackend {
 }
 
 message ConfigureNetworkResponse {}
+
+message DuplicateServerRequest {
+  // The server to copy.
+  string id = 1;
+  string name = 2;
+  uint32 port = 3;
+}
+
+message DuplicateServerResponse {
+  Server server = 1;
+}
