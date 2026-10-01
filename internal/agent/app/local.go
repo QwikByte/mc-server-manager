@@ -2,14 +2,19 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/local"
+	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 )
@@ -68,6 +73,32 @@ func serverCommand(cfg *config) *cobra.Command {
 				})
 			},
 		},
+		&cobra.Command{
+			Use:   "logs <id>",
+			Short: "Follow the console of a server until Ctrl+C",
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				// Following has no time limit, so it uses the command's context directly.
+				return withLocal(cmd.Context(), *cfg, func(_ context.Context, conn *grpc.ClientConn) error {
+					return followLogs(cmd.Context(), conn, args[0])
+				})
+			},
+		},
+		&cobra.Command{
+			Use:   "command <id> <command>...",
+			Short: "Run a console command, e.g.: server command <id> say Hello",
+			Args:  cobra.MinimumNArgs(2),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return withLocal(cmd.Context(), *cfg, func(ctx context.Context, conn *grpc.ClientConn) error {
+					req := &mcsmv1.SendCommandRequest{Id: args[0], Command: strings.Join(args[1:], " ")}
+					res, err := mcsmv1.NewServerServiceClient(conn).SendCommand(ctx, req)
+					if err == nil {
+						fmt.Println(strings.TrimRight(res.GetOutput(), "\n"))
+					}
+					return err
+				})
+			},
+		},
 	)
 	return cmd
 }
@@ -82,6 +113,23 @@ func withLocal(ctx context.Context, cfg config, fn func(context.Context, *grpc.C
 	ctx, cancel := context.WithTimeout(ctx, localTimeout)
 	defer cancel()
 	return fn(ctx, conn)
+}
+
+func followLogs(ctx context.Context, conn *grpc.ClientConn, id string) error {
+	stream, err := mcsmv1.NewServerServiceClient(conn).StreamLogs(ctx, &mcsmv1.StreamLogsRequest{Id: id, Tail: 100})
+	if err != nil {
+		return err
+	}
+	for {
+		res, err := stream.Recv()
+		if errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Println(res.GetLine())
+	}
 }
 
 func printServers(ctx context.Context, conn *grpc.ClientConn) error {

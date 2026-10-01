@@ -20,6 +20,9 @@ Servers run as containers based on [itzg/minecraft-server](https://github.com/it
 (Vanilla, Paper, Purpur, Fabric, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy)
 (Velocity, BungeeCord). Container labels are the agent's only state, so servers keep running while an agent restarts.
 
+Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
+through the RCON connection the server image provides.
+
 ## Security model
 
 - **Own CA.** The master creates an Ed25519 certificate authority on first start. All master ↔ agent traffic is
@@ -113,11 +116,11 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 1. Install Docker, `bin/mcsm-agent` and the unit file.
 2. Add the node in the panel and run `sudo mcsm-agent enroll <join-token>`.
 3. Start the service and allow port 7443 only from the master's IP.
-4. Check the node locally with `sudo mcsm-agent status`.
+4. Check the node locally with `sudo mcsm-agent status`; `sudo mcsm-agent server logs <id>` follows a console.
 
 ## Roadmap
 
-- Live console and logs
+- Console commands for proxies
 - File manager and backups
 - Networks: register backend servers with their Velocity/BungeeCord proxy automatically
 - Automatic rotation of node certificates (currently valid for one year)

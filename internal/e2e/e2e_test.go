@@ -3,8 +3,14 @@ package e2e
 
 import (
 	"context"
+	"errors"
+	"io"
+	"iter"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 
@@ -19,6 +25,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -78,6 +85,42 @@ func TestEnrollAndControlNode(t *testing.T) {
 		t.Fatalf("servers = %v, want one running server", list.GetServers())
 	}
 
+	// The console arrives without colour codes, and commands return their output.
+	id := created.GetServer().GetId()
+	logs, err := servers.StreamLogs(ctx, &mcsmv1.StreamLogsRequest{Id: id, Tail: 10})
+	check(t, err)
+	var lines []string
+	for {
+		res, err := logs.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		check(t, err)
+		lines = append(lines, res.GetLine())
+	}
+	if want := []string{"[INFO]: Starting", "[INFO]: Done"}; !slices.Equal(lines, want) {
+		t.Fatalf("log lines = %q, want %q", lines, want)
+	}
+	out, err := servers.SendCommand(ctx, &mcsmv1.SendCommandRequest{Id: id, Command: "/say hi"})
+	check(t, err)
+	if out.GetOutput() != "ran say hi" {
+		t.Fatalf("command output = %q", out.GetOutput())
+	}
+
+	// The master relays the console to the browser as Server-Sent Events.
+	mux := http.NewServeMux()
+	server.NewHandler(nodes).Register(mux)
+	panel := httptest.NewServer(mux)
+	t.Cleanup(panel.Close)
+	res, err := http.Get(panel.URL + "/api/nodes/" + n.ID + "/servers/" + id + "/logs")
+	check(t, err)
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	check(t, err)
+	if want := "data: [INFO]: Starting\n\ndata: [INFO]: Done\n\nevent: end\ndata:\n\n"; string(body) != want {
+		t.Fatalf("event stream = %q, want %q", body, want)
+	}
+
 	// Invalid requests are rejected by the agent.
 	for _, tc := range []struct {
 		name string
@@ -90,6 +133,10 @@ func TestEnrollAndControlNode(t *testing.T) {
 		}},
 		{"port in use", codes.AlreadyExists, func() error {
 			_, err := servers.CreateServer(ctx, lobby)
+			return err
+		}},
+		{"command with several lines", codes.InvalidArgument, func() error {
+			_, err := servers.SendCommand(ctx, &mcsmv1.SendCommandRequest{Id: id, Command: "say hi\nop attacker"})
 			return err
 		}},
 		{"path traversal", codes.InvalidArgument, func() error {
@@ -154,6 +201,20 @@ func (f *fakeRuntime) Stop(_ context.Context, id string) error {
 }
 
 func (f *fakeRuntime) Remove(context.Context, string) error { return runtime.ErrNotFound }
+
+func (f *fakeRuntime) Logs(context.Context, string, int) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		for _, line := range []string{"\x1b[32m[INFO]: Starting\x1b[m", "[INFO]: Done\r"} {
+			if !yield(line, nil) {
+				return
+			}
+		}
+	}
+}
+
+func (f *fakeRuntime) SendCommand(_ context.Context, _, command string) (string, error) {
+	return "§6ran " + command, nil
+}
 
 func (f *fakeRuntime) setState(id string, state mcsmv1.ServerState) error {
 	f.mu.Lock()

@@ -11,6 +11,11 @@ service ServerService {
   rpc StartServer(StartServerRequest) returns (StartServerResponse);
   rpc StopServer(StopServerRequest) returns (StopServerResponse);
   rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
+  // StreamLogs sends the last lines of the server console, then follows it until the
+  // server stops or the client disconnects.
+  rpc StreamLogs(StreamLogsRequest) returns (stream StreamLogsResponse);
+  // SendCommand runs a console command and returns its output.
+  rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
 }
 
 enum ServerType {
@@ -81,3 +86,23 @@ message DeleteServerRequest {
 }
 
 message DeleteServerResponse {}
+
+message StreamLogsRequest {
+  string id = 1;
+  // Number of past lines to send first, at most 1000.
+  uint32 tail = 2;
+}
+
+message StreamLogsResponse {
+  string line = 1;
+}
+
+message SendCommandRequest {
+  string id = 1;
+  // A single console command, e.g. "say Hello". A leading slash is optional.
+  string command = 2;
+}
+
+message SendCommandResponse {
+  string output = 1;
+}

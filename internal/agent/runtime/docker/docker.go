@@ -3,15 +3,21 @@
 package docker
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -29,6 +35,7 @@ const (
 
 	stopTimeoutSeconds = 60 // time for the server to save its worlds
 	pidsLimit          = 1024
+	maxLineBytes       = 1 << 20
 )
 
 // image describes how a server type maps onto the itzg images.
@@ -92,13 +99,17 @@ func (d *Docker) List(ctx context.Context) ([]runtime.Server, error) {
 	}
 	servers := make([]runtime.Server, 0, len(res.Items))
 	for _, c := range res.Items {
-		var spec runtime.Spec
-		if err := json.Unmarshal([]byte(c.Labels[labelSpec]), &spec); err != nil {
-			continue // not created by a compatible agent
+		if spec, ok := specOf(c.Labels); ok {
+			servers = append(servers, runtime.Server{Spec: spec, State: state(c)})
 		}
-		servers = append(servers, runtime.Server{Spec: spec, State: state(c)})
 	}
 	return servers, nil
+}
+
+// specOf reads the server spec stored in the labels of a container created by the agent.
+func specOf(labels map[string]string) (runtime.Spec, bool) {
+	var spec runtime.Spec
+	return spec, json.Unmarshal([]byte(labels[labelSpec]), &spec) == nil
 }
 
 func state(c container.Summary) mcsmv1.ServerState {
@@ -168,6 +179,74 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 		return notFound(err)
 	}
 	return d.root.RemoveAll(id)
+}
+
+func (d *Docker) Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		logs, err := d.cli.ContainerLogs(ctx, containerName(id), client.ContainerLogsOptions{
+			ShowStdout: true, ShowStderr: true, Follow: true, Tail: strconv.Itoa(tail),
+		})
+		if err != nil {
+			yield("", notFound(err))
+			return
+		}
+		defer logs.Close()
+		// Docker multiplexes stdout and stderr into one stream; both end up in the console.
+		r, w := io.Pipe()
+		defer r.Close()
+		go func() {
+			_, err := stdcopy.StdCopy(w, w, logs)
+			w.CloseWithError(err)
+		}()
+		lines := bufio.NewScanner(r)
+		lines.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
+		for lines.Scan() {
+			if !yield(lines.Text(), nil) {
+				return
+			}
+		}
+		if err := lines.Err(); err != nil && ctx.Err() == nil {
+			yield("", err)
+		}
+	}
+}
+
+// SendCommand runs the command through rcon-cli, which the itzg server image ships
+// together with a preconfigured RCON connection. Proxies have no RCON.
+func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, error) {
+	inspect, err := d.cli.ContainerInspect(ctx, containerName(id), client.ContainerInspectOptions{})
+	if err != nil {
+		return "", notFound(err)
+	}
+	if spec, ok := specOf(inspect.Container.Config.Labels); !ok || images[spec.Type].ref != serverImage {
+		return "", runtime.ErrUnsupported
+	}
+	if !inspect.Container.State.Running {
+		return "", runtime.ErrNotRunning
+	}
+	exec, err := d.cli.ExecCreate(ctx, containerName(id), client.ExecCreateOptions{
+		Cmd: []string{"rcon-cli", command}, AttachStdout: true, AttachStderr: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	attached, err := d.cli.ExecAttach(ctx, exec.ID, client.ExecAttachOptions{})
+	if err != nil {
+		return "", err
+	}
+	defer attached.Close()
+	var out bytes.Buffer
+	if _, err := stdcopy.StdCopy(&out, &out, io.LimitReader(attached.Reader, maxLineBytes)); err != nil {
+		return "", err
+	}
+	result, err := d.cli.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", fmt.Errorf("rcon-cli failed: %s", strings.TrimSpace(out.String()))
+	}
+	return out.String(), nil
 }
 
 func (d *Docker) pull(ctx context.Context, ref string) error {

@@ -43,6 +43,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		_, err := c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
 		return err
 	}))
+	mux.HandleFunc("GET /api/nodes/{node}/servers/{id}/logs", h.logs)
+	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/command", h.command)
 }
 
 type view struct {

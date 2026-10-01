@@ -30,6 +30,12 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --color-rail: var(--rail);
+  --color-console: var(--console);
+  --color-console-foreground: var(--console-foreground);
+  --color-console-muted: var(--console-muted);
+  --color-console-command: var(--console-command);
+  --color-console-warn: var(--console-warn);
+  --color-console-error: var(--console-error);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -75,6 +81,14 @@
   --lamp-glow: rgb(240 168 48 / 0.55);
   --lamp-off: #8c6c4e;
   --lamp-off-frame: #5e4630;
+
+  /* The console stays dark in both themes, like a terminal. */
+  --console: #1b1e23;
+  --console-foreground: #d5d9de;
+  --console-muted: #8b929c;
+  --console-command: #6cc7ac;
+  --console-warn: #e3b341;
+  --console-error: #f0786c;
 }
 
 @media (prefers-color-scheme: dark) {

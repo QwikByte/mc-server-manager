@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,12 +25,16 @@ const (
 	maxMemoryMB = 64 * 1024
 	minPort     = 1024
 	maxPort     = 65535
+	maxTail     = 1000
+	maxCommand  = 1000
 )
 
 var (
 	idPattern      = regexp.MustCompile(`^[a-z2-7]{26}$`) // lower-cased crypto/rand.Text
 	namePattern    = regexp.MustCompile(`^[\pL\pN][\pL\pN _.-]{0,31}$`)
 	versionPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
+	// Terminal escape sequences and Minecraft formatting codes (§a, §l, ...).
+	formatting = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|§[0-9a-fk-orxA-FK-ORX]|\r`)
 )
 
 type Service struct {
@@ -88,6 +93,39 @@ func (s *Service) DeleteServer(ctx context.Context, req *mcsmv1.DeleteServerRequ
 	return &mcsmv1.DeleteServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Remove)
 }
 
+func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.ServerService_StreamLogsServer) error {
+	if !idPattern.MatchString(req.GetId()) {
+		return status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	for line, err := range s.rt.Logs(stream.Context(), req.GetId(), int(min(req.GetTail(), maxTail))) {
+		if err != nil {
+			return toStatus(err)
+		}
+		if err := stream.Send(&mcsmv1.StreamLogsResponse{Line: plain(line)}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) SendCommand(ctx context.Context, req *mcsmv1.SendCommandRequest) (*mcsmv1.SendCommandResponse, error) {
+	if !idPattern.MatchString(req.GetId()) {
+		return nil, status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	command := strings.TrimPrefix(strings.TrimSpace(req.GetCommand()), "/")
+	if command == "" || len(command) > maxCommand || strings.ContainsFunc(command, unicode.IsControl) {
+		return nil, status.Errorf(codes.InvalidArgument, "Enter a single command with up to %d characters.", maxCommand)
+	}
+	output, err := s.rt.SendCommand(ctx, req.GetId(), command)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &mcsmv1.SendCommandResponse{Output: plain(output)}, nil
+}
+
+// plain removes colours and formatting so that console output reads as plain text.
+func plain(text string) string { return formatting.ReplaceAllString(text, "") }
+
 func (s *Service) apply(ctx context.Context, id string, op func(context.Context, string) error) error {
 	if !idPattern.MatchString(id) {
 		return status.Error(codes.InvalidArgument, "invalid server ID")
@@ -125,6 +163,12 @@ func toStatus(err error) error {
 		return nil
 	case errors.Is(err, runtime.ErrNotFound):
 		return status.Error(codes.NotFound, "Server not found.")
+	case errors.Is(err, runtime.ErrNotRunning):
+		return status.Error(codes.FailedPrecondition, "Start the server to send commands.")
+	case errors.Is(err, runtime.ErrUnsupported):
+		return status.Error(codes.FailedPrecondition, "Proxies don't accept console commands yet.")
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return status.FromContextError(err).Err()
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}

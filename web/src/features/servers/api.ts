@@ -49,3 +49,9 @@ export function useServerAction(nodeId: string) {
     onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
   })
 }
+
+export function useSendCommand(nodeId: string, serverId: string) {
+  return useMutation({
+    mutationFn: (command: string) => api<{ output: string }>(`/nodes/${nodeId}/servers/${serverId}/command`, { body: { command } }),
+  })
+}

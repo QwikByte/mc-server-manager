@@ -24,6 +24,8 @@ const (
 	ServerService_StartServer_FullMethodName  = "/mcsm.v1.ServerService/StartServer"
 	ServerService_StopServer_FullMethodName   = "/mcsm.v1.ServerService/StopServer"
 	ServerService_DeleteServer_FullMethodName = "/mcsm.v1.ServerService/DeleteServer"
+	ServerService_StreamLogs_FullMethodName   = "/mcsm.v1.ServerService/StreamLogs"
+	ServerService_SendCommand_FullMethodName  = "/mcsm.v1.ServerService/SendCommand"
 )
 
 // ServerServiceClient is the client API for ServerService service.
@@ -37,6 +39,11 @@ type ServerServiceClient interface {
 	StartServer(ctx context.Context, in *StartServerRequest, opts ...grpc.CallOption) (*StartServerResponse, error)
 	StopServer(ctx context.Context, in *StopServerRequest, opts ...grpc.CallOption) (*StopServerResponse, error)
 	DeleteServer(ctx context.Context, in *DeleteServerRequest, opts ...grpc.CallOption) (*DeleteServerResponse, error)
+	// StreamLogs sends the last lines of the server console, then follows it until the
+	// server stops or the client disconnects.
+	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
+	// SendCommand runs a console command and returns its output.
+	SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error)
 }
 
 type serverServiceClient struct {
@@ -97,6 +104,35 @@ func (c *serverServiceClient) DeleteServer(ctx context.Context, in *DeleteServer
 	return out, nil
 }
 
+func (c *serverServiceClient) StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ServerService_ServiceDesc.Streams[0], ServerService_StreamLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamLogsRequest, StreamLogsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ServerService_StreamLogsClient = grpc.ServerStreamingClient[StreamLogsResponse]
+
+func (c *serverServiceClient) SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendCommandResponse)
+	err := c.cc.Invoke(ctx, ServerService_SendCommand_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ServerServiceServer is the server API for ServerService service.
 // All implementations must embed UnimplementedServerServiceServer
 // for forward compatibility.
@@ -108,6 +144,11 @@ type ServerServiceServer interface {
 	StartServer(context.Context, *StartServerRequest) (*StartServerResponse, error)
 	StopServer(context.Context, *StopServerRequest) (*StopServerResponse, error)
 	DeleteServer(context.Context, *DeleteServerRequest) (*DeleteServerResponse, error)
+	// StreamLogs sends the last lines of the server console, then follows it until the
+	// server stops or the client disconnects.
+	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
+	// SendCommand runs a console command and returns its output.
+	SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error)
 	mustEmbedUnimplementedServerServiceServer()
 }
 
@@ -132,6 +173,12 @@ func (UnimplementedServerServiceServer) StopServer(context.Context, *StopServerR
 }
 func (UnimplementedServerServiceServer) DeleteServer(context.Context, *DeleteServerRequest) (*DeleteServerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteServer not implemented")
+}
+func (UnimplementedServerServiceServer) StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamLogs not implemented")
+}
+func (UnimplementedServerServiceServer) SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendCommand not implemented")
 }
 func (UnimplementedServerServiceServer) mustEmbedUnimplementedServerServiceServer() {}
 func (UnimplementedServerServiceServer) testEmbeddedByValue()                       {}
@@ -244,6 +291,35 @@ func _ServerService_DeleteServer_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ServerService_StreamLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ServerServiceServer).StreamLogs(m, &grpc.GenericServerStream[StreamLogsRequest, StreamLogsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ServerService_StreamLogsServer = grpc.ServerStreamingServer[StreamLogsResponse]
+
+func _ServerService_SendCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendCommandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServerServiceServer).SendCommand(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ServerService_SendCommand_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServerServiceServer).SendCommand(ctx, req.(*SendCommandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ServerService_ServiceDesc is the grpc.ServiceDesc for ServerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -271,7 +347,17 @@ var ServerService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "DeleteServer",
 			Handler:    _ServerService_DeleteServer_Handler,
 		},
+		{
+			MethodName: "SendCommand",
+			Handler:    _ServerService_SendCommand_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamLogs",
+			Handler:       _ServerService_StreamLogs_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "mcsm/v1/server.proto",
 }
