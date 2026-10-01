@@ -1,4 +1,4 @@
-import { PlayIcon, StopIcon, TrashIcon } from "@phosphor-icons/react"
+import { ArrowClockwiseIcon, PlayIcon, StopIcon, TrashIcon } from "@phosphor-icons/react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
@@ -25,10 +25,16 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
   return (
     <div className="flex justify-end gap-1">
       {running ? (
-        <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("stop", `Stopped ${server.name}`)}>
-          <StopIcon />
-          Stop
-        </Button>
+        <>
+          <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("restart", `Restarted ${server.name}`)}>
+            <ArrowClockwiseIcon />
+            Restart
+          </Button>
+          <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("stop", `Stopped ${server.name}`)}>
+            <StopIcon />
+            Stop
+          </Button>
+        </>
       ) : (
         <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("start", `Started ${server.name}`)}>
           <PlayIcon />

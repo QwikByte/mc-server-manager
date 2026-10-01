@@ -16,6 +16,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/files"
 	"github.com/QwikByte/mc-server-manager/internal/agent/node"
+	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime/docker"
 	"github.com/QwikByte/mc-server-manager/internal/agent/server"
@@ -84,5 +85,6 @@ func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *stora
 	mcsmv1.RegisterNodeServiceServer(s, node.NewService(rt, identity, locations))
 	mcsmv1.RegisterServerServiceServer(s, server.NewService(rt))
 	mcsmv1.RegisterFileServiceServer(s, files.NewService(rt))
+	mcsmv1.RegisterPropertiesServiceServer(s, properties.NewService(rt))
 	return s
 }

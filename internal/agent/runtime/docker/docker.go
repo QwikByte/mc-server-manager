@@ -224,6 +224,11 @@ func (d *Docker) Stop(ctx context.Context, id string) error {
 	return notFound(err)
 }
 
+func (d *Docker) Restart(ctx context.Context, id string) error {
+	_, err := d.cli.ContainerRestart(ctx, containerName(id), client.ContainerRestartOptions{Timeout: new(stopTimeoutSeconds)})
+	return notFound(err)
+}
+
 // Remove deletes the container and all server data.
 func (d *Docker) Remove(ctx context.Context, id string) error {
 	_, spec, err := d.inspect(ctx, id)

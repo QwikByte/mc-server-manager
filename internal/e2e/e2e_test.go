@@ -35,6 +35,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/mc-server-manager/internal/master/properties"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
@@ -189,6 +190,7 @@ func (m *master) panel(t *testing.T) *httptest.Server {
 	server.NewHandler(m.nodes, networks).Register(mux)
 	network.NewHandler(networks).Register(mux)
 	files.NewHandler(m.nodes).Register(mux)
+	properties.NewHandler(m.nodes).Register(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -323,6 +325,10 @@ func (f *fakeRuntime) Start(_ context.Context, id string) error {
 
 func (f *fakeRuntime) Stop(_ context.Context, id string) error {
 	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_STOPPED)
+}
+
+func (f *fakeRuntime) Restart(_ context.Context, id string) error {
+	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_RUNNING)
 }
 
 func (f *fakeRuntime) Remove(context.Context, string) error { return runtime.ErrNotFound }

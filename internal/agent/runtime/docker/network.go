@@ -71,8 +71,7 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 	if !running || !changed {
 		return nil // applying the same configuration again must not kick players
 	}
-	_, err = d.cli.ContainerRestart(ctx, containerName(id), client.ContainerRestartOptions{Timeout: new(stopTimeoutSeconds)})
-	return err
+	return d.Restart(ctx, id)
 }
 
 // writeProxyConfig writes velocity.toml and the forwarding secret. It reports whether

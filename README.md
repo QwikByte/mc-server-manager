@@ -26,6 +26,11 @@ through the RCON connection the server image provides.
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
 the master), edits configuration files in the browser and downloads files or whole folders as ZIP archives.
 
+`server.properties` can be edited as a form: grouped settings with switches, choices and validated numbers, a
+MOTD editor with colour codes and preview, and a search. Only properties of the server's Minecraft version are
+shown, comments in the file are kept, and properties the manager relies on (container port, RCON) are locked.
+Secrets such as the RCON password never reach the panel.
+
 ## Networks
 
 A network puts Paper or Purpur servers behind a Velocity proxy, on one node or spread across nodes. The master stores
@@ -93,6 +98,7 @@ internal/master/
   server/               server API, forwarded to the node's agent
   network/              networks of servers behind a proxy, applied through the agents
   files/                file manager, streamed between the browser and the agent
+  properties/           server.properties editor
   database/             SQLite and embedded migrations
   httpapi/              JSON helpers
 internal/agent/
@@ -104,10 +110,11 @@ internal/agent/
   datadir/              confined access to a server's data, owned by the server's user
   network/              proxy and backend configuration for networks
   files/                file access for the file manager
+  properties/           reads and updates server.properties, keeping comments
   runtime/              runtime interface; docker/ implements it
-internal/e2e/           end-to-end tests: enrollment, control, files and networks over real mTLS
+internal/e2e/           end-to-end tests: enrollment, control, files, properties and networks over real mTLS
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
-  src/features/         auth, nodes, servers, files, networks
+  src/features/         auth, nodes, servers, files, properties, networks
 deploy/systemd/         service units
 ```
 

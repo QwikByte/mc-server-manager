@@ -58,7 +58,7 @@ export function useCreateServer(nodeId: string) {
   })
 }
 
-export type ServerAction = "start" | "stop" | "delete"
+export type ServerAction = "start" | "stop" | "restart" | "delete"
 
 export function useServerAction(nodeId: string) {
   const queryClient = useQueryClient()

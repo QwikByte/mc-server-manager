@@ -54,6 +54,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		_, err := c.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
 		return err
 	}))
+	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/restart", h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
+		_, err := c.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
+		return err
+	}))
 	deleteServer := h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
 		_, err := c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
 		return err

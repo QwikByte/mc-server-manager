@@ -19,6 +19,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/mc-server-manager/internal/master/properties"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 	"github.com/QwikByte/mc-server-manager/web"
@@ -94,6 +95,7 @@ func routes(users *auth.Service, nodes *node.Service, networks *network.Service)
 	server.NewHandler(nodes, networks).Register(api)
 	network.NewHandler(networks).Register(api)
 	files.NewHandler(nodes).Register(api)
+	properties.NewHandler(nodes).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)

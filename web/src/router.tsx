@@ -94,6 +94,11 @@ const serverFilesRoute = createRoute({
   }),
   component: lazyRouteComponent(() => import("@/features/files/files-page"), "FilesPage"),
 })
+const serverPropertiesRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "properties",
+  component: lazyRouteComponent(() => import("@/features/properties/properties-page"), "PropertiesPage"),
+})
 
 const networksRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -113,7 +118,7 @@ export const router = createRouter({
       indexRoute,
       nodesRoute,
       nodeRoute,
-      serverRoute.addChildren([serverConsoleRoute, serverFilesRoute]),
+      serverRoute.addChildren([serverConsoleRoute, serverFilesRoute, serverPropertiesRoute]),
       networksRoute,
       networkRoute,
     ]),

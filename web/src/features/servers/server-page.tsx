@@ -1,4 +1,4 @@
-import { CaretLeftIcon, FolderIcon, TerminalIcon } from "@phosphor-icons/react"
+import { CaretLeftIcon, FolderIcon, SlidersHorizontalIcon, TerminalIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { Lamp } from "@/components/lamp"
@@ -17,6 +17,7 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
 const tabs = [
   { to: "/nodes/$nodeId/servers/$serverId", label: "Console", icon: TerminalIcon, exact: true },
   { to: "/nodes/$nodeId/servers/$serverId/files", label: "Files", icon: FolderIcon, exact: false },
+  { to: "/nodes/$nodeId/servers/$serverId/properties", label: "Properties", icon: SlidersHorizontalIcon, exact: false, game: true },
 ] as const
 
 /** Header and tabs of a server; the tabs are child routes. */
@@ -67,18 +68,20 @@ export function ServerPage() {
             }
           />
           <nav aria-label="Server" className="mb-8 flex gap-1 overflow-x-auto border-b">
-            {tabs.map(({ to, label, icon: Icon, exact }) => (
-              <Link
-                key={to}
-                to={to}
-                params={{ nodeId, serverId }}
-                activeOptions={{ exact, includeSearch: false }}
-                className="-mb-px flex items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground"
-              >
-                <Icon className="size-4" />
-                {label}
-              </Link>
-            ))}
+            {tabs
+              .filter((tab) => !("game" in tab && serverType(server.type).proxy))
+              .map(({ to, label, icon: Icon, exact }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  params={{ nodeId, serverId }}
+                  activeOptions={{ exact, includeSearch: false }}
+                  className="-mb-px flex items-center gap-2 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground"
+                >
+                  <Icon className="size-4" />
+                  {label}
+                </Link>
+              ))}
           </nav>
           <Outlet />
         </>

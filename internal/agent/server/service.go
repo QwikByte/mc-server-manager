@@ -95,6 +95,10 @@ func (s *Service) StopServer(ctx context.Context, req *mcsmv1.StopServerRequest)
 	return &mcsmv1.StopServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Stop)
 }
 
+func (s *Service) RestartServer(ctx context.Context, req *mcsmv1.RestartServerRequest) (*mcsmv1.RestartServerResponse, error) {
+	return &mcsmv1.RestartServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Restart)
+}
+
 func (s *Service) DeleteServer(ctx context.Context, req *mcsmv1.DeleteServerRequest) (*mcsmv1.DeleteServerResponse, error) {
 	return &mcsmv1.DeleteServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Remove)
 }

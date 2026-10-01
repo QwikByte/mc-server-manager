@@ -80,6 +80,17 @@ func serverCommand(cfg *config) *cobra.Command {
 			},
 		},
 		&cobra.Command{
+			Use:   "restart <id>",
+			Short: "Stop a server gracefully and start it again",
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return withLocal(cmd.Context(), *cfg, func(ctx context.Context, conn *grpc.ClientConn) error {
+					_, err := mcsmv1.NewServerServiceClient(conn).RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: args[0]})
+					return err
+				})
+			},
+		},
+		&cobra.Command{
 			Use:   "logs <id>",
 			Short: "Follow the console of a server until Ctrl+C",
 			Args:  cobra.ExactArgs(1),

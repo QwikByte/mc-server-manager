@@ -10,6 +10,8 @@ service ServerService {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc StartServer(StartServerRequest) returns (StartServerResponse);
   rpc StopServer(StopServerRequest) returns (StopServerResponse);
+  // RestartServer stops a server gracefully and starts it again.
+  rpc RestartServer(RestartServerRequest) returns (RestartServerResponse);
   rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
   // StreamLogs sends the last lines of the server console, then follows it until the
   // server stops or the client disconnects.
@@ -88,6 +90,12 @@ message StopServerRequest {
 }
 
 message StopServerResponse {}
+
+message RestartServerRequest {
+  string id = 1;
+}
+
+message RestartServerResponse {}
 
 message DeleteServerRequest {
   string id = 1;

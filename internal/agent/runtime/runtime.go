@@ -90,6 +90,8 @@ type Runtime interface {
 	Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error]
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, id, command string) (string, error)
+	// Restart stops a server gracefully and starts it again.
+	Restart(ctx context.Context, id string) error
 	// Configure gives a server its role in a network and restarts it if it runs.
 	Configure(ctx context.Context, id string, network Network) error
 	// Data opens the data directory of a server; the caller closes it.
