@@ -11,4 +11,5 @@ Wants=network-online.target
 Type=oneshot
 ExecStartPre=rm -f /var/lib/mcsm-master/update-request
 ExecStart=/usr/lib/mcsm-master/install.sh update --only master --version latest
-TimeoutStartSec=15min
+# Leaves time to wait for other installations of packages, e.g. automatic updates.
+TimeoutStartSec=30min

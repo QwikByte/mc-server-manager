@@ -20,7 +20,8 @@ public_host="" admin=admin join="" install_docker=no only="" local_agent=no fres
 log() { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
-fetch() { curl --proto '=https' --tlsv1.2 -fsSL "$@"; }
+# A download that can't connect within 20 seconds is tried again, rather than hanging.
+fetch() { curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 20 --retry 3 "$@"; }
 has_tty() { (: </dev/tty) 2>/dev/null; }
 installed() { command -v "$1" >/dev/null; }
 
@@ -78,6 +79,22 @@ check_system() {
   fetch -o "$tmp/checksums.txt" "$REPO/releases/download/$version/checksums.txt" || die "Release $version not found."
 }
 
+# wait_for_packages waits up to 10 minutes while another installation of packages runs, e.g.
+# the automatic updates of a new server or an update of the master on the same machine, and
+# says so. unattended-upgrade-shutdown always runs on Ubuntu and installs nothing.
+wait_for_packages() {
+  local i
+  installed pgrep || return 0
+  for ((i = 0; i < 120; i++)); do
+    pgrep -x 'apt|apt-get|aptitude|dpkg|dnf|yum|zypper|pacman' >/dev/null ||
+      pgrep -f '^/usr/bin/python3[.0-9]* /usr/bin/unattended-upgrade( |$)' >/dev/null || break
+    ((i)) || printf 'Waiting for another installation of packages to finish, e.g. automatic updates'
+    printf .
+    sleep 5
+  done
+  ((i == 0)) || printf '\n'
+}
+
 # install_package downloads a package of the release, verifies its checksum and installs or updates it.
 install_package() {
   local file="$1_${version#v}_linux_${arch}.$format"
@@ -85,8 +102,9 @@ install_package() {
   fetch -o "$tmp/$file" "$REPO/releases/download/$version/$file"
   (cd "$tmp" && grep -E "^[0-9a-f]{64}  $file\$" checksums.txt | sha256sum -c --strict --quiet) ||
     die "The checksum of $file does not match, the download is broken."
-  # Another installation may be running, e.g. an update of the master on the same machine:
-  # wait up to 5 minutes for it. dnf and yum wait on their own.
+  wait_for_packages
+  # The package managers wait for an installation that is still running on their own; apt for
+  # up to 5 more minutes.
   if installed apt-get; then
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --allow-downgrades -o DPkg::Lock::Timeout=300 \
       -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$tmp/$file" >/dev/null
@@ -124,6 +142,7 @@ setup_master() {
     log "Creating the administrator $admin"
     install -d -o mcsm -g mcsm -m 0700 /var/lib/mcsm-master
     if has_tty; then
+      printf 'Choose the password for %s, with at least 12 characters. What you type is not shown.\n' "$admin"
       runuser -u mcsm -- mcsm-master user add "$admin" </dev/tty
     else
       password=$(head -c 18 /dev/urandom | base64)
@@ -138,7 +157,7 @@ setup_docker() {
     [ "$install_docker" = yes ] ||
       [[ $(ask "The agent runs servers in Docker, which is not installed. Install it with Docker's script from https://get.docker.com? [Y/n]" y) =~ ^[yYjJ] ]] ||
       { warn "Without Docker the node can't run servers. Install it and restart the agent: systemctl restart mcsm-agent"; return; }
-    log "Installing Docker"
+    log "Installing Docker, which takes a few minutes"
     fetch -o "$tmp/get-docker.sh" https://get.docker.com
     sh "$tmp/get-docker.sh" >/dev/null
   fi
