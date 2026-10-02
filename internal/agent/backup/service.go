@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
@@ -196,6 +198,69 @@ func (s *Service) DownloadBackup(req *mcsmv1.DownloadBackupRequest, stream mcsmv
 	}
 }
 
+// ImportBackup adds a backup that a server had on another node, with its ID and details.
+func (s *Service) ImportBackup(stream mcsmv1.BackupService_ImportBackupServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	b := h.GetBackup()
+	if b == nil {
+		return status.Error(codes.InvalidArgument, "the first message must describe the backup")
+	}
+	d, err := importedDetails(b)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	srv, release, err := s.lock(stream.Context(), h.GetServerId())
+	if err != nil {
+		return err
+	}
+	defer release()
+	imported, err := s.store.add(srv.ID, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, func(w io.Writer) error {
+		for {
+			msg, err := stream.Recv()
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(msg.GetData()); err != nil {
+				return err
+			}
+		}
+	})
+	if err != nil {
+		return toStatus(err)
+	}
+	return stream.SendAndClose(&mcsmv1.ImportBackupResponse{Backup: imported.proto()})
+}
+
+// importedDetails validates a backup from another node like those made here.
+func importedDetails(b *mcsmv1.Backup) (details, error) {
+	d := details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId()}
+	for _, p := range b.GetPaths() {
+		name, ok := datadir.Name(p)
+		if !ok {
+			return d, fmt.Errorf("invalid path %q in backup", p)
+		}
+		d.Paths = append(d.Paths, name)
+	}
+	switch {
+	case !idPattern.MatchString(b.GetId()):
+		return d, errors.New("invalid backup ID")
+	case len(d.Paths) == 0:
+		return d, errors.New("the backup has no files")
+	case utf8.RuneCountInString(d.Label) > maxLabel || strings.ContainsFunc(d.Label, unicode.IsControl):
+		return d, errors.New("invalid label")
+	case d.JobID != "" && !jobPattern.MatchString(d.JobID):
+		return d, errors.New("invalid job ID")
+	}
+	return d, nil
+}
+
 // RemoveAll deletes all backups of a server, which is done when the server is deleted.
 func (s *Service) RemoveAll(serverID string) error {
 	if !runtime.ValidID(serverID) {
@@ -241,6 +306,8 @@ func toStatus(err error) error {
 		return status.Error(codes.NotFound, "Server not found.")
 	case errors.Is(err, fs.ErrNotExist):
 		return status.Error(codes.NotFound, "Backup not found.")
+	case errors.Is(err, fs.ErrExist):
+		return status.Error(codes.AlreadyExists, "The backup exists already.")
 	case errors.Is(err, storage.ErrUnknown):
 		return status.Errorf(codes.InvalidArgument, "%s. Add it on the node with: mcsm-agent storage add", err)
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):

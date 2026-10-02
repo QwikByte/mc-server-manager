@@ -22,6 +22,9 @@ import { useAccess } from "@/features/access/use-access"
 import { NodeActivity } from "@/features/logs/activity"
 import { serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
+import { usageQuery } from "@/features/usage/api"
+import { formatCores } from "@/features/usage/format"
+import { UsageHistory } from "@/features/usage/usage-history"
 import { formatBytes, formatDate, formatMegabytes } from "@/lib/format"
 import { memoryCapacityMb, memoryLimitMb, type Node, type NodeInfo, nodeQuery } from "./api"
 import { NewJoinTokenButton, RemoveNodeButton, RenewCertificateButton } from "./node-actions"
@@ -72,6 +75,25 @@ export function NodePage() {
             <>
               <NodeFacts node={node} info={node.info} />
               <ServerList nodeId={node.id} />
+              {can("nodes.view", node.id) && (
+                <UsageHistory
+                  nodeId={node.id}
+                  charts={[
+                    {
+                      title: "CPU",
+                      series: [{ label: "CPU", tone: "series-1", value: (p) => p.cpuMillis }],
+                      format: formatCores,
+                      max: node.info.cpuCount * 1000,
+                    },
+                    {
+                      title: "Memory",
+                      series: [{ label: "Memory", tone: "series-1", value: (p) => p.memoryBytes }],
+                      format: (v) => formatBytes(Math.round(v)),
+                      max: node.info.memoryBytes,
+                    },
+                  ]}
+                />
+              )}
               {node.info.storage && can("nodes.view", node.id) && <StorageList locations={node.info.storage} />}
             </>
           ) : node.status === "pending" ? (
@@ -101,6 +123,9 @@ export function NodePage() {
 
 function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   const { data: servers } = useQuery(serversQuery(node.id))
+  // Missing without the permission to see the node, empty if the agent can't measure the machine.
+  const usage = useQuery(usageQuery(node.id)).data?.node
+  const live = usage?.cpuCount && usage.memoryTotalBytes ? usage : undefined
   const assignedMb = servers?.reduce((sum, s) => sum + s.memoryMb, 0)
   const capacityMb = memoryCapacityMb(node)
   const limitMb = memoryLimitMb(node)
@@ -113,8 +138,17 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon={CpuIcon} tone="warning" label="CPU" value={`${info.cpuCount} cores`} />
-        <StatCard icon={MemoryIcon} tone="violet" label="Memory" value={formatBytes(info.memoryBytes)}>
+        <StatCard icon={CpuIcon} tone="warning" label="CPU" value={live ? formatCores(live.cpuMillis) : `${info.cpuCount} cores`}>
+          {live && (
+            <div className="space-y-2">
+              <Meter value={live.cpuMillis / (live.cpuCount * 1000)} label="CPU used" />
+              <p>of {info.cpuCount} cores in use</p>
+            </div>
+          )}
+        </StatCard>
+        <StatCard icon={MemoryIcon} tone="violet" label="Memory" value={formatBytes(live ? live.memoryUsedBytes : info.memoryBytes)}>
+          {live && <Meter value={live.memoryUsedBytes / live.memoryTotalBytes} label="Memory used" className="mb-2" />}
+          {live && `of ${formatBytes(info.memoryBytes)} in use · `}
           {limitMb === undefined ? "Not limited for servers" : `${formatMegabytes(limitMb)} usable by servers`}
         </StatCard>
         <StatCard icon={CubeIcon} tone="success" label="Assigned" value={assignedMb === undefined ? "–" : formatMegabytes(assignedMb)}>

@@ -19,6 +19,9 @@ service BackupService {
   rpc DeleteBackup(DeleteBackupRequest) returns (DeleteBackupResponse);
   // DownloadBackup sends the archive in chunks. The first message carries its size.
   rpc DownloadBackup(DownloadBackupRequest) returns (stream DownloadBackupResponse);
+  // ImportBackup adds a backup of a server that came from another node. The header
+  // describes it, the data that follows is its archive.
+  rpc ImportBackup(stream ImportBackupRequest) returns (ImportBackupResponse);
 }
 
 // BackupSelection chooses what of a server is backed up.
@@ -95,4 +98,21 @@ message DownloadBackupRequest {
 message DownloadBackupResponse {
   int64 size = 1;
   bytes data = 2;
+}
+
+message ImportBackupHeader {
+  string server_id = 1;
+  // The backup keeps its ID; location chooses where it is kept on this node.
+  Backup backup = 2;
+}
+
+message ImportBackupRequest {
+  oneof content {
+    ImportBackupHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message ImportBackupResponse {
+  Backup backup = 1;
 }

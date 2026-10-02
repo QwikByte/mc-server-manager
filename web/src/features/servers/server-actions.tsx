@@ -1,20 +1,36 @@
-import { ArrowClockwiseIcon, CopyIcon, DotsThreeIcon, PlayIcon, StackIcon, StopIcon, TrashIcon } from "@phosphor-icons/react"
+import {
+  ArrowClockwiseIcon,
+  ArrowsLeftRightIcon,
+  CircleNotchIcon,
+  CopyIcon,
+  DotsThreeIcon,
+  PlayIcon,
+  StackIcon,
+  StopIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
+import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
 import { SaveTemplateDialog } from "@/features/templates/save-template-dialog"
-import { type Server, type ServerAction, useServerAction } from "./api"
+import { type Server, type ServerAction, useMove, useServerAction } from "./api"
 import { DuplicateServerDialog } from "./duplicate-server-dialog"
+import { MoveServerDialog } from "./move-server-dialog"
 import { serverType } from "./server-types"
 
-/** Start or stop a server, copy it, save it as a template and delete it after confirmation. */
+/**
+ * Start or stop a server, copy it, move it, save it as a template and delete it after
+ * confirmation. While it moves, it can't be changed.
+ */
 export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; server: Server; onDeleted?: () => void }) {
   const mutation = useServerAction(nodeId)
-  const [dialog, setDialog] = useState<"duplicate" | "template">()
+  const move = useMove(server.id)
+  const [dialog, setDialog] = useState<"duplicate" | "move" | "template">()
   const running = server.state !== "stopped"
   const dialogProps = { nodeId, server, open: true, onOpenChange: (open: boolean) => !open && setDialog(undefined) }
 
@@ -35,7 +51,17 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
   const may = (p: Permission) => can(p, nodeId, server.id)
   const duplicate = can("servers.create", nodeId) && may("files.read")
   const saveTemplate = can("templates.manage") && (serverType(server.type).proxy || may("properties.edit"))
+  // Moving deletes the server here and copies all its files.
+  const movable = may("servers.delete") && may("files.read")
   const power = running ? may("servers.restart") || may("servers.stop") : may("servers.start")
+  if (move && !move.finishedAt) {
+    return (
+      <Pill tone="info">
+        <CircleNotchIcon className="size-3.5 animate-spin motion-reduce:animate-none" />
+        Moving to {move.toName}
+      </Pill>
+    )
+  }
   if (!power && !duplicate && !saveTemplate && !may("servers.delete")) return null
 
   return (
@@ -64,7 +90,7 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
         )
       )}
       <div className="ml-auto flex items-center gap-1">
-        {(duplicate || saveTemplate) && (
+        {(duplicate || movable || saveTemplate) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -82,6 +108,12 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
                 <DropdownMenuItem onSelect={() => setDialog("duplicate")}>
                   <CopyIcon />
                   Duplicate…
+                </DropdownMenuItem>
+              )}
+              {movable && (
+                <DropdownMenuItem onSelect={() => setDialog("move")}>
+                  <ArrowsLeftRightIcon />
+                  Move to another node…
                 </DropdownMenuItem>
               )}
               {saveTemplate && (
@@ -116,6 +148,7 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
         )}
       </div>
       {dialog === "duplicate" && <DuplicateServerDialog {...dialogProps} />}
+      {dialog === "move" && <MoveServerDialog {...dialogProps} />}
       {dialog === "template" && <SaveTemplateDialog {...dialogProps} />}
     </div>
   )

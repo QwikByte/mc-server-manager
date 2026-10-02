@@ -119,6 +119,12 @@ func (s *Service) Forget(ctx context.Context, nodeID, serverID string) error {
 	return err
 }
 
+// Move keeps a server that moved to another node a target of its tasks.
+func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE task_targets SET node_id = ? WHERE node_id = ? AND server_id = ?`, to, from, serverID)
+	return err
+}
+
 // build validates a task and lets its kind check its settings.
 func (s *Service) build(kind string, in Input) (Task, error) {
 	t := Task{Name: strings.TrimSpace(in.Name), Enabled: in.Enabled, Schedule: in.Schedule, kind: kind}

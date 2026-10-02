@@ -30,6 +30,7 @@ const (
 	ServerService_SendCommand_FullMethodName      = "/mcsm.v1.ServerService/SendCommand"
 	ServerService_ConfigureNetwork_FullMethodName = "/mcsm.v1.ServerService/ConfigureNetwork"
 	ServerService_DuplicateServer_FullMethodName  = "/mcsm.v1.ServerService/DuplicateServer"
+	ServerService_ImportServer_FullMethodName     = "/mcsm.v1.ServerService/ImportServer"
 )
 
 // ServerServiceClient is the client API for ServerService service.
@@ -61,6 +62,10 @@ type ServerServiceClient interface {
 	// settings of another one. A running game server saves its worlds first. The copy is
 	// stopped and standalone: it doesn't take over the network role of the original.
 	DuplicateServer(ctx context.Context, in *DuplicateServerRequest, opts ...grpc.CallOption) (*DuplicateServerResponse, error)
+	// ImportServer creates a stopped server with the ID and settings of a server of another
+	// node, e.g. one that moves here. The header describes it, the data that follows is its
+	// data directory as a ZIP archive, like ArchiveDirectory sends it.
+	ImportServer(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportServerRequest, ImportServerResponse], error)
 }
 
 type serverServiceClient struct {
@@ -190,6 +195,19 @@ func (c *serverServiceClient) DuplicateServer(ctx context.Context, in *Duplicate
 	return out, nil
 }
 
+func (c *serverServiceClient) ImportServer(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportServerRequest, ImportServerResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ServerService_ServiceDesc.Streams[1], ServerService_ImportServer_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ImportServerRequest, ImportServerResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ServerService_ImportServerClient = grpc.ClientStreamingClient[ImportServerRequest, ImportServerResponse]
+
 // ServerServiceServer is the server API for ServerService service.
 // All implementations must embed UnimplementedServerServiceServer
 // for forward compatibility.
@@ -219,6 +237,10 @@ type ServerServiceServer interface {
 	// settings of another one. A running game server saves its worlds first. The copy is
 	// stopped and standalone: it doesn't take over the network role of the original.
 	DuplicateServer(context.Context, *DuplicateServerRequest) (*DuplicateServerResponse, error)
+	// ImportServer creates a stopped server with the ID and settings of a server of another
+	// node, e.g. one that moves here. The header describes it, the data that follows is its
+	// data directory as a ZIP archive, like ArchiveDirectory sends it.
+	ImportServer(grpc.ClientStreamingServer[ImportServerRequest, ImportServerResponse]) error
 	mustEmbedUnimplementedServerServiceServer()
 }
 
@@ -261,6 +283,9 @@ func (UnimplementedServerServiceServer) ConfigureNetwork(context.Context, *Confi
 }
 func (UnimplementedServerServiceServer) DuplicateServer(context.Context, *DuplicateServerRequest) (*DuplicateServerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DuplicateServer not implemented")
+}
+func (UnimplementedServerServiceServer) ImportServer(grpc.ClientStreamingServer[ImportServerRequest, ImportServerResponse]) error {
+	return status.Error(codes.Unimplemented, "method ImportServer not implemented")
 }
 func (UnimplementedServerServiceServer) mustEmbedUnimplementedServerServiceServer() {}
 func (UnimplementedServerServiceServer) testEmbeddedByValue()                       {}
@@ -474,6 +499,13 @@ func _ServerService_DuplicateServer_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ServerService_ImportServer_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ServerServiceServer).ImportServer(&grpc.GenericServerStream[ImportServerRequest, ImportServerResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ServerService_ImportServerServer = grpc.ClientStreamingServer[ImportServerRequest, ImportServerResponse]
+
 // ServerService_ServiceDesc is the grpc.ServiceDesc for ServerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -527,6 +559,11 @@ var ServerService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "StreamLogs",
 			Handler:       _ServerService_StreamLogs_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ImportServer",
+			Handler:       _ServerService_ImportServer_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "mcsm/v1/server.proto",

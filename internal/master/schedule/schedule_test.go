@@ -118,7 +118,7 @@ func TestService(t *testing.T) {
 		t.Fatal(err)
 	}
 	kind := fakeKind{make(chan time.Time, 1)}
-	s := NewService(db, fakeNodes{}, map[string]Kind{"fake": kind})
+	s := NewService(db, fakeNodes{}, map[string]Kind{"fake": kind}, func(string) bool { return false })
 	if err := s.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}

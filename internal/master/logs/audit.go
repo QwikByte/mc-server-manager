@@ -57,6 +57,7 @@ var actions = map[string]action{
 	"POST " + routeServer + "/stop":                     {logging.Servers, "Stop server"},
 	"POST " + routeServer + "/restart":                  {logging.Servers, "Restart server"},
 	"POST " + routeServer + "/duplicate":                {logging.Servers, "Duplicate server"},
+	"POST " + routeServer + "/move":                     {logging.Servers, "Move server"},
 	"POST " + routeServer + "/command":                  {logging.Console, "Send console command"},
 	"PUT " + routeServer + "/properties":                {logging.Files, "Change server.properties"},
 	"GET " + routeFiles + "/content":                    {logging.Files, "Download file"},

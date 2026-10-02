@@ -698,6 +698,185 @@ func (x *DownloadBackupResponse) GetData() []byte {
 	return nil
 }
 
+type ImportBackupHeader struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	// The backup keeps its ID; location chooses where it is kept on this node.
+	Backup        *Backup `protobuf:"bytes,2,opt,name=backup,proto3" json:"backup,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportBackupHeader) Reset() {
+	*x = ImportBackupHeader{}
+	mi := &file_mcsm_v1_backup_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBackupHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBackupHeader) ProtoMessage() {}
+
+func (x *ImportBackupHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_backup_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBackupHeader.ProtoReflect.Descriptor instead.
+func (*ImportBackupHeader) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_backup_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ImportBackupHeader) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *ImportBackupHeader) GetBackup() *Backup {
+	if x != nil {
+		return x.Backup
+	}
+	return nil
+}
+
+type ImportBackupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*ImportBackupRequest_Header
+	//	*ImportBackupRequest_Data
+	Content       isImportBackupRequest_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportBackupRequest) Reset() {
+	*x = ImportBackupRequest{}
+	mi := &file_mcsm_v1_backup_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBackupRequest) ProtoMessage() {}
+
+func (x *ImportBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_backup_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBackupRequest.ProtoReflect.Descriptor instead.
+func (*ImportBackupRequest) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_backup_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ImportBackupRequest) GetContent() isImportBackupRequest_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *ImportBackupRequest) GetHeader() *ImportBackupHeader {
+	if x != nil {
+		if x, ok := x.Content.(*ImportBackupRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *ImportBackupRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Content.(*ImportBackupRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isImportBackupRequest_Content interface {
+	isImportBackupRequest_Content()
+}
+
+type ImportBackupRequest_Header struct {
+	Header *ImportBackupHeader `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type ImportBackupRequest_Data struct {
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*ImportBackupRequest_Header) isImportBackupRequest_Content() {}
+
+func (*ImportBackupRequest_Data) isImportBackupRequest_Content() {}
+
+type ImportBackupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Backup        *Backup                `protobuf:"bytes,1,opt,name=backup,proto3" json:"backup,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportBackupResponse) Reset() {
+	*x = ImportBackupResponse{}
+	mi := &file_mcsm_v1_backup_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBackupResponse) ProtoMessage() {}
+
+func (x *ImportBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_backup_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBackupResponse.ProtoReflect.Descriptor instead.
+func (*ImportBackupResponse) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_backup_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ImportBackupResponse) GetBackup() *Backup {
+	if x != nil {
+		return x.Backup
+	}
+	return nil
+}
+
 var File_mcsm_v1_backup_proto protoreflect.FileDescriptor
 
 const file_mcsm_v1_backup_proto_rawDesc = "" +
@@ -745,13 +924,23 @@ const file_mcsm_v1_backup_proto_rawDesc = "" +
 	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\"@\n" +
 	"\x16DownloadBackupResponse\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data2\x98\x03\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\"Z\n" +
+	"\x12ImportBackupHeader\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12'\n" +
+	"\x06backup\x18\x02 \x01(\v2\x0f.mcsm.v1.BackupR\x06backup\"m\n" +
+	"\x13ImportBackupRequest\x125\n" +
+	"\x06header\x18\x01 \x01(\v2\x1b.mcsm.v1.ImportBackupHeaderH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
+	"\acontent\"?\n" +
+	"\x14ImportBackupResponse\x12'\n" +
+	"\x06backup\x18\x01 \x01(\v2\x0f.mcsm.v1.BackupR\x06backup2\xe7\x03\n" +
 	"\rBackupService\x12H\n" +
 	"\vListBackups\x12\x1b.mcsm.v1.ListBackupsRequest\x1a\x1c.mcsm.v1.ListBackupsResponse\x12K\n" +
 	"\fCreateBackup\x12\x1c.mcsm.v1.CreateBackupRequest\x1a\x1d.mcsm.v1.CreateBackupResponse\x12N\n" +
 	"\rRestoreBackup\x12\x1d.mcsm.v1.RestoreBackupRequest\x1a\x1e.mcsm.v1.RestoreBackupResponse\x12K\n" +
 	"\fDeleteBackup\x12\x1c.mcsm.v1.DeleteBackupRequest\x1a\x1d.mcsm.v1.DeleteBackupResponse\x12S\n" +
-	"\x0eDownloadBackup\x12\x1e.mcsm.v1.DownloadBackupRequest\x1a\x1f.mcsm.v1.DownloadBackupResponse0\x01B:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
+	"\x0eDownloadBackup\x12\x1e.mcsm.v1.DownloadBackupRequest\x1a\x1f.mcsm.v1.DownloadBackupResponse0\x01\x12M\n" +
+	"\fImportBackup\x12\x1c.mcsm.v1.ImportBackupRequest\x1a\x1d.mcsm.v1.ImportBackupResponse(\x01B:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
 
 var (
 	file_mcsm_v1_backup_proto_rawDescOnce sync.Once
@@ -765,7 +954,7 @@ func file_mcsm_v1_backup_proto_rawDescGZIP() []byte {
 	return file_mcsm_v1_backup_proto_rawDescData
 }
 
-var file_mcsm_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_mcsm_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_mcsm_v1_backup_proto_goTypes = []any{
 	(*BackupSelection)(nil),        // 0: mcsm.v1.BackupSelection
 	(*Backup)(nil),                 // 1: mcsm.v1.Backup
@@ -779,26 +968,34 @@ var file_mcsm_v1_backup_proto_goTypes = []any{
 	(*DeleteBackupResponse)(nil),   // 9: mcsm.v1.DeleteBackupResponse
 	(*DownloadBackupRequest)(nil),  // 10: mcsm.v1.DownloadBackupRequest
 	(*DownloadBackupResponse)(nil), // 11: mcsm.v1.DownloadBackupResponse
+	(*ImportBackupHeader)(nil),     // 12: mcsm.v1.ImportBackupHeader
+	(*ImportBackupRequest)(nil),    // 13: mcsm.v1.ImportBackupRequest
+	(*ImportBackupResponse)(nil),   // 14: mcsm.v1.ImportBackupResponse
 }
 var file_mcsm_v1_backup_proto_depIdxs = []int32{
 	1,  // 0: mcsm.v1.ListBackupsResponse.backups:type_name -> mcsm.v1.Backup
 	0,  // 1: mcsm.v1.CreateBackupRequest.selection:type_name -> mcsm.v1.BackupSelection
 	1,  // 2: mcsm.v1.CreateBackupResponse.backup:type_name -> mcsm.v1.Backup
-	2,  // 3: mcsm.v1.BackupService.ListBackups:input_type -> mcsm.v1.ListBackupsRequest
-	4,  // 4: mcsm.v1.BackupService.CreateBackup:input_type -> mcsm.v1.CreateBackupRequest
-	6,  // 5: mcsm.v1.BackupService.RestoreBackup:input_type -> mcsm.v1.RestoreBackupRequest
-	8,  // 6: mcsm.v1.BackupService.DeleteBackup:input_type -> mcsm.v1.DeleteBackupRequest
-	10, // 7: mcsm.v1.BackupService.DownloadBackup:input_type -> mcsm.v1.DownloadBackupRequest
-	3,  // 8: mcsm.v1.BackupService.ListBackups:output_type -> mcsm.v1.ListBackupsResponse
-	5,  // 9: mcsm.v1.BackupService.CreateBackup:output_type -> mcsm.v1.CreateBackupResponse
-	7,  // 10: mcsm.v1.BackupService.RestoreBackup:output_type -> mcsm.v1.RestoreBackupResponse
-	9,  // 11: mcsm.v1.BackupService.DeleteBackup:output_type -> mcsm.v1.DeleteBackupResponse
-	11, // 12: mcsm.v1.BackupService.DownloadBackup:output_type -> mcsm.v1.DownloadBackupResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	1,  // 3: mcsm.v1.ImportBackupHeader.backup:type_name -> mcsm.v1.Backup
+	12, // 4: mcsm.v1.ImportBackupRequest.header:type_name -> mcsm.v1.ImportBackupHeader
+	1,  // 5: mcsm.v1.ImportBackupResponse.backup:type_name -> mcsm.v1.Backup
+	2,  // 6: mcsm.v1.BackupService.ListBackups:input_type -> mcsm.v1.ListBackupsRequest
+	4,  // 7: mcsm.v1.BackupService.CreateBackup:input_type -> mcsm.v1.CreateBackupRequest
+	6,  // 8: mcsm.v1.BackupService.RestoreBackup:input_type -> mcsm.v1.RestoreBackupRequest
+	8,  // 9: mcsm.v1.BackupService.DeleteBackup:input_type -> mcsm.v1.DeleteBackupRequest
+	10, // 10: mcsm.v1.BackupService.DownloadBackup:input_type -> mcsm.v1.DownloadBackupRequest
+	13, // 11: mcsm.v1.BackupService.ImportBackup:input_type -> mcsm.v1.ImportBackupRequest
+	3,  // 12: mcsm.v1.BackupService.ListBackups:output_type -> mcsm.v1.ListBackupsResponse
+	5,  // 13: mcsm.v1.BackupService.CreateBackup:output_type -> mcsm.v1.CreateBackupResponse
+	7,  // 14: mcsm.v1.BackupService.RestoreBackup:output_type -> mcsm.v1.RestoreBackupResponse
+	9,  // 15: mcsm.v1.BackupService.DeleteBackup:output_type -> mcsm.v1.DeleteBackupResponse
+	11, // 16: mcsm.v1.BackupService.DownloadBackup:output_type -> mcsm.v1.DownloadBackupResponse
+	14, // 17: mcsm.v1.BackupService.ImportBackup:output_type -> mcsm.v1.ImportBackupResponse
+	12, // [12:18] is the sub-list for method output_type
+	6,  // [6:12] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_mcsm_v1_backup_proto_init() }
@@ -806,13 +1003,17 @@ func file_mcsm_v1_backup_proto_init() {
 	if File_mcsm_v1_backup_proto != nil {
 		return
 	}
+	file_mcsm_v1_backup_proto_msgTypes[13].OneofWrappers = []any{
+		(*ImportBackupRequest_Header)(nil),
+		(*ImportBackupRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_backup_proto_rawDesc), len(file_mcsm_v1_backup_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

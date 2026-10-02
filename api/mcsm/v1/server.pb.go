@@ -1582,6 +1582,132 @@ func (x *DuplicateServerResponse) GetServer() *Server {
 	return nil
 }
 
+type ImportServerRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*ImportServerRequest_Header
+	//	*ImportServerRequest_Data
+	Content       isImportServerRequest_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportServerRequest) Reset() {
+	*x = ImportServerRequest{}
+	mi := &file_mcsm_v1_server_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportServerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportServerRequest) ProtoMessage() {}
+
+func (x *ImportServerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_server_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportServerRequest.ProtoReflect.Descriptor instead.
+func (*ImportServerRequest) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ImportServerRequest) GetContent() isImportServerRequest_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *ImportServerRequest) GetHeader() *Server {
+	if x != nil {
+		if x, ok := x.Content.(*ImportServerRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *ImportServerRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Content.(*ImportServerRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isImportServerRequest_Content interface {
+	isImportServerRequest_Content()
+}
+
+type ImportServerRequest_Header struct {
+	Header *Server `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type ImportServerRequest_Data struct {
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*ImportServerRequest_Header) isImportServerRequest_Content() {}
+
+func (*ImportServerRequest_Data) isImportServerRequest_Content() {}
+
+type ImportServerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Server        *Server                `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportServerResponse) Reset() {
+	*x = ImportServerResponse{}
+	mi := &file_mcsm_v1_server_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportServerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportServerResponse) ProtoMessage() {}
+
+func (x *ImportServerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_server_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportServerResponse.ProtoReflect.Descriptor instead.
+func (*ImportServerResponse) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ImportServerResponse) GetServer() *Server {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
 var File_mcsm_v1_server_proto protoreflect.FileDescriptor
 
 const file_mcsm_v1_server_proto_rawDesc = "" +
@@ -1688,6 +1814,12 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04port\x18\x03 \x01(\rR\x04port\"B\n" +
 	"\x17DuplicateServerResponse\x12'\n" +
+	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server\"a\n" +
+	"\x13ImportServerRequest\x12)\n" +
+	"\x06header\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
+	"\acontent\"?\n" +
+	"\x14ImportServerResponse\x12'\n" +
 	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server*\xf0\x01\n" +
 	"\n" +
 	"ServerType\x12\x1b\n" +
@@ -1709,7 +1841,7 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x18SERVER_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SERVER_STATE_STOPPED\x10\x01\x12\x19\n" +
 	"\x15SERVER_STATE_STARTING\x10\x02\x12\x18\n" +
-	"\x14SERVER_STATE_RUNNING\x10\x032\xe3\x06\n" +
+	"\x14SERVER_STATE_RUNNING\x10\x032\xb2\a\n" +
 	"\rServerService\x12H\n" +
 	"\vListServers\x12\x1b.mcsm.v1.ListServersRequest\x1a\x1c.mcsm.v1.ListServersResponse\x12K\n" +
 	"\fCreateServer\x12\x1c.mcsm.v1.CreateServerRequest\x1a\x1d.mcsm.v1.CreateServerResponse\x12H\n" +
@@ -1723,7 +1855,8 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"StreamLogs\x12\x1a.mcsm.v1.StreamLogsRequest\x1a\x1b.mcsm.v1.StreamLogsResponse0\x01\x12H\n" +
 	"\vSendCommand\x12\x1b.mcsm.v1.SendCommandRequest\x1a\x1c.mcsm.v1.SendCommandResponse\x12W\n" +
 	"\x10ConfigureNetwork\x12 .mcsm.v1.ConfigureNetworkRequest\x1a!.mcsm.v1.ConfigureNetworkResponse\x12T\n" +
-	"\x0fDuplicateServer\x12\x1f.mcsm.v1.DuplicateServerRequest\x1a .mcsm.v1.DuplicateServerResponseB:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
+	"\x0fDuplicateServer\x12\x1f.mcsm.v1.DuplicateServerRequest\x1a .mcsm.v1.DuplicateServerResponse\x12M\n" +
+	"\fImportServer\x12\x1c.mcsm.v1.ImportServerRequest\x1a\x1d.mcsm.v1.ImportServerResponse(\x01B:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
 
 var (
 	file_mcsm_v1_server_proto_rawDescOnce sync.Once
@@ -1738,7 +1871,7 @@ func file_mcsm_v1_server_proto_rawDescGZIP() []byte {
 }
 
 var file_mcsm_v1_server_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_mcsm_v1_server_proto_goTypes = []any{
 	(ServerType)(0),                  // 0: mcsm.v1.ServerType
 	(RestartPolicy)(0),               // 1: mcsm.v1.RestartPolicy
@@ -1767,7 +1900,9 @@ var file_mcsm_v1_server_proto_goTypes = []any{
 	(*ConfigureNetworkResponse)(nil), // 24: mcsm.v1.ConfigureNetworkResponse
 	(*DuplicateServerRequest)(nil),   // 25: mcsm.v1.DuplicateServerRequest
 	(*DuplicateServerResponse)(nil),  // 26: mcsm.v1.DuplicateServerResponse
-	nil,                              // 27: mcsm.v1.CreateServerRequest.PropertiesEntry
+	(*ImportServerRequest)(nil),      // 27: mcsm.v1.ImportServerRequest
+	(*ImportServerResponse)(nil),     // 28: mcsm.v1.ImportServerResponse
+	nil,                              // 29: mcsm.v1.CreateServerRequest.PropertiesEntry
 }
 var file_mcsm_v1_server_proto_depIdxs = []int32{
 	0,  // 0: mcsm.v1.Server.type:type_name -> mcsm.v1.ServerType
@@ -1776,39 +1911,43 @@ var file_mcsm_v1_server_proto_depIdxs = []int32{
 	3,  // 3: mcsm.v1.ListServersResponse.servers:type_name -> mcsm.v1.Server
 	0,  // 4: mcsm.v1.CreateServerRequest.type:type_name -> mcsm.v1.ServerType
 	1,  // 5: mcsm.v1.CreateServerRequest.restart_policy:type_name -> mcsm.v1.RestartPolicy
-	27, // 6: mcsm.v1.CreateServerRequest.properties:type_name -> mcsm.v1.CreateServerRequest.PropertiesEntry
+	29, // 6: mcsm.v1.CreateServerRequest.properties:type_name -> mcsm.v1.CreateServerRequest.PropertiesEntry
 	3,  // 7: mcsm.v1.CreateServerResponse.server:type_name -> mcsm.v1.Server
 	1,  // 8: mcsm.v1.UpdateServerRequest.restart_policy:type_name -> mcsm.v1.RestartPolicy
 	3,  // 9: mcsm.v1.UpdateServerResponse.server:type_name -> mcsm.v1.Server
 	23, // 10: mcsm.v1.ConfigureNetworkRequest.backends:type_name -> mcsm.v1.NetworkBackend
 	3,  // 11: mcsm.v1.DuplicateServerResponse.server:type_name -> mcsm.v1.Server
-	4,  // 12: mcsm.v1.ServerService.ListServers:input_type -> mcsm.v1.ListServersRequest
-	6,  // 13: mcsm.v1.ServerService.CreateServer:input_type -> mcsm.v1.CreateServerRequest
-	8,  // 14: mcsm.v1.ServerService.StartServer:input_type -> mcsm.v1.StartServerRequest
-	10, // 15: mcsm.v1.ServerService.StopServer:input_type -> mcsm.v1.StopServerRequest
-	12, // 16: mcsm.v1.ServerService.RestartServer:input_type -> mcsm.v1.RestartServerRequest
-	16, // 17: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
-	14, // 18: mcsm.v1.ServerService.UpdateServer:input_type -> mcsm.v1.UpdateServerRequest
-	18, // 19: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
-	20, // 20: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
-	22, // 21: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
-	25, // 22: mcsm.v1.ServerService.DuplicateServer:input_type -> mcsm.v1.DuplicateServerRequest
-	5,  // 23: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
-	7,  // 24: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
-	9,  // 25: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
-	11, // 26: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
-	13, // 27: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
-	17, // 28: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
-	15, // 29: mcsm.v1.ServerService.UpdateServer:output_type -> mcsm.v1.UpdateServerResponse
-	19, // 30: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
-	21, // 31: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
-	24, // 32: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
-	26, // 33: mcsm.v1.ServerService.DuplicateServer:output_type -> mcsm.v1.DuplicateServerResponse
-	23, // [23:34] is the sub-list for method output_type
-	12, // [12:23] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	3,  // 12: mcsm.v1.ImportServerRequest.header:type_name -> mcsm.v1.Server
+	3,  // 13: mcsm.v1.ImportServerResponse.server:type_name -> mcsm.v1.Server
+	4,  // 14: mcsm.v1.ServerService.ListServers:input_type -> mcsm.v1.ListServersRequest
+	6,  // 15: mcsm.v1.ServerService.CreateServer:input_type -> mcsm.v1.CreateServerRequest
+	8,  // 16: mcsm.v1.ServerService.StartServer:input_type -> mcsm.v1.StartServerRequest
+	10, // 17: mcsm.v1.ServerService.StopServer:input_type -> mcsm.v1.StopServerRequest
+	12, // 18: mcsm.v1.ServerService.RestartServer:input_type -> mcsm.v1.RestartServerRequest
+	16, // 19: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
+	14, // 20: mcsm.v1.ServerService.UpdateServer:input_type -> mcsm.v1.UpdateServerRequest
+	18, // 21: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
+	20, // 22: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
+	22, // 23: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
+	25, // 24: mcsm.v1.ServerService.DuplicateServer:input_type -> mcsm.v1.DuplicateServerRequest
+	27, // 25: mcsm.v1.ServerService.ImportServer:input_type -> mcsm.v1.ImportServerRequest
+	5,  // 26: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
+	7,  // 27: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
+	9,  // 28: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
+	11, // 29: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
+	13, // 30: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
+	17, // 31: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
+	15, // 32: mcsm.v1.ServerService.UpdateServer:output_type -> mcsm.v1.UpdateServerResponse
+	19, // 33: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
+	21, // 34: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
+	24, // 35: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
+	26, // 36: mcsm.v1.ServerService.DuplicateServer:output_type -> mcsm.v1.DuplicateServerResponse
+	28, // 37: mcsm.v1.ServerService.ImportServer:output_type -> mcsm.v1.ImportServerResponse
+	26, // [26:38] is the sub-list for method output_type
+	14, // [14:26] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_mcsm_v1_server_proto_init() }
@@ -1820,13 +1959,17 @@ func file_mcsm_v1_server_proto_init() {
 		(*NetworkBackend_ServerId)(nil),
 		(*NetworkBackend_Address)(nil),
 	}
+	file_mcsm_v1_server_proto_msgTypes[24].OneofWrappers = []any{
+		(*ImportServerRequest_Header)(nil),
+		(*ImportServerRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_server_proto_rawDesc), len(file_mcsm_v1_server_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   25,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

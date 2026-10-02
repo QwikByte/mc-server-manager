@@ -1,0 +1,129 @@
+import { useQuery } from "@tanstack/react-query"
+import { useState } from "react"
+import { ErrorCallout } from "@/components/callout"
+import { Section } from "@/components/section"
+import { Segmented } from "@/components/segmented"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
+import { historyQuery, type UsagePoint, type UsageRange, ranges } from "./api"
+import { type ChartSeries, TimeChart } from "./time-chart"
+
+/** A chart of the history: one measure, so one scale. */
+export interface ChartSpec {
+  title: string
+  series: ChartSeries[]
+  format: (value: number) => string
+  /** Top of the axis, e.g. a limit; 0 or missing rounds up the highest value. */
+  max?: number
+  nice?: (value: number) => number
+}
+
+/**
+ * The history of a node, or of one of its servers, as charts or a table. The range applies
+ * to all of them.
+ */
+export function UsageHistory({ nodeId, serverId, charts }: { nodeId: string; serverId?: string; charts: ChartSpec[] }) {
+  const [range, setRange] = useState<UsageRange>("day")
+  const [view, setView] = useState<"charts" | "table">("charts")
+  const { data, error, isPlaceholderData, dataUpdatedAt } = useQuery(historyQuery(nodeId, serverId, range))
+
+  return (
+    <Section
+      title="History"
+      description="Recorded every minute while it runs and kept for a week."
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Segmented
+            label="Time range"
+            value={range}
+            onChange={setRange}
+            options={Object.entries(ranges).map(([value, r]) => ({ value: value as UsageRange, label: r.label }))}
+          />
+          <Segmented
+            label="View"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "charts", label: "Charts" },
+              { value: "table", label: "Table" },
+            ]}
+          />
+        </div>
+      }
+    >
+      {error ? (
+        <ErrorCallout error={error} />
+      ) : !data ? (
+        <Skeleton className="h-64 rounded-xl" />
+      ) : (
+        // While another range loads, the current one stays, dimmed.
+        <div className={cn("transition-opacity", isPlaceholderData && "opacity-60")}>
+          {view === "table" ? (
+            <UsageTable points={data.points} charts={charts} range={range} />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {charts.map((chart) => (
+                <TimeChart
+                  key={chart.title}
+                  {...chart}
+                  points={data.points}
+                  step={data.step}
+                  span={ranges[range].span}
+                  end={dataUpdatedAt}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Section>
+  )
+}
+
+/** The values of the charts by step, newest first. */
+function UsageTable({ points, charts, range }: { points: UsagePoint[]; charts: ChartSpec[]; range: UsageRange }) {
+  const columns = charts.flatMap((c) =>
+    c.series.map((s) => ({ label: c.series.length > 1 ? `${c.title} ${s.label.toLowerCase()}` : c.title, value: s.value, format: c.format })),
+  )
+  const time = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, range === "day" ? { hour: "2-digit", minute: "2-digit" } : { dateStyle: "short", timeStyle: "short" })
+  return (
+    <div className="surface max-h-[28rem] overflow-auto rounded-xl">
+      <Table>
+        <TableHeader className="sticky top-0 bg-card">
+          <TableRow>
+            <TableHead>Time</TableHead>
+            {columns.map((c) => (
+              <TableHead key={c.label} className="text-right">
+                {c.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {points.toReversed().map((p) => (
+            <TableRow key={p.time}>
+              <TableCell className="text-muted-foreground">{time(p.time)}</TableCell>
+              {columns.map((c) => {
+                const v = c.value(p)
+                return (
+                  <TableCell key={c.label} className="text-right tabular-nums">
+                    {v === null ? "–" : c.format(v)}
+                  </TableCell>
+                )
+              })}
+            </TableRow>
+          ))}
+          {points.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={columns.length + 1} className="text-center text-muted-foreground">
+                Nothing recorded in this time
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}

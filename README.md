@@ -40,6 +40,16 @@ A server can be duplicated on its node: the copy gets all files, worlds and sett
 starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
 players stay connected. The copy doesn't take over the original's place in a network.
 
+A server can move to another node with its ID, files, settings and, if chosen, its backups; otherwise the backups are
+deleted with it. Port, storage location, memory and CPU limits are checked on the new node first. The server then
+stops, its data is copied through the master, and it starts on the new node if it ran before. Its backup jobs,
+policies, the scopes of groups and its usage history follow it, and its network is configured again, which restarts
+the proxy. The original is deleted only once the server is complete on the new node; if anything fails before, the
+copy goes away and the server runs where it was. While it moves, the panel shows the progress, refuses changes to the
+server and continues on the new node once it is done; scheduled tasks leave it out meanwhile. The new node needs free
+space for the archive of the data besides the data itself, until it is extracted. If the master stops during a move,
+the server stays on its old node, stopped.
+
 Each node has settings for its servers: the storage location preselected for new servers, a port range (new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
 the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
@@ -182,6 +192,22 @@ the network and configures each server through its agent; changes are applied to
   directory and port inside the container.
 - New Minecraft servers start with a whitelist: add players with `whitelist add <name>` in each server's console.
 
+## Usage
+
+The panel shows what nodes and servers use, now and during the last week.
+
+- **Now.** Every agent measures every 5 seconds: CPU and memory of the node and of each server (without the page
+  cache, like `docker stats`), the network traffic of each server, the size of its data (every 5 minutes), the players
+  online and the ticks per second of Paper and Purpur servers. Players come from the status request that the server
+  list in the game sends too, which game servers and Velocity answer; BungeeCord is left out, as it logs every such
+  request. The ticks per second come through the server's console port over a connection that stays open, because
+  servers log every new one. Server cards show CPU, memory and players; the **Usage** tab of a server and the node page
+  show the rest.
+- **History.** The master records the latest measurement of every agent each minute and keeps it for a week. Charts
+  show the last 24 hours (averages of 5 minutes) or 7 days (averages of 30 minutes), with the most players of each
+  step, and a table shows the same values. Gaps are times in which a server didn't run or its node couldn't be
+  reached. The history of a server moves and goes away with it.
+
 ## Logs
 
 The master keeps a log of what happens on it and on its agents, so that it's clear who did what and what went wrong.
@@ -323,6 +349,13 @@ Users get their permissions from groups; a user can be in several groups and has
   from formulas in entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the
   browser connects again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP
   address is that of the proxy.
+- **Moving servers.** Agents never connect to each other: the master relays the server's archive and backups between
+  them over its mutually authenticated connections. The new node checks the settings like those of a new server and
+  extracts the archive confined to the server's data directory, without symbolic links. Moving needs the permissions
+  to delete the server and read its files, and to create servers on the new node.
+- **Usage.** To ask a server for its ticks per second, the agent reads the console password from the server's
+  `server.properties` and connects to the server's console port inside Docker's network; the password never leaves
+  the node.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
@@ -342,7 +375,7 @@ Users get their permissions from groups; a user can be in several groups and has
 The code is organised by feature, not by layer.
 
 ```
-api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, plugins, backups, log) and generated code
+api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, plugins, backups, log, stats) and generated code
 cmd/mcsm-master/        master binary
 cmd/mcsm-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -369,6 +402,7 @@ internal/master/
   policy/               policies as scheduled tasks: restarts with warnings, stops, starts, console commands
   database/             SQLite and embedded migrations
   logs/                 log in the database, logging of API requests, collecting the agents' logs, REST API, CLI
+  usage/                history of what nodes and servers use, from the agents' measurements, REST API
   httpapi/              JSON helpers
 internal/agent/
   app/                  wiring, listeners, local CLI
@@ -383,11 +417,12 @@ internal/agent/
   plugin/               plugin and mod files of servers
   backup/               backups of servers: selection, archives, restoring
   logs/                 latest log entries in memory, log service, logging of every call
+  stats/                measures what the node and its servers use: CPU, memory, network, data, players, TPS
   runtime/              runtime interface; docker/ implements it
 internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, nodes, servers, files, properties, networks, plugins, templates, backups, policies,
-                        schedules (shared by backups and policies), settings, terminal, logs,
+                        schedules (shared by backups and policies), settings, terminal, logs, usage,
                         access (users, groups and the permission checks of the panel), updates
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```

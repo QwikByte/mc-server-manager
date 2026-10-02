@@ -58,6 +58,17 @@ func TestNetwork(t *testing.T) {
 		t.Fatal("the API exposes the forwarding secret")
 	}
 
+	// A server that moves to the proxy's node is reached there and still trusts the proxy.
+	api.do("POST", "/api/nodes/"+survival.NodeID+"/servers/"+survival.ServerID+"/move", map[string]any{"node": a1.node.ID}, http.StatusAccepted, nil)
+	if mv := waitForMove(t, api, survival.ServerID); mv.Phase != "done" || len(mv.Warnings) != 0 {
+		t.Fatalf("move = %+v", mv)
+	}
+	survivalBackend = runtime.NetworkBackend{Name: "survival", ServerID: survival.ServerID}
+	wantProxy(survivalBackend, lobbyBackend)
+	if got := a1.runtime.network(survival.ServerID).ForwardingSecret; got != secret {
+		t.Fatalf("moved survival secret = %q, want the network's", got)
+	}
+
 	// Removed servers stop trusting the proxy; the last one stays.
 	api.do("DELETE", "/api/networks/"+n.ID+"/backends/"+lobby.ServerID, nil, http.StatusOK, &n)
 	if a1.runtime.network(lobby.ServerID).ForwardingSecret != "" {
@@ -67,7 +78,7 @@ func TestNetwork(t *testing.T) {
 	api.do("DELETE", "/api/networks/"+n.ID+"/backends/"+survival.ServerID, nil, http.StatusConflict, nil)
 
 	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusNoContent, nil)
-	if a2.runtime.network(survival.ServerID).ForwardingSecret != "" {
+	if a1.runtime.network(survival.ServerID).ForwardingSecret != "" {
 		t.Fatal("survival still trusts the proxy of the deleted network")
 	}
 	wantProxy()

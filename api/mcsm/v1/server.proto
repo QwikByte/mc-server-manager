@@ -29,6 +29,10 @@ service ServerService {
   // settings of another one. A running game server saves its worlds first. The copy is
   // stopped and standalone: it doesn't take over the network role of the original.
   rpc DuplicateServer(DuplicateServerRequest) returns (DuplicateServerResponse);
+  // ImportServer creates a stopped server with the ID and settings of a server of another
+  // node, e.g. one that moves here. The header describes it, the data that follows is its
+  // data directory as a ZIP archive, like ArchiveDirectory sends it.
+  rpc ImportServer(stream ImportServerRequest) returns (ImportServerResponse);
 }
 
 enum ServerType {
@@ -205,5 +209,16 @@ message DuplicateServerRequest {
 }
 
 message DuplicateServerResponse {
+  Server server = 1;
+}
+
+message ImportServerRequest {
+  oneof content {
+    Server header = 1;
+    bytes data = 2;
+  }
+}
+
+message ImportServerResponse {
   Server server = 1;
 }

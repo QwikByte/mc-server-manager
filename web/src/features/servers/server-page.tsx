@@ -1,5 +1,6 @@
 import {
   ArchiveIcon,
+  ChartLineIcon,
   ClockCounterClockwiseIcon,
   FolderIcon,
   GearIcon,
@@ -25,6 +26,7 @@ import { nodeQuery } from "@/features/nodes/api"
 import { formatMegabytes } from "@/lib/format"
 import { useServer } from "./api"
 import { Console } from "./console"
+import { MoveStatus } from "./move-status"
 import { ServerActions } from "./server-actions"
 import { ServerStateBadge } from "./server-state"
 import { displayVersion, serverLook, serverType } from "./server-types"
@@ -37,6 +39,7 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
  */
 const tabs = [
   { to: "/nodes/$nodeId/servers/$serverId", label: () => "Console", icon: TerminalIcon, exact: true, permission: "console.view" },
+  { to: "/nodes/$nodeId/servers/$serverId/usage", label: () => "Usage", icon: ChartLineIcon, exact: false, permission: "servers.view" },
   { to: "/nodes/$nodeId/servers/$serverId/files", label: () => "Files", icon: FolderIcon, exact: false, permission: "files.read" },
   {
     to: "/nodes/$nodeId/servers/$serverId/properties",
@@ -85,6 +88,7 @@ export function ServerPage() {
       <BackLink to="/nodes/$nodeId" params={{ nodeId }}>
         {node?.name ?? "Node"}
       </BackLink>
+      <MoveStatus nodeId={nodeId} serverId={serverId} />
       {isPending ? (
         <Skeleton className="h-96 rounded-xl" />
       ) : error ? (

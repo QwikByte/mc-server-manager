@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -118,16 +119,24 @@ func (s store) find(serverID, id string) (backup, error) {
 	return backups[i], nil
 }
 
-// create archives paths of a server's data into a new backup in a location. The backup
-// only shows up once its archive is complete.
+// create archives paths of a server's data into a new backup in a location.
 func (s store) create(ctx context.Context, data *datadir.Dir, serverID, location string, d details) (backup, error) {
+	return s.add(serverID, location, newID(d.Created), d, func(w io.Writer) error { return datadir.WriteZip(ctx, w, data.Root, d.Paths...) })
+}
+
+// add adds a backup to a location, whose archive write writes. It only shows up once its
+// archive is complete, and never replaces another one.
+func (s store) add(serverID, location, id string, d details, write func(io.Writer) error) (backup, error) {
 	root, err := s.storage.BackupPath(location)
 	if err != nil {
 		return backup{}, err
 	}
-	b := backup{details: d, ID: newID(d.Created), Location: location, dir: filepath.Join(root, serverID)}
+	b := backup{details: d, ID: id, Location: location, dir: filepath.Join(root, serverID)}
 	if err := os.MkdirAll(b.dir, 0o700); err != nil {
 		return b, err
+	}
+	if _, err := os.Lstat(b.info()); err == nil {
+		return b, fs.ErrExist
 	}
 	tmp := datadir.TempName(b.dir)
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a new file in the backups folder
@@ -136,7 +145,7 @@ func (s store) create(ctx context.Context, data *datadir.Dir, serverID, location
 	}
 	defer os.Remove(tmp) // fails once the archive is in place
 	info, err := json.Marshal(b.details)
-	if err = errors.Join(err, datadir.WriteZip(ctx, f, data.Root, d.Paths...), f.Close()); err != nil {
+	if err = errors.Join(err, write(f), f.Close()); err != nil {
 		return b, err
 	}
 	if err := os.WriteFile(b.info(), info, 0o600); err != nil {

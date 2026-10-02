@@ -1,0 +1,300 @@
+// Package stats measures what the node and its servers use, every few seconds, for the
+// panel to show and the master to keep a history of.
+package stats
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"io/fs"
+	"log/slog"
+	"net"
+	"regexp"
+	"slices"
+	"strconv"
+	"sync"
+	"time"
+
+	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
+	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+)
+
+const (
+	interval     = 5 * time.Second
+	diskInterval = 5 * time.Minute
+	probeTimeout = 2 * time.Second
+	// rconRetry is how long the agent waits before it connects to a console again that
+	// failed, as the server logs every attempt.
+	rconRetry = time.Minute
+)
+
+var (
+	formatting = regexp.MustCompile(`§.`)
+	tpsPattern = regexp.MustCompile(`TPS from last 1m, 5m, 15m: \*?([0-9.]+)`)
+)
+
+// Service measures the usage every few seconds and serves the latest measurement.
+type Service struct {
+	mcsmv1.UnimplementedStatsServiceServer
+	rt runtime.Runtime
+
+	measuring sync.Mutex // one measurement at a time; guards host and servers
+	host      cpuTimes   // of the measurement before
+	servers   map[string]*serverState
+
+	mu     sync.Mutex
+	latest *mcsmv1.GetStatsResponse
+	disks  map[string]uint64 // size of the data of each server
+}
+
+// serverState is what the service keeps about a server between measurements.
+type serverState struct {
+	usage     runtime.Usage
+	at        time.Time
+	rcon      *rcon
+	rconHost  string
+	rconRetry time.Time
+}
+
+func NewService(rt runtime.Runtime) *Service {
+	return &Service{rt: rt, servers: map[string]*serverState{}, disks: map[string]uint64{}}
+}
+
+// GetStats returns the latest measurement, or measures now if there is none of the last
+// few seconds, e.g. while the agent starts.
+func (s *Service) GetStats(ctx context.Context, _ *mcsmv1.GetStatsRequest) (*mcsmv1.GetStatsResponse, error) {
+	if latest, fresh := s.get(); fresh {
+		return latest, nil
+	}
+	s.measuring.Lock()
+	defer s.measuring.Unlock()
+	if _, fresh := s.get(); !fresh { // unless a concurrent call measured meanwhile
+		s.measureLocked(ctx)
+	}
+	latest, _ := s.get()
+	return latest, nil
+}
+
+// get returns the latest measurement and whether it is of the last few seconds.
+func (s *Service) get() (*mcsmv1.GetStatsResponse, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.latest, s.latest != nil && time.Since(time.Unix(s.latest.GetTimeUnix(), 0)) <= 2*interval
+}
+
+// Run measures the usage every few seconds, and the size of the servers' data every few
+// minutes, until ctx ends.
+func (s *Service) Run(ctx context.Context) {
+	go every(ctx, diskInterval, s.measureDisks)
+	every(ctx, interval, s.measure)
+	s.measuring.Lock()
+	defer s.measuring.Unlock()
+	for _, state := range s.servers {
+		state.reset()
+	}
+}
+
+func every(ctx context.Context, d time.Duration, fn func(context.Context)) {
+	t := time.NewTicker(d)
+	defer t.Stop()
+	for {
+		fn(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+func (s *Service) measure(ctx context.Context) {
+	s.measuring.Lock()
+	defer s.measuring.Unlock()
+	s.measureLocked(ctx)
+}
+
+func (s *Service) measureLocked(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, interval)
+	defer cancel()
+	now := time.Now()
+	res := &mcsmv1.GetStatsResponse{TimeUnix: now.Unix(), Node: s.measureHost()}
+	list, err := s.rt.List(ctx)
+	if err != nil {
+		slog.Debug("Can't list the servers to measure them", "err", err)
+	}
+	// In parallel, as the probes wait for the servers; each touches only its own state.
+	res.Servers = make([]*mcsmv1.ServerStats, len(list))
+	var wg sync.WaitGroup
+	for i, srv := range list {
+		state := s.servers[srv.ID]
+		if state == nil {
+			state = &serverState{}
+			s.servers[srv.ID] = state
+		}
+		wg.Go(func() { res.Servers[i] = state.measure(ctx, s.rt, srv, now) })
+	}
+	wg.Wait()
+	for id, state := range s.servers {
+		if err == nil && !slices.ContainsFunc(list, func(srv runtime.Server) bool { return srv.ID == id }) {
+			state.reset()
+			delete(s.servers, id)
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, srv := range res.Servers {
+		srv.DiskBytes = s.disks[srv.Id]
+	}
+	s.latest = res
+}
+
+func (s *Service) measureHost() *mcsmv1.NodeStats {
+	node := &mcsmv1.NodeStats{}
+	if t, err := readCPU(); err == nil {
+		if prev := s.host; prev.total > 0 && t.total > prev.total && t.busy >= prev.busy {
+			node.CpuMillis = uint32((t.busy - prev.busy) * uint64(t.cores) * 1000 / (t.total - prev.total)) //nolint:gosec // at most the cores
+		}
+		node.CpuCount, s.host = t.cores, t
+	}
+	node.MemoryUsedBytes, node.MemoryTotalBytes, _ = readMemory()
+	return node
+}
+
+func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runtime.Server, now time.Time) *mcsmv1.ServerStats {
+	stats := &mcsmv1.ServerStats{Id: srv.ID}
+	if srv.State == mcsmv1.ServerState_SERVER_STATE_STOPPED {
+		st.reset()
+		return stats
+	}
+	u, err := rt.Usage(ctx, srv.ID)
+	if err != nil {
+		st.reset()
+		return stats
+	}
+	// Counters start again when the server restarts.
+	prev, elapsed := st.usage, now.Sub(st.at)
+	if !st.at.IsZero() && elapsed > 0 && u.CPUTime >= prev.CPUTime && u.NetRxBytes >= prev.NetRxBytes && u.NetTxBytes >= prev.NetTxBytes {
+		stats.CpuMillis = uint32((u.CPUTime - prev.CPUTime) * 1000 / elapsed) //nolint:gosec // at most the cores
+		stats.NetworkReceivedBytesPerSecond = perSecond(u.NetRxBytes-prev.NetRxBytes, elapsed)
+		stats.NetworkSentBytesPerSecond = perSecond(u.NetTxBytes-prev.NetTxBytes, elapsed)
+	}
+	st.usage, st.at = u, now
+	stats.Running, stats.MemoryBytes, stats.MemoryLimitBytes = true, u.MemoryBytes, u.MemoryLimit
+	if srv.State != mcsmv1.ServerState_SERVER_STATE_RUNNING {
+		return stats // starting servers don't answer yet
+	}
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	if srv.Type != mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD { // which logs every status request
+		stats.Players, _ = ping(ctx, srv.Port)
+	}
+	if srv.Type == mcsmv1.ServerType_SERVER_TYPE_PAPER || srv.Type == mcsmv1.ServerType_SERVER_TYPE_PURPUR {
+		stats.Tps = st.tps(ctx, rt, srv.ID, u.Host, now)
+	}
+	return stats
+}
+
+func perSecond(bytes uint64, d time.Duration) uint64 { return uint64(float64(bytes) / d.Seconds()) }
+
+// tps asks a Paper or Purpur server for its ticks per second over the last minute.
+func (st *serverState) tps(ctx context.Context, rt runtime.Runtime, id, host string, now time.Time) float64 {
+	if st.rconHost != host {
+		st.closeRCON()
+	}
+	if st.rcon == nil && now.After(st.rconRetry) {
+		r, err := openRCON(ctx, rt, id, host)
+		if err != nil {
+			slog.Debug("Can't connect to the console of a server", "server", id, "err", err)
+			st.rconRetry = now.Add(rconRetry)
+			return 0
+		}
+		st.rcon, st.rconHost = r, host
+	}
+	if st.rcon == nil {
+		return 0
+	}
+	out, err := st.rcon.call(ctx, rconCommand, "tps")
+	if err != nil {
+		st.closeRCON()
+		return 0
+	}
+	m := tpsPattern.FindStringSubmatch(plain(out))
+	if m == nil {
+		return 0
+	}
+	tps, _ := strconv.ParseFloat(m[1], 64)
+	return min(tps, 20)
+}
+
+// openRCON connects to the console of a server with the port and password in its
+// server.properties, which the server image chooses.
+func openRCON(ctx context.Context, rt runtime.Runtime, id, host string) (*rcon, error) {
+	if host == "" {
+		return nil, errors.New("the server's ports can't be reached")
+	}
+	dir, err := rt.Data(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	props, err := properties.Read(dir)
+	if err = errors.Join(err, dir.Close()); err != nil {
+		return nil, err
+	}
+	if props["enable-rcon"] != "true" || props["rcon.password"] == "" {
+		return nil, errors.New("the console port is off")
+	}
+	return dialRCON(ctx, net.JoinHostPort(host, cmp.Or(props["rcon.port"], "25575")), props["rcon.password"])
+}
+
+// reset forgets a server that stopped.
+func (st *serverState) reset() {
+	st.closeRCON()
+	st.at = time.Time{}
+}
+
+func (st *serverState) closeRCON() {
+	if st.rcon != nil {
+		_ = st.rcon.Close()
+		st.rcon = nil
+	}
+}
+
+// measureDisks measures the size of the data of all servers, which takes a while for
+// big worlds.
+func (s *Service) measureDisks(ctx context.Context) {
+	list, err := s.rt.List(ctx)
+	if err != nil {
+		return
+	}
+	sizes := make(map[string]uint64, len(list))
+	for _, srv := range list {
+		if size, err := s.diskSize(ctx, srv.ID); err == nil {
+			sizes[srv.ID] = size
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.disks = sizes
+}
+
+func (s *Service) diskSize(ctx context.Context, id string) (uint64, error) {
+	dir, err := s.rt.Data(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	defer dir.Close()
+	var size uint64
+	err = fs.WalkDir(dir.FS(), ".", func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				size += uint64(info.Size()) //nolint:gosec // sizes aren't negative
+			}
+		}
+		return ctx.Err() // folders that can't be read are left out
+	})
+	return size, err
+}
+
+// plain removes the formatting codes of Minecraft from text.
+func plain(text string) string { return formatting.ReplaceAllString(text, "") }
