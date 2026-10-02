@@ -2,10 +2,12 @@ package e2e
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +74,36 @@ func TestMoveServer(t *testing.T) {
 	}
 	if state(t, a2, lobby.ServerID) != mcsmv1.ServerState_SERVER_STATE_RUNNING || slices.ContainsFunc(must(a1.runtime.List(t.Context())), isServer(lobby.ServerID)) {
 		t.Fatal("the failed move left the server elsewhere")
+	}
+}
+
+// While a server moves, the terminal refuses commands that change it, like the API.
+func TestTerminalWhileMoving(t *testing.T) {
+	m := startMaster(t)
+	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
+	lobby := m.createServer(t, a1, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	panel := m.panel(t)
+	api := apiClient{t: t, url: panel.URL}
+	hold := make(chan struct{})
+	a2.runtime.mu.Lock()
+	a2.runtime.hold = hold
+	a2.runtime.mu.Unlock()
+
+	api.do("POST", "/api/nodes/"+a1.node.ID+"/servers/"+lobby.ServerID+"/move", map[string]any{"node": a2.node.ID}, http.StatusAccepted, nil)
+	for _, command := range []string{"server start %s", "server command %s say hi", "backup create %s", "backup restore %s b1"} {
+		if _, err := runTerminal(t, http.DefaultClient, panel.URL, a1.node.ID, fmt.Sprintf(command, lobby.ServerID)); !strings.Contains(err, "moving to another node") {
+			t.Errorf("%s while moving: error %q", command, err)
+		}
+	}
+	if _, err := runTerminal(t, http.DefaultClient, panel.URL, a1.node.ID, "backup list "+lobby.ServerID); err != "" {
+		t.Errorf("backup list while moving: %s", err)
+	}
+	close(hold)
+	if mv := waitForMove(t, api, lobby.ServerID); mv.Phase != "done" {
+		t.Fatalf("move = %+v", mv)
+	}
+	if _, err := runTerminal(t, http.DefaultClient, panel.URL, a2.node.ID, "server start "+lobby.ServerID); err != "" {
+		t.Errorf("start after the move: %s", err)
 	}
 }
 

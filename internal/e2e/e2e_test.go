@@ -344,6 +344,9 @@ type fakeRuntime struct {
 	commands []string
 	// createErr makes creating servers fail, e.g. on a node that is full.
 	createErr error
+	// hold, if set, holds up creating servers until it is closed, e.g. to act while a server
+	// moves to this node.
+	hold chan struct{}
 }
 
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
@@ -356,7 +359,17 @@ func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) {
 	return append([]runtime.Server(nil), f.servers...), nil
 }
 
-func (f *fakeRuntime) Create(_ context.Context, spec runtime.Spec) error {
+func (f *fakeRuntime) Create(ctx context.Context, spec runtime.Spec) error {
+	f.mu.Lock()
+	hold := f.hold
+	f.mu.Unlock()
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.createErr != nil {

@@ -179,7 +179,7 @@ func API(s Services) *http.ServeMux {
 	access.NewHandler(s.Access, s.Users).Register(m)
 	settings.NewHandler(s.Settings).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
-	terminal.NewHandler(s.Nodes, s.Settings, s.Logs).Register(m)
+	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
 	server.NewHandler(s.Nodes, s.Networks, s.Moves, s.Tasks, s.Access, s.Usage).Register(m)
 	network.NewHandler(s.Networks).Register(m)
