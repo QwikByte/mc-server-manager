@@ -10,7 +10,7 @@
 set -Eeuo pipefail
 
 REPO_URL=https://github.com/QwikByte/mc-server-manager.git
-BRANCH=claude/nifty-ritchie-dxkhyr
+BRANCH=main
 GO_MINOR=27
 NODE_MAJOR=22
 BASE=http://localhost:8080

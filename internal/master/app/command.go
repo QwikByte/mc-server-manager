@@ -9,8 +9,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -21,6 +25,9 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/logs"
+	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/mc-server-manager/internal/master/settings"
+	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
 type config struct {
@@ -75,15 +82,70 @@ func Command() *cobra.Command {
 		cmd.SetContext(access.WithGrants(cmd.Context(), access.Admin()))
 	}
 
-	root.AddCommand(serve, user, logsCmd)
+	var enrollAddr string
+	addNodeCmd := &cobra.Command{
+		Use:   "add <name> <agent-address>",
+		Short: "Add a node and print the join token its agent enrolls with, e.g. for scripts",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return addNode(cmd.Context(), cfg, args[0], args[1], enrollAddr)
+		},
+	}
+	addNodeCmd.Flags().StringVar(&enrollAddr, "public-enroll-addr", "", "host:port the agent reaches the enrollment endpoint at; the panel's settings can replace it")
+	nodeCmd := &cobra.Command{Use: "node", Short: "Manage the nodes"}
+	nodeCmd.AddCommand(addNodeCmd)
+
+	root.AddCommand(serve, user, nodeCmd, logsCmd)
 	return root
 }
 
+// openDB opens the database in dataDir. Only the owner of dataDir may: files another user,
+// such as root, creates in it would lock the master out.
 func openDB(dataDir string) (*sql.DB, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, err
 	}
+	info, err := os.Stat(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		if owner := strconv.FormatUint(uint64(st.Uid), 10); owner != strconv.Itoa(os.Getuid()) {
+			if u, err := user.LookupId(owner); err == nil {
+				owner = u.Username
+			}
+			return nil, fmt.Errorf("%s belongs to another user, run this as %s, e.g. with: sudo -u %s mcsm-master …", dataDir, owner, owner)
+		}
+	}
 	return database.Open(filepath.Join(dataDir, "master.db"))
+}
+
+// addNode adds a node and prints its join token, alone on stdout for scripts.
+func addNode(ctx context.Context, cfg config, name, address, enrollAddr string) error {
+	db, err := openDB(cfg.dataDir)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	ca, err := pki.LoadOrCreateCA(filepath.Join(cfg.dataDir, "pki"))
+	if err != nil {
+		return err
+	}
+	conf, err := settings.Load(ctx, db, settings.Master{EnrollAddr: enrollAddr}, nil)
+	if err != nil {
+		return err
+	}
+	if conf.EnrollAddr() == "" {
+		return errors.New("set --public-enroll-addr or the enrollment address in the panel's settings")
+	}
+	n, token, err := node.NewService(db, ca, nil, conf).Create(ctx, name, address)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Added node %s. Its agent enrolls once until %s with: mcsm-agent enroll <join-token>\n",
+		n.Name, token.ExpiresAt.Local().Format(time.DateTime))
+	fmt.Println(token)
+	return nil
 }
 
 func addUser(ctx context.Context, cfg config, username string) error {

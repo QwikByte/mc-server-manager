@@ -3,6 +3,7 @@ package e2e
 import (
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,6 +54,7 @@ func TestMasterSettings(t *testing.T) {
 		} `json:"node"`
 		JoinToken          string    `json:"joinToken"`
 		JoinTokenExpiresAt time.Time `json:"joinTokenExpiresAt"`
+		InstallCommand     string    `json:"installCommand"`
 	}
 	api.do("POST", "/api/nodes", map[string]string{"name": "node-1", "address": "127.0.0.1:7443"}, http.StatusCreated, &created)
 	token, err := enrollment.ParseToken(created.JoinToken)
@@ -62,6 +64,9 @@ func TestMasterSettings(t *testing.T) {
 	}
 	if left := time.Until(created.JoinTokenExpiresAt); left < 29*time.Minute || left > 30*time.Minute {
 		t.Fatalf("join token expires in %v, want 30 minutes", left)
+	}
+	if !strings.HasSuffix(created.InstallCommand, "/install.sh | sudo bash -s -- agent --join "+created.JoinToken) {
+		t.Fatalf("install command = %q", created.InstallCommand)
 	}
 
 	// The settings are kept, and an empty address means the one from the command line.

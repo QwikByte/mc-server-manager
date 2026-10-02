@@ -120,9 +120,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logging.Note(r.Context(), slog.String(logging.KeyNode, n.ID), slog.String(logging.KeyNodeName, n.Name))
-	httpapi.WriteJSON(w, http.StatusCreated, map[string]any{
-		"node": view{Node: n, Status: "pending"}, "joinToken": token.String(), "joinTokenExpiresAt": token.ExpiresAt,
-	})
+	body := tokenJSON(token)
+	body["node"] = view{Node: n, Status: "pending"}
+	httpapi.WriteJSON(w, http.StatusCreated, body)
+}
+
+func tokenJSON(t JoinToken) map[string]any {
+	return map[string]any{"joinToken": t.String(), "joinTokenExpiresAt": t.ExpiresAt, "installCommand": t.InstallCommand()}
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +153,7 @@ func (h *Handler) joinToken(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"joinToken": token.String(), "joinTokenExpiresAt": token.ExpiresAt})
+	httpapi.WriteJSON(w, http.StatusOK, tokenJSON(token))
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {

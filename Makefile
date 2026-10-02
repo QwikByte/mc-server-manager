@@ -2,8 +2,9 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X github.com/QwikByte/mc-server-manager/internal/buildinfo.Version=$(VERSION)
 GOBUILD := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 BUF     := go run github.com/bufbuild/buf/cmd/buf@v1.73.0
+GORELEASER := go run github.com/goreleaser/goreleaser/v2@v2.18.2
 
-.PHONY: build web master agent generate lint test dev-master dev-web
+.PHONY: build web master agent generate lint test packages dev-master dev-web
 
 ## build: build the panel and both binaries into bin/
 build: web master agent
@@ -28,6 +29,10 @@ lint:
 
 test:
 	go test -race ./...
+
+## packages: build the packages and archives of a release into dist/, without publishing
+packages:
+	$(GORELEASER) release --snapshot --clean
 
 ## dev-master: run the master with a local data directory (API on :8080, enrollment on :9443)
 dev-master:

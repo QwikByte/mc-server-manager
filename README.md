@@ -44,6 +44,71 @@ Each node has settings for its servers: the storage location preselected for new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
 the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
 
+## Installation
+
+Releases contain packages for Debian, Ubuntu and their derivatives (`.deb`), Fedora, RHEL, Rocky Linux, AlmaLinux and
+openSUSE (`.rpm`) and Arch Linux, each for x86_64 and arm64. Only Linux with systemd is supported. The installer picks
+the package, checks its checksum and sets everything up. Running it again updates, and `--version vX.Y.Z` installs a
+certain release.
+
+**Master**, the panel:
+
+```sh
+curl -fsSL https://github.com/QwikByte/mc-server-manager/releases/latest/download/install.sh | sudo bash -s -- master
+```
+
+It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), and for the password
+of the first administrator, `admin` unless `--admin` names another (without a terminal, it generates one and shows it).
+Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
+`cdn.modrinth.com`. The panel listens on `127.0.0.1:8080`; serve it over HTTPS with a reverse proxy, e.g. with
+[Caddy](https://caddyserver.com) and this `Caddyfile`, which also gets the certificate:
+
+```
+panel.example.com {
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+**Nodes.** Add a node in the panel under **Nodes**. It shows a command that installs the agent in the master's version,
+offers to install Docker if it's missing (`--install-docker` doesn't ask), connects the agent with a join token and
+starts it:
+
+```sh
+curl -fsSL https://github.com/QwikByte/mc-server-manager/releases/download/<version>/install.sh | sudo bash -s -- agent --join <join-token>
+```
+
+Allow port 7443 only from the master's IP address.
+
+**Everything on one machine.** `… | sudo bash -s -- all` installs master and agent, registers the machine as node and
+connects its agent, which then only accepts connections from the machine itself.
+
+**Updates.** `… | sudo bash -s -- update` updates what is installed to the latest release. Running services restart;
+Minecraft servers keep running. Update the master first, then the nodes.
+
+| Where                                         | What                                                                                           |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/etc/mcsm/master.env`, `/etc/mcsm/agent.env` | Options of the services, e.g. listen addresses or a log file; `systemctl restart` applies them |
+| `/var/lib/mcsm-master`, `/var/lib/mcsm-agent` | Database and CA of the master; credentials, server data and backups of the agent               |
+| `journalctl -u mcsm-master`, `-u mcsm-agent`  | What the services log; `--log-format json` in the options suits log collectors                 |
+
+**Commands on the master's host** run as the master's user `mcsm`: `sudo -u mcsm mcsm-master logs` shows the log,
+`… user add <name>` creates an administrator, e.g. after losing access, and
+`… node add <name> <agent-address> --public-enroll-addr <host:port>` adds a node and prints its join token for scripts.
+
+**Commands on a node:** `sudo mcsm-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the
+agent's own log. `backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is
+unreachable too. `storage add ssd /mnt/ssd/mcsm` allows another directory for server data, e.g. on a faster disk; new
+servers can then be created there from the panel, and backup jobs can keep their backups there.
+
+**Removing.** `apt remove`, `dnf remove` or `pacman -R` with `mcsm-master` or `mcsm-agent` stops and removes a program
+but keeps its data. Delete `/var/lib/mcsm-master`, `/var/lib/mcsm-agent` and `/etc/mcsm` to remove that too. The
+Minecraft servers of a node keep running in Docker; delete them in the panel before.
+
+**By hand.** Each release also has `.tar.gz` archives with the static binary, its systemd unit and its options, for
+other distributions: the unit expects the binary in `/usr/bin`, the options in `/etc/mcsm` and, for the master, a system
+user `mcsm`. `checksums.txt` lists the SHA-256 checksums of all files, and
+`gh attestation verify <file> --repo QwikByte/mc-server-manager` proves that a file was built by the release workflow.
+
 ## Templates
 
 A template preconfigures new servers: software, Minecraft version, memory, the settings above, `server.properties`
@@ -241,6 +306,11 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
+- **Installation.** The installer only runs once it is downloaded completely, downloads only over HTTPS from the
+  releases and installs a package only if its SHA-256 checksum matches the release's `checksums.txt`. Release files
+  carry build provenance attestations, signed through GitHub, that tie them to the release workflow and the tagged
+  commit. The master runs as its own system user with a hardened systemd unit, and refuses a data directory of another
+  user, so a command run as root can't leave files there that lock the master out.
 
 ## Repository layout
 
@@ -293,7 +363,7 @@ web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, nodes, servers, files, properties, networks, plugins, templates, backups, policies,
                         schedules (shared by backups and policies), settings, terminal, logs,
                         access (users, groups and the permission checks of the panel)
-deploy/systemd/         service units
+packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 
 ## Development
@@ -309,48 +379,29 @@ make dev-master                                                    # API on :808
 make dev-web                                                       # panel on http://localhost:5173
 ```
 
-In the panel, add a node with the agent address `127.0.0.1:7443` and run the commands it shows:
+In the panel, add a node with the agent address `127.0.0.1:7443` and enroll the agent with its join token, which the
+panel shows under "Installed the agent another way?":
 
 ```sh
 go run ./cmd/mcsm-agent --data-dir .data/agent enroll <join-token>
 go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 ```
 
-| Command         | Purpose                                                  |
-| --------------- | -------------------------------------------------------- |
-| `make build`    | Builds the panel and both binaries into `bin/`           |
-| `make test`     | Runs all Go tests, including the end-to-end test         |
-| `make lint`     | golangci-lint, oxlint and the TypeScript type check      |
-| `make generate` | Regenerates the gRPC code after changing `api/**/*.proto` |
+| Command         | Purpose                                                                        |
+| --------------- | ------------------------------------------------------------------------------ |
+| `make build`    | Builds the panel and both binaries into `bin/`                                 |
+| `make test`     | Runs all Go tests, including the end-to-end test                               |
+| `make lint`     | golangci-lint, oxlint and the TypeScript type check                            |
+| `make generate` | Regenerates the gRPC code after changing `api/**/*.proto`                      |
+| `make packages` | Builds the packages and archives of a release into `dist/`, without publishing |
 
-## Deployment
+**Releasing.** Pushing a tag `vX.Y.Z`, or `vX.Y.Z-rc.N` for a pre-release, runs the release workflow: it tests, builds
+the panel and both programs with [GoReleaser](https://goreleaser.com) and publishes a GitHub release with the packages,
+archives, checksums, attestations and the installer, which installs the version it belongs to.
 
-`make build` produces two static binaries; the master contains the panel. Example systemd units are in
-[`deploy/systemd`](deploy/systemd).
-
-**Master**
-
-1. `useradd --system --no-create-home mcsm`, install `bin/mcsm-master` to `/usr/local/bin` and the unit file.
-   Set `--public-enroll-addr` to the host and port agents use to reach the master (or later in the panel's settings).
-2. `sudo -u mcsm mcsm-master --data-dir /var/lib/mcsm-master user add admin`
-3. Put a TLS reverse proxy in front of `127.0.0.1:8080` and open port 9443 for the agents.
-   For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and `cdn.modrinth.com`.
-4. systemd's journal keeps what the master logs to stderr; add `--log-format json` for log collectors. For a log
-   file, add `LogsDirectory=mcsm-master` to the unit and `--log-file /var/log/mcsm-master/master.log` to the command.
-   `sudo -u mcsm mcsm-master --data-dir /var/lib/mcsm-master logs` reads the log on the host.
-
-**Agent** (on every node)
-
-1. Install Docker, `bin/mcsm-agent` and the unit file.
-2. Add the node in the panel and run `sudo mcsm-agent enroll <join-token>`.
-3. Start the service and allow port 7443 only from the master's IP.
-4. Check the node locally with `sudo mcsm-agent status`; `sudo mcsm-agent server logs <id>` follows a console and
-   `sudo mcsm-agent logs -f` the agent's own log.
-5. Optionally allow more directories for server data, e.g. on a faster disk:
-   `sudo mcsm-agent storage add ssd /mnt/ssd/mcsm`. New servers can then be created there from the panel, and
-   backup jobs can keep their backups there, e.g. on another disk than the servers.
-6. `sudo mcsm-agent backup list <id>` lists the backups of a server, `backup create <id>` backs it up and
-   `backup restore <id> <backup-id>` restores it, also while the master is unreachable.
+```sh
+git tag v1.2.0 && git push origin v1.2.0
+```
 
 ## Roadmap
 

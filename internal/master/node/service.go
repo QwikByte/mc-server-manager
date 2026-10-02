@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
@@ -106,6 +108,12 @@ func NewService(db *sql.DB, ca *pki.CA, cert *pki.Holder, config Config) *Servic
 type JoinToken struct {
 	enrollment.Token
 	ExpiresAt time.Time
+}
+
+// InstallCommand installs the agent in the master's version on a node, or updates it, and
+// enrolls it with the token.
+func (t JoinToken) InstallCommand() string {
+	return fmt.Sprintf("curl -fsSL %s | sudo bash -s -- agent --join %s", buildinfo.InstallScript(), t)
 }
 
 // Create registers a node with the default limits and returns the join token its agent enrolls with.
