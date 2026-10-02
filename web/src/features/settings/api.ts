@@ -12,6 +12,8 @@ export interface MasterSettings {
   nodeDefaults: NodeLimits
   /** How long log entries are kept. */
   logDays: number
+  /** Whether the master looks for new releases, which administrators can install. */
+  checkUpdates: boolean
 }
 
 /** The running master; apart from the certificate, it only changes with a restart. */
