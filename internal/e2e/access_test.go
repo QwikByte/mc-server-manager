@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"slices"
 	"strconv"
@@ -24,20 +23,13 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	svc := m.services(t)
 	srv := httptest.NewTLSServer(masterapp.Handler(svc)) // HTTPS for the secure session cookie
 	t.Cleanup(srv.Close)
-	browser := func() apiClient {
-		client := *srv.Client()
-		jar, err := cookiejar.New(nil)
-		check(t, err)
-		client.Jar = jar
-		return apiClient{t: t, url: srv.URL, client: &client}
-	}
 	path := func(s network.Ref) string { return "/api/nodes/" + s.NodeID + "/servers/" + s.ServerID }
 
 	admin, err := svc.Users.CreateUser(t.Context(), "admin", "the-admins-password")
 	check(t, err)
 	check(t, svc.Access.MakeAdmin(t.Context(), admin.ID))
 	adminPath := "/api/users/" + strconv.FormatInt(admin.ID, 10)
-	root := browser()
+	root := browser(t, srv)
 	root.do("GET", "/api/servers", nil, http.StatusUnauthorized, nil)
 	root.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "the-admins-password"}, http.StatusOK, nil)
 
@@ -58,7 +50,7 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	}
 	root.do("POST", "/api/users", map[string]any{"username": "mod", "groups": []string{mods.ID}}, http.StatusCreated, &invited)
 	modPath := "/api/users/" + strconv.FormatInt(invited.User.ID, 10)
-	mod := browser()
+	mod := browser(t, srv)
 	var who auth.User
 	mod.do("POST", "/api/auth/setup/check", map[string]string{"token": invited.SetupLink.Token}, http.StatusOK, &who)
 	if who.Username != "mod" {

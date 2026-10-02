@@ -12,6 +12,7 @@ import (
 	"iter"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -262,6 +263,16 @@ func (m *master) createServer(t *testing.T, a agent, name string, typ mcsmv1.Ser
 	})
 	check(t, err)
 	return network.Ref{NodeID: a.node.ID, ServerID: res.GetServer().GetId()}
+}
+
+// browser is a client of a panel served over HTTPS, for its secure session cookie, that
+// keeps its own cookies like the browser of a user.
+func browser(t *testing.T, srv *httptest.Server) apiClient {
+	client := *srv.Client()
+	jar, err := cookiejar.New(nil)
+	check(t, err)
+	client.Jar = jar
+	return apiClient{t: t, url: srv.URL, client: &client}
 }
 
 type apiClient struct {

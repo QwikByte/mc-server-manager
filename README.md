@@ -189,8 +189,8 @@ The master keeps a log of what happens on it and on its agents, so that it's cle
 - **Actions.** Every request of the panel that changes something, and every download of a file, folder, backup or
   export, is logged with the user, the IP address, the node and server it concerned (with their names at that time),
   the outcome and how long it took. Denied requests are logged as warnings, failed ones as warnings or, if the master
-  or an agent failed, errors. Sign-ins, failed sign-ins, password changes, sign-outs, enrollments, certificate renewals
-  and what backup jobs and policies did on each server are logged too.
+  or an agent failed, errors. Sign-ins, failed sign-ins, password changes, changes of two-factor authentication,
+  sign-outs, enrollments, certificate renewals and what backup jobs and policies did on each server are logged too.
 - **Agents.** An agent logs every call it receives with its origin (the master or its local CLI) and keeps its latest
   entries in memory. The master collects them over the mutually authenticated connection and continues where it left
   off, also after a restart of either. Calls that only read are logged at the debug level, downloads at the info level.
@@ -225,7 +225,8 @@ only shows to users with the permission for it.
   commands: `status`, `node list`, `node renew <node>` and `logs`. `help` lists them; output streams in as it happens, e.g.
   for `server logs <id>`, and Ctrl+C stops a command. A node's page opens its terminal directly. Besides the
   permission to use the terminal, every command needs its own, e.g. `server restart <id>` that to restart this server.
-- **Users** invites users, chooses their groups, disables and deletes them, and creates setup links.
+- **Users** invites users, chooses their groups, disables and deletes them, creates setup links and turns off two-factor
+  authentication for users who lost their phone.
 - **Groups** defines what their members may do.
 
 ## Users and permissions
@@ -249,8 +250,15 @@ Users get their permissions from groups; a user can be in several groups and has
   administrators with this version.
 - **Invitations.** New users get a setup link (valid for three days, usable once) to choose their password; the same
   link resets a forgotten password. The token is in the link's fragment, which browsers don't send to servers, and the
-  panel removes it from the address bar once it was read. Users change their own password in the panel, which signs
-  them out everywhere else.
+  panel removes it from the address bar once it was read. Users change their own password on their account page (their
+  name in the sidebar), which signs them out everywhere else.
+- **Two-factor authentication.** It is off until users set it up on their account page: they scan a QR code with an
+  authenticator app (TOTP, e.g. Google Authenticator, Aegis or a password manager), confirm with a code of it and their
+  password, and get 10 recovery codes that each replace a code once. Then signing in asks for a code after the
+  password, and other sessions end. A setup link then only sets the password; signing in still needs a code. Turning
+  it off and new recovery codes need the password. Users who may manage a
+  user turn it off for them, e.g. after they lost their phone and recovery codes, but not for themselves; without any
+  administrator who can still sign in, `mcsm-master user add` creates a new one.
 
 ## Security model
 
@@ -269,8 +277,12 @@ Users get their permissions from groups; a user can be in several groups and has
   certificates are server-only, so a compromised node can't command other nodes. Locally, the agent is controlled
   through a Unix socket (mode `0600` inside a `0700` data directory).
 - **Panel.** Argon2id password hashes, session tokens stored as SHA-256 hashes, `__Host-` cookies
-  (`HttpOnly`, `Secure`, `SameSite=Strict`), cross-origin request protection, sign-in rate limiting, a strict
-  Content Security Policy and self-hosted fonts. The panel must be served over HTTPS (reverse proxy or
+  (`HttpOnly`, `Secure`, `SameSite=Strict`), cross-origin request protection, sign-in rate limiting (also for changes
+  that need the password), a strict Content Security Policy and self-hosted fonts.
+- **Two-factor authentication.** Codes of the app (RFC 6238) work only once, and from the fifth wrong code in a row on,
+  codes aren't checked for a minute that doubles with every further wrong one, up to a day; parallel guesses count
+  too. Recovery codes have 50 random bits and are stored as SHA-256 hashes. The secret of the app is stored in the
+  master's database, which needs the same protection as the CA key next to it. The panel must be served over HTTPS (reverse proxy or
   `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt).
 - **Networks.** Only Velocity's modern forwarding is supported: it signs the forwarded player data with a random
   secret per network. BungeeCord's forwarding can be spoofed by anyone who reaches a backend. The secret is stored in
@@ -339,7 +351,7 @@ internal/agentcli/      commands that control a running agent, for its local CLI
 internal/logging/       log setup: console, rotating file, attributes with a meaning, notes of requests (shared)
 internal/master/
   app/                  wiring, HTTP and gRPC listeners, CLI
-  auth/                 accounts, passwords, setup links, sessions, sign-in
+  auth/                 accounts, passwords, setup links, two-factor authentication, sessions, sign-in
   access/               permissions, groups with scopes, user management, the permission every API route needs
   settings/             settings of the master that the panel changes, and a description of the running master
   terminal/             runs the commands of the master and of the agents for the panel
@@ -422,5 +434,4 @@ git tag v1.2.0 && git push origin v1.2.0
 
 - Console commands for proxies, so that network changes reload the proxy instead of restarting it
 - More runtimes (plain processes)
-- Two-factor authentication
 - German translation of the panel

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"slices"
 	"strconv"
@@ -43,17 +42,10 @@ func TestLogs(t *testing.T) {
 	svc := m.services(t)
 	srv := httptest.NewTLSServer(masterapp.Handler(svc))
 	t.Cleanup(srv.Close)
-	browser := func() apiClient {
-		client := *srv.Client()
-		jar, err := cookiejar.New(nil)
-		check(t, err)
-		client.Jar = jar
-		return apiClient{t: t, url: srv.URL, client: &client}
-	}
 	admin, err := svc.Users.CreateUser(t.Context(), "admin", "the-admins-password")
 	check(t, err)
 	check(t, svc.Access.MakeAdmin(t.Context(), admin.ID))
-	root := browser()
+	root := browser(t, srv)
 	root.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "a-wrong-password"}, http.StatusUnauthorized, nil)
 	root.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "the-admins-password"}, http.StatusOK, nil)
 	invite := func(name string, groups ...string) apiClient {
@@ -61,7 +53,7 @@ func TestLogs(t *testing.T) {
 			SetupLink auth.SetupLink `json:"setupLink"`
 		}
 		root.do("POST", "/api/users", map[string]any{"username": name, "groups": groups}, http.StatusCreated, &invited)
-		user := browser()
+		user := browser(t, srv)
 		user.do("POST", "/api/auth/setup", map[string]string{"token": invited.SetupLink.Token, "password": "a-good-password"}, http.StatusOK, nil)
 		return user
 	}

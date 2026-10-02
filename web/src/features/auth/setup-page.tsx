@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { type FormEvent, useEffect, useState } from "react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -43,7 +44,17 @@ function PasswordForm({ token, username }: { token: string; username: string }) 
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!mismatch) setup.mutate({ token, password: form.password }, { onSuccess: () => navigate({ to: "/" }) })
+    if (mismatch) return
+    setup.mutate(
+      { token, password: form.password },
+      {
+        onSuccess: (result) => {
+          if (!("mfaRequired" in result)) return navigate({ to: "/" })
+          toast.success("Saved your password", { description: "Sign in with it and a code of your authenticator app." })
+          return navigate({ to: "/login", search: {} })
+        },
+      },
+    )
   }
 
   return (
