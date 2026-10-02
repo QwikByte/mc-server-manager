@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"sync"
@@ -152,15 +153,22 @@ func (s *Service) plan(t Task) {
 	}
 }
 
-// state returns when an enabled task runs next and whether it is running.
-func (s *Service) state(id string) (*time.Time, bool) {
+// nextRun returns when an enabled task runs next.
+func (s *Service) nextRun(id string) *time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if sl, ok := s.slots[id]; ok {
 		at := sl.at
-		return &at, s.running[id]
+		return &at
 	}
-	return nil, s.running[id]
+	return nil
+}
+
+// runningTasks returns the IDs of the tasks that are running.
+func (s *Service) runningTasks() map[string]bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return maps.Clone(s.running)
 }
 
 // RunNow runs a task right away, after its lead time if it has one, e.g. to warn players.
