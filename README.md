@@ -62,6 +62,38 @@ version, installs the projects it requires, and replaces an older version of the
 recognised by their hash, so the tab shows their project, version and available updates, also for files uploaded
 by hand. Own `.jar` files can be uploaded too. Servers load changes when they restart.
 
+## Backups
+
+Backups are ZIP archives that the agent keeps on the server's node, in the `backups` folder of a storage location
+(`<data-dir>/backups` by default). What a backup contains is chosen per backup or job: worlds (every folder with a
+`level.dat`, also those added later), plugins or mods with their settings, configuration (the files in the server's
+folder except jars and logs, and `config/`), everything, or further files and folders. A running game server writes
+its worlds to disk first and pauses saving while they are archived, so players stay connected.
+
+- **By hand.** The **Backups** tab of a server backs it up now, e.g. before an update, and lists, downloads, restores
+  and deletes its backups.
+- **Jobs.** The **Backups** page schedules backup jobs for servers or whole nodes (including servers created later):
+  on chosen weekdays at one or more times of day in a time zone. A job keeps the newest backups per server and deletes
+  older ones; backups made by hand are never deleted that way. A job backs up one server per node at a time.
+- **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds
+  and leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
+  stopped while the files are swapped, and started again afterwards.
+- Deleting a server deletes its backups too. Locally, `mcsm-agent backup list|create|restore` works without the
+  master, e.g. to restore a server while the master is unreachable.
+
+## Policies
+
+Policies rule servers or whole nodes on a schedule like that of backup jobs:
+
+- **Restart**, e.g. every night at 4:00. Players are warned in the chat beforehand (10, 5 and 1 minutes before by
+  default, with an editable message) and the servers restart at the scheduled time.
+- **Stop** and **start**, e.g. for opening hours. Stopping warns the players like restarting.
+- **Console command**, e.g. a broadcast every evening.
+
+Restarts and stops only concern running servers, starts only stopped ones. The master runs backup jobs and policies;
+runs it misses while it is down are skipped. The latest run and its errors are shown with each job and policy, and
+both can be run right away. Deleted servers are removed from them automatically.
+
 ## Networks
 
 A network puts Paper or Purpur servers behind a Velocity proxy, on one node or spread across nodes. The master stores
@@ -116,6 +148,11 @@ the network and configures each server through its agent; changes are applied to
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
   directory. A copied proxy loses its forwarding secret and a copied backend stops trusting the proxy, so a copy
   can't impersonate a server of a network.
+- **Backups.** The agent keeps backups outside of the servers' folders, accessible to itself only (mode `0700`), so a
+  compromised server can't read or tamper with them. The master can only choose among the storage locations the
+  node's administrator allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry
+  to the server's folder, and backups never contain symbolic links. Downloads are attachments like those of the file
+  manager.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
@@ -125,7 +162,7 @@ the network and configures each server through its agent; changes are applied to
 The code is organised by feature, not by layer.
 
 ```
-api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, plugins) and generated code
+api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, plugins, backups) and generated code
 cmd/mcsm-master/        master binary
 cmd/mcsm-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -141,6 +178,9 @@ internal/master/
   plugin/               installs, lists and removes plugins and mods of servers
   modrinth/             client for the Modrinth API and CDN
   template/             templates for new servers
+  schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API
+  backup/               backups of servers, and backup jobs as scheduled tasks
+  policy/               policies as scheduled tasks: restarts with warnings, stops, starts, console commands
   database/             SQLite and embedded migrations
   httpapi/              JSON helpers
 internal/agent/
@@ -154,10 +194,12 @@ internal/agent/
   files/                file access for the file manager
   properties/           reads and updates server.properties, keeping comments
   plugin/               plugin and mod files of servers
+  backup/               backups of servers: selection, archives, restoring
   runtime/              runtime interface; docker/ implements it
 internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
-  src/features/         auth, nodes, servers, files, properties, networks, plugins, templates
+  src/features/         auth, nodes, servers, files, properties, networks, plugins, templates, backups, policies,
+                        schedules (shared by backups and policies)
 deploy/systemd/         service units
 ```
 
@@ -208,12 +250,14 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 3. Start the service and allow port 7443 only from the master's IP.
 4. Check the node locally with `sudo mcsm-agent status`; `sudo mcsm-agent server logs <id>` follows a console.
 5. Optionally allow more directories for server data, e.g. on a faster disk:
-   `sudo mcsm-agent storage add ssd /mnt/ssd/mcsm`. New servers can then be created there from the panel.
+   `sudo mcsm-agent storage add ssd /mnt/ssd/mcsm`. New servers can then be created there from the panel, and
+   backup jobs can keep their backups there, e.g. on another disk than the servers.
+6. `sudo mcsm-agent backup list <id>` lists the backups of a server, `backup create <id>` backs it up and
+   `backup restore <id> <backup-id>` restores it, also while the master is unreachable.
 
 ## Roadmap
 
 - Console commands for proxies, so that network changes reload the proxy instead of restarting it
-- Backups
 - More runtimes (plain processes)
 - Roles, two-factor authentication and an audit log
 - German translation of the panel

@@ -1,4 +1,4 @@
-import { GraphIcon, HardDrivesIcon, PuzzlePieceIcon, SignOutIcon, StackIcon } from "@phosphor-icons/react"
+import { ArchiveIcon, CalendarCheckIcon, GraphIcon, HardDrivesIcon, PuzzlePieceIcon, SignOutIcon, StackIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { Logo } from "@/components/logo"
@@ -11,6 +11,8 @@ const navigation = [
   { to: "/networks", label: "Networks", icon: GraphIcon },
   { to: "/templates", label: "Templates", icon: StackIcon },
   { to: "/plugins", label: "Plugins", icon: PuzzlePieceIcon },
+  { to: "/backups", label: "Backups", icon: ArchiveIcon },
+  { to: "/policies", label: "Policies", icon: CalendarCheckIcon },
 ] as const
 
 /** A sidebar on large screens, a bar at the top on small ones. */
@@ -29,7 +31,7 @@ export function AppShell() {
             <span className="block text-xs text-muted-foreground">Admin panel</span>
           </span>
         </Link>
-        <nav aria-label="Main" className="flex gap-1 md:flex-col">
+        <nav aria-label="Main" className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] md:flex-col md:overflow-visible">
           <p className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase max-md:hidden">Manage</p>
           {navigation.map(({ to, label, icon: Icon }) => (
             <Link

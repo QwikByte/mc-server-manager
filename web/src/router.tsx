@@ -104,6 +104,11 @@ const serverPluginsRoute = createRoute({
   path: "plugins",
   component: lazyRouteComponent(() => import("@/features/plugins/server-plugins-page"), "ServerPluginsPage"),
 })
+const serverBackupsRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "backups",
+  component: lazyRouteComponent(() => import("@/features/backups/server-backups-page"), "ServerBackupsPage"),
+})
 const serverSettingsRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "settings",
@@ -137,6 +142,38 @@ const templateRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/templates/template-page"), "TemplatePage"),
 })
 
+const backupJobsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/backups",
+  component: lazyRouteComponent(() => import("@/features/backups/backup-jobs-page"), "BackupJobsPage"),
+})
+const newBackupJobRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/backups/new",
+  component: lazyRouteComponent(() => import("@/features/backups/backup-job-page"), "NewBackupJobPage"),
+})
+const backupJobRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/backups/$jobId",
+  component: lazyRouteComponent(() => import("@/features/backups/backup-job-page"), "BackupJobPage"),
+})
+
+const policiesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/policies",
+  component: lazyRouteComponent(() => import("@/features/policies/policies-page"), "PoliciesPage"),
+})
+const newPolicyRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/policies/new",
+  component: lazyRouteComponent(() => import("@/features/policies/policy-page"), "NewPolicyPage"),
+})
+const policyRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/policies/$policyId",
+  component: lazyRouteComponent(() => import("@/features/policies/policy-page"), "PolicyPage"),
+})
+
 const pluginsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/plugins",
@@ -150,12 +187,25 @@ export const router = createRouter({
       indexRoute,
       nodesRoute,
       nodeRoute,
-      serverRoute.addChildren([serverConsoleRoute, serverFilesRoute, serverPropertiesRoute, serverPluginsRoute, serverSettingsRoute]),
+      serverRoute.addChildren([
+        serverConsoleRoute,
+        serverFilesRoute,
+        serverPropertiesRoute,
+        serverPluginsRoute,
+        serverBackupsRoute,
+        serverSettingsRoute,
+      ]),
       networksRoute,
       networkRoute,
       templatesRoute,
       newTemplateRoute,
       templateRoute,
+      backupJobsRoute,
+      newBackupJobRoute,
+      backupJobRoute,
+      policiesRoute,
+      newPolicyRoute,
+      policyRoute,
       pluginsRoute,
     ]),
   ]),
