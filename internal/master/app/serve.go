@@ -66,12 +66,17 @@ func serve(ctx context.Context, cfg config) error {
 	}
 
 	conf, err := settings.Load(ctx, db, settings.Master{
-		Version: buildinfo.Version, StartedAt: time.Now(), PanelAddr: cfg.httpAddr, PanelTLS: cfg.tlsCert != "",
+		Version: buildinfo.Version, StartedAt: time.Now(), PanelDefaultAddr: cfg.httpAddr, PanelTLS: cfg.tlsCert != "",
 		EnrollListenAddr: cfg.enrollAddr, EnrollAddr: publicAddr, CAFingerprint: pki.Fingerprint(ca.Cert),
 	}, masterCert)
 	if err != nil {
 		return err
 	}
+	panelListener, err := conf.ListenPanel()
+	if err != nil {
+		return err
+	}
+	defer panelListener.Close()
 
 	users := auth.NewService(db)
 	nodes := node.NewService(db, ca, masterCert, conf)
@@ -89,6 +94,10 @@ func serve(ctx context.Context, cfg config) error {
 	go nodes.MaintainCertificates(ctx, 6*time.Hour)
 	if ok, err := users.HasUsers(ctx); err == nil && !ok {
 		slog.Warn("No administrator account exists yet, create one with: mcsm-master user add <username>", logging.Auth)
+	}
+	if m := conf.Master(); m.PanelAddrError != "" {
+		slog.Warn("The panel can't listen at the address from the settings, so it listens at the one from the command line",
+			logging.Settings, "addr", m.PanelAddr, "err", m.PanelAddrError)
 	}
 
 	enrollListener, err := net.Listen("tcp", cfg.enrollAddr)
@@ -108,7 +117,6 @@ func serve(ctx context.Context, cfg config) error {
 	usageStore := usage.NewStore(db, nodes)
 	go usageStore.Run(ctx)
 	httpServer := &http.Server{
-		Addr: cfg.httpAddr,
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
@@ -121,12 +129,12 @@ func serve(ctx context.Context, cfg config) error {
 	go func() { errc <- grpcServer.Serve(enrollListener) }()
 	go func() {
 		if cfg.tlsCert != "" {
-			errc <- httpServer.ListenAndServeTLS(cfg.tlsCert, cfg.tlsKey)
+			errc <- httpServer.ServeTLS(panelListener, cfg.tlsCert, cfg.tlsKey)
 		} else {
-			errc <- httpServer.ListenAndServe()
+			errc <- httpServer.Serve(panelListener)
 		}
 	}()
-	slog.Info("Master started", "version", buildinfo.Version, "panel", cfg.httpAddr,
+	slog.Info("Master started", "version", buildinfo.Version, "panel", conf.Master().PanelAddr,
 		"enrollment", cfg.enrollAddr, "public_enrollment", conf.EnrollAddr(), "ca_fingerprint", pki.Fingerprint(ca.Cert))
 
 	select {

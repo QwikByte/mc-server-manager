@@ -35,6 +35,7 @@ func TestMasterSettings(t *testing.T) {
 	for name, change := range map[string]func(map[string]any){
 		"address without port": func(s map[string]any) { s["enrollAddr"] = "panel.example.com" },
 		"address with a path":  func(s map[string]any) { s["enrollAddr"] = "panel.example.com/x:9443" },
+		"panel at a host name": func(s map[string]any) { s["panelAddr"] = "panel.example.com:8080" },
 		"endless sessions":     func(s map[string]any) { s["sessionHours"] = 24 * 365 },
 		"short join tokens":    func(s map[string]any) { s["joinTokenMinutes"] = 1 },
 		"reversed port range":  func(s map[string]any) { s["nodeDefaults"] = map[string]any{"portMin": 30000, "portMax": 20000} },

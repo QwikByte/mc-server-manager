@@ -59,7 +59,7 @@ func Command() *cobra.Command {
 		RunE:  func(cmd *cobra.Command, _ []string) error { return serve(cmd.Context(), cfg) },
 	}
 	f := serve.Flags()
-	f.StringVar(&cfg.httpAddr, "http-addr", "127.0.0.1:8080", "listen address of the admin panel")
+	f.StringVar(&cfg.httpAddr, "http-addr", "127.0.0.1:8080", "listen address of the admin panel; the panel's settings can replace it from the next start")
 	f.StringVar(&cfg.tlsCert, "tls-cert", "", "TLS certificate of the admin panel; omit behind a TLS-terminating reverse proxy")
 	f.StringVar(&cfg.tlsKey, "tls-key", "", "TLS private key of the admin panel")
 	f.StringSliceVar(&cfg.trustedProxies, "trusted-proxy", nil, "IP addresses or CIDR networks of reverse proxies whose X-Forwarded-For or X-Real-IP header tells the client's address for the sign-in rate limit and the log, e.g. 127.0.0.1")

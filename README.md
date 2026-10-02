@@ -69,11 +69,13 @@ defaults instead, because `sudo-rs`, the `sudo` of newer Ubuntu releases, doesn'
 curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/latest/download/install.sh && sudo bash install.sh master
 ```
 
-It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), and for the password
-of the first administrator, `admin` unless `--admin` names another (piped, it generates one and shows it).
-The password needs at least 12 characters and isn't shown while you type it.
+It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), for the IP address
+and port the panel listens at (`--panel-addr`, `127.0.0.1:8080` by default, `0.0.0.0:<port>` for all interfaces, ports
+from 1024 on), and for the password of the first administrator, `admin` unless `--admin` names another (piped, it
+generates one and shows it). The password needs at least 12 characters and isn't shown while you type it. These options
+only apply to a new installation; later, both addresses can be changed in the panel's settings.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
-`cdn.modrinth.com`. The panel listens on `127.0.0.1:8080`; serve it over HTTPS with a reverse proxy, e.g. with
+`cdn.modrinth.com`. Browsers only sign in over HTTPS, so serve the panel with a reverse proxy, e.g. with
 [Caddy](https://caddyserver.com) and this `Caddyfile`, which also gets the certificate:
 
 ```
@@ -247,8 +249,12 @@ Entries are kept for 30 days unless the settings say otherwise, and at most the 
 The **Settings** page configures the master, gives an overview of the agents and manages who may do what. Each tab
 only shows to users with the permission for it.
 
-- **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings,
-  which apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
+- **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings.
+  The address the panel listens at (it replaces `--http-addr`; empty uses the flag again) applies when the master starts
+  again, e.g. with `systemctl restart mcsm-master` or the next update; the page says so until then. It is checked when
+  saved, and if the master can't listen there when it starts, e.g. because another program took the port, the panel
+  falls back to `--http-addr` and shows why, so a wrong address can't lock you out. The other settings apply right
+  away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
   flag again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel
   last (1 hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default),
   the port range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can
