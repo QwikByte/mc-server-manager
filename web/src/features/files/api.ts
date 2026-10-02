@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
-import { ApiError, api } from "@/lib/api"
+import { ApiError, api, responseError } from "@/lib/api"
 
 export interface FileEntry {
   name: string
@@ -62,10 +62,7 @@ export class BinaryFileError extends Error {}
 /** Reads a file as UTF-8 text, or throws BinaryFileError for other content. */
 export async function readText(s: ServerFiles, path: string): Promise<string> {
   const res = await fetch(contentUrl(s, path))
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new ApiError(res.status, data.error ?? `The file could not be loaded (status ${res.status}).`)
-  }
+  if (!res.ok) throw await responseError(res, `The file could not be loaded (status ${res.status}).`)
   const bytes = new Uint8Array(await res.arrayBuffer())
   try {
     const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes)

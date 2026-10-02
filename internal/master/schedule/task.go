@@ -204,6 +204,9 @@ func constraint(err error, name string) error {
 
 // load reads the tasks of a kind, or one of them if id isn't empty.
 func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
+	// A run records its outcome before it ends, so reading which tasks run first ensures
+	// that a task that isn't running shows the outcome of its latest run.
+	running := s.runningTasks()
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, kind, name, enabled, schedule, settings, last_run_at, last_error, created_at
 		FROM tasks WHERE ? IN ('', kind) AND ? IN ('', id) ORDER BY name`, kind, id)
@@ -229,7 +232,7 @@ func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 		if lastRun.Valid {
 			t.LastRun = &Run{At: time.Unix(lastRun.Int64, 0), Error: lastError.String}
 		}
-		t.NextRun, t.Running = s.state(t.ID)
+		t.NextRun, t.Running = s.nextRun(t.ID), running[t.ID]
 		index[t.ID] = len(tasks)
 		tasks = append(tasks, t)
 	}

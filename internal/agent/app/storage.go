@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -56,8 +55,8 @@ func storageCommand(cfg *config) *cobra.Command {
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				// The running agent knows which servers use the location.
-				return withLocal(cmd.Context(), *cfg, func(ctx context.Context, conn *grpc.ClientConn) error {
-					res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+				return cfg.local(cmd.Context(), func(conn grpc.ClientConnInterface) error {
+					res, err := mcsmv1.NewServerServiceClient(conn).ListServers(cmd.Context(), &mcsmv1.ListServersRequest{})
 					if err != nil {
 						return err
 					}

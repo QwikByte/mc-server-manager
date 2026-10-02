@@ -10,11 +10,13 @@ import {
   TerminalIcon,
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { getRouteApi, Link, Outlet, useNavigate } from "@tanstack/react-router"
+import { getRouteApi, Outlet, useNavigate } from "@tanstack/react-router"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { BackLink } from "@/components/back-link"
 import { PageHeader } from "@/components/page-header"
+import { TabLink } from "@/components/tab-link"
+import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { nodeQuery } from "@/features/nodes/api"
 import { formatMegabytes } from "@/lib/format"
@@ -89,23 +91,17 @@ export function ServerPage() {
               <ServerActions nodeId={nodeId} server={server} onDeleted={() => navigate({ to: "/nodes/$nodeId", params: { nodeId } })} />
             }
           />
-          <nav aria-label="Server" className="mb-8 flex max-w-full gap-1 overflow-x-auto rounded-xl bg-muted/80 p-1 sm:w-fit">
+          <Tabs label="Server">
             {tabs
               .map((tab) => ({ ...tab, label: tab.label(server.type) }))
               .filter((tab) => tab.label)
               .map(({ to, label, icon: Icon, exact }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  params={{ nodeId, serverId }}
-                  activeOptions={{ exact, includeSearch: false }}
-                  className="flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground data-[status=active]:bg-card data-[status=active]:text-foreground data-[status=active]:shadow-sm"
-                >
+                <TabLink key={to} to={to} params={{ nodeId, serverId }} activeOptions={{ exact, includeSearch: false }}>
                   <Icon className="size-4" weight="duotone" />
                   {label}
-                </Link>
+                </TabLink>
               ))}
-          </nav>
+          </Tabs>
           <Outlet />
         </>
       )}

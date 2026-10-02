@@ -30,7 +30,7 @@ export function NewJoinTokenButton({ node, variant = "outline" }: { node: Node; 
             <DialogTitle>Connect {node.name}</DialogTitle>
             <DialogDescription>Any earlier join token of this node no longer works.</DialogDescription>
           </DialogHeader>
-          {issue.data && <EnrollSteps joinToken={issue.data.joinToken} />}
+          {issue.data && <EnrollSteps token={issue.data} />}
           <DialogFooter>
             <DialogClose asChild>
               <Button>Done</Button>

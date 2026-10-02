@@ -26,7 +26,9 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/properties"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
+	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
+	"github.com/QwikByte/mc-server-manager/internal/master/terminal"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 	"github.com/QwikByte/mc-server-manager/web"
 )
@@ -54,8 +56,16 @@ func serve(ctx context.Context, cfg config) error {
 		return err
 	}
 
+	conf, err := settings.Load(ctx, db, settings.Master{
+		Version: buildinfo.Version, StartedAt: time.Now(), PanelAddr: cfg.httpAddr, PanelTLS: cfg.tlsCert != "",
+		EnrollListenAddr: cfg.enrollAddr, EnrollAddr: publicAddr, CAFingerprint: pki.Fingerprint(ca.Cert),
+	}, masterCert)
+	if err != nil {
+		return err
+	}
+
 	users := auth.NewService(db)
-	nodes := node.NewService(db, ca, masterCert, publicAddr)
+	nodes := node.NewService(db, ca, masterCert, conf)
 	defer nodes.Close()
 	go masterCert.Maintain(ctx, time.Hour, ca.MasterCertificate)
 	go nodes.MaintainCertificates(ctx, 6*time.Hour)
@@ -76,7 +86,7 @@ func serve(ctx context.Context, cfg config) error {
 	}
 	httpServer := &http.Server{
 		Addr:              cfg.httpAddr,
-		Handler:           routes(users, nodes, network.NewService(db, nodes), plugins, template.NewService(db, plugins), tasks),
+		Handler:           routes(users, conf, nodes, network.NewService(db, nodes), plugins, template.NewService(db, plugins), tasks),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -90,7 +100,7 @@ func serve(ctx context.Context, cfg config) error {
 		}
 	}()
 	slog.Info("master started", "version", buildinfo.Version, "panel", cfg.httpAddr,
-		"enrollment", cfg.enrollAddr, "public_enrollment", publicAddr, "ca_fingerprint", pki.Fingerprint(ca.Cert))
+		"enrollment", cfg.enrollAddr, "public_enrollment", conf.EnrollAddr(), "ca_fingerprint", pki.Fingerprint(ca.Cert))
 
 	select {
 	case err = <-errc:
@@ -102,12 +112,14 @@ func serve(ctx context.Context, cfg config) error {
 	return errors.Join(err, httpServer.Shutdown(shutdownCtx))
 }
 
-func routes(users *auth.Service, nodes *node.Service, networks *network.Service, plugins *plugin.Service,
-	templates *template.Service, tasks *schedule.Service,
+func routes(users *auth.Service, conf *settings.Service, nodes *node.Service, networks *network.Service,
+	plugins *plugin.Service, templates *template.Service, tasks *schedule.Service,
 ) http.Handler {
-	authHandler := auth.NewHandler(users)
+	authHandler := auth.NewHandler(users, conf.SessionTTL)
 	api := http.NewServeMux()
 	authHandler.Register(api)
+	settings.NewHandler(conf).Register(api)
+	terminal.NewHandler(nodes, conf).Register(api)
 	node.NewHandler(nodes).Register(api)
 	server.NewHandler(nodes, networks, tasks).Register(api)
 	network.NewHandler(networks).Register(api)

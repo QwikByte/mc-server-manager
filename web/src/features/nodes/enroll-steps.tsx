@@ -1,13 +1,15 @@
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
 import { type ReactNode, useState } from "react"
+import { formatDateTime } from "@/lib/format"
+import type { JoinToken } from "./api"
 
 /** Explains how to connect the agent of a node, using a freshly issued join token. */
-export function EnrollSteps({ joinToken }: { joinToken: string }) {
+export function EnrollSteps({ token: { joinToken, joinTokenExpiresAt } }: { token: JoinToken }) {
   return (
     <ol className="space-y-5">
       <Step number={1}>Install mcsm-agent on the node.</Step>
       <Step number={2}>
-        <p>Run this command on the node within one hour. The token works only once.</p>
+        <p>Run this command on the node before {formatDateTime(joinTokenExpiresAt)}. The token works only once.</p>
         <CopyCommand command={`mcsm-agent enroll ${joinToken}`} />
       </Step>
       <Step number={3}>

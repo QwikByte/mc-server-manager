@@ -16,7 +16,12 @@ export async function api<T = void>(path: string, init: { method?: string; body?
     body: hasBody ? JSON.stringify(init.body) : undefined,
   })
   if (res.status === 204) return undefined as T
+  if (!res.ok) throw await responseError(res)
+  return (await res.json().catch(() => ({}))) as T
+}
+
+/** Reads the message the master sent with a failed response. */
+export async function responseError(res: Response, fallback = `The request failed with status ${res.status}.`): Promise<ApiError> {
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new ApiError(res.status, data.error ?? `The request failed with status ${res.status}.`)
-  return data as T
+  return new ApiError(res.status, data.error ?? fallback)
 }
