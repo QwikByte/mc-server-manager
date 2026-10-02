@@ -19,7 +19,7 @@ type limiter struct {
 func newLimiter() *limiter { return &limiter{clients: make(map[string]*rate.Limiter)} }
 
 func (l *limiter) allow(r *http.Request) bool {
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	ip := ClientIP(r)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if len(l.clients) > 10_000 {
@@ -31,4 +31,12 @@ func (l *limiter) allow(r *http.Request) bool {
 		l.clients[ip] = lim
 	}
 	return lim.Allow()
+}
+
+// ClientIP is the address a request came from; behind a reverse proxy, that of the proxy.
+func ClientIP(r *http.Request) string {
+	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return ip
+	}
+	return r.RemoteAddr
 }

@@ -2,9 +2,11 @@ package schedule
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -56,6 +58,7 @@ func (h *Handler) save(status int, op func(ctx context.Context, id string, in In
 			httpapi.WriteError(w, r, err)
 			return
 		}
+		logging.Note(r.Context(), slog.String("name", in.Name))
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
 		t, err := op(ctx, r.PathValue("id"), in)

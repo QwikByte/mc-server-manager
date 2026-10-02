@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
@@ -35,6 +36,8 @@ type Kind interface {
 	Lead(settings json.RawMessage) time.Duration
 	// Run runs a task for its scheduled time at on the servers that servers returns.
 	Run(ctx context.Context, t Task, servers Servers, at time.Time) error
+	// Category is that of the log entries of the tasks.
+	Category() slog.Attr
 }
 
 // Servers returns the target servers of a task in their current state. Its error names the
@@ -48,12 +51,18 @@ type Server struct {
 	NodeName string
 }
 
-// Wrap names the server in an error from an operation on it.
-func (s Server) Wrap(err error) error {
+// Report logs the outcome of an action of a task on the server, e.g. "Restart server", and
+// returns its error with the name of the server.
+func (s Server) Report(t Task, category slog.Attr, action string, err error) error {
+	attrs := []any{category, "task", t.Name, logging.KeyNode, s.NodeID, logging.KeyNodeName, s.NodeName,
+		logging.KeyServer, s.GetId(), logging.KeyServerName, s.GetName()}
 	if err == nil {
+		slog.Info(action, attrs...)
 		return nil
 	}
-	return fmt.Errorf("%s on %s: %s", s.GetName(), s.NodeName, status.Convert(err).Message())
+	msg := status.Convert(err).Message()
+	slog.Warn(action+" failed", append(attrs, "err", msg)...)
+	return fmt.Errorf("%s on %s: %s", s.GetName(), s.NodeName, msg)
 }
 
 // Nodes provides the nodes and connections to their agents.
@@ -116,7 +125,7 @@ func (s *Service) loop(ctx context.Context) {
 				continue
 			}
 			if !s.run(id, sl.at) {
-				slog.Warn("skipped a scheduled run, the previous one is still running", "task", id)
+				slog.Warn("Skipped a scheduled run, the previous one is still running", "task_id", id)
 			}
 			after := sl.at
 			if now.After(after) {
@@ -215,15 +224,18 @@ func (s *Service) execute(ctx context.Context, id string, at time.Time) {
 		err = s.kinds[t.kind].Run(ctx, t, s.servers(t.Targets), at)
 	}
 	var msg string
+	category := s.kinds[t.kind].Category()
 	if err != nil {
 		if msg = err.Error(); len(msg) > maxError {
 			msg = msg[:maxError]
 		}
-		slog.Warn("scheduled task failed", "task", t.Name, "err", msg)
+		slog.Warn("Run scheduled task failed", category, "task", t.Name, "err", msg)
+	} else {
+		slog.Info("Run scheduled task", category, "task", t.Name)
 	}
 	if _, err := s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE tasks SET last_run_at = ?, last_error = ? WHERE id = ?`,
 		at.Unix(), msg, id); err != nil {
-		slog.Error("record the run of a task", "task", t.Name, "err", err)
+		slog.Error("Can't record the run of a task", category, "task", t.Name, "err", err)
 	}
 }
 

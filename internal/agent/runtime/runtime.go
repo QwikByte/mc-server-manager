@@ -15,6 +15,7 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
 // idPattern matches server IDs, which also name directories and containers.
@@ -142,7 +143,7 @@ func PauseSaving(ctx context.Context, rt Runtime, srv Server) (resume func(), er
 	}
 	resume = func() {
 		if _, err := rt.SendCommand(context.WithoutCancel(ctx), srv.ID, "save-on"); err != nil {
-			slog.Warn("can't turn saving on again", "server", srv.ID, "err", err)
+			slog.Warn("Can't turn saving on again", logging.Servers, logging.KeyServer, srv.ID, "err", err)
 		}
 	}
 	if _, err := rt.SendCommand(ctx, srv.ID, "save-all flush"); err != nil {

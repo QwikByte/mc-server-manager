@@ -13,6 +13,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
 type Service struct {
@@ -39,7 +40,7 @@ func (s *Service) GetInfo(ctx context.Context, _ *mcsmv1.GetInfoRequest) (*mcsmv
 	}
 	locations, err := s.storage.List()
 	if err != nil {
-		slog.Warn("can't read the storage locations", "err", err)
+		slog.Warn("Can't read the storage locations", logging.Nodes, "err", err)
 	}
 	for _, l := range locations {
 		res.Storage = append(res.Storage, &mcsmv1.StorageLocation{Name: l.Name, Path: l.Path, FreeBytes: l.FreeBytes, TotalBytes: l.TotalBytes})
@@ -59,6 +60,6 @@ func (s *Service) InstallCertificate(_ context.Context, req *mcsmv1.InstallCerti
 	if err := s.identity.install(req.GetCertificateDer()); err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "certificate rejected: %v", err)
 	}
-	slog.Info("installed renewed node certificate", "not_after", s.identity.Get().Leaf.NotAfter)
+	slog.Info("Install renewed node certificate", logging.Nodes, "not_after", s.identity.Get().Leaf.NotAfter)
 	return &mcsmv1.InstallCertificateResponse{}, nil
 }

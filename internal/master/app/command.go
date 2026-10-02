@@ -16,9 +16,11 @@ import (
 	"golang.org/x/term"
 
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/mc-server-manager/internal/master/logs"
 )
 
 type config struct {
@@ -28,6 +30,7 @@ type config struct {
 	tlsKey     string
 	enrollAddr string
 	publicAddr string
+	log        logging.Options
 }
 
 // Command returns the root command of mcsm-master.
@@ -53,6 +56,7 @@ func Command() *cobra.Command {
 	f.StringVar(&cfg.tlsKey, "tls-key", "", "TLS private key of the admin panel")
 	f.StringVar(&cfg.enrollAddr, "enroll-addr", ":9443", "listen address of the enrollment endpoint")
 	f.StringVar(&cfg.publicAddr, "public-enroll-addr", "", "host:port agents use to reach the enrollment endpoint (default <hostname>:<enroll port>); the panel's settings can replace it")
+	cfg.log.AddFlags(f)
 
 	user := &cobra.Command{Use: "user", Short: "Manage administrator accounts"}
 	user.AddCommand(&cobra.Command{
@@ -62,7 +66,16 @@ func Command() *cobra.Command {
 		RunE:  func(cmd *cobra.Command, args []string) error { return addUser(cmd.Context(), cfg, args[0]) },
 	})
 
-	root.AddCommand(serve, user)
+	// The log on the master's host shows everything, like the panel to administrators.
+	logsCmd := logs.Command(func() (*logs.Store, error) {
+		db, err := openDB(cfg.dataDir)
+		return logs.NewStore(db, nil, nil), err
+	})
+	logsCmd.PreRun = func(cmd *cobra.Command, _ []string) {
+		cmd.SetContext(access.WithGrants(cmd.Context(), access.Admin()))
+	}
+
+	root.AddCommand(serve, user, logsCmd)
 	return root
 }
 

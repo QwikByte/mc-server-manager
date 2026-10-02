@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package mcsm.v1;
+
+option go_package = "github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1";
+
+// LogService is served by every agent and reads its log: what it did, for whom, and what
+// went wrong. The agent keeps the latest entries in memory; the master collects them.
+service LogService {
+  // ReadLog sends the kept entries after the given position, then, with follow, new ones
+  // as they are logged. A reader that falls behind by more than the kept entries misses
+  // the oldest of them.
+  rpc ReadLog(ReadLogRequest) returns (stream ReadLogResponse);
+}
+
+message ReadLogRequest {
+  // Position of the last entry the reader has. Entries of another boot of the agent are
+  // all new to the reader; an empty boot reads all kept entries.
+  string boot = 1;
+  uint64 after = 2;
+  bool follow = 3;
+}
+
+message ReadLogResponse {
+  repeated LogEntry entries = 1;
+}
+
+message LogEntry {
+  // Identifies the run of the agent; seq counts the entries of a run from 1.
+  string boot = 1;
+  uint64 seq = 2;
+  int64 time_unix_nano = 3;
+  // Level as in Go's log/slog: -4 debug, 0 info, 4 warn, 8 error.
+  sint32 level = 4;
+  string message = 5;
+  // What the entry is about, e.g. "servers", and the server if it concerns one.
+  string category = 6;
+  string server_id = 7;
+  map<string, string> attrs = 8;
+}

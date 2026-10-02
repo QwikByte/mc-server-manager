@@ -15,10 +15,12 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
+	"github.com/QwikByte/mc-server-manager/internal/master/logs"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
@@ -68,10 +70,19 @@ func serve(ctx context.Context, cfg config) error {
 	users := auth.NewService(db)
 	nodes := node.NewService(db, ca, masterCert, conf)
 	defer nodes.Close()
+	logStore := logs.NewStore(db, logs.NewNames(nodes), conf.LogRetention)
+	logFile, err := logging.Setup(cfg.log, logStore.Handler(cfg.log.Level))
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
+	logStore.Start(ctx)
+	defer logStore.Close() // before the log file and the database close
+	go logStore.Collect(ctx, nodes)
 	go masterCert.Maintain(ctx, time.Hour, ca.MasterCertificate)
 	go nodes.MaintainCertificates(ctx, 6*time.Hour)
 	if ok, err := users.HasUsers(ctx); err == nil && !ok {
-		slog.Warn("no administrator account exists yet, create one with: mcsm-master user add <username>")
+		slog.Warn("No administrator account exists yet, create one with: mcsm-master user add <username>", logging.Auth)
 	}
 
 	enrollListener, err := net.Listen("tcp", cfg.enrollAddr)
@@ -89,7 +100,7 @@ func serve(ctx context.Context, cfg config) error {
 		Addr: cfg.httpAddr,
 		Handler: Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
-			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks,
+			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -103,7 +114,7 @@ func serve(ctx context.Context, cfg config) error {
 			errc <- httpServer.ListenAndServe()
 		}
 	}()
-	slog.Info("master started", "version", buildinfo.Version, "panel", cfg.httpAddr,
+	slog.Info("Master started", "version", buildinfo.Version, "panel", cfg.httpAddr,
 		"enrollment", cfg.enrollAddr, "public_enrollment", conf.EnrollAddr(), "ca_fingerprint", pki.Fingerprint(ca.Cert))
 
 	select {
@@ -113,7 +124,13 @@ func serve(ctx context.Context, cfg config) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	grpcServer.GracefulStop()
-	return errors.Join(err, httpServer.Shutdown(shutdownCtx))
+	err = errors.Join(err, httpServer.Shutdown(shutdownCtx))
+	if err != nil {
+		slog.Error("Master stopped", "err", err)
+	} else {
+		slog.Info("Master stopped")
+	}
+	return err
 }
 
 // Services are what the master serves over HTTP.
@@ -126,6 +143,7 @@ type Services struct {
 	Plugins   *plugin.Service
 	Templates *template.Service
 	Tasks     *schedule.Service
+	Logs      *logs.Store
 }
 
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
@@ -143,12 +161,14 @@ func Handler(s Services) http.Handler {
 }
 
 // API returns the routes of the API that act for a user, each with the permission it needs.
+// Requests that change something are logged.
 func API(s Services) *http.ServeMux {
 	api := http.NewServeMux()
-	m := access.NewMux(api)
+	m := access.NewMux(api, s.Logs.Audit())
 	access.NewHandler(s.Access, s.Users).Register(m)
 	settings.NewHandler(s.Settings).Register(m)
-	terminal.NewHandler(s.Nodes, s.Settings).Register(m)
+	logs.NewHandler(s.Logs).Register(m)
+	terminal.NewHandler(s.Nodes, s.Settings, s.Logs).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
 	server.NewHandler(s.Nodes, s.Networks, s.Tasks, s.Access).Register(m)
 	network.NewHandler(s.Networks).Register(m)

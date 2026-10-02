@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 )
@@ -41,6 +43,9 @@ const (
 	// lateWarning is how late a warning may be sent, e.g. when the master just started.
 	lateWarning = time.Minute
 )
+
+// actions are what the log says a policy did to a server.
+var actions = map[string]string{restart: "Restart server", stop: "Stop server", start: "Start server", command: "Send console command"}
 
 var defaultMessages = map[string]string{
 	restart: "The server restarts in {minutes} min.",
@@ -103,6 +108,8 @@ func (Policies) Check(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(s)
 }
 
+func (Policies) Category() slog.Attr { return logging.Policies }
+
 // Lead is the time of the earliest warning before a restart or stop.
 func (Policies) Lead(raw json.RawMessage) time.Duration {
 	var s Settings
@@ -149,7 +156,7 @@ func (p Policies) Run(ctx context.Context, t schedule.Task, servers schedule.Ser
 	for _, srv := range list {
 		if concerns(s, srv) {
 			wg.Go(func() {
-				err := srv.Wrap(p.call(ctx, srv, s.Action, s.Command))
+				err := srv.Report(t, logging.Policies, actions[s.Action], p.call(ctx, srv, s.Action, s.Command))
 				mu.Lock()
 				defer mu.Unlock()
 				errs = append(errs, err)

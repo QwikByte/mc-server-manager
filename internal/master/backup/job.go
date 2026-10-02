@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"sync"
 	"time"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 )
@@ -55,6 +57,8 @@ func (Jobs) Check(raw json.RawMessage) (json.RawMessage, error) {
 
 func (Jobs) Lead(json.RawMessage) time.Duration { return 0 }
 
+func (Jobs) Category() slog.Attr { return logging.Backups }
+
 // Run backs up the servers of a job. Each node backs up one server at a time, to spare its
 // disks; nodes work in parallel.
 func (j Jobs) Run(ctx context.Context, t schedule.Task, servers schedule.Servers, _ time.Time) error {
@@ -75,7 +79,7 @@ func (j Jobs) Run(ctx context.Context, t schedule.Task, servers schedule.Servers
 	for _, onNode := range byNode {
 		wg.Go(func() {
 			for _, srv := range onNode {
-				err := srv.Wrap(j.backUp(ctx, srv, t, s))
+				err := srv.Report(t, logging.Backups, "Back up server", j.backUp(ctx, srv, t, s))
 				mu.Lock()
 				errs = append(errs, err)
 				mu.Unlock()

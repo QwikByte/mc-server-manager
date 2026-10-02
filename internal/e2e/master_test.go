@@ -19,14 +19,14 @@ func TestMasterSettings(t *testing.T) {
 		Master   settings.Master   `json:"master"`
 	}
 	api.do("GET", "/api/settings", nil, http.StatusOK, &got)
-	if s := got.Settings; s.SessionHours != 12 || s.JoinTokenMinutes != 60 || *s.NodeDefaults.MemoryReserveMB != 1024 || got.Master.EnrollAddr != m.enrollAddr {
+	if s := got.Settings; s.SessionHours != 12 || s.JoinTokenMinutes != 60 || *s.NodeDefaults.MemoryReserveMB != 1024 || s.LogDays != 30 || got.Master.EnrollAddr != m.enrollAddr {
 		t.Fatalf("default settings = %+v, master = %+v", s, got.Master)
 	}
 
 	valid := func(change func(map[string]any)) map[string]any {
 		s := map[string]any{
 			"enrollAddr": "panel.example.com:9443", "sessionHours": 24, "joinTokenMinutes": 30,
-			"nodeDefaults": map[string]any{"portMin": 25565, "portMax": 25600, "memoryReserveMb": 2048},
+			"nodeDefaults": map[string]any{"portMin": 25565, "portMax": 25600, "memoryReserveMb": 2048}, "logDays": 90,
 		}
 		change(s)
 		return s
@@ -37,6 +37,7 @@ func TestMasterSettings(t *testing.T) {
 		"endless sessions":     func(s map[string]any) { s["sessionHours"] = 24 * 365 },
 		"short join tokens":    func(s map[string]any) { s["joinTokenMinutes"] = 1 },
 		"reversed port range":  func(s map[string]any) { s["nodeDefaults"] = map[string]any{"portMin": 30000, "portMax": 20000} },
+		"logs kept forever":    func(s map[string]any) { s["logDays"] = 0 },
 	} {
 		if body := api.do("PUT", "/api/settings", valid(change), http.StatusBadRequest, nil); body == "" {
 			t.Errorf("%s: no error message", name)

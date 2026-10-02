@@ -54,10 +54,10 @@ func (h *Holder) Maintain(ctx context.Context, interval time.Duration, issue fun
 				err = h.Set(cert)
 			}
 			if err != nil {
-				slog.Error("renew certificate", "name", h.Get().Leaf.Subject.CommonName, "err", err)
+				slog.Error("Renew certificate failed", "name", h.Get().Leaf.Subject.CommonName, "err", err)
 				continue
 			}
-			slog.Info("renewed certificate", "name", h.Get().Leaf.Subject.CommonName, "not_after", h.Get().Leaf.NotAfter)
+			slog.Info("Renew certificate", "name", h.Get().Leaf.Subject.CommonName, "not_after", h.Get().Leaf.NotAfter)
 		}
 	}
 }

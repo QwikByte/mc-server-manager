@@ -30,6 +30,7 @@ export const permissionIds = [
   "backupjobs.manage",
   "policies.view",
   "policies.manage",
+  "logs.view",
   "settings.view",
   "settings.edit",
   "terminal.use",

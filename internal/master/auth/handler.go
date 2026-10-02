@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -51,6 +52,7 @@ func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 func (h *Handler) limited(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !h.limiter.allow(r) {
+			slog.Warn("Too many sign-in attempts", logging.Auth, "ip", ClientIP(r), "route", r.Pattern)
 			httpapi.WriteError(w, r, httpapi.Errorf(http.StatusTooManyRequests, "Too many attempts. Wait a minute and try again."))
 			return
 		}
@@ -70,12 +72,14 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	ttl := h.sessionTTL()
 	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, ttl)
 	if errors.Is(err, ErrInvalidCredentials) {
+		slog.Warn("Sign in failed", logging.Auth, logging.KeyUser, req.Username, "ip", ClientIP(r))
 		err = httpapi.Errorf(http.StatusUnauthorized, "Username or password is incorrect.")
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	slog.Info("Sign in", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
 	http.SetCookie(w, sessionCookie(token, int(ttl.Seconds())))
 	httpapi.WriteJSON(w, http.StatusOK, user)
 }
@@ -109,11 +113,14 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	ttl := h.sessionTTL()
 	user, token, err := h.svc.Setup(r.Context(), req.Token, req.Password, ttl)
+	if errors.Is(err, errInvalidSetup) {
+		slog.Warn("Set password with setup link failed", logging.Auth, "ip", ClientIP(r), "err", err)
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	slog.Info("password set with a setup link", "user", user.Username)
+	slog.Info("Set password with setup link", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
 	http.SetCookie(w, sessionCookie(token, int(ttl.Seconds())))
 	httpapi.WriteJSON(w, http.StatusOK, user)
 }
@@ -134,9 +141,11 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 		keep = c.Value
 	}
 	if err := h.svc.ChangePassword(r.Context(), user.ID, req.Current, req.New, keep); err != nil {
+		slog.Warn("Change password failed", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r), "err", err)
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	slog.Info("Change password", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -146,6 +155,9 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 			httpapi.WriteError(w, r, err)
 			return
 		}
+	}
+	if user, ok := UserFrom(r.Context()); ok {
+		slog.Info("Sign out", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
 	}
 	http.SetCookie(w, sessionCookie("", -1))
 	w.WriteHeader(http.StatusNoContent)

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
@@ -19,10 +20,12 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
@@ -202,9 +205,16 @@ func (s *Service) Enroll(ctx context.Context, req *mcsmv1.EnrollRequest) (*mcsmv
 	if err != nil {
 		return nil, err
 	}
+	// Anyone who reaches the enrollment endpoint can send IDs, so they are kept short.
+	attrs := []any{logging.Nodes, logging.KeyNode, req.GetNodeId()[:min(len(req.GetNodeId()), 64)]}
+	if p, ok := peer.FromContext(ctx); ok {
+		attrs = append(attrs, "ip", p.Addr.String())
+	}
 	if rowsAffected(res) != 1 {
+		slog.Warn("Enroll node failed", append(attrs, "err", "invalid, expired or used join token")...)
 		return nil, status.Error(codes.PermissionDenied, "join token is invalid, expired or already used")
 	}
+	slog.Info("Enroll node", attrs...)
 	return &mcsmv1.EnrollResponse{CertificateDer: cert, CaCertificateDer: s.ca.Cert.Raw}, nil
 }
 

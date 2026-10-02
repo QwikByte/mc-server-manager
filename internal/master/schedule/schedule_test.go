@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
@@ -93,6 +95,7 @@ type fakeKind struct{ runs chan time.Time }
 
 func (fakeKind) Check(settings json.RawMessage) (json.RawMessage, error) { return settings, nil }
 func (fakeKind) Lead(json.RawMessage) time.Duration                      { return 0 }
+func (fakeKind) Category() slog.Attr                                     { return logging.System }
 func (k fakeKind) Run(_ context.Context, _ Task, _ Servers, at time.Time) error {
 	k.runs <- at
 	return errors.New("node-1: unreachable")

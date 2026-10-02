@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"net/http"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
@@ -248,6 +250,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	logging.Note(r.Context(), slog.String(logging.KeyServer, res.GetServer().GetId()), slog.String(logging.KeyServerName, res.GetServer().GetName()))
 	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetServer()))
 }
 
@@ -286,6 +289,7 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	logging.Note(r.Context(), slog.String("copy", res.GetServer().GetName()), slog.String("copy_id", res.GetServer().GetId()))
 	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetServer()))
 }
 

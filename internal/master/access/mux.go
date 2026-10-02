@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -14,19 +15,29 @@ type Need func(r *http.Request, g Grants) (Permission, bool)
 
 // Mux registers the routes of the API. Every route states what it needs, so none can be
 // added without deciding who may use it.
-type Mux struct{ mux *http.ServeMux }
+type Mux struct {
+	mux  *http.ServeMux
+	wrap []Wrapper
+}
 
-func NewMux(mux *http.ServeMux) Mux { return Mux{mux: mux} }
+// Wrapper wraps the handler of a route, including its permission check, e.g. to log requests.
+type Wrapper func(pattern string, h http.HandlerFunc) http.HandlerFunc
+
+func NewMux(mux *http.ServeMux, wrap ...Wrapper) Mux { return Mux{mux: mux, wrap: wrap} }
 
 // Handle registers a route that runs h only if need allows the request.
 func (m Mux) Handle(pattern string, need Need, h http.HandlerFunc) {
-	m.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+	checked := func(w http.ResponseWriter, r *http.Request) {
 		if p, ok := need(r, From(r.Context())); !ok {
 			httpapi.WriteError(w, r, Denied(p))
 			return
 		}
 		h(w, r)
-	})
+	}
+	for _, wrap := range m.wrap {
+		checked = wrap(pattern, checked)
+	}
+	m.mux.HandleFunc(pattern, checked)
 }
 
 // Denied is the error for a request that lacks a permission.
@@ -79,7 +90,7 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		}
 		g, err := s.Grants(r.Context(), user.ID)
 		if err != nil {
-			slog.Error("load permissions", "user", user.Username, "err", err)
+			slog.Error("Can't load permissions", logging.Users, logging.KeyUser, user.Username, "err", err)
 			httpapi.WriteError(w, r, err)
 			return
 		}
