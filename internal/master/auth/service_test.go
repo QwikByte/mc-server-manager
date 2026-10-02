@@ -33,19 +33,19 @@ func TestLoginSessionLifecycle(t *testing.T) {
 	if _, err := svc.CreateUser(ctx, "admin", "a-long-enough-password"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.Login(ctx, "admin", "wrong-password!", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "admin", "wrong-password!", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("wrong password: got %v", err)
 	}
-	if _, _, err := svc.Login(ctx, "nobody", "a-long-enough-password", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "nobody", "a-long-enough-password", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("unknown user: got %v", err)
 	}
 
-	_, token, err := svc.Login(ctx, "ADMIN", "a-long-enough-password", time.Hour)
+	_, token, err := svc.Login(ctx, "ADMIN", "a-long-enough-password", "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Sessions last as long as the settings said when signing in.
-	_, expired, err := svc.Login(ctx, "admin", "a-long-enough-password", -time.Second)
+	_, expired, err := svc.Login(ctx, "admin", "a-long-enough-password", "", -time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestInviteDisableAndChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := svc.Login(ctx, "alice", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "alice", "", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("invited user signed in without a password: %v", err)
 	}
 	if _, _, err := svc.Setup(ctx, link.Token, "short", time.Hour); err == nil {
@@ -91,7 +91,7 @@ func TestInviteDisableAndChangePassword(t *testing.T) {
 	}
 
 	// Changing the password keeps the current session and ends the others.
-	_, other, err := svc.Login(ctx, "alice", "alices-long-password", time.Hour)
+	_, other, err := svc.Login(ctx, "alice", "alices-long-password", "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestInviteDisableAndChangePassword(t *testing.T) {
 	if _, err := svc.Authenticate(ctx, session); !errors.Is(err, ErrNoSession) {
 		t.Fatalf("session of a disabled user still valid: %v", err)
 	}
-	if _, _, err := svc.Login(ctx, "alice", "a-brand-new-password", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "alice", "a-brand-new-password", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("disabled user signed in: %v", err)
 	}
 	if _, err := svc.SetupUser(ctx, reset.Token); err == nil {

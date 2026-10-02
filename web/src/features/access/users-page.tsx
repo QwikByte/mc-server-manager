@@ -1,4 +1,4 @@
-import { UsersIcon } from "@phosphor-icons/react"
+import { ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
@@ -62,6 +62,11 @@ export function UsersPage() {
                     <span className="font-medium">{user.username}</span>
                     {user.id === me?.id && <Chip>You</Chip>}
                     <StatusBadge status={statusOf(user)} />
+                    {user.mfa && (
+                      <Chip icon={ShieldCheckIcon} className="max-sm:hidden">
+                        2FA
+                      </Chip>
+                    )}
                   </span>
                 </TableCell>
                 <TableCell>

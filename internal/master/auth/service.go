@@ -1,5 +1,6 @@
 // Package auth manages the accounts of the panel and their sign-ins: passwords, setup
-// links and sessions. What a user may do is up to the access package.
+// links, two-factor authentication and sessions. What a user may do is up to the access
+// package.
 package auth
 
 import (
@@ -22,7 +23,7 @@ const (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid username or password")
+	ErrInvalidCredentials = httpapi.Errorf(http.StatusUnauthorized, "Username or password is incorrect.")
 	ErrNoSession          = errors.New("no valid session")
 
 	errNotFound     = httpapi.Errorf(http.StatusNotFound, "User not found.")
@@ -41,8 +42,10 @@ type Account struct {
 	User
 	Disabled bool `json:"disabled"`
 	// PasswordSet is false until an invited user sets a password with the setup link.
-	PasswordSet bool      `json:"passwordSet"`
-	CreatedAt   time.Time `json:"createdAt"`
+	PasswordSet bool `json:"passwordSet"`
+	// MFA tells whether signing in needs a code of an authenticator app too.
+	MFA       bool      `json:"mfa"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // SetupLink lets a user set a password once until it expires. Token goes into the link.
@@ -105,7 +108,9 @@ func (s *Service) HasUsers(ctx context.Context) (bool, error) {
 
 // Accounts returns all users ordered by name.
 func (s *Service) Accounts(ctx context.Context) ([]Account, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, username, disabled, password_hash != '', created_at FROM users ORDER BY username`)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT u.id, u.username, u.disabled, u.password_hash != '', COALESCE(m.enabled, 0), u.created_at
+		FROM users u LEFT JOIN user_mfa m ON m.user_id = u.id ORDER BY u.username`)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +119,7 @@ func (s *Service) Accounts(ctx context.Context) ([]Account, error) {
 	for rows.Next() {
 		var a Account
 		var created int64
-		if err := rows.Scan(&a.ID, &a.Username, &a.Disabled, &a.PasswordSet, &created); err != nil {
+		if err := rows.Scan(&a.ID, &a.Username, &a.Disabled, &a.PasswordSet, &a.MFA, &created); err != nil {
 			return nil, err
 		}
 		a.CreatedAt = time.Unix(created, 0)
@@ -171,7 +176,8 @@ func (s *Service) SetupUser(ctx context.Context, token string) (User, error) {
 }
 
 // Setup sets the password of a user with a setup link, which is used up. All sessions of
-// the user end and a new one starts, which lasts for ttl.
+// the user end and a new one starts, which lasts for ttl, unless signing in needs a code
+// too: then the returned token is empty, so that a setup link can't replace the code.
 func (s *Service) Setup(ctx context.Context, token, password string, ttl time.Duration) (User, string, error) {
 	if err := checkPassword(password); err != nil {
 		return User{}, "", err
@@ -180,25 +186,23 @@ func (s *Service) Setup(ctx context.Context, token, password string, ttl time.Du
 	if err != nil {
 		return u, "", err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	err = s.inTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM setup_tokens WHERE token_hash = ?`, hashToken(token))
+		if err == nil && rowsAffected(res) == 0 {
+			err = errInvalidSetup // used by a concurrent request
+		}
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hashPassword(password), u.ID)
+		}
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, u.ID)
+		}
+		return err
+	})
 	if err != nil {
 		return u, "", err
 	}
-	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
-	res, err := tx.ExecContext(ctx, `DELETE FROM setup_tokens WHERE token_hash = ?`, hashToken(token))
-	if err == nil && rowsAffected(res) == 0 {
-		err = errInvalidSetup // used by a concurrent request
-	}
-	if err == nil {
-		_, err = tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hashPassword(password), u.ID)
-	}
-	if err == nil {
-		_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, u.ID)
-	}
-	if err == nil {
-		err = tx.Commit()
-	}
-	if err != nil {
+	if m, err := s.MFA(ctx, u.ID); err != nil || m.Enabled {
 		return u, "", err
 	}
 	session, err := s.startSession(ctx, u.ID, ttl)
@@ -208,12 +212,8 @@ func (s *Service) Setup(ctx context.Context, token, password string, ttl time.Du
 // ChangePassword replaces the password of a user who knows the current one. Other
 // sessions than the one identified by keep end.
 func (s *Service) ChangePassword(ctx context.Context, id int64, current, next, keep string) error {
-	var hash string
-	if err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id = ?`, id).Scan(&hash); err != nil {
+	if err := s.confirmPassword(ctx, id, current); err != nil {
 		return err
-	}
-	if !verifyPassword(hash, current) {
-		return httpapi.Errorf(http.StatusBadRequest, "The current password is incorrect.")
 	}
 	if err := checkPassword(next); err != nil {
 		return err
@@ -227,11 +227,15 @@ func (s *Service) ChangePassword(ctx context.Context, id int64, current, next, k
 
 // Login verifies the credentials and starts a session that lasts for ttl, identified by
 // the returned token. Disabled users and invited users without a password can't sign in.
-func (s *Service) Login(ctx context.Context, username, password string, ttl time.Duration) (User, string, error) {
+// With two-factor authentication, code is a code of the user's app or a recovery code; if
+// it is empty, Login returns ErrCodeRequired once the password is right.
+func (s *Service) Login(ctx context.Context, username, password, code string, ttl time.Duration) (User, string, error) {
 	user := User{Username: username}
 	var hash string
-	err := s.db.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users WHERE username = ? AND disabled = 0`, username).
-		Scan(&user.ID, &user.Username, &hash)
+	var mfa bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT u.id, u.username, u.password_hash, COALESCE(m.enabled, 0) FROM users u LEFT JOIN user_mfa m ON m.user_id = u.id
+		WHERE u.username = ? AND u.disabled = 0`, username).Scan(&user.ID, &user.Username, &hash, &mfa)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && hash == "" {
 		verifyPassword(dummyHash(), password) // takes as long as for existing users
 		return User{}, "", ErrInvalidCredentials
@@ -239,8 +243,17 @@ func (s *Service) Login(ctx context.Context, username, password string, ttl time
 	if err != nil {
 		return User{}, "", err
 	}
-	if !verifyPassword(hash, password) {
-		return User{}, "", ErrInvalidCredentials
+	switch {
+	case !verifyPassword(hash, password):
+		err = ErrInvalidCredentials
+	case !mfa:
+	case code == "":
+		err = ErrCodeRequired
+	default:
+		err = s.checkCode(ctx, user.ID, code)
+	}
+	if err != nil {
+		return User{}, "", err
 	}
 	token, err := s.startSession(ctx, user.ID, ttl)
 	return user, token, err

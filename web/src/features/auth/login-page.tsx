@@ -1,7 +1,7 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useLogin } from "./api"
 import { AuthLayout } from "./auth-layout"
@@ -13,44 +13,105 @@ export function LoginPage() {
   const navigate = useNavigate()
   const login = useLogin()
   const [credentials, setCredentials] = useState({ username: "", password: "" })
+  // Set once the password was right, if the account needs a code too.
+  const [code, setCode] = useState<string>()
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    login.mutate(credentials, { onSuccess: () => navigate({ to: redirect ?? "/nodes" }) })
+    login.mutate(
+      { ...credentials, code },
+      { onSuccess: (result) => ("mfaRequired" in result ? setCode("") : navigate({ to: redirect ?? "/nodes" })) },
+    )
   }
 
+  function back() {
+    setCode(undefined)
+    login.reset()
+  }
+
+  const needsCode = code !== undefined
   return (
-    <AuthLayout title="Welcome back" description="Sign in to manage your nodes, servers and networks.">
+    <AuthLayout
+      title={needsCode ? "Two-factor authentication" : "Welcome back"}
+      description={needsCode ? "Enter the code of your authenticator app." : "Sign in to manage your nodes, servers and networks."}
+    >
       <form onSubmit={submit} noValidate>
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="username">Username</FieldLabel>
-            <Input
-              id="username"
-              autoComplete="username"
-              autoFocus
-              required
-              value={credentials.username}
-              onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="password">Password</FieldLabel>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={credentials.password}
-              onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-            />
-          </Field>
+          {needsCode ? (
+            <CodeField value={code} onChange={setCode} />
+          ) : (
+            <>
+              <Field>
+                <FieldLabel htmlFor="username">Username</FieldLabel>
+                <Input
+                  id="username"
+                  autoComplete="username"
+                  autoFocus
+                  required
+                  value={credentials.username}
+                  onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={credentials.password}
+                  onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
+                />
+              </Field>
+            </>
+          )}
           {login.error && <FieldError>{login.error.message}</FieldError>}
-          <Button type="submit" size="lg" className="w-full" disabled={login.isPending}>
-            {login.isPending ? "Signing in…" : "Sign in"}
+          <Button type="submit" size="lg" className="w-full" disabled={login.isPending || code === ""}>
+            {login.isPending ? "Signing in…" : needsCode ? "Verify" : "Sign in"}
           </Button>
+          {needsCode && (
+            <Button type="button" variant="ghost" className="-mt-2 w-full" onClick={back}>
+              Sign in as someone else
+            </Button>
+          )}
         </FieldGroup>
       </form>
     </AuthLayout>
+  )
+}
+
+/** A code of the authenticator app, or a recovery code for those who lost it. */
+function CodeField({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+  const [recovery, setRecovery] = useState(false)
+  return (
+    <Field>
+      <FieldLabel htmlFor="code">{recovery ? "Recovery code" : "Code"}</FieldLabel>
+      <Input
+        // Remounts, and so takes the focus, when switching between the kinds of code.
+        key={String(recovery)}
+        id="code"
+        autoFocus
+        autoComplete="one-time-code"
+        inputMode={recovery ? "text" : "numeric"}
+        maxLength={recovery ? 11 : 6}
+        placeholder={recovery ? "XXXXX-XXXXX" : "000000"}
+        className="h-12 text-center font-mono text-xl tracking-[0.3em] placeholder:text-muted-foreground/40"
+        value={value}
+        onChange={(e) => onChange(recovery ? e.target.value.trim() : e.target.value.replace(/\D/g, ""))}
+      />
+      <FieldDescription>
+        {recovery ? "Each recovery code works once." : "Lost your device?"}{" "}
+        <button
+          type="button"
+          className="font-medium text-foreground underline-offset-4 hover:underline"
+          onClick={() => {
+            setRecovery(!recovery)
+            onChange("")
+          }}
+        >
+          {recovery ? "Use your app instead" : "Use a recovery code"}
+        </button>
+      </FieldDescription>
+    </Field>
   )
 }

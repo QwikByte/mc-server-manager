@@ -1,4 +1,3 @@
-import { KeyIcon } from "@phosphor-icons/react"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -48,9 +47,7 @@ export function PasswordDialog({ username }: { username: string }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Change password" title="Change password">
-          <KeyIcon />
-        </Button>
+        <Button variant="outline">Change password</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="grid gap-6">

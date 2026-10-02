@@ -8,7 +8,6 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { useAccess } from "@/features/access/use-access"
 import { meQuery, useLogout } from "@/features/auth/api"
-import { PasswordDialog } from "@/features/auth/password-dialog"
 import { LogAlerts } from "@/features/logs/log-alerts"
 import { UpdateBanner } from "@/features/updates/update-banner"
 
@@ -56,18 +55,21 @@ export function AppShell() {
             {access.canSomewhere("logs.view") && <LogAlerts />}
             <ThemeToggle className="md:flex-1" />
           </div>
-          <div className="flex items-center gap-3 md:rounded-xl md:bg-muted/60 md:p-2">
-            <span
-              aria-hidden
-              className="grid size-8 shrink-0 place-items-center rounded-full bg-linear-to-br from-violet-500 to-sky-500 text-xs font-bold text-white uppercase max-md:hidden"
-            >
-              {user?.username.charAt(0)}
-            </span>
-            <span className="min-w-0 flex-1 leading-tight max-md:hidden">
-              <span className="block truncate text-sm font-semibold">{user?.username}</span>
-              <span className="block text-xs text-muted-foreground">Signed in</span>
-            </span>
-            {user && <PasswordDialog username={user.username} />}
+          <div className="flex items-center gap-2 md:gap-3 md:rounded-xl md:bg-muted/60 md:p-2">
+            <Link to="/account" className="group flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <span
+                aria-hidden
+                className="grid size-8 shrink-0 place-items-center rounded-full bg-linear-to-br from-violet-500 to-sky-500 text-xs font-bold text-white uppercase ring-primary/40 ring-offset-2 ring-offset-sidebar transition-shadow group-hover:ring-2"
+              >
+                {user?.username.charAt(0)}
+              </span>
+              <span className="min-w-0 flex-1 leading-tight max-md:sr-only">
+                <span className="block truncate text-sm font-semibold group-hover:text-primary group-data-[status=active]:text-primary">
+                  {user?.username}
+                </span>
+                <span className="block text-xs text-muted-foreground">Your account</span>
+              </span>
+            </Link>
             <Button
               variant="ghost"
               size="icon-sm"

@@ -34,11 +34,16 @@ func UserFrom(ctx context.Context) (User, bool) {
 }
 
 // Register adds the routes for the signed-in user's own account. They need a session but
-// no permission.
+// no permission. Those that check the password are rate limited like signing in.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/auth/me", h.me)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
-	mux.HandleFunc("PUT /api/auth/password", h.changePassword)
+	mux.HandleFunc("PUT /api/auth/password", h.limited(h.changePassword))
+	mux.HandleFunc("GET /api/auth/mfa", h.mfa)
+	mux.HandleFunc("POST /api/auth/mfa/setup", h.setUpMFA)
+	mux.HandleFunc("POST /api/auth/mfa", h.limited(h.enableMFA))
+	mux.HandleFunc("DELETE /api/auth/mfa", h.limited(h.disableMFA))
+	mux.HandleFunc("POST /api/auth/mfa/recovery-codes", h.limited(h.newRecoveryCodes))
 }
 
 // RegisterPublic adds the routes that work without a session: signing in and setting a
@@ -60,20 +65,26 @@ func (h *Handler) limited(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// login signs a user in. With two-factor authentication, a request without a code only
+// tells that one is needed.
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Code     string `json:"code"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
 	ttl := h.sessionTTL()
-	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, ttl)
-	if errors.Is(err, ErrInvalidCredentials) {
-		slog.Warn("Sign in failed", logging.Auth, logging.KeyUser, req.Username, "ip", ClientIP(r))
-		err = httpapi.Errorf(http.StatusUnauthorized, "Username or password is incorrect.")
+	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, req.Code, ttl)
+	switch {
+	case errors.Is(err, ErrCodeRequired):
+		httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"mfaRequired": true})
+		return
+	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, errWrongCode), errors.Is(err, errCodeLocked):
+		slog.Warn("Sign in failed", logging.Auth, logging.KeyUser, req.Username, "ip", ClientIP(r), "reason", err)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -101,7 +112,8 @@ func (h *Handler) checkSetup(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, user)
 }
 
-// setup sets the password with a setup link and signs the user in.
+// setup sets the password with a setup link and signs the user in, unless signing in needs
+// a code too.
 func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Token    string `json:"token"`
@@ -121,6 +133,10 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("Set password with setup link", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
+	if token == "" {
+		httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"mfaRequired": true})
+		return
+	}
 	http.SetCookie(w, sessionCookie(token, int(ttl.Seconds())))
 	httpapi.WriteJSON(w, http.StatusOK, user)
 }
@@ -136,25 +152,100 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, _ := UserFrom(r.Context())
-	var keep string
-	if c, err := r.Cookie(cookieName); err == nil {
-		keep = c.Value
+	err := h.svc.ChangePassword(r.Context(), user.ID, req.Current, req.New, sessionToken(r))
+	reply(w, r, "Change password", nil, err)
+}
+
+// mfa tells whether two-factor authentication is on for the signed-in user.
+func (h *Handler) mfa(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	m, err := h.svc.MFA(r.Context(), user.ID)
+	reply(w, r, "", m, err)
+}
+
+// setUpMFA returns a new secret for the user's authenticator app.
+func (h *Handler) setUpMFA(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	setup, err := h.svc.SetUpMFA(r.Context(), user)
+	reply(w, r, "", setup, err)
+}
+
+// enableMFA turns on two-factor authentication with a code of the app that was set up, and
+// returns the recovery codes. The user's other sessions end.
+func (h *Handler) enableMFA(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Password string `json:"password"`
+		Code     string `json:"code"`
 	}
-	if err := h.svc.ChangePassword(r.Context(), user.ID, req.Current, req.New, keep); err != nil {
-		slog.Warn("Change password failed", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r), "err", err)
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	slog.Info("Change password", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
-	w.WriteHeader(http.StatusNoContent)
+	user, _ := UserFrom(r.Context())
+	codes, err := h.svc.EnableMFA(r.Context(), user.ID, req.Password, req.Code, sessionToken(r))
+	reply(w, r, "Turn on two-factor authentication", recoveryCodes{codes}, err)
+}
+
+func (h *Handler) disableMFA(w http.ResponseWriter, r *http.Request) {
+	password, ok := readPassword(w, r)
+	if !ok {
+		return
+	}
+	user, _ := UserFrom(r.Context())
+	reply(w, r, "Turn off two-factor authentication", nil, h.svc.DisableMFA(r.Context(), user.ID, password))
+}
+
+func (h *Handler) newRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	password, ok := readPassword(w, r)
+	if !ok {
+		return
+	}
+	user, _ := UserFrom(r.Context())
+	codes, err := h.svc.NewRecoveryCodes(r.Context(), user.ID, password)
+	reply(w, r, "Create recovery codes", recoveryCodes{codes}, err)
+}
+
+type recoveryCodes struct {
+	Codes []string `json:"recoveryCodes"`
+}
+
+// readPassword reads a request that confirms a change with the user's password.
+func readPassword(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var req struct {
+		Password string `json:"password"`
+	}
+	err := httpapi.ReadJSON(w, r, &req)
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+	}
+	return req.Password, err == nil
+}
+
+// reply writes v, or no content if v is nil, or err. A change of the signed-in user's
+// account, named by action, is logged.
+func reply(w http.ResponseWriter, r *http.Request, action string, v any, err error) {
+	if action != "" {
+		user, _ := UserFrom(r.Context())
+		if err != nil {
+			slog.Warn(action+" failed", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r), "err", err)
+		} else {
+			slog.Info(action, logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
+		}
+	}
+	switch {
+	case err != nil:
+		httpapi.WriteError(w, r, err)
+	case v == nil:
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		httpapi.WriteJSON(w, http.StatusOK, v)
+	}
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(cookieName); err == nil {
-		if err := h.svc.Logout(r.Context(), c.Value); err != nil {
-			httpapi.WriteError(w, r, err)
-			return
-		}
+	if err := h.svc.Logout(r.Context(), sessionToken(r)); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
 	}
 	if user, ok := UserFrom(r.Context()); ok {
 		slog.Info("Sign out", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
@@ -185,6 +276,14 @@ func (h *Handler) Require(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, user)))
 	})
+}
+
+// sessionToken is the token of the request's session, if any.
+func sessionToken(r *http.Request) string {
+	if c, err := r.Cookie(cookieName); err == nil {
+		return c.Value
+	}
+	return ""
 }
 
 func sessionCookie(value string, maxAge int) *http.Cookie {

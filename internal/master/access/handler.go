@@ -18,6 +18,7 @@ var (
 	errStronger  = httpapi.Errorf(http.StatusForbidden, "This user has permissions that you don't have, so only someone with more permissions can manage them.")
 	errLastAdmin = httpapi.Errorf(http.StatusConflict, "Keep at least one enabled administrator.")
 	errSelf      = httpapi.Errorf(http.StatusBadRequest, "You can't disable or delete your own account.")
+	errOwnMFA    = httpapi.Errorf(http.StatusBadRequest, "Turn off your own two-factor authentication on your account page.")
 )
 
 // Handler serves the groups and the user management.
@@ -52,6 +53,7 @@ func (h *Handler) Register(m Mux) {
 	m.Handle("PUT /api/users/{id}", Everywhere(UsersManage), h.updateUser)
 	m.Handle("DELETE /api/users/{id}", Everywhere(UsersManage), h.deleteUser)
 	m.Handle("POST /api/users/{id}/setup-link", Everywhere(UsersManage), h.setupLink)
+	m.Handle("DELETE /api/users/{id}/mfa", Everywhere(UsersManage), h.resetMFA)
 }
 
 // saveGroup creates a group, or changes the one with the ID of the path. Only permissions
@@ -234,6 +236,23 @@ func (h *Handler) setupLink(w http.ResponseWriter, r *http.Request) {
 		logging.Note(ctx, slog.String("account", target.Username))
 	}
 	write(w, r, http.StatusOK, link, err)
+}
+
+// resetMFA turns off two-factor authentication for a user who lost the app and the recovery
+// codes. The own one needs the password, on the account page.
+func (h *Handler) resetMFA(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	target, _, err := h.manageable(r)
+	if err == nil && isSelf(ctx, target.ID) {
+		err = errOwnMFA
+	}
+	if err == nil {
+		err = h.users.ResetMFA(ctx, target.ID)
+	}
+	if err == nil {
+		logging.Note(ctx, slog.String("account", target.Username))
+	}
+	write(w, r, http.StatusNoContent, nil, err)
 }
 
 // manageable returns the user of the path if the signed-in user has every permission of

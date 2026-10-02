@@ -78,6 +78,8 @@ export interface User {
   disabled: boolean
   /** False until an invited user sets a password with the setup link. */
   passwordSet: boolean
+  /** Whether signing in needs a code of an authenticator app too. */
+  mfa: boolean
   createdAt: string
   /** IDs of the user's groups. */
   groups: string[]
@@ -139,4 +141,10 @@ export function useDeleteUser() {
 export function useNewSetupLink(id: number) {
   const invalidate = useInvalidate()
   return useMutation({ mutationFn: () => api<SetupLink>(`/users/${id}/setup-link`, { method: "POST" }), onSuccess: invalidate })
+}
+
+/** Turns off two-factor authentication for a user who lost the app and the recovery codes. */
+export function useResetMfa(id: number) {
+  const invalidate = useInvalidate()
+  return useMutation({ mutationFn: () => api(`/users/${id}/mfa`, { method: "DELETE" }), onSuccess: invalidate })
 }

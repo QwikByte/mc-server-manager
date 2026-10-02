@@ -205,6 +205,13 @@ const logsRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/logs/logs-page"), "LogsPage"),
 })
 
+// The signed-in user's own account, which needs no permission.
+const accountRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/account",
+  component: lazyRouteComponent(() => import("@/features/auth/account-page"), "AccountPage"),
+})
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -280,6 +287,7 @@ export const router = createRouter({
       policyRoute,
       pluginsRoute,
       logsRoute,
+      accountRoute,
       settingsRoute.addChildren([
         generalSettingsRoute,
         agentsSettingsRoute,

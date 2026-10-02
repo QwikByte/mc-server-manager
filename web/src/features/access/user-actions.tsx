@@ -1,4 +1,4 @@
-import { KeyIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react"
+import { KeyIcon, PencilSimpleIcon, ShieldSlashIcon, TrashIcon } from "@phosphor-icons/react"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -15,17 +15,45 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
-import { type Group, type User, useDeleteUser, useNewSetupLink, useUpdateUser } from "./api"
+import { type Group, type User, useDeleteUser, useNewSetupLink, useResetMfa, useUpdateUser } from "./api"
 import { GroupPicker } from "./group-picker"
 import { SetupLinkView } from "./setup-link-view"
 
-/** Edits, resets and deletes a user. The own account can't be disabled or deleted. */
+/**
+ * Edits, resets and deletes a user. The own account can't be disabled or deleted, and its
+ * two-factor authentication is turned off on the account page.
+ */
 export function UserActions({ user, groups, self }: { user: User; groups: Group[]; self: boolean }) {
   const remove = useDeleteUser()
+  const resetMfa = useResetMfa(user.id)
   return (
     <span className="flex justify-end gap-1">
       <EditUserDialog user={user} groups={groups} self={self} />
       <SetupLinkDialog user={user} />
+      {user.mfa && !self && (
+        <ConfirmDialog
+          trigger={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Turn off two-factor authentication for ${user.username}`}
+              title="Turn off two-factor authentication"
+            >
+              <ShieldSlashIcon />
+            </Button>
+          }
+          title={`Turn off two-factor authentication for ${user.username}?`}
+          description={`Only do this if ${user.username} lost the authenticator app and the recovery codes, and you are sure you are talking to them. Then their password alone signs them in until they set it up again.`}
+          action="Turn off"
+          destructive
+          onConfirm={() =>
+            resetMfa.mutate(undefined, {
+              onSuccess: () => toast.success(`Turned off two-factor authentication for ${user.username}`),
+              onError: (e) => toast.error(e.message),
+            })
+          }
+        />
+      )}
       {!self && (
         <ConfirmDialog
           trigger={
