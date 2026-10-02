@@ -1,4 +1,4 @@
-import { ArchiveIcon, CalendarCheckIcon, GearSixIcon, GraphIcon, HardDrivesIcon, PuzzlePieceIcon, StackIcon } from "@phosphor-icons/react"
+import { ArchiveIcon, CalendarCheckIcon, GearSixIcon, GraphIcon, HardDrivesIcon, PuzzlePieceIcon, ScrollIcon, StackIcon } from "@phosphor-icons/react"
 import type { Access } from "@/features/access/use-access"
 import { seesSettings } from "@/features/settings/tabs"
 
@@ -20,7 +20,13 @@ export const navigation = [
       { to: "/policies", label: "Policies", icon: CalendarCheckIcon, visible: (a: Access) => a.can("policies.view") },
     ],
   },
-  { title: "System", links: [{ to: "/settings", label: "Settings", icon: GearSixIcon, visible: seesSettings }] },
+  {
+    title: "System",
+    links: [
+      { to: "/logs", label: "Logs", icon: ScrollIcon, visible: (a: Access) => a.canSomewhere("logs.view") },
+      { to: "/settings", label: "Settings", icon: GearSixIcon, visible: seesSettings },
+    ],
+  },
 ] as const
 
 /** The first section the user may see, where the panel opens. */

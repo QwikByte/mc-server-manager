@@ -19,6 +19,7 @@ import { StatCard } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
+import { NodeActivity } from "@/features/logs/activity"
 import { serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
 import { formatBytes, formatDate, formatMegabytes } from "@/lib/format"
@@ -90,6 +91,8 @@ export function NodePage() {
               description={`The master can't reach the agent at ${node.address}. Check that mcsm-agent is running and that the port is open for the master.`}
             />
           )}
+          {/* Also while the agent is offline, which its last entries may explain. */}
+          {can("logs.view", node.id) && <NodeActivity nodeId={node.id} />}
         </>
       )}
     </>

@@ -67,8 +67,8 @@ function MasterFacts({ master, effectiveEnrollAddr }: { master: Master; effectiv
 }
 
 function formOf(s: MasterSettings) {
-  const { enrollAddr, sessionHours, joinTokenMinutes } = s
-  return { enrollAddr, sessionHours, joinTokenMinutes, nodeDefaults: limitsForm(s.nodeDefaults) }
+  const { enrollAddr, sessionHours, joinTokenMinutes, logDays } = s
+  return { enrollAddr, sessionHours, joinTokenMinutes, logDays, nodeDefaults: limitsForm(s.nodeDefaults) }
 }
 
 function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
@@ -135,6 +135,16 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               onChange={(sessionHours) => set({ sessionHours })}
             />
             <FieldDescription>Up to a week. Applies from the next sign-in; shorter sessions are safer.</FieldDescription>
+          </Field>
+        </FormSection>
+
+        <FormSection title="Log" description="What the master and its agents did and what went wrong, shown on the Logs page.">
+          <Field>
+            <FieldLabel htmlFor="settings-log-days">Keep entries for</FieldLabel>
+            <NumberInput id="settings-log-days" min={1} max={365} unit="days" value={form.logDays} onChange={(logDays) => set({ logDays })} />
+            <FieldDescription>
+              Up to a year. Older entries are deleted every hour; the newest million are kept at most. Export entries to keep them longer.
+            </FieldDescription>
           </Field>
         </FormSection>
 
