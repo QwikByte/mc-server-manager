@@ -10,7 +10,9 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -18,7 +20,30 @@ import (
 const (
 	filePerm = 0o640
 	dirPerm  = 0o750
+	// tempPrefix starts the names of temporary files and folders of the agent.
+	tempPrefix = ".mcsm-"
+	maxPath    = 1024
 )
+
+// Name turns a slash-separated path relative to a data directory into a name in it, "."
+// for the directory itself. os.Root rejects escaping paths too, but ".." has no use here,
+// so such paths are refused upfront, like backslashes.
+func Name(p string) (string, bool) {
+	if len(p) > maxPath || strings.ContainsAny(p, "\x00\\") || slices.Contains(strings.Split(p, "/"), "..") {
+		return "", false
+	}
+	name := strings.TrimPrefix(path.Clean("/"+p), "/")
+	if name == "" {
+		return ".", true
+	}
+	return filepath.FromSlash(name), true
+}
+
+// IsTemp reports whether a file or folder name is one of the agent's temporary ones.
+func IsTemp(name string) bool { return strings.HasPrefix(name, tempPrefix) }
+
+// TempName returns a new name for a temporary file or folder in the folder dir.
+func TempName(dir string) string { return filepath.Join(dir, tempPrefix+strings.ToLower(rand.Text())) }
 
 // Dir is the data directory of a server. Its methods that create files and
 // directories set their owner; files created otherwise belong to the agent.
@@ -56,7 +81,7 @@ func (d *Dir) WriteFile(name string, data []byte) error {
 // write succeeded. An existing file keeps its permissions. Without overwrite, an
 // existing file is left alone and fs.ErrExist is returned.
 func (d *Dir) Replace(name string, overwrite bool, write func(io.Writer) error) (err error) {
-	tmp := filepath.Join(filepath.Dir(name), ".mcsm-"+rand.Text()+".tmp")
+	tmp := TempName(filepath.Dir(name))
 	f, err := d.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm)
 	if err != nil {
 		return err

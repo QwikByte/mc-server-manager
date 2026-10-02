@@ -67,7 +67,7 @@ func Command() *cobra.Command {
 		},
 	}
 
-	root.AddCommand(serve, enrollCmd, statusCommand(&cfg), serverCommand(&cfg), storageCommand(&cfg))
+	root.AddCommand(serve, enrollCmd, statusCommand(&cfg), serverCommand(&cfg), storageCommand(&cfg), backupCommand(&cfg))
 	return root
 }
 

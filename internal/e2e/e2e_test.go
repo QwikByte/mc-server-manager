@@ -31,13 +31,16 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
+	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
+	"github.com/QwikByte/mc-server-manager/internal/master/policy"
 	"github.com/QwikByte/mc-server-manager/internal/master/properties"
+	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
@@ -191,14 +194,19 @@ func startMaster(t *testing.T) *master {
 func (m *master) panel(t *testing.T) *httptest.Server {
 	networks := network.NewService(m.db, m.nodes)
 	plugins := plugin.NewService(m.nodes, modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/"))
+	tasks := schedule.NewService(m.db, m.nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(m.nodes), policy.TaskKind: policy.New(m.nodes)})
+	check(t, tasks.Start(t.Context()))
 	mux := http.NewServeMux()
-	server.NewHandler(m.nodes, networks).Register(mux)
+	server.NewHandler(m.nodes, networks, tasks).Register(mux)
 	network.NewHandler(networks).Register(mux)
 	files.NewHandler(m.nodes).Register(mux)
 	properties.NewHandler(m.nodes).Register(mux)
 	node.NewHandler(m.nodes).Register(mux)
 	plugin.NewHandler(plugins).Register(mux)
 	template.NewHandler(template.NewService(m.db, plugins)).Register(mux)
+	backup.NewHandler(m.nodes).Register(mux)
+	schedule.NewHandler(tasks, backup.TaskKind).Register(mux, "/api/backup-jobs")
+	schedule.NewHandler(tasks, policy.TaskKind).Register(mux, "/api/policies")
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -352,7 +360,16 @@ func (f *fakeRuntime) Restart(_ context.Context, id string) error {
 	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_RUNNING)
 }
 
-func (f *fakeRuntime) Remove(context.Context, string) error { return runtime.ErrNotFound }
+func (f *fakeRuntime) Remove(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	i := slices.IndexFunc(f.servers, func(s runtime.Server) bool { return s.ID == id })
+	if i < 0 {
+		return runtime.ErrNotFound
+	}
+	f.servers = slices.Delete(f.servers, i, i+1)
+	return os.RemoveAll(filepath.Join(f.dir, id))
+}
 
 func (f *fakeRuntime) Logs(context.Context, string, int) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {

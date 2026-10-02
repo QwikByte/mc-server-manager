@@ -80,6 +80,16 @@ func (l *Locations) Path(name string) (string, error) {
 	return path, nil
 }
 
+// BackupPath returns the directory with the backups kept in a location; an empty name
+// means the default location. Only the agent can access it, containers can't.
+func (l *Locations) BackupPath(name string) (string, error) {
+	if name == "" || name == Default {
+		return filepath.Join(l.dataDir, "backups"), nil
+	}
+	path, err := l.Path(name)
+	return filepath.Join(path, "backups"), err
+}
+
 // Add registers a directory as a location, creating it if needed.
 func (l *Locations) Add(name, path string) error {
 	if !namePattern.MatchString(name) || name == Default {
@@ -107,7 +117,7 @@ func (l *Locations) Add(name, path string) error {
 	return l.save(paths)
 }
 
-// Remove unregisters a location. Its directory and data are kept.
+// Remove unregisters a location. Its directory, data and backups are kept.
 func (l *Locations) Remove(name string) error {
 	paths, err := l.load()
 	if err != nil {

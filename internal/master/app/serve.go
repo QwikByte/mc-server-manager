@@ -16,12 +16,15 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
+	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
+	"github.com/QwikByte/mc-server-manager/internal/master/policy"
 	"github.com/QwikByte/mc-server-manager/internal/master/properties"
+	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
@@ -67,9 +70,13 @@ func serve(ctx context.Context, cfg config) error {
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	plugins := plugin.NewService(nodes, modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN))
+	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)})
+	if err := tasks.Start(ctx); err != nil {
+		return err
+	}
 	httpServer := &http.Server{
 		Addr:              cfg.httpAddr,
-		Handler:           routes(users, nodes, network.NewService(db, nodes), plugins, template.NewService(db, plugins)),
+		Handler:           routes(users, nodes, network.NewService(db, nodes), plugins, template.NewService(db, plugins), tasks),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -95,17 +102,22 @@ func serve(ctx context.Context, cfg config) error {
 	return errors.Join(err, httpServer.Shutdown(shutdownCtx))
 }
 
-func routes(users *auth.Service, nodes *node.Service, networks *network.Service, plugins *plugin.Service, templates *template.Service) http.Handler {
+func routes(users *auth.Service, nodes *node.Service, networks *network.Service, plugins *plugin.Service,
+	templates *template.Service, tasks *schedule.Service,
+) http.Handler {
 	authHandler := auth.NewHandler(users)
 	api := http.NewServeMux()
 	authHandler.Register(api)
 	node.NewHandler(nodes).Register(api)
-	server.NewHandler(nodes, networks).Register(api)
+	server.NewHandler(nodes, networks, tasks).Register(api)
 	network.NewHandler(networks).Register(api)
 	files.NewHandler(nodes).Register(api)
 	properties.NewHandler(nodes).Register(api)
 	plugin.NewHandler(plugins).Register(api)
 	template.NewHandler(templates).Register(api)
+	backup.NewHandler(nodes).Register(api)
+	schedule.NewHandler(tasks, backup.TaskKind).Register(api, "/api/backup-jobs")
+	schedule.NewHandler(tasks, policy.TaskKind).Register(api, "/api/policies")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)

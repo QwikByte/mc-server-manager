@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/local"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/backup"
 	"github.com/QwikByte/mc-server-manager/internal/agent/files"
 	"github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/plugin"
@@ -45,8 +46,9 @@ func serve(ctx context.Context, cfg config) error {
 	defer rt.Close()
 
 	// The master connects via mutual TLS, the local CLI via the Unix socket.
-	remote := NewGRPCServer(rt, identity, locations, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
-	localSrv := NewGRPCServer(rt, identity, locations, grpc.Creds(local.NewCredentials()))
+	svc := newServices(rt, identity, locations)
+	remote := svc.grpcServer(grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
+	localSrv := svc.grpcServer(grpc.Creds(local.NewCredentials()))
 
 	tcpListener, err := net.Listen("tcp", cfg.listenAddr)
 	if err != nil {
@@ -80,13 +82,41 @@ func serve(ctx context.Context, cfg config) error {
 	return err
 }
 
+// services are the gRPC services of the agent. The servers for the master and the local CLI
+// share them, so both see the same state, e.g. a backup in progress.
+type services struct {
+	node       *node.Service
+	server     *server.Service
+	files      *files.Service
+	properties *properties.Service
+	plugin     *plugin.Service
+	backup     *backup.Service
+}
+
+func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations) *services {
+	backups := backup.NewService(rt, locations)
+	return &services{
+		node:       node.NewService(rt, identity, locations),
+		server:     server.NewService(rt, backups),
+		files:      files.NewService(rt),
+		properties: properties.NewService(rt),
+		plugin:     plugin.NewService(rt),
+		backup:     backups,
+	}
+}
+
+func (s *services) grpcServer(opts ...grpc.ServerOption) *grpc.Server {
+	srv := grpc.NewServer(opts...)
+	mcsmv1.RegisterNodeServiceServer(srv, s.node)
+	mcsmv1.RegisterServerServiceServer(srv, s.server)
+	mcsmv1.RegisterFileServiceServer(srv, s.files)
+	mcsmv1.RegisterPropertiesServiceServer(srv, s.properties)
+	mcsmv1.RegisterPluginServiceServer(srv, s.plugin)
+	mcsmv1.RegisterBackupServiceServer(srv, s.backup)
+	return srv
+}
+
 // NewGRPCServer registers all agent services on a new gRPC server.
 func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, opts ...grpc.ServerOption) *grpc.Server {
-	s := grpc.NewServer(opts...)
-	mcsmv1.RegisterNodeServiceServer(s, node.NewService(rt, identity, locations))
-	mcsmv1.RegisterServerServiceServer(s, server.NewService(rt))
-	mcsmv1.RegisterFileServiceServer(s, files.NewService(rt))
-	mcsmv1.RegisterPropertiesServiceServer(s, properties.NewService(rt))
-	mcsmv1.RegisterPluginServiceServer(s, plugin.NewService(rt))
-	return s
+	return newServices(rt, identity, locations).grpcServer(opts...)
 }

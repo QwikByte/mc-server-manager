@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"mime"
 	"net/http"
 	"path"
 	"strconv"
@@ -92,9 +91,9 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	attachment(w, path.Base(p))
+	httpapi.Attachment(w, path.Base(p))
 	w.Header().Set("Content-Length", strconv.FormatInt(first.GetSize(), 10))
-	relay(w, first, stream)
+	httpapi.Relay(w, first, stream)
 }
 
 func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
@@ -118,30 +117,8 @@ func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
 	if name == "/" {
 		name = "server"
 	}
-	attachment(w, name+".zip")
-	relay(w, first, stream)
-}
-
-// attachment makes the browser save the response instead of rendering it, so files
-// from a server can't run scripts in the panel.
-func attachment(w http.ResponseWriter, name string) {
-	h := w.Header()
-	h.Set("Content-Type", "application/octet-stream")
-	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
-	h.Set("Content-Security-Policy", "sandbox")
-	h.Set("Cache-Control", "no-store")
-}
-
-type chunk interface{ GetData() []byte }
-
-// relay copies a stream of chunks to the response. Once the response has started,
-// an error can only cut it short, which the browser reports as a failed download.
-func relay[T chunk](w http.ResponseWriter, first T, stream interface{ Recv() (T, error) }) {
-	for msg, err := first, error(nil); err == nil; msg, err = stream.Recv() {
-		if _, err := w.Write(msg.GetData()); err != nil { //nolint:gosec // an attachment, see attachment()
-			return
-		}
-	}
+	httpapi.Attachment(w, name+".zip")
+	httpapi.Relay(w, first, stream)
 }
 
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
