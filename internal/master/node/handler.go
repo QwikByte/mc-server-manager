@@ -2,11 +2,13 @@ package node
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -117,6 +119,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	logging.Note(r.Context(), slog.String(logging.KeyNode, n.ID), slog.String(logging.KeyNodeName, n.Name))
 	httpapi.WriteJSON(w, http.StatusCreated, map[string]any{
 		"node": view{Node: n, Status: "pending"}, "joinToken": token.String(), "joinTokenExpiresAt": token.ExpiresAt,
 	})

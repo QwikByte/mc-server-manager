@@ -10,6 +10,8 @@ export interface MasterSettings {
   joinTokenMinutes: number
   /** Limits new nodes get. */
   nodeDefaults: NodeLimits
+  /** How long log entries are kept. */
+  logDays: number
 }
 
 /** The running master; apart from the certificate, it only changes with a restart. */

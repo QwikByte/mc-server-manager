@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { useAccess } from "@/features/access/use-access"
 import { meQuery, useLogout } from "@/features/auth/api"
 import { PasswordDialog } from "@/features/auth/password-dialog"
+import { LogAlerts } from "@/features/logs/log-alerts"
 
 /** A sidebar on large screens, a bar at the top on small ones. */
 export function AppShell() {
@@ -50,7 +51,10 @@ export function AppShell() {
             ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:gap-3">
-          <ThemeToggle className="md:w-full" />
+          <div className="flex items-center gap-2">
+            {access.canSomewhere("logs.view") && <LogAlerts />}
+            <ThemeToggle className="md:flex-1" />
+          </div>
           <div className="flex items-center gap-3 md:rounded-xl md:bg-muted/60 md:p-2">
             <span
               aria-hidden

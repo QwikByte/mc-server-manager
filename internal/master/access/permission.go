@@ -46,6 +46,8 @@ const (
 	PoliciesView     Permission = "policies.view"
 	PoliciesManage   Permission = "policies.manage"
 
+	LogsView Permission = "logs.view"
+
 	SettingsView Permission = "settings.view"
 	SettingsEdit Permission = "settings.edit"
 	Terminal     Permission = "terminal.use"
@@ -125,6 +127,9 @@ var Catalog = []Area{
 		global(BackupJobsManage, "Manage backup jobs", "Create, change, delete and run backup jobs for any server.", BackupJobsView),
 		global(PoliciesView, "See policies", ""),
 		global(PoliciesManage, "Manage policies", "Create, change, delete and run policies, which restart, stop and start any server or run console commands.", PoliciesView),
+	}},
+	{"Logs", []Info{
+		scoped(LogsView, "See logs", "Actions, warnings and errors of the master and the agents. Entries about users, groups, settings and the master itself need it for all servers."),
 	}},
 	{"System", []Info{
 		global(SettingsView, "See the master's settings", "Its version, addresses and settings."),

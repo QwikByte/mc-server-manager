@@ -16,6 +16,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/backup"
 	"github.com/QwikByte/mc-server-manager/internal/agent/files"
+	agentlogs "github.com/QwikByte/mc-server-manager/internal/agent/logs"
 	"github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/plugin"
 	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
@@ -24,10 +25,17 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/server"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
 func serve(ctx context.Context, cfg config) error {
+	buf := agentlogs.NewBuffer()
+	logFile, err := logging.Setup(cfg.log, buf.Handler(cfg.log.Level))
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
 	if err := ensureDataDir(cfg); err != nil {
 		return err
 	}
@@ -46,9 +54,9 @@ func serve(ctx context.Context, cfg config) error {
 	defer rt.Close()
 
 	// The master connects via mutual TLS, the local CLI via the Unix socket.
-	svc := newServices(rt, identity, locations)
-	remote := svc.grpcServer(grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
-	localSrv := svc.grpcServer(grpc.Creds(local.NewCredentials()))
+	svc := newServices(rt, identity, locations, buf, slog.Default())
+	remote := svc.grpcServer(agentlogs.FromMaster, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
+	localSrv := svc.grpcServer(agentlogs.FromLocal, grpc.Creds(local.NewCredentials()))
 
 	tcpListener, err := net.Listen("tcp", cfg.listenAddr)
 	if err != nil {
@@ -68,8 +76,8 @@ func serve(ctx context.Context, cfg config) error {
 	errc := make(chan error, 2)
 	go func() { errc <- remote.Serve(tcpListener) }()
 	go func() { errc <- localSrv.Serve(unixListener) }()
-	slog.Info("agent started", "version", buildinfo.Version, "listen", cfg.listenAddr, "socket", cfg.socket(),
-		"node", identity.Get().Leaf.Subject.CommonName, "certificate_not_after", identity.Get().Leaf.NotAfter,
+	slog.Info("Agent started", "version", buildinfo.Version, "listen", cfg.listenAddr, "socket", cfg.socket(),
+		"identity", identity.Get().Leaf.Subject.CommonName, "certificate_not_after", identity.Get().Leaf.NotAfter,
 		"ca_fingerprint", pki.Fingerprint(identity.CA))
 
 	select {
@@ -79,6 +87,11 @@ func serve(ctx context.Context, cfg config) error {
 	// Running servers are not affected: containers keep running without the agent.
 	remote.Stop()
 	localSrv.Stop()
+	if err != nil {
+		slog.Error("Agent stopped", "err", err)
+	} else {
+		slog.Info("Agent stopped")
+	}
 	return err
 }
 
@@ -91,9 +104,12 @@ type services struct {
 	properties *properties.Service
 	plugin     *plugin.Service
 	backup     *backup.Service
+	log        *agentlogs.Service
+	calls      *slog.Logger
 }
 
-func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations) *services {
+// newServices returns the services, which log the calls they receive to calls.
+func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, buf *agentlogs.Buffer, calls *slog.Logger) *services {
 	backups := backup.NewService(rt, locations)
 	return &services{
 		node:       node.NewService(rt, identity, locations),
@@ -102,21 +118,27 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 		properties: properties.NewService(rt),
 		plugin:     plugin.NewService(rt),
 		backup:     backups,
+		log:        agentlogs.NewService(buf),
+		calls:      calls,
 	}
 }
 
-func (s *services) grpcServer(opts ...grpc.ServerOption) *grpc.Server {
-	srv := grpc.NewServer(opts...)
+// grpcServer serves the services to callers from origin, logging their calls.
+func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Server {
+	srv := grpc.NewServer(append(agentlogs.Interceptors(origin, s.calls), opts...)...)
 	mcsmv1.RegisterNodeServiceServer(srv, s.node)
 	mcsmv1.RegisterServerServiceServer(srv, s.server)
 	mcsmv1.RegisterFileServiceServer(srv, s.files)
 	mcsmv1.RegisterPropertiesServiceServer(srv, s.properties)
 	mcsmv1.RegisterPluginServiceServer(srv, s.plugin)
 	mcsmv1.RegisterBackupServiceServer(srv, s.backup)
+	mcsmv1.RegisterLogServiceServer(srv, s.log)
 	return srv
 }
 
-// NewGRPCServer registers all agent services on a new gRPC server.
-func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, opts ...grpc.ServerOption) *grpc.Server {
-	return newServices(rt, identity, locations).grpcServer(opts...)
+// NewGRPCServer registers all agent services on a new gRPC server for the master. The calls
+// are logged to buf, which the log service reads.
+func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, buf *agentlogs.Buffer, opts ...grpc.ServerOption) *grpc.Server {
+	calls := slog.New(buf.Handler(slog.LevelDebug))
+	return newServices(rt, identity, locations, buf, calls).grpcServer(agentlogs.FromMaster, opts...)
 }

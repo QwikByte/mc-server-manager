@@ -7,6 +7,7 @@ import { accessQuery } from "@/features/access/api"
 import { accessOf } from "@/features/access/use-access"
 import { meQuery } from "@/features/auth/api"
 import { LoginPage } from "@/features/auth/login-page"
+import { validateLogSearch } from "@/features/logs/search"
 import { ApiError } from "@/lib/api"
 
 export const queryClient = new QueryClient({
@@ -120,6 +121,11 @@ const serverBackupsRoute = createRoute({
   path: "backups",
   component: lazyRouteComponent(() => import("@/features/backups/server-backups-page"), "ServerBackupsPage"),
 })
+const serverActivityRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "activity",
+  component: lazyRouteComponent(() => import("@/features/logs/activity"), "ServerActivityPage"),
+})
 const serverSettingsRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "settings",
@@ -191,6 +197,14 @@ const pluginsRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/plugins/plugins-page"), "PluginsPage"),
 })
 
+// The filter of the log is in the address, so that it can be shared and bookmarked.
+const logsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/logs",
+  validateSearch: validateLogSearch,
+  component: lazyRouteComponent(() => import("@/features/logs/logs-page"), "LogsPage"),
+})
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -250,6 +264,7 @@ export const router = createRouter({
         serverPropertiesRoute,
         serverPluginsRoute,
         serverBackupsRoute,
+        serverActivityRoute,
         serverSettingsRoute,
       ]),
       networksRoute,
@@ -264,6 +279,7 @@ export const router = createRouter({
       newPolicyRoute,
       policyRoute,
       pluginsRoute,
+      logsRoute,
       settingsRoute.addChildren([
         generalSettingsRoute,
         agentsSettingsRoute,

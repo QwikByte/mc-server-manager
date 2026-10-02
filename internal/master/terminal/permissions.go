@@ -61,6 +61,7 @@ func agentChecks(nodeID string) map[string]check {
 		"backup list":    server(access.BackupsView),
 		"backup create":  server(access.BackupsCreate),
 		"backup restore": server(access.BackupsRestore),
+		"logs":           node(access.LogsView),
 	}
 }
 
@@ -72,6 +73,10 @@ func (h *Handler) masterChecks() map[string]check {
 			return access.SettingsView, g.Has(access.SettingsView)
 		},
 		"node list": func(context.Context, access.Grants, []string) (access.Permission, bool) { return "", true },
+		// The entries are limited to the scope of the permission.
+		"logs": func(_ context.Context, g access.Grants, _ []string) (access.Permission, bool) {
+			return access.LogsView, g.Somewhere(access.LogsView, "")
+		},
 		"node renew": func(ctx context.Context, g access.Grants, args []string) (access.Permission, bool) {
 			n, err := h.findNode(ctx, args[0])
 			return access.NodesCertificates, err != nil || g.On(access.NodesCertificates, n.ID, "") // unknown: renew reports it

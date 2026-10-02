@@ -28,6 +28,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/app"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
+	agentlogs "github.com/QwikByte/mc-server-manager/internal/agent/logs"
 	agentnode "github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
@@ -36,6 +37,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/mc-server-manager/internal/master/logs"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
@@ -169,6 +171,7 @@ type master struct {
 	cert       *pki.Holder
 	settings   *settings.Service
 	nodes      *node.Service
+	logs       *logs.Store
 	enrollAddr string
 	modrinth   *fakeModrinth
 }
@@ -189,10 +192,16 @@ func startMaster(t *testing.T) *master {
 	check(t, err)
 	nodes := node.NewService(db, ca, masterCert, conf)
 	t.Cleanup(nodes.Close)
+	logStore := logs.NewStore(db, logs.NewNames(nodes), conf.LogRetention)
+	logStore.Start(t.Context())
+	t.Cleanup(logStore.Close)
 	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(enrollServer, nodes)
 	serve(t, enrollServer, ln)
-	return &master{db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, enrollAddr: ln.Addr().String(), modrinth: startModrinth(t)}
+	return &master{
+		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t),
+	}
 }
 
 // services are those of a master's panel.
@@ -204,6 +213,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
 		Networks: network.NewService(m.db, nodes), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Logs: m.logs,
 	}
 }
 
@@ -224,6 +234,7 @@ type agent struct {
 	dir      string
 	identity *agentnode.Identity
 	runtime  *fakeRuntime
+	log      *agentlogs.Buffer
 }
 
 // startAgent registers a node and enrolls its agent with a join token.
@@ -231,12 +242,12 @@ func (m *master) startAgent(t *testing.T, name string) agent {
 	ln := listen(t)
 	n, token, err := m.nodes.Create(t.Context(), name, ln.Addr().String())
 	check(t, err)
-	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{dir: t.TempDir()}}
+	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{dir: t.TempDir()}, log: agentlogs.NewBuffer()}
 	check(t, enroll.Run(t.Context(), token.String(), a.dir))
 	a.identity, err = agentnode.LoadIdentity(a.dir)
 	check(t, err)
 	creds := credentials.NewTLS(pki.AgentServerTLS(a.identity.Holder, a.identity.CA))
-	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), grpc.Creds(creds)), ln)
+	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), a.log, grpc.Creds(creds)), ln)
 	return a
 }
 

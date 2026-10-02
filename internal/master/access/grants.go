@@ -116,6 +116,18 @@ func (g Grants) Somewhere(p Permission, nodeID string) bool {
 	return false
 }
 
+// Scope returns where p applies: everywhere, or on whole nodes and single servers.
+func (g Grants) Scope(p Permission) (all bool, nodes []string, servers []Target) {
+	s := g.perms[p]
+	switch {
+	case g.admin:
+		return true, nil, nil
+	case s == nil:
+		return false, nil, nil
+	}
+	return s.all, slices.Collect(maps.Keys(s.nodes)), slices.Collect(maps.Keys(s.servers))
+}
+
 // SeesNode reports whether the node is shown: if the user may see it or some of its servers.
 func (g Grants) SeesNode(nodeID string) bool {
 	return g.Somewhere(NodesView, nodeID) || g.Somewhere(ServersView, nodeID)

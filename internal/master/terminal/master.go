@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
+	"github.com/QwikByte/mc-server-manager/internal/master/logs"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
 
@@ -43,7 +44,7 @@ func (h *Handler) masterCommands() []*cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE:  h.status,
 	}
-	return []*cobra.Command{status, nodes}
+	return []*cobra.Command{status, nodes, logs.Command(func() (*logs.Store, error) { return h.logs, nil })}
 }
 
 func (h *Handler) status(cmd *cobra.Command, _ []string) error {

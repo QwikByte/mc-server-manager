@@ -2,8 +2,10 @@ package network
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -39,6 +41,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	logging.Note(r.Context(), slog.String("name", req.Name))
 	n, err := h.svc.Create(r.Context(), req.Name, req.Proxy, req.Lobby)
 	write(w, r, http.StatusCreated, n, err)
 }

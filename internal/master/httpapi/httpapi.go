@@ -63,7 +63,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			return
 		}
 	}
-	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	slog.Error("Request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 }
 

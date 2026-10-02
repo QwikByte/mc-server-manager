@@ -21,9 +21,10 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agentcli"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/mc-server-manager/internal/master/logs"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 )
@@ -51,9 +52,12 @@ type Master interface {
 type Handler struct {
 	nodes  Nodes
 	master Master
+	logs   *logs.Store
 }
 
-func NewHandler(nodes Nodes, master Master) *Handler { return &Handler{nodes: nodes, master: master} }
+func NewHandler(nodes Nodes, master Master, logs *logs.Store) *Handler {
+	return &Handler{nodes: nodes, master: master, logs: logs}
+}
 
 // Register adds the route; besides the terminal permission, every command needs its own.
 func (h *Handler) Register(mux access.Mux) {
@@ -85,8 +89,10 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 	if len(args) > 0 && args[0] == root.Name() {
 		args = args[1:]
 	}
-	user, _ := auth.UserFrom(r.Context())
-	slog.Info("terminal command", "user", user.Username, "target", req.Target, "command", req.Command)
+	logging.Note(r.Context(), slog.String("command", req.Command))
+	if req.Target != MasterTarget {
+		logging.Note(r.Context(), slog.String(logging.KeyNode, req.Target))
+	}
 
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	w.Header().Set("Cache-Control", "no-store")
@@ -103,6 +109,7 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 		if st, ok := status.FromError(err); ok {
 			done.Error = st.Message() // errors of agents, without the gRPC prefix
 		}
+		logging.Note(r.Context(), slog.String("err", done.Error))
 	}
 	out.send(done)
 }

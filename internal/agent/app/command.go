@@ -14,12 +14,14 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
 	"github.com/QwikByte/mc-server-manager/internal/agentcli"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
 type config struct {
 	dataDir    string
 	socketPath string
 	listenAddr string
+	log        logging.Options
 }
 
 func (c config) pkiDir() string { return filepath.Join(c.dataDir, "pki") }
@@ -51,6 +53,7 @@ func Command() *cobra.Command {
 		RunE:  func(cmd *cobra.Command, _ []string) error { return serve(cmd.Context(), cfg) },
 	}
 	serve.Flags().StringVar(&cfg.listenAddr, "listen", ":7443", "listen address for connections from the master")
+	cfg.log.AddFlags(serve.Flags())
 
 	enrollCmd := &cobra.Command{
 		Use:   "enroll <join-token>",

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -86,7 +87,7 @@ func (h *Handler) saveGroup(w http.ResponseWriter, r *http.Request) {
 		group, err = h.svc.updateGroup(ctx, id, in)
 	}
 	if err == nil {
-		slog.Info("group saved", "by", username(ctx), "group", group.Name, "permissions", group.Permissions, "all_servers", group.AllServers)
+		logging.Note(ctx, slog.String("group", group.Name), slog.Any("permissions", group.Permissions), slog.Bool("all_servers", group.AllServers))
 	}
 	write(w, r, status, group, err)
 }
@@ -104,7 +105,7 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		err = h.svc.deleteGroup(ctx, group.ID)
 	}
 	if err == nil {
-		slog.Info("group deleted", "by", username(ctx), "group", group.Name)
+		logging.Note(ctx, slog.String("group", group.Name))
 	}
 	write(w, r, http.StatusNoContent, nil, err)
 }
@@ -166,7 +167,7 @@ func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	slog.Info("user invited", "by", username(ctx), "user", user.Username, "groups", req.Groups)
+	logging.Note(ctx, slog.String("account", user.Username), slog.Any("groups", req.Groups))
 	httpapi.WriteJSON(w, http.StatusCreated, map[string]any{"user": user, "setupLink": link})
 }
 
@@ -198,7 +199,7 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		err = h.users.SetDisabled(ctx, target.ID, req.Disabled)
 	}
 	if err == nil {
-		slog.Info("user changed", "by", username(ctx), "user", target.Username, "groups", req.Groups, "disabled", req.Disabled)
+		logging.Note(ctx, slog.String("account", target.Username), slog.Any("groups", req.Groups), slog.Bool("disabled", req.Disabled))
 	}
 	write(w, r, http.StatusNoContent, nil, err)
 }
@@ -216,7 +217,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		err = h.users.Delete(ctx, target.ID)
 	}
 	if err == nil {
-		slog.Info("user deleted", "by", username(ctx), "user", target.Username)
+		logging.Note(ctx, slog.String("account", target.Username))
 	}
 	write(w, r, http.StatusNoContent, nil, err)
 }
@@ -230,7 +231,7 @@ func (h *Handler) setupLink(w http.ResponseWriter, r *http.Request) {
 		link, err = h.users.NewSetupLink(ctx, target.ID)
 	}
 	if err == nil {
-		slog.Info("setup link created", "by", username(ctx), "user", target.Username)
+		logging.Note(ctx, slog.String("account", target.Username))
 	}
 	write(w, r, http.StatusOK, link, err)
 }
@@ -290,11 +291,6 @@ func (h *Handler) keepAdmin(ctx context.Context, userID int64) error {
 func isSelf(ctx context.Context, userID int64) bool {
 	user, ok := auth.UserFrom(ctx)
 	return ok && user.ID == userID
-}
-
-func username(ctx context.Context) string {
-	user, _ := auth.UserFrom(ctx)
-	return user.Username
 }
 
 func write(w http.ResponseWriter, r *http.Request, status int, v any, err error) {

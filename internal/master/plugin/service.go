@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 )
@@ -403,7 +404,7 @@ func message(err error) string {
 	if st, ok := status.FromError(err); ok {
 		return st.Message()
 	}
-	slog.Error("plugin operation failed", "err", err)
+	slog.Error("Plugin operation failed", logging.Plugins, "err", err)
 	return "internal error"
 }
 

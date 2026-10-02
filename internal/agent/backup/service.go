@@ -25,6 +25,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
 const (
@@ -105,7 +106,7 @@ func (s *Service) CreateBackup(ctx context.Context, req *mcsmv1.CreateBackupRequ
 	}
 	if req.GetJobId() != "" && req.GetKeep() > 0 {
 		if err := s.store.prune(srv.ID, req.GetJobId(), int(req.GetKeep())); err != nil {
-			slog.Warn("can't delete old backups", "server", srv.ID, "job", req.GetJobId(), "err", err)
+			slog.Warn("Can't delete old backups", logging.Backups, logging.KeyServer, srv.ID, "job", req.GetJobId(), "err", err)
 		}
 	}
 	return &mcsmv1.CreateBackupResponse{Backup: b.proto()}, nil

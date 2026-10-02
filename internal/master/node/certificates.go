@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/peer"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -84,7 +85,7 @@ func (s *Service) MaintainCertificates(ctx context.Context, interval time.Durati
 func (s *Service) renewDue(ctx context.Context) {
 	nodes, err := s.List(ctx)
 	if err != nil {
-		slog.Error("list nodes for certificate renewal", "err", err)
+		slog.Error("Can't list the nodes to renew their certificates", logging.Nodes, "err", err)
 		return
 	}
 	for _, n := range nodes {
@@ -94,9 +95,9 @@ func (s *Service) renewDue(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, renewTimeout)
 		if _, cert, err := s.Status(ctx, n.ID); err == nil && pki.NeedsRenewal(cert, time.Now()) {
 			if renewed, err := s.RenewCertificate(ctx, n.ID); err != nil {
-				slog.Warn("renew node certificate", "node", n.Name, "err", err)
+				slog.Warn("Renew node certificate failed", logging.Nodes, logging.KeyNode, n.ID, logging.KeyNodeName, n.Name, "err", err)
 			} else {
-				slog.Info("renewed node certificate", "node", n.Name, "not_after", renewed.NotAfter)
+				slog.Info("Renew node certificate", logging.Nodes, logging.KeyNode, n.ID, logging.KeyNodeName, n.Name, "not_after", renewed.NotAfter)
 			}
 		}
 		cancel()

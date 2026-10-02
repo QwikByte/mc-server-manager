@@ -28,6 +28,7 @@ const (
 	maxSessionHours     = 7 * 24
 	minJoinTokenMinutes = 5
 	maxJoinTokenMinutes = 24 * 60
+	maxLogDays          = 365
 )
 
 var hostname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
@@ -43,11 +44,13 @@ type Settings struct {
 	JoinTokenMinutes int `json:"joinTokenMinutes"`
 	// NodeDefaults are the limits new nodes get.
 	NodeDefaults node.Limits `json:"nodeDefaults"`
+	// LogDays is how long log entries are kept.
+	LogDays int `json:"logDays"`
 }
 
 // defaults apply until the settings are changed, and to settings added later.
 func defaults() Settings {
-	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}}
+	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30}
 }
 
 // Master describes the running master. Apart from its certificate, it only changes with a restart.
@@ -131,6 +134,11 @@ func (s *Service) JoinTokenTTL() time.Duration {
 // NodeDefaults implements node.Config.
 func (s *Service) NodeDefaults() node.Limits { return s.Get().NodeDefaults }
 
+// LogRetention is how long log entries are kept.
+func (s *Service) LogRetention() time.Duration {
+	return time.Duration(s.Get().LogDays) * 24 * time.Hour
+}
+
 // SessionTTL is how long new sign-ins to the panel last.
 func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().SessionHours) * time.Hour }
 
@@ -142,6 +150,8 @@ func validate(s Settings) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a session duration from 1 to %d hours.", maxSessionHours)
 	case s.JoinTokenMinutes < minJoinTokenMinutes || s.JoinTokenMinutes > maxJoinTokenMinutes:
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a join token validity from %d to %d minutes.", minJoinTokenMinutes, maxJoinTokenMinutes)
+	case s.LogDays < 1 || s.LogDays > maxLogDays:
+		return httpapi.Errorf(http.StatusBadRequest, "Enter how long log entries are kept, from 1 to %d days.", maxLogDays)
 	}
 	return s.NodeDefaults.Validate()
 }

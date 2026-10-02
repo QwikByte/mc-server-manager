@@ -1,5 +1,6 @@
 import {
   ArchiveIcon,
+  ClockCounterClockwiseIcon,
   FolderIcon,
   GearIcon,
   HardDrivesIcon,
@@ -55,6 +56,13 @@ const tabs = [
     permission: "servers.view",
   },
   { to: "/nodes/$nodeId/servers/$serverId/backups", label: () => "Backups", icon: ArchiveIcon, exact: false, permission: "backups.view" },
+  {
+    to: "/nodes/$nodeId/servers/$serverId/activity",
+    label: () => "Activity",
+    icon: ClockCounterClockwiseIcon,
+    exact: false,
+    permission: "logs.view",
+  },
   {
     to: "/nodes/$nodeId/servers/$serverId/settings",
     label: () => "Settings",
