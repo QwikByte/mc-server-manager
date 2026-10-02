@@ -39,6 +39,12 @@ var folders = map[mcsmv1.ServerType]string{
 	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   "mods",
 }
 
+// Folder returns the folder that servers of a type load plugins or mods from.
+func Folder(t mcsmv1.ServerType) (string, bool) {
+	folder, ok := folders[t]
+	return folder, ok
+}
+
 // fileName matches plugin files: a plain .jar file name without paths.
 var fileName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._+()\[\]-]{0,127}\.jar$`)
 
@@ -189,7 +195,7 @@ func (s *Service) open(ctx context.Context, id string) (*datadir.Dir, string, er
 	if err != nil {
 		return nil, "", toStatus(err)
 	}
-	folder, ok := folders[srv.Type]
+	folder, ok := Folder(srv.Type)
 	if !ok {
 		return nil, "", status.Error(codes.FailedPrecondition, "Vanilla servers can't load plugins or mods.")
 	}

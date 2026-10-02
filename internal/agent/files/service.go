@@ -8,8 +8,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -24,7 +22,6 @@ import (
 const (
 	chunkSize  = 256 << 10
 	maxEntries = 5000
-	maxPath    = 1024
 	// MaxFileSize limits uploads; worlds and modpacks stay well below it.
 	MaxFileSize = 16 << 30
 )
@@ -150,8 +147,8 @@ func (s *Service) ArchiveDirectory(req *mcsmv1.ArchiveDirectoryRequest, stream m
 	}
 	defer sub.Close()
 	r, w := io.Pipe()
-	defer r.Close() // stops writeZip if the client goes away
-	go func() { w.CloseWithError(writeZip(w, sub)) }()
+	defer r.Close() // stops WriteZip if the client goes away
+	go func() { w.CloseWithError(datadir.WriteZip(stream.Context(), w, sub, ".")) }()
 	return sendChunks(r, func(data []byte) error {
 		return stream.Send(&mcsmv1.ArchiveDirectoryResponse{Data: data})
 	})
@@ -222,17 +219,12 @@ func (s *Service) open(ctx context.Context, id, p string) (*datadir.Dir, string,
 	return dir, name, nil
 }
 
-// clean turns a path from the panel into a name inside the data directory. os.Root
-// rejects escaping paths too, but ".." has no use here, so it is refused upfront.
 func clean(p string) (string, error) {
-	if len(p) > maxPath || strings.ContainsAny(p, "\x00\\") || slices.Contains(strings.Split(p, "/"), "..") {
+	name, ok := datadir.Name(p)
+	if !ok {
 		return "", status.Error(codes.InvalidArgument, "invalid path")
 	}
-	name := strings.TrimPrefix(path.Clean("/"+p), "/")
-	if name == "" {
-		return ".", nil
-	}
-	return filepath.FromSlash(name), nil
+	return name, nil
 }
 
 func fileInfo(info fs.FileInfo) *mcsmv1.FileInfo {

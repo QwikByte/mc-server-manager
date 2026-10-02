@@ -1,4 +1,5 @@
 import {
+  ArchiveIcon,
   FolderIcon,
   GearIcon,
   HardDrivesIcon,
@@ -44,6 +45,7 @@ const tabs = [
     icon: PuzzlePieceIcon,
     exact: false,
   },
+  { to: "/nodes/$nodeId/servers/$serverId/backups", label: () => "Backups", icon: ArchiveIcon, exact: false },
   { to: "/nodes/$nodeId/servers/$serverId/settings", label: () => "Settings", icon: GearIcon, exact: false },
 ] as const
 

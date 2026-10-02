@@ -36,13 +36,19 @@ type Networks interface {
 	CheckRemovable(ctx context.Context, nodeID, serverID string) error
 }
 
+// Tasks forget deleted servers, so that backup jobs and policies no longer run on them.
+type Tasks interface {
+	Forget(ctx context.Context, nodeID, serverID string) error
+}
+
 type Handler struct {
 	nodes    Nodes
 	networks Networks
+	tasks    Tasks
 }
 
-func NewHandler(nodes Nodes, networks Networks) *Handler {
-	return &Handler{nodes: nodes, networks: networks}
+func NewHandler(nodes Nodes, networks Networks, tasks Tasks) *Handler {
+	return &Handler{nodes: nodes, networks: networks, tasks: tasks}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -61,17 +67,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 		_, err := c.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
 		return err
 	}))
-	deleteServer := h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
-		return err
-	})
-	mux.HandleFunc("DELETE /api/nodes/{node}/servers/{id}", func(w http.ResponseWriter, r *http.Request) {
-		if err := h.networks.CheckRemovable(r.Context(), r.PathValue("node"), r.PathValue("id")); err != nil {
-			httpapi.WriteError(w, r, err)
-			return
-		}
-		deleteServer(w, r)
-	})
+	mux.HandleFunc("DELETE /api/nodes/{node}/servers/{id}", h.delete)
 	mux.HandleFunc("PUT /api/nodes/{node}/servers/{id}", h.update)
 	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/duplicate", h.duplicate)
 	mux.HandleFunc("GET /api/nodes/{node}/servers/{id}/logs", h.logs)
@@ -315,6 +311,29 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, toView(res.GetServer()))
+}
+
+// delete deletes a server with its data and backups, unless a network needs it.
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	nodeID, id := r.PathValue("node"), r.PathValue("id")
+	ctx, cancel := context.WithTimeout(r.Context(), actionTimeout)
+	defer cancel()
+	err := h.networks.CheckRemovable(ctx, nodeID, id)
+	var c mcsmv1.ServerServiceClient
+	if err == nil {
+		c, err = h.client(ctx, r)
+	}
+	if err == nil {
+		_, err = c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
+	}
+	if err == nil {
+		err = h.tasks.Forget(ctx, nodeID, id)
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // lifecycle wraps an operation on a single server that returns no data.

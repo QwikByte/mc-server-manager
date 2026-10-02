@@ -6,7 +6,9 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"iter"
+	"log/slog"
 	"regexp"
 	"slices"
 	"strings"
@@ -31,6 +33,8 @@ var (
 	ErrNotRunning = errors.New("server is not running")
 	// ErrUnsupported is returned for operations the server type does not support.
 	ErrUnsupported = errors.New("not supported for this server type")
+	// ErrNotReady is returned when a server that is starting can't save its worlds yet.
+	ErrNotReady = errors.New("the server is starting")
 )
 
 // Spec describes a server.
@@ -124,4 +128,26 @@ func Find(ctx context.Context, rt Runtime, id string) (Server, error) {
 		return Server{}, ErrNotFound
 	}
 	return servers[i], nil
+}
+
+// PauseSaving makes a running game server write its worlds to disk and stop saving, so
+// that its data can be copied consistently while players stay connected. resume turns
+// saving on again. Stopped servers and proxies need nothing.
+func PauseSaving(ctx context.Context, rt Runtime, srv Server) (resume func(), err error) {
+	if srv.State == mcsmv1.ServerState_SERVER_STATE_STOPPED || srv.Type.Proxy() {
+		return func() {}, nil
+	}
+	if _, err := rt.SendCommand(ctx, srv.ID, "save-off"); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrNotReady, err)
+	}
+	resume = func() {
+		if _, err := rt.SendCommand(context.WithoutCancel(ctx), srv.ID, "save-on"); err != nil {
+			slog.Warn("can't turn saving on again", "server", srv.ID, "err", err)
+		}
+	}
+	if _, err := rt.SendCommand(ctx, srv.ID, "save-all flush"); err != nil {
+		resume()
+		return nil, err
+	}
+	return resume, nil
 }

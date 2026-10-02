@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"regexp"
 	"slices"
@@ -55,10 +54,18 @@ var (
 
 type Service struct {
 	mcsmv1.UnimplementedServerServiceServer
-	rt runtime.Runtime
+	rt      runtime.Runtime
+	backups Backups
 }
 
-func NewService(rt runtime.Runtime) *Service { return &Service{rt: rt} }
+// Backups are deleted together with their server.
+type Backups interface {
+	RemoveAll(serverID string) error
+}
+
+func NewService(rt runtime.Runtime, backups Backups) *Service {
+	return &Service{rt: rt, backups: backups}
+}
 
 func (s *Service) ListServers(ctx context.Context, _ *mcsmv1.ListServersRequest) (*mcsmv1.ListServersResponse, error) {
 	servers, err := s.rt.List(ctx)
@@ -129,20 +136,14 @@ func (s *Service) DuplicateServer(ctx context.Context, req *mcsmv1.DuplicateServ
 	if err := s.check(ctx, spec); err != nil {
 		return nil, err
 	}
-	if source.State != mcsmv1.ServerState_SERVER_STATE_STOPPED && !source.Type.Proxy() {
-		// The server writes everything to disk and pauses saving while its data is copied.
-		if _, err := s.rt.SendCommand(ctx, source.ID, "save-off"); err != nil {
-			return nil, status.Error(codes.FailedPrecondition, "Wait until the server has started, or stop it, to duplicate it.")
-		}
-		defer func() {
-			if _, err := s.rt.SendCommand(context.WithoutCancel(ctx), source.ID, "save-on"); err != nil {
-				slog.Warn("can't turn saving on again after duplicating", "server", source.ID, "err", err)
-			}
-		}()
-		if _, err := s.rt.SendCommand(ctx, source.ID, "save-all flush"); err != nil {
-			return nil, toStatus(err)
-		}
+	resume, err := runtime.PauseSaving(ctx, s.rt, source)
+	if errors.Is(err, runtime.ErrNotReady) {
+		return nil, status.Error(codes.FailedPrecondition, "Wait until the server has started, or stop it, to duplicate it.")
 	}
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	defer resume()
 	if err := s.rt.Duplicate(ctx, source.ID, spec); err != nil {
 		return nil, toStatus(err)
 	}
@@ -207,7 +208,10 @@ func (s *Service) RestartServer(ctx context.Context, req *mcsmv1.RestartServerRe
 }
 
 func (s *Service) DeleteServer(ctx context.Context, req *mcsmv1.DeleteServerRequest) (*mcsmv1.DeleteServerResponse, error) {
-	return &mcsmv1.DeleteServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Remove)
+	if err := s.apply(ctx, req.GetId(), s.rt.Remove); err != nil {
+		return nil, err
+	}
+	return &mcsmv1.DeleteServerResponse{}, toStatus(s.backups.RemoveAll(req.GetId()))
 }
 
 func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.ServerService_StreamLogsServer) error {
