@@ -30,7 +30,10 @@ func NewService(rt runtime.Runtime, identity *Identity, locations *storage.Locat
 // unreachable agent apart from a broken container runtime.
 func (s *Service) GetInfo(ctx context.Context, _ *mcsmv1.GetInfoRequest) (*mcsmv1.GetInfoResponse, error) {
 	hostname, _ := os.Hostname()
-	res := &mcsmv1.GetInfoResponse{AgentVersion: buildinfo.Version, Hostname: hostname, Runtime: "unavailable"}
+	res := &mcsmv1.GetInfoResponse{
+		AgentVersion: buildinfo.Version, Hostname: hostname, Runtime: "unavailable",
+		CertificateNotAfterUnix: s.identity.Get().Leaf.NotAfter.Unix(),
+	}
 	if info, err := s.rt.Info(ctx); err == nil {
 		res.Os, res.CpuCount, res.MemoryBytes, res.Runtime = info.OS, info.CPUs, info.MemoryBytes, info.Name
 	}

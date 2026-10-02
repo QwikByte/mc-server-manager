@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -14,11 +15,21 @@ const cookieName = "__Host-mcsm_session"
 type userKey struct{}
 
 type Handler struct {
-	svc     *Service
-	limiter *limiter
+	svc        *Service
+	sessionTTL func() time.Duration
+	limiter    *limiter
 }
 
-func NewHandler(svc *Service) *Handler { return &Handler{svc: svc, limiter: newLimiter()} }
+// NewHandler returns the handler of the sign-in. sessionTTL tells how long new sessions last.
+func NewHandler(svc *Service, sessionTTL func() time.Duration) *Handler {
+	return &Handler{svc: svc, sessionTTL: sessionTTL, limiter: newLimiter()}
+}
+
+// UserFrom returns the signed in user of a request that passed Require.
+func UserFrom(ctx context.Context) (User, bool) {
+	user, ok := ctx.Value(userKey{}).(User)
+	return user, ok
+}
 
 // Register adds the routes that require a session.
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -40,7 +51,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password)
+	ttl := h.sessionTTL()
+	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, ttl)
 	if errors.Is(err, ErrInvalidCredentials) {
 		err = httpapi.Errorf(http.StatusUnauthorized, "Username or password is incorrect.")
 	}
@@ -48,7 +60,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	http.SetCookie(w, sessionCookie(token, int(sessionTTL.Seconds())))
+	http.SetCookie(w, sessionCookie(token, int(ttl.Seconds())))
 	httpapi.WriteJSON(w, http.StatusOK, user)
 }
 

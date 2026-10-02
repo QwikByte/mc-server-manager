@@ -109,7 +109,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusCreated, map[string]any{"node": view{Node: n, Status: "pending"}, "joinToken": token.String()})
+	httpapi.WriteJSON(w, http.StatusCreated, map[string]any{
+		"node": view{Node: n, Status: "pending"}, "joinToken": token.String(), "joinTokenExpiresAt": token.ExpiresAt,
+	})
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +138,7 @@ func (h *Handler) joinToken(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, map[string]string{"joinToken": token.String()})
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"joinToken": token.String(), "joinTokenExpiresAt": token.ExpiresAt})
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {

@@ -27,8 +27,6 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
-const joinTokenTTL = time.Hour
-
 // reconnect caps the retry delay, so a node shows up soon after its agent (re)starts.
 var reconnect = grpc.ConnectParams{Backoff: backoff.Config{BaseDelay: time.Second, Multiplier: 1.6, Jitter: 0.2, MaxDelay: 10 * time.Second}}
 
@@ -47,12 +45,37 @@ type Node struct {
 type Settings struct {
 	// DefaultStorage is the storage location preselected for new servers.
 	DefaultStorage string `json:"defaultStorage"`
+	Limits
+}
+
+// Limits restrict the servers of a node. New nodes get the defaults of the master's settings.
+type Limits struct {
 	// PortMin and PortMax limit the ports of servers; nil allows any port.
 	PortMin *uint32 `json:"portMin"`
 	PortMax *uint32 `json:"portMax"`
 	// MemoryReserveMB is kept free of server memory for the system; nil allows
 	// assigning more memory than the node has.
 	MemoryReserveMB *uint32 `json:"memoryReserveMb"`
+}
+
+// Validate checks the port range and the memory reserve.
+func (l Limits) Validate() error {
+	switch {
+	case (l.PortMin == nil) != (l.PortMax == nil),
+		l.PortMin != nil && (*l.PortMin < 1024 || *l.PortMax > 65535 || *l.PortMin > *l.PortMax):
+		return httpapi.Errorf(http.StatusBadRequest, "Enter a port range from 1024 to 65535, or none.")
+	case l.MemoryReserveMB != nil && *l.MemoryReserveMB > 1<<20:
+		return httpapi.Errorf(http.StatusBadRequest, "Enter the memory to keep free in MB.")
+	}
+	return nil
+}
+
+// Config holds the settings of the master that concern nodes. They can change at any time.
+type Config interface {
+	// EnrollAddr is the host:port join tokens tell agents to enroll at.
+	EnrollAddr() string
+	JoinTokenTTL() time.Duration
+	NodeDefaults() Limits
 }
 
 const nodeColumns = `id, name, address, enrolled_at, created_at, default_storage, port_min, port_max, memory_reserve_mb`
@@ -62,30 +85,41 @@ var storageName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 type Service struct {
 	mcsmv1.UnimplementedEnrollmentServiceServer
 
-	db         *sql.DB
-	ca         *pki.CA
-	cert       *pki.Holder // the master's own certificate
-	enrollAddr string      // published in join tokens
+	db     *sql.DB
+	ca     *pki.CA
+	cert   *pki.Holder // the master's own certificate
+	config Config
 
 	mu      sync.Mutex
 	conns   map[string]*grpc.ClientConn
 	renewMu sync.Mutex // one certificate renewal at a time
 }
 
-func NewService(db *sql.DB, ca *pki.CA, cert *pki.Holder, enrollAddr string) *Service {
-	return &Service{db: db, ca: ca, cert: cert, enrollAddr: enrollAddr, conns: make(map[string]*grpc.ClientConn)}
+func NewService(db *sql.DB, ca *pki.CA, cert *pki.Holder, config Config) *Service {
+	return &Service{db: db, ca: ca, cert: cert, config: config, conns: make(map[string]*grpc.ClientConn)}
 }
 
-// Create registers a node and returns the join token its agent enrolls with.
-func (s *Service) Create(ctx context.Context, name, address string) (Node, enrollment.Token, error) {
-	n := Node{ID: strings.ToLower(rand.Text()), Name: strings.TrimSpace(name), Address: strings.TrimSpace(address), CreatedAt: time.Now()}
-	if err := validate(n); err != nil {
-		return n, enrollment.Token{}, err
+// JoinToken lets the agent of a node enroll once until it expires.
+type JoinToken struct {
+	enrollment.Token
+	ExpiresAt time.Time
+}
+
+// Create registers a node with the default limits and returns the join token its agent enrolls with.
+func (s *Service) Create(ctx context.Context, name, address string) (Node, JoinToken, error) {
+	n := Node{
+		ID: strings.ToLower(rand.Text()), Name: strings.TrimSpace(name), Address: strings.TrimSpace(address), CreatedAt: time.Now(),
+		Settings: Settings{DefaultStorage: "default", Limits: s.config.NodeDefaults()},
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO nodes (id, name, address, created_at) VALUES (?, ?, ?, ?)`,
-		n.ID, n.Name, n.Address, n.CreatedAt.Unix())
+	if err := validate(n); err != nil {
+		return n, JoinToken{}, err
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO nodes (id, name, address, created_at, default_storage, port_min, port_max, memory_reserve_mb)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ID, n.Name, n.Address, n.CreatedAt.Unix(), n.DefaultStorage, n.PortMin, n.PortMax, n.MemoryReserveMB)
 	if err != nil {
-		return n, enrollment.Token{}, uniqueName(err, n.Name)
+		return n, JoinToken{}, uniqueName(err, n.Name)
 	}
 	token, err := s.NewJoinToken(ctx, n.ID)
 	return n, token, err
@@ -124,13 +158,8 @@ func validate(n Node) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter the agent address as host:port, for example 203.0.113.10:7443.")
 	case n.DefaultStorage != "" && !storageName.MatchString(n.DefaultStorage):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose a storage location of the node.")
-	case (n.PortMin == nil) != (n.PortMax == nil),
-		n.PortMin != nil && (*n.PortMin < 1024 || *n.PortMax > 65535 || *n.PortMin > *n.PortMax):
-		return httpapi.Errorf(http.StatusBadRequest, "Enter a port range from 1024 to 65535, or none.")
-	case n.MemoryReserveMB != nil && *n.MemoryReserveMB > 1<<20:
-		return httpapi.Errorf(http.StatusBadRequest, "Enter the memory to keep free in MB.")
 	}
-	return nil
+	return n.Validate()
 }
 
 func validAddress(address string) bool {
@@ -146,15 +175,17 @@ func uniqueName(err error, name string) error {
 }
 
 // NewJoinToken replaces the pending join token of a node, e.g. to reinstall its agent.
-func (s *Service) NewJoinToken(ctx context.Context, id string) (enrollment.Token, error) {
+func (s *Service) NewJoinToken(ctx context.Context, id string) (JoinToken, error) {
 	secret := rand.Text()
 	hash := sha256.Sum256([]byte(secret))
+	expires := time.Now().Add(s.config.JoinTokenTTL())
 	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET join_secret_hash = ?, join_expires_at = ? WHERE id = ?`,
-		hash[:], time.Now().Add(joinTokenTTL).Unix(), id)
+		hash[:], expires.Unix(), id)
 	if err == nil && rowsAffected(res) == 0 {
 		err = errNotFound
 	}
-	return enrollment.Token{Master: s.enrollAddr, NodeID: id, Secret: secret, CAFingerprint: pki.Fingerprint(s.ca.Cert)}, err
+	token := enrollment.Token{Master: s.config.EnrollAddr(), NodeID: id, Secret: secret, CAFingerprint: pki.Fingerprint(s.ca.Cert)}
+	return JoinToken{token, expires}, err
 }
 
 // Enroll implements mcsmv1.EnrollmentServiceServer. The join token is consumed atomically.

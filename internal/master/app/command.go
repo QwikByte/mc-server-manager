@@ -51,7 +51,7 @@ func Command() *cobra.Command {
 	f.StringVar(&cfg.tlsCert, "tls-cert", "", "TLS certificate of the admin panel; omit behind a TLS-terminating reverse proxy")
 	f.StringVar(&cfg.tlsKey, "tls-key", "", "TLS private key of the admin panel")
 	f.StringVar(&cfg.enrollAddr, "enroll-addr", ":9443", "listen address of the enrollment endpoint")
-	f.StringVar(&cfg.publicAddr, "public-enroll-addr", "", "host:port agents use to reach the enrollment endpoint (default <hostname>:<enroll port>)")
+	f.StringVar(&cfg.publicAddr, "public-enroll-addr", "", "host:port agents use to reach the enrollment endpoint (default <hostname>:<enroll port>); the panel's settings can replace it")
 
 	user := &cobra.Command{Use: "user", Short: "Manage administrator accounts"}
 	user.AddCommand(&cobra.Command{

@@ -12,10 +12,7 @@ import (
 	"time"
 )
 
-const (
-	sessionTTL     = 12 * time.Hour
-	minPasswordLen = 12
-)
+const minPasswordLen = 12
 
 var (
 	ErrInvalidCredentials = errors.New("invalid username or password")
@@ -53,8 +50,9 @@ func (s *Service) HasUsers(ctx context.Context) (bool, error) {
 	return exists, err
 }
 
-// Login verifies the credentials and starts a session identified by the returned token.
-func (s *Service) Login(ctx context.Context, username, password string) (User, string, error) {
+// Login verifies the credentials and starts a session that lasts for ttl, identified by
+// the returned token.
+func (s *Service) Login(ctx context.Context, username, password string, ttl time.Duration) (User, string, error) {
 	user := User{Username: username}
 	var hash string
 	err := s.db.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users WHERE username = ?`, username).
@@ -76,7 +74,7 @@ func (s *Service) Login(ctx context.Context, username, password string) (User, s
 	}
 	token := rand.Text()
 	_, err = s.db.ExecContext(ctx, `INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)`,
-		hashToken(token), user.ID, now.Add(sessionTTL).Unix())
+		hashToken(token), user.ID, now.Add(ttl).Unix())
 	return user, token, err
 }
 

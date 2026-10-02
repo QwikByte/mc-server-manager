@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
+	"github.com/QwikByte/mc-server-manager/internal/agentcli"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 )
 
@@ -67,7 +68,8 @@ func Command() *cobra.Command {
 		},
 	}
 
-	root.AddCommand(serve, enrollCmd, statusCommand(&cfg), serverCommand(&cfg), storageCommand(&cfg), backupCommand(&cfg))
+	root.AddCommand(serve, enrollCmd, storageCommand(&cfg))
+	root.AddCommand(agentcli.Commands(cfg.local)...)
 	return root
 }
 

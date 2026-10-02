@@ -67,9 +67,11 @@ type GetInfoResponse struct {
 	// Container runtime driving the servers, e.g. "docker 29.0.0".
 	Runtime string `protobuf:"bytes,6,opt,name=runtime,proto3" json:"runtime,omitempty"`
 	// Where servers can keep their data; the default location comes first.
-	Storage       []*StorageLocation `protobuf:"bytes,7,rep,name=storage,proto3" json:"storage,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Storage []*StorageLocation `protobuf:"bytes,7,rep,name=storage,proto3" json:"storage,omitempty"`
+	// When the certificate the agent presents to the master expires.
+	CertificateNotAfterUnix int64 `protobuf:"varint,8,opt,name=certificate_not_after_unix,json=certificateNotAfterUnix,proto3" json:"certificate_not_after_unix,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *GetInfoResponse) Reset() {
@@ -149,6 +151,13 @@ func (x *GetInfoResponse) GetStorage() []*StorageLocation {
 		return x.Storage
 	}
 	return nil
+}
+
+func (x *GetInfoResponse) GetCertificateNotAfterUnix() int64 {
+	if x != nil {
+		return x.CertificateNotAfterUnix
+	}
+	return 0
 }
 
 // StorageLocation is a directory the node's administrator allowed for server data.
@@ -385,7 +394,7 @@ var File_mcsm_v1_node_proto protoreflect.FileDescriptor
 const file_mcsm_v1_node_proto_rawDesc = "" +
 	"\n" +
 	"\x12mcsm/v1/node.proto\x12\amcsm.v1\"\x10\n" +
-	"\x0eGetInfoRequest\"\xf0\x01\n" +
+	"\x0eGetInfoRequest\"\xad\x02\n" +
 	"\x0fGetInfoResponse\x12#\n" +
 	"\ragent_version\x18\x01 \x01(\tR\fagentVersion\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x12\x0e\n" +
@@ -393,7 +402,8 @@ const file_mcsm_v1_node_proto_rawDesc = "" +
 	"\tcpu_count\x18\x04 \x01(\rR\bcpuCount\x12!\n" +
 	"\fmemory_bytes\x18\x05 \x01(\x04R\vmemoryBytes\x12\x18\n" +
 	"\aruntime\x18\x06 \x01(\tR\aruntime\x122\n" +
-	"\astorage\x18\a \x03(\v2\x18.mcsm.v1.StorageLocationR\astorage\"y\n" +
+	"\astorage\x18\a \x03(\v2\x18.mcsm.v1.StorageLocationR\astorage\x12;\n" +
+	"\x1acertificate_not_after_unix\x18\b \x01(\x03R\x17certificateNotAfterUnix\"y\n" +
 	"\x0fStorageLocation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1d\n" +

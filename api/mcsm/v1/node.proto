@@ -27,6 +27,8 @@ message GetInfoResponse {
   string runtime = 6;
   // Where servers can keep their data; the default location comes first.
   repeated StorageLocation storage = 7;
+  // When the certificate the agent presents to the master expires.
+  int64 certificate_not_after_unix = 8;
 }
 
 // StorageLocation is a directory the node's administrator allowed for server data.

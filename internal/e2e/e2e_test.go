@@ -30,7 +30,6 @@ import (
 	agentnode "github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
-	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
@@ -42,7 +41,9 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/properties"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 	"github.com/QwikByte/mc-server-manager/internal/master/server"
+	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
+	"github.com/QwikByte/mc-server-manager/internal/master/terminal"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -165,6 +166,8 @@ func TestEnrollAndControlNode(t *testing.T) {
 type master struct {
 	db         *sql.DB
 	ca         *pki.CA
+	cert       *pki.Holder
+	settings   *settings.Service
 	nodes      *node.Service
 	enrollAddr string
 	modrinth   *fakeModrinth
@@ -182,12 +185,14 @@ func startMaster(t *testing.T) *master {
 	masterCert, err := pki.NewHolder(cert)
 	check(t, err)
 	ln := listen(t)
-	nodes := node.NewService(db, ca, masterCert, ln.Addr().String())
+	conf, err := settings.Load(t.Context(), db, settings.Master{Version: "test", EnrollAddr: ln.Addr().String()}, masterCert)
+	check(t, err)
+	nodes := node.NewService(db, ca, masterCert, conf)
 	t.Cleanup(nodes.Close)
 	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(enrollServer, nodes)
 	serve(t, enrollServer, ln)
-	return &master{db: db, ca: ca, nodes: nodes, enrollAddr: ln.Addr().String(), modrinth: startModrinth(t)}
+	return &master{db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, enrollAddr: ln.Addr().String(), modrinth: startModrinth(t)}
 }
 
 // panel serves the REST API of the master without authentication.
@@ -197,6 +202,8 @@ func (m *master) panel(t *testing.T) *httptest.Server {
 	tasks := schedule.NewService(m.db, m.nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(m.nodes), policy.TaskKind: policy.New(m.nodes)})
 	check(t, tasks.Start(t.Context()))
 	mux := http.NewServeMux()
+	settings.NewHandler(m.settings).Register(mux)
+	terminal.NewHandler(m.nodes, m.settings).Register(mux)
 	server.NewHandler(m.nodes, networks, tasks).Register(mux)
 	network.NewHandler(networks).Register(mux)
 	files.NewHandler(m.nodes).Register(mux)
@@ -215,7 +222,7 @@ func (m *master) panel(t *testing.T) *httptest.Server {
 // agent is an enrolled agent that serves a fake runtime.
 type agent struct {
 	node     node.Node
-	token    enrollment.Token
+	token    node.JoinToken
 	dir      string
 	identity *agentnode.Identity
 	runtime  *fakeRuntime
