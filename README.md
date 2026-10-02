@@ -60,16 +60,17 @@ Releases contain packages for Debian, Ubuntu and their derivatives (`.deb`), Fed
 openSUSE (`.rpm`) and Arch Linux, each for x86_64 and arm64. Only Linux with systemd is supported. The installer picks
 the package, checks its checksum and sets everything up. Running it again updates, and `--version vX.Y.Z` installs a
 certain release. While another installation of packages runs, e.g. the automatic updates of a new server, it waits up
-to 10 minutes and says so.
+to 10 minutes and says so. It asks questions only when started from a file as below; piped to `sudo bash`, it uses the
+defaults instead, because `sudo-rs`, the `sudo` of newer Ubuntu releases, doesn't pass on what is typed then.
 
 **Master**, the panel:
 
 ```sh
-curl -fsSL https://github.com/QwikByte/mc-server-manager/releases/latest/download/install.sh | sudo bash -s -- master
+curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/latest/download/install.sh && sudo bash install.sh master
 ```
 
 It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), and for the password
-of the first administrator, `admin` unless `--admin` names another (without a terminal, it generates one and shows it).
+of the first administrator, `admin` unless `--admin` names another (piped, it generates one and shows it).
 The password needs at least 12 characters and isn't shown while you type it.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
 `cdn.modrinth.com`. The panel listens on `127.0.0.1:8080`; serve it over HTTPS with a reverse proxy, e.g. with
@@ -86,12 +87,12 @@ offers to install Docker if it's missing (`--install-docker` doesn't ask), conne
 starts it:
 
 ```sh
-curl -fsSL https://github.com/QwikByte/mc-server-manager/releases/download/<version>/install.sh | sudo bash -s -- agent --join <join-token>
+curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/download/<version>/install.sh && sudo bash install.sh agent --join <join-token>
 ```
 
 Allow port 7443 only from the master's IP address.
 
-**Everything on one machine.** `… | sudo bash -s -- all` installs master and agent, registers the machine as node and
+**Everything on one machine.** `sudo bash install.sh all` installs master and agent, registers the machine as node and
 connects its agent, which then only accepts connections from the machine itself.
 
 **Updates.** The master looks for a new release every 6 hours. Administrators then see a notice in the panel with the

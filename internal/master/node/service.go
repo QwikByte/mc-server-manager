@@ -113,7 +113,7 @@ type JoinToken struct {
 // InstallCommand installs the agent in the master's version on a node, or updates it, and
 // enrolls it with the token.
 func (t JoinToken) InstallCommand() string {
-	return fmt.Sprintf("curl -fsSL %s | sudo bash -s -- agent --join %s", buildinfo.InstallScript(), t)
+	return fmt.Sprintf("curl -fsSLO %s && sudo bash install.sh agent --join %s", buildinfo.InstallScript(), t)
 }
 
 // Create registers a node with the default limits and returns the join token its agent enrolls with.

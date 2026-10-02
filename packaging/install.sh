@@ -8,6 +8,8 @@
 #
 # Options: --version <vX.Y.Z> installs that release instead of the one this script belongs to.
 # Packages: .deb (apt), .rpm (dnf, yum, zypper) and Arch Linux (pacman), for x86_64 and arm64.
+# Questions: run as "sudo bash install.sh ..." to answer them. Piped to bash, it asks nothing,
+# generates the administrator's password and installs Docker only with --install-docker.
 set -Eeuo pipefail
 
 # The release workflow replaces "latest" with the version of the release.
@@ -22,7 +24,9 @@ warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
 # A download that can't connect within 20 seconds is tried again, rather than hanging.
 fetch() { curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 20 --retry 3 "$@"; }
-has_tty() { (: </dev/tty) 2>/dev/null; }
+# Questions are only asked when the script runs in a terminal, not when it is piped to sudo:
+# sudo-rs, the sudo of newer Ubuntu releases, then doesn't pass on what is typed.
+interactive() { [ -t 0 ]; }
 installed() { command -v "$1" >/dev/null; }
 
 usage() {
@@ -33,8 +37,8 @@ usage() {
 # terminal it prints nothing.
 ask() {
   local answer=""
-  has_tty || return 0
-  read -r -p "$1 " answer </dev/tty
+  interactive || return 0
+  read -r -p "$1 " answer
   printf '%s' "${answer:-$2}"
 }
 
@@ -141,9 +145,9 @@ setup_master() {
     [ -z "$public_host" ] || sed -i "s|^MCSM_MASTER_OPTS=\"|&--public-enroll-addr $public_host:$ENROLL_PORT |" /etc/mcsm/master.env
     log "Creating the administrator $admin"
     install -d -o mcsm -g mcsm -m 0700 /var/lib/mcsm-master
-    if has_tty; then
+    if interactive; then
       printf 'Choose the password for %s, with at least 12 characters. What you type is not shown.\n' "$admin"
-      runuser -u mcsm -- mcsm-master user add "$admin" </dev/tty
+      runuser -u mcsm -- mcsm-master user add "$admin"
     else
       password=$(head -c 18 /dev/urandom | base64)
       printf '%s\n' "$password" | runuser -u mcsm -- mcsm-master user add "$admin"
