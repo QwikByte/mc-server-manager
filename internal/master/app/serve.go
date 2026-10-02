@@ -39,6 +39,10 @@ import (
 )
 
 func serve(ctx context.Context, cfg config) error {
+	proxies, err := auth.ParseProxies(cfg.trustedProxies)
+	if err != nil {
+		return err
+	}
 	db, err := openDB(cfg.dataDir)
 	if err != nil {
 		return err
@@ -105,11 +109,11 @@ func serve(ctx context.Context, cfg config) error {
 	go usageStore.Run(ctx)
 	httpServer := &http.Server{
 		Addr: cfg.httpAddr,
-		Handler: Handler(Services{
+		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
 			Usage: usageStore, Moves: moves,
-		}),
+		})),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

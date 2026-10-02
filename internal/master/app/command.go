@@ -31,13 +31,14 @@ import (
 )
 
 type config struct {
-	dataDir    string
-	httpAddr   string
-	tlsCert    string
-	tlsKey     string
-	enrollAddr string
-	publicAddr string
-	log        logging.Options
+	dataDir        string
+	httpAddr       string
+	tlsCert        string
+	tlsKey         string
+	trustedProxies []string
+	enrollAddr     string
+	publicAddr     string
+	log            logging.Options
 }
 
 // Command returns the root command of mcsm-master.
@@ -61,6 +62,7 @@ func Command() *cobra.Command {
 	f.StringVar(&cfg.httpAddr, "http-addr", "127.0.0.1:8080", "listen address of the admin panel")
 	f.StringVar(&cfg.tlsCert, "tls-cert", "", "TLS certificate of the admin panel; omit behind a TLS-terminating reverse proxy")
 	f.StringVar(&cfg.tlsKey, "tls-key", "", "TLS private key of the admin panel")
+	f.StringSliceVar(&cfg.trustedProxies, "trusted-proxy", nil, "IP addresses or CIDR networks of reverse proxies whose X-Forwarded-For or X-Real-IP header tells the client's address for the sign-in rate limit and the log, e.g. 127.0.0.1")
 	f.StringVar(&cfg.enrollAddr, "enroll-addr", ":9443", "listen address of the enrollment endpoint")
 	f.StringVar(&cfg.publicAddr, "public-enroll-addr", "", "host:port agents use to reach the enrollment endpoint (default <hostname>:<enroll port>); the panel's settings can replace it")
 	cfg.log.AddFlags(f)

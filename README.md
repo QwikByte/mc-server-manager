@@ -82,6 +82,10 @@ panel.example.com {
 }
 ```
 
+Then add `--trusted-proxy 127.0.0.1` to `MCSM_MASTER_OPTS` in `/etc/mcsm/master.env`, so that the master takes the
+address of each client from the proxy's `X-Forwarded-For` header. Otherwise all clients share the proxy's address, and
+with it the budget of the sign-in rate limit, and the log shows only the proxy's address.
+
 **Nodes.** Add a node in the panel under **Nodes**. It shows a command that installs the agent in the master's version,
 offers to install Docker if it's missing (`--install-docker` doesn't ask), connects the agent with a join token and
 starts it:
@@ -306,8 +310,11 @@ Users get their permissions from groups; a user can be in several groups and has
   certificates are server-only, so a compromised node can't command other nodes. Locally, the agent is controlled
   through a Unix socket (mode `0600` inside a `0700` data directory).
 - **Panel.** Argon2id password hashes, session tokens stored as SHA-256 hashes, `__Host-` cookies
-  (`HttpOnly`, `Secure`, `SameSite=Strict`), cross-origin request protection, sign-in rate limiting (also for changes
-  that need the password), a strict Content Security Policy and self-hosted fonts.
+  (`HttpOnly`, `Secure`, `SameSite=Strict`), cross-origin request protection, a strict Content Security Policy and
+  self-hosted fonts. Sign-in attempts are rate limited per client address (IPv6 per /64 network) and per username,
+  changes that need the password per user. A username has a larger budget than a client, so that a single client
+  can't keep a user out. Client addresses come from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse
+  proxies named with `--trusted-proxy`.
 - **Two-factor authentication.** Codes of the app (RFC 6238) work only once, and from the fifth wrong code in a row on,
   codes aren't checked for a minute that doubles with every further wrong one, up to a day; parallel guesses count
   too. Recovery codes have 50 random bits and are stored as SHA-256 hashes. The secret of the app is stored in the
@@ -351,7 +358,7 @@ Users get their permissions from groups; a user can be in several groups and has
   that may hold secrets, such as the forwarding secret of a network, are never logged. Exports protect spreadsheets
   from formulas in entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the
   browser connects again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP
-  address is that of the proxy.
+  address is that of the proxy, unless `--trusted-proxy` names it.
 - **Moving servers.** Agents never connect to each other: the master relays the server's archive and backups between
   them over its mutually authenticated connections. The new node checks the settings like those of a new server and
   extracts the archive confined to the server's data directory, without symbolic links. Moving needs the permissions

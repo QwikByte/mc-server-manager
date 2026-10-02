@@ -207,6 +207,7 @@ summary_master() {
                 panel.example.com {
                     reverse_proxy 127.0.0.1:8080
                 }
+              and add --trusted-proxy 127.0.0.1 to MCSM_MASTER_OPTS in /etc/mcsm/master.env.
               Until then, reach it through an SSH tunnel: ssh -L 8080:127.0.0.1:8080 root@<this machine>
   Nodes       enroll on port $ENROLL_PORT, open it for them. Add them in the panel under Nodes.
               The address they use is set in /etc/mcsm/master.env or the panel's settings.
