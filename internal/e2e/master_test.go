@@ -65,7 +65,7 @@ func TestMasterSettings(t *testing.T) {
 	if left := time.Until(created.JoinTokenExpiresAt); left < 29*time.Minute || left > 30*time.Minute {
 		t.Fatalf("join token expires in %v, want 30 minutes", left)
 	}
-	if !strings.HasSuffix(created.InstallCommand, "/install.sh | sudo bash -s -- agent --join "+created.JoinToken) {
+	if !strings.HasSuffix(created.InstallCommand, "/install.sh && sudo bash install.sh agent --join "+created.JoinToken) {
 		t.Fatalf("install command = %q", created.InstallCommand)
 	}
 
