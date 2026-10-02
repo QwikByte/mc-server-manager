@@ -6,6 +6,7 @@ import { Section } from "@/components/section"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useAccess } from "@/features/access/use-access"
 import type { NodeServer } from "@/features/servers/api"
 import { AddBackendDialog } from "./add-backend-dialog"
 import type { Backend, Network } from "./api"
@@ -17,11 +18,12 @@ const disconnects = "The proxy restarts to apply this, which disconnects all pla
 
 /** The game servers behind the proxy; players join the first one. */
 export function BackendList({ network, servers }: { network: Network; servers?: NodeServer[] }) {
+  const manage = useAccess().can("networks.manage")
   return (
     <Section
       title="Servers"
       description="Players switch between them with /server and the name."
-      actions={<AddBackendDialog network={network} />}
+      actions={manage && <AddBackendDialog network={network} />}
     >
       <div className="surface overflow-hidden rounded-xl">
         <Table>
@@ -63,6 +65,7 @@ function BackendRow({
   server: NodeServer | null | undefined
   first: boolean
 }) {
+  const manage = useAccess().can("networks.manage")
   const { run, isPending } = useNetworkChange(network.id)
   const name = server?.name ?? backend.name
   const last = network.backends.length === 1
@@ -85,7 +88,7 @@ function BackendRow({
       <TableCell className="hidden font-mono sm:table-cell">/server {backend.name}</TableCell>
       <TableCell className="hidden font-mono md:table-cell">{server?.port ?? "–"}</TableCell>
       <TableCell>
-        <div className="flex justify-end gap-1">
+        <div className="flex justify-end gap-1" hidden={!manage}>
           {!first && (
             <ConfirmDialog
               trigger={

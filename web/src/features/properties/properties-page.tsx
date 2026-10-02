@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { type Server, useServer, useServerAction } from "@/features/servers/api"
 import { propertiesQuery, type ServerProperties, useUpdateProperties } from "./api"
 import { PropertyField } from "./property-field"
@@ -38,6 +39,7 @@ export function PropertiesPage() {
 }
 
 function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Server; data: ServerProperties }) {
+  const { can } = useAccess()
   const [changes, setChanges] = useState<Record<string, string>>({})
   const [search, setSearch] = useState("")
   const update = useUpdateProperties(nodeId, server.id)
@@ -133,7 +135,7 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
             >
               Save
             </Button>
-            {server.state !== "stopped" && (
+            {server.state !== "stopped" && can("servers.restart", nodeId, server.id) && (
               <Button disabled={update.isPending || Object.keys(errors).length > 0} onClick={() => save(true)}>
                 Save and restart
               </Button>

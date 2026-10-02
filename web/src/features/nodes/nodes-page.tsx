@@ -8,6 +8,7 @@ import { Meter } from "@/components/meter"
 import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { AddNodeDialog } from "./add-node-dialog"
@@ -15,7 +16,9 @@ import { memoryCapacityMb, type Node, nodesQuery } from "./api"
 import { NodeStatusBadge } from "./node-status"
 
 export function NodesPage() {
+  const { can } = useAccess()
   const { data: nodes, isPending, error } = useQuery(nodesQuery)
+  const add = can("nodes.enroll") && <AddNodeDialog />
   const { data: servers } = useQuery(allServersQuery)
 
   return (
@@ -25,7 +28,7 @@ export function NodesPage() {
         tone="info"
         title="Nodes"
         description="Machines that run the agent and host your servers."
-        actions={<AddNodeDialog />}
+        actions={add}
       />
       {isPending ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -40,9 +43,9 @@ export function NodesPage() {
           icon={HardDrivesIcon}
           tone="info"
           title="No nodes yet"
-          description="Add the first machine that should run Minecraft servers."
+          description={add ? "Add the first machine that should run Minecraft servers." : "You can't see any nodes yet."}
         >
-          <AddNodeDialog />
+          {add}
         </EmptyState>
       ) : (
         <>

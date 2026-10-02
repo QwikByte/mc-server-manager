@@ -11,6 +11,7 @@ import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import type { TaskInput } from "@/features/schedules/api"
 import { TaskForm } from "@/features/schedules/task-form"
 import { actions, emptyPolicy, type PolicyAction, type PolicySettings, policies, warns } from "./api"
@@ -18,6 +19,7 @@ import { actions, emptyPolicy, type PolicyAction, type PolicySettings, policies,
 const route = getRouteApi("/_app/policies/$policyId")
 
 export function PolicyPage() {
+  const manage = useAccess().can("policies.manage")
   const { policyId } = route.useParams()
   const { data: policy, isPending, error } = useQuery(policies.taskQuery(policyId))
   const save = policies.useSaveTask(policyId)
@@ -31,14 +33,17 @@ export function PolicyPage() {
       ) : (
         <>
           <PageHeader icon={CalendarCheckIcon} tone="warning" title={policy.name} description={actions[policy.settings.action].description} />
-          <PolicyForm
-            // Remounting on save resets the form to what was stored.
-            key={JSON.stringify(policy)}
-            initial={{ name: policy.name, enabled: policy.enabled, schedule: policy.schedule, targets: policy.targets, settings: policy.settings }}
-            submitLabel="Save policy"
-            save={save}
-            onSaved={(p) => toast.success(`Saved ${p.name}`)}
-          />
+          {/* Without the permission to manage policies, the policy is only shown. */}
+          <fieldset disabled={!manage} className="contents">
+            <PolicyForm
+              // Remounting on save resets the form to what was stored.
+              key={JSON.stringify(policy)}
+              initial={{ name: policy.name, enabled: policy.enabled, schedule: policy.schedule, targets: policy.targets, settings: policy.settings }}
+              submitLabel="Save policy"
+              save={save}
+              onSaved={(p) => toast.success(`Saved ${p.name}`)}
+            />
+          </fieldset>
         </>
       )}
     </>

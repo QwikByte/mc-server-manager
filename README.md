@@ -113,7 +113,8 @@ the network and configures each server through its agent; changes are applied to
 
 ## Settings
 
-The **Settings** page configures the master and gives an overview of the agents. User management will follow.
+The **Settings** page configures the master, gives an overview of the agents and manages who may do what. Each tab
+only shows to users with the permission for it.
 
 - **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings,
   which apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
@@ -122,7 +123,32 @@ The **Settings** page configures the master and gives an overview of the agents.
 - **Agents** lists all nodes with their agent version, certificate and settings, which can be changed there too.
 - **Terminal** runs the commands of `mcsm-agent` (`status`, `server …`, `backup …`) on any node, and the master's own
   commands: `status`, `node list` and `node renew <node>`. `help` lists them; output streams in as it happens, e.g.
-  for `server logs <id>`, and Ctrl+C stops a command. A node's page opens its terminal directly.
+  for `server logs <id>`, and Ctrl+C stops a command. A node's page opens its terminal directly. Besides the
+  permission to use the terminal, every command needs its own, e.g. `server restart <id>` that to restart this server.
+- **Users** invites users, chooses their groups, disables and deletes them, and creates setup links.
+- **Groups** defines what their members may do.
+
+## Users and permissions
+
+Users get their permissions from groups; a user can be in several groups and has the permissions of all of them.
+
+- **Fine-grained permissions.** There are permissions for every action, by area: nodes (see, change, renew
+  certificates, remove, add), servers (see, create, start, stop, restart, change settings, delete), console (read, send
+  commands), files and configuration (browse and download, change files, `server.properties`, plugins and mods),
+  backups (see and download, back up, restore, delete), networks, templates, backup jobs, policies, the master's
+  settings, the terminal, users and groups. Choosing a permission also chooses what it needs, e.g. seeing the servers
+  one may restart.
+- **Scopes.** The node and server permissions of a group apply to all servers, or only to chosen nodes (including
+  servers created later) and single servers, e.g. a group that may restart the lobby and use its console. Lists only
+  show the nodes and servers a user may see. Other permissions, e.g. for networks or policies, apply everywhere,
+  because they act on any server.
+- **Administrators.** The built-in Administrators group has every permission, also those that later versions add.
+  `mcsm-master user add` creates administrators, e.g. the first one or after losing access. Existing users became
+  administrators with this version.
+- **Invitations.** New users get a setup link (valid for three days, usable once) to choose their password; the same
+  link resets a forgotten password. The token is in the link's fragment, which browsers don't send to servers, and the
+  panel removes it from the address bar once it was read. Users change their own password in the panel, which signs
+  them out everywhere else.
 
 ## Security model
 
@@ -166,6 +192,12 @@ The **Settings** page configures the master and gives an overview of the agents.
   node's administrator allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry
   to the server's folder, and backups never contain symbolic links. Downloads are attachments like those of the file
   manager.
+- **Permissions.** Every API route states the permission it needs when it is registered, so none can be added
+  without; the terminal checks each command the same way and refuses commands without a check. Permissions are loaded
+  for every request, so changes, disabling and deleting apply right away; disabled users are signed out. Users can only
+  grant permissions they have themselves, within their own scope, and only manage users who have no more permissions
+  than they do, so no one can raise their own permissions. The last enabled administrator can't be disabled, deleted or
+  removed from the Administrators. The master logs changes to users and groups with who made them.
 - **Terminal.** The panel's terminal is not a shell. The agent's commands are the same code as its local CLI, but
   run in the master and reach the agent through the existing mutually authenticated connection, so the agent offers
   nothing new to the master. Commands that only the node's administrator may run (`storage`, `enroll`) don't exist
@@ -188,7 +220,8 @@ internal/enrollment/    join token format (shared)
 internal/agentcli/      commands that control a running agent, for its local CLI and the panel's terminal (shared)
 internal/master/
   app/                  wiring, HTTP and gRPC listeners, CLI
-  auth/                 administrators, sessions, sign-in
+  auth/                 accounts, passwords, setup links, sessions, sign-in
+  access/               permissions, groups with scopes, user management, the permission every API route needs
   settings/             settings of the master that the panel changes, and a description of the running master
   terminal/             runs the commands of the master and of the agents for the panel
   node/                 node registry, enrollment, agent connections
@@ -220,7 +253,8 @@ internal/agent/
 internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, nodes, servers, files, properties, networks, plugins, templates, backups, policies,
-                        schedules (shared by backups and policies), settings, terminal
+                        schedules (shared by backups and policies), settings, terminal,
+                        access (users, groups and the permission checks of the panel)
 deploy/systemd/         service units
 ```
 
@@ -280,5 +314,5 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 
 - Console commands for proxies, so that network changes reload the proxy instead of restarting it
 - More runtimes (plain processes)
-- Roles, two-factor authentication and an audit log
+- Two-factor authentication and an audit log in the panel
 - German translation of the panel

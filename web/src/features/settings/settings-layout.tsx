@@ -1,38 +1,50 @@
-import { GearSixIcon, HardDrivesIcon, SlidersHorizontalIcon, TerminalWindowIcon, UsersIcon } from "@phosphor-icons/react"
-import { Outlet } from "@tanstack/react-router"
+import { GearSixIcon } from "@phosphor-icons/react"
+import { Navigate, Outlet, useLocation } from "@tanstack/react-router"
+import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { TabLink } from "@/components/tab-link"
-import { Tabs, UpcomingTab } from "@/components/tabs"
-
-const tabs = [
-  { to: "/settings", label: "General", icon: SlidersHorizontalIcon, exact: true },
-  { to: "/settings/agents", label: "Agents", icon: HardDrivesIcon, exact: false },
-  { to: "/settings/terminal", label: "Terminal", icon: TerminalWindowIcon, exact: false },
-] as const
+import { Tabs } from "@/components/tabs"
+import { useAccess } from "@/features/access/use-access"
+import { settingsTabs as tabs } from "./tabs"
 
 /** Header and tabs of the settings; the tabs are child routes. */
 export function SettingsLayout() {
+  const access = useAccess()
+  const { pathname } = useLocation()
+  const visible = tabs.filter((t) => t.visible(access))
+  // Without the General tab, the settings open with the first tab the user may see.
+  if (pathname.replace(/\/$/, "") === "/settings" && !access.can("settings.view") && visible.length > 0) {
+    return <Navigate to={visible[0].to} replace />
+  }
+
   return (
     <>
       <PageHeader
         icon={GearSixIcon}
         tone="neutral"
         title="Settings"
-        description="Configure the master and its agents, and run their commands."
+        description="Configure the master and its agents, run their commands and manage who may do what."
       />
-      <Tabs label="Settings">
-        {tabs.map(({ to, label, icon: Icon, exact }) => (
-          <TabLink key={to} to={to} activeOptions={{ exact, includeSearch: false }}>
-            <Icon className="size-4" weight="duotone" />
-            {label}
-          </TabLink>
-        ))}
-        <UpcomingTab>
-          <UsersIcon className="size-4" weight="duotone" />
-          Users
-        </UpcomingTab>
-      </Tabs>
-      <Outlet />
+      {visible.length === 0 ? (
+        <EmptyState
+          icon={GearSixIcon}
+          tone="neutral"
+          title="Nothing to see here"
+          description="Your groups don't include permissions for the settings."
+        />
+      ) : (
+        <>
+          <Tabs label="Settings">
+            {visible.map(({ to, label, icon: Icon, exact }) => (
+              <TabLink key={to} to={to} activeOptions={{ exact, includeSearch: false }}>
+                <Icon className="size-4" weight="duotone" />
+                {label}
+              </TabLink>
+            ))}
+          </Tabs>
+          <Outlet />
+        </>
+      )}
     </>
   )
 }

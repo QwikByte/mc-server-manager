@@ -10,6 +10,7 @@ import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { PluginIcon } from "@/features/plugins/plugin-icon"
 import { CreateServerDialog } from "@/features/servers/create-server-dialog"
 import { displayVersion, serverLook, serverType } from "@/features/servers/server-types"
@@ -26,6 +27,7 @@ const newTemplate = (
 )
 
 export function TemplatesPage() {
+  const manage = useAccess().can("templates.manage")
   const { data: templates, isPending, error } = useQuery(templatesQuery)
   return (
     <>
@@ -34,7 +36,7 @@ export function TemplatesPage() {
         tone="info"
         title="Templates"
         description="Preconfigured settings, server.properties and plugins for new servers. Name and port are chosen per server."
-        actions={newTemplate}
+        actions={manage && newTemplate}
       />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -49,9 +51,13 @@ export function TemplatesPage() {
           icon={StackIcon}
           tone="info"
           title="No templates yet"
-          description="Create a template from scratch, or save an existing server as a template from its page."
+          description={
+            manage
+              ? "Create a template from scratch, or save an existing server as a template from its page."
+              : "There are no templates yet."
+          }
         >
-          {newTemplate}
+          {manage && newTemplate}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
@@ -65,6 +71,7 @@ export function TemplatesPage() {
 }
 
 function TemplateCard({ template }: { template: Template }) {
+  const { can, canSomewhere } = useAccess()
   const remove = useDeleteTemplate()
   const type = serverType(template.type)
   const extras = [
@@ -103,44 +110,50 @@ function TemplateCard({ template }: { template: Template }) {
         </div>
       )}
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-4">
-        <CreateServerDialog
-          template={template}
-          trigger={
-            <Button size="sm">
-              <PlusIcon />
-              Create server
+        {canSomewhere("servers.create") && (
+          <CreateServerDialog
+            template={template}
+            trigger={
+              <Button size="sm">
+                <PlusIcon />
+                Create server
+              </Button>
+            }
+          />
+        )}
+        {can("templates.manage") && (
+          <>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/templates/$templateId" params={{ templateId: template.id }}>
+                <PencilSimpleIcon />
+                Edit
+              </Link>
             </Button>
-          }
-        />
-        <Button asChild size="sm" variant="outline">
-          <Link to="/templates/$templateId" params={{ templateId: template.id }}>
-            <PencilSimpleIcon />
-            Edit
-          </Link>
-        </Button>
-        <ConfirmDialog
-          trigger={
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label={`Delete ${template.name}`}
-              title="Delete template"
-              className="ml-auto text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            >
-              <TrashIcon />
-            </Button>
-          }
-          title={`Delete ${template.name}?`}
-          description="Servers created from the template stay as they are."
-          action="Delete template"
-          destructive
-          onConfirm={() =>
-            remove.mutate(template.id, {
-              onSuccess: () => toast.success(`Deleted ${template.name}`),
-              onError: (e) => toast.error(e.message),
-            })
-          }
-        />
+            <ConfirmDialog
+              trigger={
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={`Delete ${template.name}`}
+                  title="Delete template"
+                  className="ml-auto text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <TrashIcon />
+                </Button>
+              }
+              title={`Delete ${template.name}?`}
+              description="Servers created from the template stay as they are."
+              action="Delete template"
+              destructive
+              onConfirm={() =>
+                remove.mutate(template.id, {
+                  onSuccess: () => toast.success(`Deleted ${template.name}`),
+                  onError: (e) => toast.error(e.message),
+                })
+              }
+            />
+          </>
+        )}
       </div>
     </li>
   )

@@ -19,6 +19,7 @@ import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import type { ServerRef } from "@/features/networks/api"
 import { type Server, useServer } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
@@ -32,6 +33,7 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/plugins")
 /** The Plugins tab of a server, Mods for modded servers. */
 export function ServerPluginsPage() {
   const { nodeId, serverId } = route.useParams()
+  const manage = useAccess().can("plugins.manage", nodeId, serverId)
   const { server } = useServer(nodeId, serverId)
   const ref = { nodeId, serverId }
   const { data, isPending, error } = useQuery(pluginsQuery(ref))
@@ -47,10 +49,12 @@ export function ServerPluginsPage() {
       description={`Files in the ${data.folder} folder. Restart the server to load changes.`}
       className="mt-0"
       actions={
-        <div className="flex flex-wrap gap-2">
-          <UploadButton serverRef={ref} />
-          <AddDialog server={server} serverRef={ref} kind={kind} installed={installed} />
-        </div>
+        manage && (
+          <div className="flex flex-wrap gap-2">
+            <UploadButton serverRef={ref} />
+            <AddDialog server={server} serverRef={ref} kind={kind} installed={installed} />
+          </div>
+        )
       }
     >
       {data.catalogueError && (
@@ -63,14 +67,14 @@ export function ServerPluginsPage() {
           icon={PuzzlePieceIcon}
           tone="warning"
           title={`No ${kind} yet`}
-          description={`Add ${kind} from Modrinth, or upload your own .jar files.`}
+          description={manage ? `Add ${kind} from Modrinth, or upload your own .jar files.` : `The server has no ${kind}.`}
         >
-          <AddDialog server={server} serverRef={ref} kind={kind} installed={installed} />
+          {manage && <AddDialog server={server} serverRef={ref} kind={kind} installed={installed} />}
         </EmptyState>
       ) : (
         <ul className="surface divide-y rounded-xl">
           {data.plugins.map((plugin) => (
-            <PluginRow key={plugin.fileName} plugin={plugin} serverRef={ref} />
+            <PluginRow key={plugin.fileName} plugin={plugin} serverRef={ref} manage={manage} />
           ))}
         </ul>
       )}
@@ -78,7 +82,7 @@ export function ServerPluginsPage() {
   )
 }
 
-function PluginRow({ plugin, serverRef }: { plugin: InstalledPlugin; serverRef: ServerRef }) {
+function PluginRow({ plugin, serverRef, manage }: { plugin: InstalledPlugin; serverRef: ServerRef; manage: boolean }) {
   const change = useChangePlugins(serverRef)
   const install = useInstallPlugins()
   const { project, update } = plugin
@@ -110,36 +114,39 @@ function PluginRow({ plugin, serverRef }: { plugin: InstalledPlugin; serverRef: 
           {project ? plugin.fileName : "Not from Modrinth"} · {formatBytes(plugin.size)}
         </p>
       </div>
-      {update && (
+      {update && !manage && <Pill tone="info">Update to {update}</Pill>}
+      {update && manage && (
         <Button size="sm" variant="outline" disabled={install.isPending} onClick={updateIt}>
           <ArrowCircleUpIcon />
           <span className="max-sm:sr-only">Update to {update}</span>
         </Button>
       )}
-      <ConfirmDialog
-        trigger={
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={`Remove ${plugin.fileName}`}
-            title="Remove"
-            disabled={change.isPending}
-            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <TrashIcon />
-          </Button>
-        }
-        title={`Remove ${project?.title ?? plugin.fileName}?`}
-        description={`This deletes ${plugin.fileName}. Its configuration in the server's folder is kept.`}
-        action="Remove"
-        destructive
-        onConfirm={() =>
-          change.mutate(
-            { action: "remove", fileName: plugin.fileName },
-            { onSuccess: () => toast.success(`Removed ${plugin.fileName}`), onError: (e) => toast.error(e.message) },
-          )
-        }
-      />
+      {manage && (
+        <ConfirmDialog
+          trigger={
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={`Remove ${plugin.fileName}`}
+              title="Remove"
+              disabled={change.isPending}
+              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            >
+              <TrashIcon />
+            </Button>
+          }
+          title={`Remove ${project?.title ?? plugin.fileName}?`}
+          description={`This deletes ${plugin.fileName}. Its configuration in the server's folder is kept.`}
+          action="Remove"
+          destructive
+          onConfirm={() =>
+            change.mutate(
+              { action: "remove", fileName: plugin.fileName },
+              { onSuccess: () => toast.success(`Removed ${plugin.fileName}`), onError: (e) => toast.error(e.message) },
+            )
+          }
+        />
+      )}
     </li>
   )
 }

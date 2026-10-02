@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { Section } from "@/components/section"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { formatMegabytes } from "@/lib/format"
 import { type Server, serversQuery } from "./api"
 import { CreateServerDialog } from "./create-server-dialog"
@@ -15,10 +16,12 @@ import { ServerStateBadge } from "./server-state"
 import { displayVersion, serverLook, serverType } from "./server-types"
 
 export function ServerList({ nodeId }: { nodeId: string }) {
+  const { can } = useAccess()
   const { data: servers, isPending, error } = useQuery(serversQuery(nodeId))
+  const create = can("servers.create", nodeId) && <CreateServerDialog nodeId={nodeId} />
 
   return (
-    <Section title="Servers" actions={servers && servers.length > 0 && <CreateServerDialog nodeId={nodeId} />}>
+    <Section title="Servers" actions={servers && servers.length > 0 && create}>
       {isPending ? (
         <Skeleton className="h-44 rounded-xl" />
       ) : error ? (
@@ -27,9 +30,9 @@ export function ServerList({ nodeId }: { nodeId: string }) {
         <EmptyState
           icon={CubeIcon}
           title="No servers on this node"
-          description="Create a game server or a proxy that connects servers to a network."
+          description={create ? "Create a game server or a proxy that connects servers to a network." : "There are no servers you can see."}
         >
-          <CreateServerDialog nodeId={nodeId} />
+          {create}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -69,7 +72,7 @@ function ServerCard({ nodeId, server }: { nodeId: string; server: Server }) {
         </Chip>
         <Chip icon={MemoryIcon}>{formatMegabytes(server.memoryMb)}</Chip>
       </div>
-      <div className="relative z-10 mt-auto border-t pt-4">
+      <div className="relative z-10 mt-auto border-t pt-4 empty:hidden">
         <ServerActions nodeId={nodeId} server={server} />
       </div>
     </li>

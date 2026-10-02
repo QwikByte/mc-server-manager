@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format"
@@ -71,6 +72,7 @@ function formOf(s: MasterSettings) {
 }
 
 function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
+  const editable = useAccess().can("settings.edit")
   const initial = formOf(settings)
   const [form, setForm] = useState(initial)
   const update = useUpdateSettings()
@@ -89,60 +91,65 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
 
   return (
     <form onSubmit={submit} className="mt-10 surface rounded-2xl px-5 sm:px-8">
-      <FormSection title="Enrollment" description="How new agents reach the master with their join token.">
-        <Field>
-          <FieldLabel htmlFor="settings-enroll-addr">Enrollment address</FieldLabel>
-          <Input
-            id="settings-enroll-addr"
-            className="font-mono"
-            placeholder={master.enrollAddr}
-            maxLength={261}
-            value={form.enrollAddr}
-            onChange={(e) => set({ enrollAddr: e.target.value })}
-          />
-          <FieldDescription>
-            Host and port that join tokens tell agents to connect to, e.g. after the master moved to another domain. Leave it
-            empty to use <span className="font-mono">{master.enrollAddr}</span> from the command line.
-          </FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="settings-join-token">Join tokens are valid for</FieldLabel>
-          <NumberInput
-            id="settings-join-token"
-            min={5}
-            max={1440}
-            unit="minutes"
-            value={form.joinTokenMinutes}
-            onChange={(joinTokenMinutes) => set({ joinTokenMinutes })}
-          />
-          <FieldDescription>From 5 minutes to a day. Each token works only once.</FieldDescription>
-        </Field>
-      </FormSection>
+      {/* Without the permission to change them, the settings are only shown. */}
+      <fieldset disabled={!editable} className="contents">
+        <FormSection title="Enrollment" description="How new agents reach the master with their join token.">
+          <Field>
+            <FieldLabel htmlFor="settings-enroll-addr">Enrollment address</FieldLabel>
+            <Input
+              id="settings-enroll-addr"
+              className="font-mono"
+              placeholder={master.enrollAddr}
+              maxLength={261}
+              value={form.enrollAddr}
+              onChange={(e) => set({ enrollAddr: e.target.value })}
+            />
+            <FieldDescription>
+              Host and port that join tokens tell agents to connect to, e.g. after the master moved to another domain. Leave it empty to use{" "}
+              <span className="font-mono">{master.enrollAddr}</span> from the command line.
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="settings-join-token">Join tokens are valid for</FieldLabel>
+            <NumberInput
+              id="settings-join-token"
+              min={5}
+              max={1440}
+              unit="minutes"
+              value={form.joinTokenMinutes}
+              onChange={(joinTokenMinutes) => set({ joinTokenMinutes })}
+            />
+            <FieldDescription>From 5 minutes to a day. Each token works only once.</FieldDescription>
+          </Field>
+        </FormSection>
 
-      <FormSection title="Sign-in" description="Sessions of administrators in this panel.">
-        <Field>
-          <FieldLabel htmlFor="settings-session">Sessions last</FieldLabel>
-          <NumberInput
-            id="settings-session"
-            min={1}
-            max={168}
-            unit="hours"
-            value={form.sessionHours}
-            onChange={(sessionHours) => set({ sessionHours })}
+        <FormSection title="Sign-in" description="Sessions of administrators in this panel.">
+          <Field>
+            <FieldLabel htmlFor="settings-session">Sessions last</FieldLabel>
+            <NumberInput
+              id="settings-session"
+              min={1}
+              max={168}
+              unit="hours"
+              value={form.sessionHours}
+              onChange={(sessionHours) => set({ sessionHours })}
+            />
+            <FieldDescription>Up to a week. Applies from the next sign-in; shorter sessions are safer.</FieldDescription>
+          </Field>
+        </FormSection>
+
+        <FormSection title="New nodes" description="Limits that nodes get when they are added. Change them for each node in its settings.">
+          <LimitsFields
+            id="settings-node-defaults"
+            form={form.nodeDefaults}
+            onChange={(change) => set({ nodeDefaults: { ...form.nodeDefaults, ...change } })}
           />
-          <FieldDescription>Up to a week. Applies from the next sign-in; shorter sessions are safer.</FieldDescription>
-        </Field>
-      </FormSection>
-
-      <FormSection title="New nodes" description="Limits that nodes get when they are added. Change them for each node in its settings.">
-        <LimitsFields
-          id="settings-node-defaults"
-          form={form.nodeDefaults}
-          onChange={(change) => set({ nodeDefaults: { ...form.nodeDefaults, ...change } })}
-        />
-      </FormSection>
-
-      <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">
+        </FormSection>
+      </fieldset>
+      <div
+        className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8"
+        hidden={!editable}
+      >
         <p className="text-sm text-muted-foreground">Changes apply right away, without restarting the master.</p>
         <Button type="submit" disabled={!dirty || update.isPending}>
           {update.isPending ? "Saving…" : "Save settings"}

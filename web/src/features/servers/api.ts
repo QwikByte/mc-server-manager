@@ -120,3 +120,9 @@ export function useSendCommand(nodeId: string, serverId: string) {
     mutationFn: (command: string) => api<{ output: string }>(`/nodes/${nodeId}/servers/${serverId}/command`, { body: { command } }),
   })
 }
+
+/** A server, or all servers of a node (including later ones) if serverId is empty. */
+export interface Target {
+  nodeId: string
+  serverId: string
+}

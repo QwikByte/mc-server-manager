@@ -1,5 +1,6 @@
 import { PaperPlaneRightIcon, TerminalIcon } from "@phosphor-icons/react"
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useAccess } from "@/features/access/use-access"
 import { cn } from "@/lib/utils"
 import { type Server, useSendCommand } from "./api"
 import { serverType } from "./server-types"
@@ -33,6 +34,7 @@ function lineClass({ kind, text }: Line) {
 
 /** Live console of a server: its output as it happens and a prompt for commands. */
 export function Console({ nodeId, server }: { nodeId: string; server: Server }) {
+  const { can } = useAccess()
   const [lines, setLines] = useState<Line[]>([])
   const [connection, setConnection] = useState<Connection>("connecting")
   const [input, setInput] = useState("")
@@ -105,7 +107,13 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
     setInput(history.current[historyIndex.current] ?? "")
   }
 
-  const disabledReason = proxy ? "Proxies don't accept console commands yet" : !live ? "Start the server to send commands" : undefined
+  const disabledReason = !can("console.commands", nodeId, server.id)
+    ? "Your groups don't let you send commands"
+    : proxy
+      ? "Proxies don't accept console commands yet"
+      : !live
+        ? "Start the server to send commands"
+        : undefined
 
   return (
     <section

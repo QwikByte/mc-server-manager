@@ -5,6 +5,7 @@ import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
 import { PageHeader } from "@/components/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { serverLook } from "@/features/servers/server-types"
 import { draftOf, emptyTemplate, templateQuery, useSaveTemplate } from "./api"
 import { TemplateForm } from "./template-form"
@@ -12,6 +13,7 @@ import { TemplateForm } from "./template-form"
 const route = getRouteApi("/_app/templates/$templateId")
 
 export function TemplatePage() {
+  const { can } = useAccess()
   const { templateId } = route.useParams()
   const { data: template, isPending, error } = useQuery(templateQuery(templateId))
   const save = useSaveTemplate(templateId)
@@ -26,15 +28,18 @@ export function TemplatePage() {
       ) : (
         <>
           <PageHeader {...serverLook(template.type)} title={template.name} description={template.description || undefined} />
-          <TemplateForm
-            // Remounting on save resets the form to what was stored.
-            key={JSON.stringify(template)}
-            initial={draftOf(template)}
-            submitLabel="Save template"
-            pending={save.isPending}
-            error={save.error}
-            onSubmit={(input) => save.mutate(input, { onSuccess: (t) => toast.success(`Saved ${t.name}`) })}
-          />
+          {/* Without the permission to manage templates, the template is only shown. */}
+          <fieldset disabled={!can("templates.manage")} className="contents">
+            <TemplateForm
+              // Remounting on save resets the form to what was stored.
+              key={JSON.stringify(template)}
+              initial={draftOf(template)}
+              submitLabel="Save template"
+              pending={save.isPending}
+              error={save.error}
+              onSubmit={(input) => save.mutate(input, { onSuccess: (t) => toast.success(`Saved ${t.name}`) })}
+            />
+          </fieldset>
         </>
       )}
     </>

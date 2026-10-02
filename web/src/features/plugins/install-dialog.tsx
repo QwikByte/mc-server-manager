@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
+import { useAccess } from "@/features/access/use-access"
 import { key, refOf } from "@/features/networks/servers"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { displayVersion, serverType } from "@/features/servers/server-types"
@@ -26,7 +27,8 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
   const [selected, setSelected] = useState<string[]>([])
   const { data: servers = [] } = useQuery({ ...allServersQuery, enabled: open })
   const install = useInstallPlugins()
-  const suitable = servers.filter((s) => supports(hit.loaders, s.type))
+  const { can } = useAccess()
+  const suitable = servers.filter((s) => supports(hit.loaders, s.type) && can("plugins.manage", s.nodeId, s.id))
   const toggle = (k: string, on: boolean) => setSelected((list) => (on ? [...list, k] : list.filter((s) => s !== k)))
 
   function onOpenChange(next: boolean) {

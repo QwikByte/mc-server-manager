@@ -10,6 +10,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useAccess } from "@/features/access/use-access"
 import type { Server } from "@/features/servers/api"
 import { formatBytes, formatDateTime } from "@/lib/format"
 import { contentUrl, type FileEntry, filesQuery, join, maxEditableBytes, type ServerFiles, useChangeFiles } from "./api"
@@ -21,6 +22,7 @@ import { useUploads } from "./use-uploads"
 
 /** Lists a folder of a server; files can be dropped onto it to upload them. */
 export function FileBrowser({ files, path, server }: { files: ServerFiles; path: string; server: Server }) {
+  const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const { data, isPending, error } = useQuery(filesQuery(files, path))
   const change = useChangeFiles(files)
   const { uploads, add, cancel } = useUploads(files)
@@ -43,6 +45,7 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
     event.preventDefault()
     dragDepth.current = 0
     setDragging(false)
+    if (!writable) return
     const items = [...event.dataTransfer.items].filter((item) => item.kind === "file")
     const isFolder = (item: DataTransferItem) => item.webkitGetAsEntry()?.isDirectory
     if (items.some(isFolder)) toast.error("Folders can't be uploaded. Create the folder and upload the files inside it.")
@@ -51,7 +54,7 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
 
   function dragBy(step: number) {
     return (event: DragEvent) => {
-      if (!event.dataTransfer.types.includes("Files")) return
+      if (!writable || !event.dataTransfer.types.includes("Files")) return
       event.preventDefault()
       dragDepth.current += step
       setDragging(dragDepth.current > 0)
@@ -79,7 +82,7 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
       <div className="surface overflow-hidden rounded-xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
           <PathBreadcrumb files={files} path={path} root={server.name} />
-          <div className="flex gap-2">
+          <div className="flex gap-2" hidden={!writable}>
             <Button variant="outline" onClick={() => setCreating(true)}>
               <FolderPlusIcon />
               New folder

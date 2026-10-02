@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { contentUrl, readText, type ServerFiles, upload } from "./api"
 import type { EditorHandle } from "./code-editor"
 
@@ -15,6 +16,7 @@ const CodeEditor = lazy(() => import("./code-editor").then((m) => ({ default: m.
 
 /** Edits a text file of a server. Leaving with unsaved changes asks first. */
 export function FileEditor({ files, path, onClose }: { files: ServerFiles; path: string; onClose: () => void }) {
+  const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const name = path.split("/").pop() ?? path
   const queryClient = useQueryClient()
   const editor = useRef<EditorHandle>(null)
@@ -74,10 +76,12 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
               Download
             </a>
           </Button>
-          <Button disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
-            <FloppyDiskIcon />
-            {save.isPending ? "Saving…" : "Save"}
-          </Button>
+          {writable && (
+            <Button disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+              <FloppyDiskIcon />
+              {save.isPending ? "Saving…" : "Save"}
+            </Button>
+          )}
         </div>
       </div>
       {isPending ? (
@@ -88,10 +92,10 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
         </p>
       ) : (
         <Suspense fallback={<Skeleton className="h-[65vh] min-h-80 rounded-xl" />}>
-          <CodeEditor ref={editor} value={text} filename={name} onChange={() => setDirty(true)} />
+          <CodeEditor ref={editor} value={text} filename={name} readOnly={!writable} onChange={() => setDirty(true)} />
         </Suspense>
       )}
-      <p className="mt-3 text-xs text-muted-foreground">
+      <p className="mt-3 text-xs text-muted-foreground" hidden={!writable}>
         <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem]">Ctrl+S</kbd> saves. Servers read most settings
         when they start, so restart the server to apply your changes.
       </p>

@@ -3,6 +3,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
+import { useAccess } from "@/features/access/use-access"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +16,7 @@ import { NameDialog } from "./name-dialog"
 
 /** Menu of a file or folder: download, rename and delete. */
 export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: string; entry: FileEntry }) {
+  const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const change = useChangeFiles(files)
   const [dialog, setDialog] = useState<"rename" | "delete">()
   const path = join(dir, entry.name)
@@ -36,15 +38,19 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
               {entry.directory ? "Download as ZIP" : "Download"}
             </a>
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setDialog("rename")}>
-            <PencilSimpleIcon />
-            Rename
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => setDialog("delete")}>
-            <TrashIcon />
-            Delete
-          </DropdownMenuItem>
+          {writable && (
+            <>
+              <DropdownMenuItem onSelect={() => setDialog("rename")}>
+                <PencilSimpleIcon />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => setDialog("delete")}>
+                <TrashIcon />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <NameDialog

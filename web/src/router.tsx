@@ -1,7 +1,10 @@
 import { QueryCache, QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, createRoute, createRouter, lazyRouteComponent, Outlet, redirect } from "@tanstack/react-router"
 import { AppShell } from "@/components/app-shell"
+import { home } from "@/components/navigation"
 import { Toaster } from "@/components/ui/sonner"
+import { accessQuery } from "@/features/access/api"
+import { accessOf } from "@/features/access/use-access"
 import { meQuery } from "@/features/auth/api"
 import { LoginPage } from "@/features/auth/login-page"
 import { ApiError } from "@/lib/api"
@@ -42,12 +45,20 @@ const loginRoute = createRoute({
   component: LoginPage,
 })
 
+// Users set their password here with a setup link; the token is in the fragment.
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/setup",
+  component: lazyRouteComponent(() => import("@/features/auth/setup-page"), "SetupPage"),
+})
+
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_app",
+  // The permissions are loaded first, so that the panel only offers what the user may do.
   beforeLoad: async ({ context, location }) => {
     try {
-      await context.queryClient.ensureQueryData(meQuery)
+      await Promise.all([context.queryClient.ensureQueryData(meQuery), context.queryClient.ensureQueryData(accessQuery)])
     } catch {
       throw redirect({ to: "/login", search: { redirect: location.href } })
     }
@@ -58,8 +69,8 @@ const appRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/nodes" })
+  beforeLoad: ({ context }) => {
+    throw redirect({ to: home(accessOf(context.queryClient.getQueryData(accessQuery.queryKey))) })
   },
 })
 
@@ -195,6 +206,26 @@ const agentsSettingsRoute = createRoute({
   path: "agents",
   component: lazyRouteComponent(() => import("@/features/settings/agents-page"), "AgentsSettingsPage"),
 })
+const usersRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "users",
+  component: lazyRouteComponent(() => import("@/features/access/users-page"), "UsersPage"),
+})
+const groupsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "groups",
+  component: lazyRouteComponent(() => import("@/features/access/groups-page"), "GroupsPage"),
+})
+const newGroupRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "groups/new",
+  component: lazyRouteComponent(() => import("@/features/access/group-page"), "NewGroupPage"),
+})
+const groupRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "groups/$groupId",
+  component: lazyRouteComponent(() => import("@/features/access/group-page"), "GroupPage"),
+})
 const terminalRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "terminal",
@@ -208,6 +239,7 @@ const terminalRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
+    setupRoute,
     appRoute.addChildren([
       indexRoute,
       nodesRoute,
@@ -232,7 +264,15 @@ export const router = createRouter({
       newPolicyRoute,
       policyRoute,
       pluginsRoute,
-      settingsRoute.addChildren([generalSettingsRoute, agentsSettingsRoute, terminalRoute]),
+      settingsRoute.addChildren([
+        generalSettingsRoute,
+        agentsSettingsRoute,
+        terminalRoute,
+        usersRoute,
+        groupsRoute,
+        newGroupRoute,
+        groupRoute,
+      ]),
     ]),
   ]),
   context: { queryClient },

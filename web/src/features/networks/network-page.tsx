@@ -8,6 +8,7 @@ import { BackLink } from "@/components/back-link"
 import { PageHeader } from "@/components/page-header"
 import type { Tone } from "@/components/tone"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { allServersQuery } from "@/features/servers/api"
 import { networkQuery } from "./api"
 import { BackendList } from "./backend-list"
@@ -18,6 +19,7 @@ import { findServer } from "./servers"
 const route = getRouteApi("/_app/networks/$networkId")
 
 export function NetworkPage() {
+  const manage = useAccess().can("networks.manage")
   const { networkId } = route.useParams()
   const { data: network, isPending, error } = useQuery(networkQuery(networkId))
   const { data: servers } = useQuery(allServersQuery)
@@ -38,10 +40,12 @@ export function NetworkPage() {
             title={network.name}
             description={proxy ? `Players connect to ${proxy.nodeName} at port ${proxy.port}.` : undefined}
             actions={
-              <>
-                <ApplyNetworkButton network={network} />
-                <DeleteNetworkButton network={network} />
-              </>
+              manage && (
+                <>
+                  <ApplyNetworkButton network={network} />
+                  <DeleteNetworkButton network={network} />
+                </>
+              )
             }
           />
           <div className="grid items-center gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr]">
