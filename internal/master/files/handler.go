@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -32,15 +33,16 @@ type Handler struct{ nodes Nodes }
 
 func NewHandler(nodes Nodes) *Handler { return &Handler{nodes: nodes} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
+func (h *Handler) Register(mux access.Mux) {
 	const base = "/api/nodes/{node}/servers/{id}/files"
-	mux.HandleFunc("GET "+base, h.list)
-	mux.HandleFunc("DELETE "+base, h.delete)
-	mux.HandleFunc("GET "+base+"/content", h.download)
-	mux.HandleFunc("PUT "+base+"/content", h.upload)
-	mux.HandleFunc("GET "+base+"/archive", h.archive)
-	mux.HandleFunc("POST "+base+"/directories", h.createDirectory)
-	mux.HandleFunc("POST "+base+"/move", h.move)
+	read, write := access.OnServer(access.FilesRead), access.OnServer(access.FilesWrite)
+	mux.Handle("GET "+base, read, h.list)
+	mux.Handle("DELETE "+base, write, h.delete)
+	mux.Handle("GET "+base+"/content", read, h.download)
+	mux.Handle("PUT "+base+"/content", write, h.upload)
+	mux.Handle("GET "+base+"/archive", read, h.archive)
+	mux.Handle("POST "+base+"/directories", write, h.createDirectory)
+	mux.Handle("POST "+base+"/move", write, h.move)
 }
 
 type fileView struct {

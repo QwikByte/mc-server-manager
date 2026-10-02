@@ -12,7 +12,7 @@ func TestUpdateServer(t *testing.T) {
 	a := m.startAgent(t, "node-1")
 	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	m.createServer(t, a, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 	path := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID
 	settings := func(change func(map[string]any)) map[string]any {
 		s := map[string]any{

@@ -27,10 +27,10 @@ func TestLoginSessionLifecycle(t *testing.T) {
 	defer db.Close()
 	svc, ctx := NewService(db), t.Context()
 
-	if err := svc.CreateUser(ctx, "admin", "short"); err == nil {
+	if _, err := svc.CreateUser(ctx, "admin", "short"); err == nil {
 		t.Fatal("short password accepted")
 	}
-	if err := svc.CreateUser(ctx, "admin", "a-long-enough-password"); err != nil {
+	if _, err := svc.CreateUser(ctx, "admin", "a-long-enough-password"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := svc.Login(ctx, "admin", "wrong-password!", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
@@ -60,5 +60,72 @@ func TestLoginSessionLifecycle(t *testing.T) {
 	}
 	if _, err := svc.Authenticate(ctx, token); !errors.Is(err, ErrNoSession) {
 		t.Fatalf("session still valid after logout: %v", err)
+	}
+}
+
+func TestInviteDisableAndChangePassword(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	svc, ctx := NewService(db), t.Context()
+
+	// An invited user can't sign in until the password is set with the setup link.
+	user, link, err := svc.Invite(ctx, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.Login(ctx, "alice", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("invited user signed in without a password: %v", err)
+	}
+	if _, _, err := svc.Setup(ctx, link.Token, "short", time.Hour); err == nil {
+		t.Fatal("short password accepted")
+	}
+	_, session, err := svc.Setup(ctx, link.Token, "alices-long-password", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.Setup(ctx, link.Token, "another-long-password", time.Hour); err == nil {
+		t.Fatal("setup link used twice")
+	}
+
+	// Changing the password keeps the current session and ends the others.
+	_, other, err := svc.Login(ctx, "alice", "alices-long-password", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ChangePassword(ctx, user.ID, "wrong-password-here", "a-brand-new-password", session); err == nil {
+		t.Fatal("wrong current password accepted")
+	}
+	if err := svc.ChangePassword(ctx, user.ID, "alices-long-password", "a-brand-new-password", session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Authenticate(ctx, session); err != nil {
+		t.Fatalf("current session ended: %v", err)
+	}
+	if _, err := svc.Authenticate(ctx, other); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("other session still valid: %v", err)
+	}
+
+	// Disabled users lose their sessions and can't sign in or use setup links.
+	reset, err := svc.NewSetupLink(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetDisabled(ctx, user.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Authenticate(ctx, session); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("session of a disabled user still valid: %v", err)
+	}
+	if _, _, err := svc.Login(ctx, "alice", "a-brand-new-password", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("disabled user signed in: %v", err)
+	}
+	if _, err := svc.SetupUser(ctx, reset.Token); err == nil {
+		t.Fatal("setup link of a disabled user accepted")
+	}
+	if _, _, err := svc.Invite(ctx, "Alice"); err == nil {
+		t.Fatal("username taken twice")
 	}
 }

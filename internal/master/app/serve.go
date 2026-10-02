@@ -15,6 +15,7 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
@@ -85,8 +86,11 @@ func serve(ctx context.Context, cfg config) error {
 		return err
 	}
 	httpServer := &http.Server{
-		Addr:              cfg.httpAddr,
-		Handler:           routes(users, conf, nodes, network.NewService(db, nodes), plugins, template.NewService(db, plugins), tasks),
+		Addr: cfg.httpAddr,
+		Handler: Handler(Services{
+			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
+			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks,
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -112,30 +116,50 @@ func serve(ctx context.Context, cfg config) error {
 	return errors.Join(err, httpServer.Shutdown(shutdownCtx))
 }
 
-func routes(users *auth.Service, conf *settings.Service, nodes *node.Service, networks *network.Service,
-	plugins *plugin.Service, templates *template.Service, tasks *schedule.Service,
-) http.Handler {
-	authHandler := auth.NewHandler(users, conf.SessionTTL)
-	api := http.NewServeMux()
+// Services are what the master serves over HTTP.
+type Services struct {
+	Users     *auth.Service
+	Access    *access.Service
+	Settings  *settings.Service
+	Nodes     *node.Service
+	Networks  *network.Service
+	Plugins   *plugin.Service
+	Templates *template.Service
+	Tasks     *schedule.Service
+}
+
+// Handler returns everything the master serves over HTTP: the panel, the sign-in and the
+// API, which needs a session and loads the user's permissions for every request.
+func Handler(s Services) http.Handler {
+	authHandler := auth.NewHandler(s.Users, s.Settings.SessionTTL)
+	api := API(s)
 	authHandler.Register(api)
-	settings.NewHandler(conf).Register(api)
-	terminal.NewHandler(nodes, conf).Register(api)
-	node.NewHandler(nodes).Register(api)
-	server.NewHandler(nodes, networks, tasks).Register(api)
-	network.NewHandler(networks).Register(api)
-	files.NewHandler(nodes).Register(api)
-	properties.NewHandler(nodes).Register(api)
-	plugin.NewHandler(plugins).Register(api)
-	template.NewHandler(templates).Register(api)
-	backup.NewHandler(nodes).Register(api)
-	schedule.NewHandler(tasks, backup.TaskKind).Register(api, "/api/backup-jobs")
-	schedule.NewHandler(tasks, policy.TaskKind).Register(api, "/api/policies")
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
-	mux.Handle("/api/", authHandler.Require(api))
+	authHandler.RegisterPublic(mux)
+	mux.Handle("/api/", authHandler.Require(s.Access.Middleware(api)))
 	mux.Handle("/", web.Handler())
 	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+}
+
+// API returns the routes of the API that act for a user, each with the permission it needs.
+func API(s Services) *http.ServeMux {
+	api := http.NewServeMux()
+	m := access.NewMux(api)
+	access.NewHandler(s.Access, s.Users).Register(m)
+	settings.NewHandler(s.Settings).Register(m)
+	terminal.NewHandler(s.Nodes, s.Settings).Register(m)
+	node.NewHandler(s.Nodes).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tasks, s.Access).Register(m)
+	network.NewHandler(s.Networks).Register(m)
+	files.NewHandler(s.Nodes).Register(m)
+	properties.NewHandler(s.Nodes).Register(m)
+	plugin.NewHandler(s.Plugins).Register(m)
+	template.NewHandler(s.Templates).Register(m)
+	backup.NewHandler(s.Nodes).Register(m)
+	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
+	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
+	return api
 }
 
 func securityHeaders(next http.Handler) http.Handler {

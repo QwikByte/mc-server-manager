@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -11,20 +12,21 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/networks", func(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Register(mux access.Mux) {
+	view, manage := access.Everywhere(access.NetworksView), access.Everywhere(access.NetworksManage)
+	mux.Handle("GET /api/networks", view, func(w http.ResponseWriter, r *http.Request) {
 		networks, err := h.svc.List(r.Context())
 		write(w, r, http.StatusOK, networks, err)
 	})
-	mux.HandleFunc("POST /api/networks", h.create)
-	mux.HandleFunc("GET /api/networks/{id}", withNetwork(h.svc.Get))
-	mux.HandleFunc("DELETE /api/networks/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("POST /api/networks", manage, h.create)
+	mux.Handle("GET /api/networks/{id}", view, withNetwork(h.svc.Get))
+	mux.Handle("DELETE /api/networks/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
 		write(w, r, http.StatusNoContent, nil, h.svc.Delete(r.Context(), r.PathValue("id")))
 	})
-	mux.HandleFunc("POST /api/networks/{id}/apply", withNetwork(h.svc.Apply))
-	mux.HandleFunc("POST /api/networks/{id}/backends", h.addBackend)
-	mux.HandleFunc("DELETE /api/networks/{id}/backends/{server}", withBackend(h.svc.RemoveBackend))
-	mux.HandleFunc("POST /api/networks/{id}/backends/{server}/default", withBackend(h.svc.MakeDefault))
+	mux.Handle("POST /api/networks/{id}/apply", manage, withNetwork(h.svc.Apply))
+	mux.Handle("POST /api/networks/{id}/backends", manage, h.addBackend)
+	mux.Handle("DELETE /api/networks/{id}/backends/{server}", manage, withBackend(h.svc.RemoveBackend))
+	mux.Handle("POST /api/networks/{id}/backends/{server}/default", manage, withBackend(h.svc.MakeDefault))
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {

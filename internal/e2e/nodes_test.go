@@ -9,7 +9,7 @@ func TestNodeSettings(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
 	m.startAgent(t, "node-2")
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 	path := "/api/nodes/" + a.node.ID
 	settings := func(change func(map[string]any)) map[string]any {
 		s := map[string]any{"name": "Frankfurt 1", "address": a.node.Address, "defaultStorage": "default", "portMin": 25565, "portMax": 25570, "memoryReserveMb": 4096}

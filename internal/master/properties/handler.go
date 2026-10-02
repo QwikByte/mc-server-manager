@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -24,9 +25,9 @@ type Handler struct{ nodes Nodes }
 
 func NewHandler(nodes Nodes) *Handler { return &Handler{nodes: nodes} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/nodes/{node}/servers/{id}/properties", h.get)
-	mux.HandleFunc("PUT /api/nodes/{node}/servers/{id}/properties", h.update)
+func (h *Handler) Register(mux access.Mux) {
+	mux.Handle("GET /api/nodes/{node}/servers/{id}/properties", access.OnServer(access.Properties), h.get)
+	mux.Handle("PUT /api/nodes/{node}/servers/{id}/properties", access.OnServer(access.Properties), h.update)
 }
 
 type locked struct {

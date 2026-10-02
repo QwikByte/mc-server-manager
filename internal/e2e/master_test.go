@@ -12,7 +12,7 @@ import (
 
 func TestMasterSettings(t *testing.T) {
 	m := startMaster(t)
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 
 	var got struct {
 		Settings settings.Settings `json:"settings"`

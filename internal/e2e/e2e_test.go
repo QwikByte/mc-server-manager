@@ -3,6 +3,7 @@ package e2e
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -30,20 +31,19 @@ import (
 	agentnode "github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
+	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
+	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
-	"github.com/QwikByte/mc-server-manager/internal/master/files"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
 	"github.com/QwikByte/mc-server-manager/internal/master/policy"
-	"github.com/QwikByte/mc-server-manager/internal/master/properties"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
-	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
-	"github.com/QwikByte/mc-server-manager/internal/master/terminal"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -195,26 +195,24 @@ func startMaster(t *testing.T) *master {
 	return &master{db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, enrollAddr: ln.Addr().String(), modrinth: startModrinth(t)}
 }
 
-// panel serves the REST API of the master without authentication.
-func (m *master) panel(t *testing.T) *httptest.Server {
-	networks := network.NewService(m.db, m.nodes)
-	plugins := plugin.NewService(m.nodes, modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/"))
-	tasks := schedule.NewService(m.db, m.nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(m.nodes), policy.TaskKind: policy.New(m.nodes)})
+// services are those of a master's panel.
+func (m *master) services(t *testing.T) masterapp.Services {
+	nodes := m.nodes
+	plugins := plugin.NewService(nodes, modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/"))
+	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)})
 	check(t, tasks.Start(t.Context()))
-	mux := http.NewServeMux()
-	settings.NewHandler(m.settings).Register(mux)
-	terminal.NewHandler(m.nodes, m.settings).Register(mux)
-	server.NewHandler(m.nodes, networks, tasks).Register(mux)
-	network.NewHandler(networks).Register(mux)
-	files.NewHandler(m.nodes).Register(mux)
-	properties.NewHandler(m.nodes).Register(mux)
-	node.NewHandler(m.nodes).Register(mux)
-	plugin.NewHandler(plugins).Register(mux)
-	template.NewHandler(template.NewService(m.db, plugins)).Register(mux)
-	backup.NewHandler(m.nodes).Register(mux)
-	schedule.NewHandler(tasks, backup.TaskKind).Register(mux, "/api/backup-jobs")
-	schedule.NewHandler(tasks, policy.TaskKind).Register(mux, "/api/policies")
-	srv := httptest.NewServer(mux)
+	return masterapp.Services{
+		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
+		Networks: network.NewService(m.db, nodes), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
+	}
+}
+
+// panel serves the REST API of the master for an administrator, without signing in.
+func (m *master) panel(t *testing.T) *httptest.Server {
+	api := masterapp.API(m.services(t))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		api.ServeHTTP(w, r.WithContext(access.WithGrants(r.Context(), access.Admin())))
+	}))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -254,8 +252,9 @@ func (m *master) createServer(t *testing.T, a agent, name string, typ mcsmv1.Ser
 }
 
 type apiClient struct {
-	t   *testing.T
-	url string
+	t      *testing.T
+	url    string
+	client *http.Client // http.DefaultClient if nil
 }
 
 // do sends a request with an optional body, JSON unless it is []byte, checks the status and decodes the
@@ -274,7 +273,7 @@ func (c apiClient) do(method, path string, in any, wantStatus int, out any) stri
 	}
 	req, err := http.NewRequestWithContext(c.t.Context(), method, c.url+path, body)
 	check(c.t, err)
-	res, err := http.DefaultClient.Do(req)
+	res, err := cmp.Or(c.client, http.DefaultClient).Do(req)
 	check(c.t, err)
 	defer res.Body.Close()
 	data, err := io.ReadAll(res.Body)

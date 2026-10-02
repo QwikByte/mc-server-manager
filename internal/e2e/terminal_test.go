@@ -18,7 +18,7 @@ func TestTerminal(t *testing.T) {
 	url := m.panel(t).URL
 	run := func(target, command string) (string, string) {
 		t.Helper()
-		return runTerminal(t, url, target, command)
+		return runTerminal(t, http.DefaultClient, url, target, command)
 	}
 
 	// The commands of the agent's CLI run over the master's connection to the agent.
@@ -60,18 +60,18 @@ func TestTerminal(t *testing.T) {
 		t.Errorf("unknown node: error %q", err)
 	}
 
-	api := apiClient{t, url}
+	api := apiClient{t: t, url: url}
 	api.do("POST", "/api/terminal", map[string]string{"target": "unknown", "command": "status"}, http.StatusNotFound, nil)
 	api.do("POST", "/api/terminal", map[string]string{"target": a.node.ID, "command": "status\nserver list"}, http.StatusBadRequest, nil)
 	api.do("POST", "/api/terminal", map[string]string{"target": a.node.ID, "command": `server command x say "hi`}, http.StatusBadRequest, nil)
 }
 
 // runTerminal runs a command in the panel's terminal and returns its output and error.
-func runTerminal(t *testing.T, url, target, command string) (output, errMsg string) {
+func runTerminal(t *testing.T, client *http.Client, url, target, command string) (output, errMsg string) {
 	t.Helper()
 	body, err := json.Marshal(map[string]string{"target": target, "command": command})
 	check(t, err)
-	res, err := http.Post(url+"/api/terminal", "application/json", bytes.NewReader(body))
+	res, err := client.Post(url+"/api/terminal", "application/json", bytes.NewReader(body))
 	check(t, err)
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {

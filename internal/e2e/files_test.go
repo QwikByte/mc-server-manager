@@ -18,7 +18,7 @@ func TestFiles(t *testing.T) {
 	a := m.startAgent(t, "node-1")
 	srv := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	panel := m.panel(t)
-	api := apiClient{t, panel.URL}
+	api := apiClient{t: t, url: panel.URL}
 	base := "/api/nodes/" + srv.NodeID + "/servers/" + srv.ServerID + "/files"
 	q := func(p string) string { return "?path=" + url.QueryEscape(p) }
 

@@ -19,7 +19,7 @@ func TestNetwork(t *testing.T) {
 	lobby := m.createServer(t, a1, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	vanilla := m.createServer(t, a1, "Vanilla", mcsmv1.ServerType_SERVER_TYPE_VANILLA, 25566)
 	survival := m.createServer(t, a2, "Survival", mcsmv1.ServerType_SERVER_TYPE_PURPUR, 25570)
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 
 	var n network.Network
 	api.do("POST", "/api/networks", map[string]any{"name": "Main", "proxy": proxy, "lobby": lobby}, http.StatusCreated, &n)

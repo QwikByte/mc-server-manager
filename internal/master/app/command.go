@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 )
@@ -56,7 +57,7 @@ func Command() *cobra.Command {
 	user := &cobra.Command{Use: "user", Short: "Manage administrator accounts"}
 	user.AddCommand(&cobra.Command{
 		Use:   "add <username>",
-		Short: "Create an administrator account (reads the password from the terminal or stdin)",
+		Short: "Create an administrator account (reads the password from the terminal or stdin), e.g. the first one or after losing access",
 		Args:  cobra.ExactArgs(1),
 		RunE:  func(cmd *cobra.Command, args []string) error { return addUser(cmd.Context(), cfg, args[0]) },
 	})
@@ -82,11 +83,14 @@ func addUser(ctx context.Context, cfg config, username string) error {
 		return err
 	}
 	defer db.Close()
-	if err := auth.NewService(db).CreateUser(ctx, username, password); err != nil {
-		return err
+	user, err := auth.NewService(db).CreateUser(ctx, username, password)
+	if err == nil {
+		err = access.NewService(db).MakeAdmin(ctx, user.ID)
 	}
-	fmt.Printf("Created administrator %q.\n", username)
-	return nil
+	if err == nil {
+		fmt.Printf("Created administrator %q. Invite further users in the panel.\n", username)
+	}
+	return err
 }
 
 // readPassword prompts twice on a terminal and reads a single line from piped stdin.
