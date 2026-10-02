@@ -1,5 +1,22 @@
 // Package buildinfo exposes metadata injected at build time.
 package buildinfo
 
+import "regexp"
+
+// Repository publishes the releases.
+const Repository = "https://github.com/QwikByte/mc-server-manager"
+
 // Version is set via -ldflags "-X github.com/QwikByte/mc-server-manager/internal/buildinfo.Version=v1.0.0".
 var Version = "dev"
+
+// release matches the versions of releases, like the installer does.
+var release = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
+
+// InstallScript is the URL of the installer of this version, or of the latest release for
+// builds that aren't one.
+func InstallScript() string {
+	if release.MatchString(Version) {
+		return Repository + "/releases/download/" + Version + "/install.sh"
+	}
+	return Repository + "/releases/latest/download/install.sh"
+}

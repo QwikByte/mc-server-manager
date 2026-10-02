@@ -1,16 +1,20 @@
 [Unit]
 Description=MC Server Manager master
+Documentation=https://github.com/QwikByte/mc-server-manager
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-# Create the user once with: useradd --system --no-create-home mcsm
 User=mcsm
 Group=mcsm
-ExecStart=/usr/local/bin/mcsm-master serve --data-dir /var/lib/mcsm-master --public-enroll-addr panel.example.com:9443
+EnvironmentFile=-/etc/mcsm/master.env
+ExecStart=/usr/bin/mcsm-master --data-dir /var/lib/mcsm-master serve $MCSM_MASTER_OPTS
 StateDirectory=mcsm-master
 StateDirectoryMode=0700
+LogsDirectory=mcsm-master
+LogsDirectoryMode=0700
 Restart=on-failure
+RestartSec=5
 
 NoNewPrivileges=yes
 CapabilityBoundingSet=

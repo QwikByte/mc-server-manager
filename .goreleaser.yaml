@@ -1,0 +1,115 @@
+# Builds a release of both programs for Linux: packages, archives, checksums and the installer.
+# The release workflow runs it for tags v*; try it locally with: goreleaser release --snapshot --clean
+version: 2
+
+project_name: mc-server-manager
+
+before:
+  hooks:
+    - make web
+    # The installer installs the version it was released with.
+    - sh -c 'mkdir -p bin && sed "s/^version=latest$/version=v{{ .Version }}/" packaging/install.sh > bin/install.sh'
+
+builds:
+  - &build
+    id: mcsm-master
+    main: ./cmd/mcsm-master
+    binary: mcsm-master
+    tags: [ui]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X github.com/QwikByte/mc-server-manager/internal/buildinfo.Version=v{{ .Version }}"]
+  - <<: *build
+    id: mcsm-agent
+    main: ./cmd/mcsm-agent
+    binary: mcsm-agent
+    tags: []
+
+archives:
+  - &archive
+    id: mcsm-master
+    ids: [mcsm-master]
+    name_template: "{{ .Binary }}_{{ .Version }}_linux_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - src: packaging/master/mcsm-master.service
+        strip_parent: true
+      - src: packaging/master/master.env
+        strip_parent: true
+  - <<: *archive
+    id: mcsm-agent
+    ids: [mcsm-agent]
+    files:
+      - LICENSE
+      - README.md
+      - src: packaging/agent/mcsm-agent.service
+        strip_parent: true
+      - src: packaging/agent/agent.env
+        strip_parent: true
+
+nfpms:
+  - &package
+    id: mcsm-master
+    ids: [mcsm-master]
+    package_name: mcsm-master
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_linux_{{ .Arch }}"
+    formats: [deb, rpm, archlinux]
+    vendor: QwikByte
+    maintainer: QwikByte
+    homepage: https://github.com/QwikByte/mc-server-manager
+    license: MIT
+    section: admin
+    description: Admin panel and control plane of MC Server Manager, which manages Minecraft servers and networks on any number of nodes.
+    dependencies: [systemd]
+    contents:
+      - src: packaging/master/mcsm-master.service
+        dst: /usr/lib/systemd/system/mcsm-master.service
+      - src: packaging/master/sysusers.conf
+        dst: /usr/lib/sysusers.d/mcsm-master.conf
+      - src: packaging/master/master.env
+        dst: /etc/mcsm/master.env
+        type: config|noreplace
+    scripts:
+      postinstall: packaging/master/postinstall.sh
+      preremove: packaging/master/preremove.sh
+      postremove: packaging/postremove.sh
+    archlinux:
+      scripts:
+        postupgrade: packaging/master/postinstall.sh
+  - <<: *package
+    id: mcsm-agent
+    ids: [mcsm-agent]
+    package_name: mcsm-agent
+    description: Node agent of MC Server Manager, which runs the Minecraft servers of a machine in Docker.
+    dependencies: []
+    contents:
+      - src: packaging/agent/mcsm-agent.service
+        dst: /usr/lib/systemd/system/mcsm-agent.service
+      - src: packaging/agent/agent.env
+        dst: /etc/mcsm/agent.env
+        type: config|noreplace
+    scripts:
+      postinstall: packaging/agent/postinstall.sh
+      preremove: packaging/agent/preremove.sh
+      postremove: packaging/postremove.sh
+    archlinux:
+      scripts:
+        postupgrade: packaging/agent/postinstall.sh
+
+checksum:
+  name_template: checksums.txt
+  extra_files:
+    - glob: bin/install.sh
+
+release:
+  prerelease: auto
+  extra_files:
+    - glob: bin/install.sh
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^Merge "]

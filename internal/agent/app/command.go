@@ -66,7 +66,7 @@ func Command() *cobra.Command {
 			if err := enroll.Run(cmd.Context(), args[0], cfg.pkiDir()); err != nil {
 				return err
 			}
-			fmt.Println("Enrolled. Start the agent with: mcsm-agent serve")
+			fmt.Println("Enrolled. Start the agent, or restart it if it runs: systemctl restart mcsm-agent (or mcsm-agent serve)")
 			return nil
 		},
 	}
