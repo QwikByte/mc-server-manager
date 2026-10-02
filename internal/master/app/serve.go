@@ -94,7 +94,8 @@ func serve(ctx context.Context, cfg config) error {
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	mcsmv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	plugins := plugin.NewService(nodes, modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN))
-	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)})
+	moves := server.NewMoves()
+	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
@@ -107,7 +108,7 @@ func serve(ctx context.Context, cfg config) error {
 		Handler: Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
-			Usage: usageStore,
+			Usage: usageStore, Moves: moves,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -153,6 +154,7 @@ type Services struct {
 	Logs      *logs.Store
 	Updates   *update.Service
 	Usage     *usage.Store
+	Moves     *server.Moves
 }
 
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
@@ -173,13 +175,13 @@ func Handler(s Services) http.Handler {
 // Requests that change something are logged.
 func API(s Services) *http.ServeMux {
 	api := http.NewServeMux()
-	m := access.NewMux(api, s.Logs.Audit())
+	m := access.NewMux(api, s.Moves.Guard, s.Logs.Audit())
 	access.NewHandler(s.Access, s.Users).Register(m)
 	settings.NewHandler(s.Settings).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tasks, s.Access, s.Usage).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Moves, s.Tasks, s.Access, s.Usage).Register(m)
 	network.NewHandler(s.Networks).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)

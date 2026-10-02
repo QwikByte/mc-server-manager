@@ -26,6 +26,7 @@ import { nodeQuery } from "@/features/nodes/api"
 import { formatMegabytes } from "@/lib/format"
 import { useServer } from "./api"
 import { Console } from "./console"
+import { MoveStatus } from "./move-status"
 import { ServerActions } from "./server-actions"
 import { ServerStateBadge } from "./server-state"
 import { displayVersion, serverLook, serverType } from "./server-types"
@@ -87,6 +88,7 @@ export function ServerPage() {
       <BackLink to="/nodes/$nodeId" params={{ nodeId }}>
         {node?.name ?? "Node"}
       </BackLink>
+      <MoveStatus nodeId={nodeId} serverId={serverId} />
       {isPending ? (
         <Skeleton className="h-96 rounded-xl" />
       ) : error ? (

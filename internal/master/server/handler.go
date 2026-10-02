@@ -34,25 +34,30 @@ type Nodes interface {
 	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
 }
 
-// Networks tells whether a server can be deleted without breaking a network.
+// Networks keep servers in networks: one can't be deleted while it is in a network, and a
+// network follows a server that moves.
 type Networks interface {
 	CheckRemovable(ctx context.Context, nodeID, serverID string) error
+	Move(ctx context.Context, serverID, from, to string) error
 }
 
-// Forgetter forgets deleted servers, e.g. so that backup jobs no longer run on them and
-// groups no longer grant permissions on them.
-type Forgetter interface {
+// References refer to servers, e.g. the targets of backup jobs and the scopes of groups.
+type References interface {
+	// Forget forgets a deleted server.
 	Forget(ctx context.Context, nodeID, serverID string) error
+	// Move refers to a server that moved to another node at its new place.
+	Move(ctx context.Context, serverID, from, to string) error
 }
 
 type Handler struct {
 	nodes    Nodes
 	networks Networks
-	forget   []Forgetter
+	moves    *Moves
+	refs     []References
 }
 
-func NewHandler(nodes Nodes, networks Networks, forget ...Forgetter) *Handler {
-	return &Handler{nodes: nodes, networks: networks, forget: forget}
+func NewHandler(nodes Nodes, networks Networks, moves *Moves, refs ...References) *Handler {
+	return &Handler{nodes: nodes, networks: networks, moves: moves, refs: refs}
 }
 
 // Register adds the routes. The lists only contain the servers the user may see.
@@ -80,6 +85,9 @@ func (h *Handler) Register(mux access.Mux) {
 	// The copy contains all files of the server.
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/duplicate",
 		access.All(access.OnNode(access.ServersCreate, "node"), access.OnServer(access.FilesRead)), h.duplicate)
+	// Moving takes the server away from where it is and copies all its files.
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/move", access.All(access.OnServer(access.ServersDelete), access.OnServer(access.FilesRead)), h.move)
+	mux.Handle("GET /api/moves", access.SignedIn, h.listMoves)
 	mux.Handle("GET /api/nodes/{node}/servers/{id}/logs", access.OnServer(access.ConsoleView), h.logs)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/command", access.OnServer(access.ConsoleCommands), h.command)
 }
@@ -344,9 +352,9 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_, err = c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
 	}
-	for _, f := range h.forget {
+	for _, ref := range h.refs {
 		if err == nil {
-			err = f.Forget(ctx, nodeID, id)
+			err = ref.Forget(ctx, nodeID, id)
 		}
 	}
 	if err != nil {

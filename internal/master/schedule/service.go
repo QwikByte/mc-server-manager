@@ -75,6 +75,7 @@ type Service struct {
 	db    *sql.DB
 	nodes Nodes
 	kinds map[string]Kind
+	busy  func(serverID string) bool
 
 	mu      sync.Mutex
 	ctx     context.Context // ends the runs when the master stops
@@ -90,9 +91,11 @@ type slot struct {
 	at       time.Time
 }
 
-func NewService(db *sql.DB, nodes Nodes, kinds map[string]Kind) *Service {
+// NewService returns the service of the tasks. busy tells which servers tasks leave out for
+// now, e.g. while they move to another node.
+func NewService(db *sql.DB, nodes Nodes, kinds map[string]Kind, busy func(serverID string) bool) *Service {
 	return &Service{
-		db: db, nodes: nodes, kinds: kinds, ctx: context.Background(),
+		db: db, nodes: nodes, kinds: kinds, busy: busy, ctx: context.Background(),
 		slots: map[string]*slot{}, running: map[string]bool{}, wake: make(chan struct{}, 1),
 	}
 }
@@ -286,12 +289,16 @@ func (s *Service) nodeServers(ctx context.Context, nodeID string, ids []string) 
 	}
 	var servers []Server
 	for _, srv := range res.GetServers() {
-		if slices.Contains(ids, "") || slices.Contains(ids, srv.GetId()) {
+		switch {
+		case !slices.Contains(ids, "") && !slices.Contains(ids, srv.GetId()):
+		case s.busy(srv.GetId()):
+			err = errors.Join(err, fmt.Errorf("%s: %s is moving to another node", n.Name, srv.GetName()))
+		default:
 			servers = append(servers, Server{srv, n.ID, n.Name})
 		}
 	}
 	for _, id := range ids {
-		if id != "" && !slices.ContainsFunc(servers, func(srv Server) bool { return srv.GetId() == id }) {
+		if id != "" && !slices.ContainsFunc(res.GetServers(), func(srv *mcsmv1.Server) bool { return srv.GetId() == id }) {
 			err = errors.Join(err, fmt.Errorf("%s: the server %s no longer exists", n.Name, id))
 		}
 	}

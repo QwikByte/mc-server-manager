@@ -40,6 +40,16 @@ A server can be duplicated on its node: the copy gets all files, worlds and sett
 starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
 players stay connected. The copy doesn't take over the original's place in a network.
 
+A server can move to another node with its ID, files, settings and, if chosen, its backups; otherwise the backups are
+deleted with it. Port, storage location, memory and CPU limits are checked on the new node first. The server then
+stops, its data is copied through the master, and it starts on the new node if it ran before. Its backup jobs,
+policies, the scopes of groups and its usage history follow it, and its network is configured again, which restarts
+the proxy. The original is deleted only once the server is complete on the new node; if anything fails before, the
+copy goes away and the server runs where it was. While it moves, the panel shows the progress, refuses changes to the
+server and continues on the new node once it is done; scheduled tasks leave it out meanwhile. The new node needs free
+space for the archive of the data besides the data itself, until it is extracted. If the master stops during a move,
+the server stays on its old node, stopped.
+
 Each node has settings for its servers: the storage location preselected for new servers, a port range (new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
 the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
@@ -196,7 +206,7 @@ The panel shows what nodes and servers use, now and during the last week.
 - **History.** The master records the latest measurement of every agent each minute and keeps it for a week. Charts
   show the last 24 hours (averages of 5 minutes) or 7 days (averages of 30 minutes), with the most players of each
   step, and a table shows the same values. Gaps are times in which a server didn't run or its node couldn't be
-  reached. The history of a server goes away with it.
+  reached. The history of a server moves and goes away with it.
 
 ## Logs
 
@@ -339,6 +349,10 @@ Users get their permissions from groups; a user can be in several groups and has
   from formulas in entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the
   browser connects again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP
   address is that of the proxy.
+- **Moving servers.** Agents never connect to each other: the master relays the server's archive and backups between
+  them over its mutually authenticated connections. The new node checks the settings like those of a new server and
+  extracts the archive confined to the server's data directory, without symbolic links. Moving needs the permissions
+  to delete the server and read its files, and to create servers on the new node.
 - **Usage.** To ask a server for its ticks per second, the agent reads the console password from the server's
   `server.properties` and connects to the server's console port inside Docker's network; the password never leaves
   the node.

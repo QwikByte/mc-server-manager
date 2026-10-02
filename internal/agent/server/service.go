@@ -3,11 +3,14 @@
 package server
 
 import (
+	"archive/zip"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -18,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
@@ -148,6 +152,81 @@ func (s *Service) DuplicateServer(ctx context.Context, req *mcsmv1.DuplicateServ
 		return nil, toStatus(err)
 	}
 	return &mcsmv1.DuplicateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})}, nil
+}
+
+// ImportServer creates a stopped server with the ID and settings of a server of another
+// node, from the archive of its data. Nothing of it remains if that fails.
+func (s *Service) ImportServer(stream mcsmv1.ServerService_ImportServerServer) error {
+	ctx := stream.Context()
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	if h == nil {
+		return status.Error(codes.InvalidArgument, "the first message must describe the server")
+	}
+	spec := runtime.Spec{
+		ID: h.GetId(), Name: h.GetName(), Type: h.GetType(), Version: h.GetVersion(), MemoryMB: h.GetMemoryMb(), Port: h.GetPort(),
+		Storage: h.GetStorage(), Java: h.GetJava(), RestartPolicy: h.GetRestartPolicy(), AikarFlags: h.GetAikarFlags(),
+		JVMOptions: h.GetJvmOptions(), CPUMillis: h.GetCpuMillis(),
+	}
+	_, knownType := mcsmv1.ServerType_name[int32(spec.Type)]
+	switch {
+	case !runtime.ValidID(spec.ID):
+		return status.Error(codes.InvalidArgument, "invalid server ID")
+	case !knownType || spec.Type == mcsmv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+		return status.Error(codes.InvalidArgument, "Choose a server type.")
+	}
+	if err := s.check(ctx, spec); err != nil {
+		return err
+	}
+	if _, err := runtime.Find(ctx, s.rt, spec.ID); !errors.Is(err, runtime.ErrNotFound) {
+		return cmp.Or(toStatus(err), status.Error(codes.AlreadyExists, "The server exists on this node already."))
+	}
+	if err := s.rt.Create(ctx, spec); err != nil {
+		return toStatus(err)
+	}
+	if err := s.extract(ctx, spec.ID, stream); err != nil {
+		return toStatus(errors.Join(err, s.rt.Remove(context.WithoutCancel(ctx), spec.ID)))
+	}
+	return stream.SendAndClose(&mcsmv1.ImportServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})})
+}
+
+// extract receives an archive into a temporary file of a server's data directory, as
+// reading it needs random access, and extracts it there.
+func (s *Service) extract(ctx context.Context, id string, stream mcsmv1.ServerService_ImportServerServer) error {
+	dir, err := s.rt.Data(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	tmp := datadir.TempName(".")
+	f, err := dir.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	defer dir.Remove(tmp) //nolint:errcheck // a leftover is removed with the server
+	defer f.Close()
+	var size int64
+	for {
+		msg, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		n, err := f.Write(msg.GetData())
+		if size += int64(n); err != nil {
+			return err
+		}
+	}
+	zr, err := zip.NewReader(f, size)
+	if err != nil {
+		return err
+	}
+	return dir.ExtractZip(ctx, zr, ".")
 }
 
 func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequest) (*mcsmv1.UpdateServerResponse, error) {

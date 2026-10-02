@@ -24,6 +24,7 @@ const (
 	BackupService_RestoreBackup_FullMethodName  = "/mcsm.v1.BackupService/RestoreBackup"
 	BackupService_DeleteBackup_FullMethodName   = "/mcsm.v1.BackupService/DeleteBackup"
 	BackupService_DownloadBackup_FullMethodName = "/mcsm.v1.BackupService/DownloadBackup"
+	BackupService_ImportBackup_FullMethodName   = "/mcsm.v1.BackupService/ImportBackup"
 )
 
 // BackupServiceClient is the client API for BackupService service.
@@ -45,6 +46,9 @@ type BackupServiceClient interface {
 	DeleteBackup(ctx context.Context, in *DeleteBackupRequest, opts ...grpc.CallOption) (*DeleteBackupResponse, error)
 	// DownloadBackup sends the archive in chunks. The first message carries its size.
 	DownloadBackup(ctx context.Context, in *DownloadBackupRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadBackupResponse], error)
+	// ImportBackup adds a backup of a server that came from another node. The header
+	// describes it, the data that follows is its archive.
+	ImportBackup(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportBackupRequest, ImportBackupResponse], error)
 }
 
 type backupServiceClient struct {
@@ -114,6 +118,19 @@ func (c *backupServiceClient) DownloadBackup(ctx context.Context, in *DownloadBa
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BackupService_DownloadBackupClient = grpc.ServerStreamingClient[DownloadBackupResponse]
 
+func (c *backupServiceClient) ImportBackup(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportBackupRequest, ImportBackupResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &BackupService_ServiceDesc.Streams[1], BackupService_ImportBackup_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ImportBackupRequest, ImportBackupResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_ImportBackupClient = grpc.ClientStreamingClient[ImportBackupRequest, ImportBackupResponse]
+
 // BackupServiceServer is the server API for BackupService service.
 // All implementations must embed UnimplementedBackupServiceServer
 // for forward compatibility.
@@ -133,6 +150,9 @@ type BackupServiceServer interface {
 	DeleteBackup(context.Context, *DeleteBackupRequest) (*DeleteBackupResponse, error)
 	// DownloadBackup sends the archive in chunks. The first message carries its size.
 	DownloadBackup(*DownloadBackupRequest, grpc.ServerStreamingServer[DownloadBackupResponse]) error
+	// ImportBackup adds a backup of a server that came from another node. The header
+	// describes it, the data that follows is its archive.
+	ImportBackup(grpc.ClientStreamingServer[ImportBackupRequest, ImportBackupResponse]) error
 	mustEmbedUnimplementedBackupServiceServer()
 }
 
@@ -157,6 +177,9 @@ func (UnimplementedBackupServiceServer) DeleteBackup(context.Context, *DeleteBac
 }
 func (UnimplementedBackupServiceServer) DownloadBackup(*DownloadBackupRequest, grpc.ServerStreamingServer[DownloadBackupResponse]) error {
 	return status.Error(codes.Unimplemented, "method DownloadBackup not implemented")
+}
+func (UnimplementedBackupServiceServer) ImportBackup(grpc.ClientStreamingServer[ImportBackupRequest, ImportBackupResponse]) error {
+	return status.Error(codes.Unimplemented, "method ImportBackup not implemented")
 }
 func (UnimplementedBackupServiceServer) mustEmbedUnimplementedBackupServiceServer() {}
 func (UnimplementedBackupServiceServer) testEmbeddedByValue()                       {}
@@ -262,6 +285,13 @@ func _BackupService_DownloadBackup_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BackupService_DownloadBackupServer = grpc.ServerStreamingServer[DownloadBackupResponse]
 
+func _BackupService_ImportBackup_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(BackupServiceServer).ImportBackup(&grpc.GenericServerStream[ImportBackupRequest, ImportBackupResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_ImportBackupServer = grpc.ClientStreamingServer[ImportBackupRequest, ImportBackupResponse]
+
 // BackupService_ServiceDesc is the grpc.ServiceDesc for BackupService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -291,6 +321,11 @@ var BackupService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "DownloadBackup",
 			Handler:       _BackupService_DownloadBackup_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ImportBackup",
+			Handler:       _BackupService_ImportBackup_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "mcsm/v1/backup.proto",

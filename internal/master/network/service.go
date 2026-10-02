@@ -227,6 +227,34 @@ func (s *Service) CheckRemovable(ctx context.Context, nodeID, serverID string) e
 	return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q. Remove it from the network first.", name)
 }
 
+// Move points the network of a server that moved to another node at its new place, and
+// configures the network again, as the proxy reaches the server at another address. A
+// server without a network needs nothing.
+func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var id string
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		for _, query := range []string{
+			`UPDATE networks SET proxy_node_id = ?1 WHERE proxy_node_id = ?2 AND proxy_server_id = ?3 RETURNING id`,
+			`UPDATE network_backends SET node_id = ?1 WHERE node_id = ?2 AND server_id = ?3 RETURNING network_id`,
+		} {
+			if err := tx.QueryRowContext(ctx, query, to, from, serverID).Scan(&id); err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil || id == "" {
+		return err
+	}
+	n, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	return s.apply(ctx, n)
+}
+
 // Apply configures all servers of a network again, e.g. after a node was offline.
 func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
 	s.mu.Lock()

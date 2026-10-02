@@ -285,6 +285,12 @@ func (s *Service) Forget(ctx context.Context, nodeID, serverID string) error {
 	return err
 }
 
+// Move keeps a server that moved to another node in the scopes of the groups that name it.
+func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE group_targets SET node_id = ? WHERE node_id = ? AND server_id = ?`, to, from, serverID)
+	return err
+}
+
 func rowsAffected(res sql.Result) int64 {
 	n, _ := res.RowsAffected()
 	return n

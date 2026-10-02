@@ -45,6 +45,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
 	"github.com/QwikByte/mc-server-manager/internal/master/policy"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
+	"github.com/QwikByte/mc-server-manager/internal/master/server"
 	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/master/update"
@@ -212,12 +213,14 @@ func startMaster(t *testing.T) *master {
 func (m *master) services(t *testing.T) masterapp.Services {
 	nodes := m.nodes
 	plugins := plugin.NewService(nodes, modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/"))
-	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)})
+	moves := server.NewMoves()
+	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
 		Networks: network.NewService(m.db, nodes), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes),
+		Moves: moves,
 	}
 }
 
@@ -339,6 +342,8 @@ type fakeRuntime struct {
 	servers  []runtime.Server
 	networks map[string]runtime.Network
 	commands []string
+	// createErr makes creating servers fail, e.g. on a node that is full.
+	createErr error
 }
 
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
@@ -354,6 +359,9 @@ func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) {
 func (f *fakeRuntime) Create(_ context.Context, spec runtime.Spec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.createErr != nil {
+		return f.createErr
+	}
 	f.servers = append(f.servers, runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})
 	return os.Mkdir(filepath.Join(f.dir, spec.ID), 0o750)
 }

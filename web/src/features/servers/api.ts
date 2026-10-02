@@ -94,6 +94,56 @@ export function useDuplicateServer(nodeId: string) {
   })
 }
 
+export type MovePhase = "stopping" | "copying" | "backups" | "finishing" | "done" | "failed"
+
+/** A server moving to another node; the master shows finished moves for an hour. */
+export interface Move {
+  serverId: string
+  serverName: string
+  from: string
+  to: string
+  toName: string
+  phase: MovePhase
+  /** How much of the data and backups was copied, as compressed archives. */
+  bytes: number
+  backups: number
+  backupsTotal: number
+  /** Why it failed; the server stayed where it was. */
+  error?: string
+  /** What went wrong once the server was on the new node. */
+  warnings: string[]
+  startedAt: string
+  finishedAt?: string
+}
+
+/** The moves of the servers the user may see, checked often while one is in progress. */
+export const movesQuery = queryOptions({
+  queryKey: ["moves"],
+  queryFn: () => api<Move[]>("/moves"),
+  refetchInterval: (query) => (query.state.data?.some((m) => !m.finishedAt) ? 1_500 : 15_000),
+})
+
+/** The latest move of a server, if it moved within the last hour or is moving. */
+export function useMove(serverId: string) {
+  return useQuery(movesQuery).data?.find((m) => m.serverId === serverId)
+}
+
+export interface MoveRequest {
+  node: string
+  port: number
+  storage: string
+  /** Whether the backups move too; otherwise they are deleted with the server on its old node. */
+  backups: boolean
+}
+
+export function useMoveServer(nodeId: string, serverId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: MoveRequest) => api<Move>(`/nodes/${nodeId}/servers/${serverId}/move`, { body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: movesQuery.queryKey }),
+  })
+}
+
 export type ServerAction = "start" | "stop" | "restart" | "delete"
 
 export function useServerAction(nodeId: string) {

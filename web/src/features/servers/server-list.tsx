@@ -74,8 +74,9 @@ function ServerCard({ nodeId, server, usage }: { nodeId: string; server: Server;
         <Chip icon={HashIcon}>
           <span className="font-mono">{server.port}</span>
         </Chip>
+        {/* While it runs, its memory of the container's limit, which includes what Java needs besides the heap. */}
         <Chip icon={MemoryIcon}>
-          {live ? `${formatBytes(live.memoryBytes)} / ${formatMegabytes(server.memoryMb)}` : formatMegabytes(server.memoryMb)}
+          {live?.memoryLimitBytes ? `${formatBytes(live.memoryBytes)} / ${formatBytes(live.memoryLimitBytes)}` : formatMegabytes(server.memoryMb)}
         </Chip>
         {live && <Chip icon={CpuIcon}>{formatCores(live.cpuMillis)}</Chip>}
         {live?.players && (
