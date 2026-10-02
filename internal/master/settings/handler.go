@@ -26,7 +26,7 @@ func (h *Handler) get(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
-	var req Settings
+	req := h.svc.Get() // settings the request leaves out stay as they are
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
 		return

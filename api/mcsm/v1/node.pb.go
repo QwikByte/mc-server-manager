@@ -389,6 +389,87 @@ func (*InstallCertificateResponse) Descriptor() ([]byte, []int) {
 	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{6}
 }
 
+type UpdateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Release to install, e.g. "v1.2.0".
+	Version       string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateRequest) Reset() {
+	*x = UpdateRequest{}
+	mi := &file_mcsm_v1_node_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRequest) ProtoMessage() {}
+
+func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_node_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateRequest) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UpdateRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type UpdateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateResponse) Reset() {
+	*x = UpdateResponse{}
+	mi := &file_mcsm_v1_node_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateResponse) ProtoMessage() {}
+
+func (x *UpdateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_node_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateResponse.ProtoReflect.Descriptor instead.
+func (*UpdateResponse) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_node_proto_rawDescGZIP(), []int{8}
+}
+
 var File_mcsm_v1_node_proto protoreflect.FileDescriptor
 
 const file_mcsm_v1_node_proto_rawDesc = "" +
@@ -416,11 +497,15 @@ const file_mcsm_v1_node_proto_rawDesc = "" +
 	"\acsr_der\x18\x01 \x01(\fR\x06csrDer\"D\n" +
 	"\x19InstallCertificateRequest\x12'\n" +
 	"\x0fcertificate_der\x18\x01 \x01(\fR\x0ecertificateDer\"\x1c\n" +
-	"\x1aInstallCertificateResponse2\xee\x01\n" +
+	"\x1aInstallCertificateResponse\")\n" +
+	"\rUpdateRequest\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\"\x10\n" +
+	"\x0eUpdateResponse2\xa9\x02\n" +
 	"\vNodeService\x12<\n" +
 	"\aGetInfo\x12\x17.mcsm.v1.GetInfoRequest\x1a\x18.mcsm.v1.GetInfoResponse\x12B\n" +
 	"\tCreateCSR\x12\x19.mcsm.v1.CreateCSRRequest\x1a\x1a.mcsm.v1.CreateCSRResponse\x12]\n" +
-	"\x12InstallCertificate\x12\".mcsm.v1.InstallCertificateRequest\x1a#.mcsm.v1.InstallCertificateResponseB:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
+	"\x12InstallCertificate\x12\".mcsm.v1.InstallCertificateRequest\x1a#.mcsm.v1.InstallCertificateResponse\x129\n" +
+	"\x06Update\x12\x16.mcsm.v1.UpdateRequest\x1a\x17.mcsm.v1.UpdateResponseB:Z8github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1b\x06proto3"
 
 var (
 	file_mcsm_v1_node_proto_rawDescOnce sync.Once
@@ -434,7 +519,7 @@ func file_mcsm_v1_node_proto_rawDescGZIP() []byte {
 	return file_mcsm_v1_node_proto_rawDescData
 }
 
-var file_mcsm_v1_node_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_mcsm_v1_node_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_mcsm_v1_node_proto_goTypes = []any{
 	(*GetInfoRequest)(nil),             // 0: mcsm.v1.GetInfoRequest
 	(*GetInfoResponse)(nil),            // 1: mcsm.v1.GetInfoResponse
@@ -443,17 +528,21 @@ var file_mcsm_v1_node_proto_goTypes = []any{
 	(*CreateCSRResponse)(nil),          // 4: mcsm.v1.CreateCSRResponse
 	(*InstallCertificateRequest)(nil),  // 5: mcsm.v1.InstallCertificateRequest
 	(*InstallCertificateResponse)(nil), // 6: mcsm.v1.InstallCertificateResponse
+	(*UpdateRequest)(nil),              // 7: mcsm.v1.UpdateRequest
+	(*UpdateResponse)(nil),             // 8: mcsm.v1.UpdateResponse
 }
 var file_mcsm_v1_node_proto_depIdxs = []int32{
 	2, // 0: mcsm.v1.GetInfoResponse.storage:type_name -> mcsm.v1.StorageLocation
 	0, // 1: mcsm.v1.NodeService.GetInfo:input_type -> mcsm.v1.GetInfoRequest
 	3, // 2: mcsm.v1.NodeService.CreateCSR:input_type -> mcsm.v1.CreateCSRRequest
 	5, // 3: mcsm.v1.NodeService.InstallCertificate:input_type -> mcsm.v1.InstallCertificateRequest
-	1, // 4: mcsm.v1.NodeService.GetInfo:output_type -> mcsm.v1.GetInfoResponse
-	4, // 5: mcsm.v1.NodeService.CreateCSR:output_type -> mcsm.v1.CreateCSRResponse
-	6, // 6: mcsm.v1.NodeService.InstallCertificate:output_type -> mcsm.v1.InstallCertificateResponse
-	4, // [4:7] is the sub-list for method output_type
-	1, // [1:4] is the sub-list for method input_type
+	7, // 4: mcsm.v1.NodeService.Update:input_type -> mcsm.v1.UpdateRequest
+	1, // 5: mcsm.v1.NodeService.GetInfo:output_type -> mcsm.v1.GetInfoResponse
+	4, // 6: mcsm.v1.NodeService.CreateCSR:output_type -> mcsm.v1.CreateCSRResponse
+	6, // 7: mcsm.v1.NodeService.InstallCertificate:output_type -> mcsm.v1.InstallCertificateResponse
+	8, // 8: mcsm.v1.NodeService.Update:output_type -> mcsm.v1.UpdateResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -470,7 +559,7 @@ func file_mcsm_v1_node_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_node_proto_rawDesc), len(file_mcsm_v1_node_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

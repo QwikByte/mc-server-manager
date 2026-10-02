@@ -8,12 +8,14 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
 import { StatCard } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import { useAccess } from "@/features/access/use-access"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
+import { UpdateCheck } from "@/features/updates/update-check"
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format"
 import { type Master, type MasterSettings, type SettingsView, settingsQuery, useUpdateSettings } from "./api"
 
@@ -67,12 +69,13 @@ function MasterFacts({ master, effectiveEnrollAddr }: { master: Master; effectiv
 }
 
 function formOf(s: MasterSettings) {
-  const { enrollAddr, sessionHours, joinTokenMinutes, logDays } = s
-  return { enrollAddr, sessionHours, joinTokenMinutes, logDays, nodeDefaults: limitsForm(s.nodeDefaults) }
+  const { enrollAddr, sessionHours, joinTokenMinutes, logDays, checkUpdates } = s
+  return { enrollAddr, sessionHours, joinTokenMinutes, logDays, checkUpdates, nodeDefaults: limitsForm(s.nodeDefaults) }
 }
 
 function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
-  const editable = useAccess().can("settings.edit")
+  const access = useAccess()
+  const editable = access.can("settings.edit")
   const initial = formOf(settings)
   const [form, setForm] = useState(initial)
   const update = useUpdateSettings()
@@ -146,6 +149,19 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               Up to a year. Older entries are deleted every hour; the newest million are kept at most. Export entries to keep them longer.
             </FieldDescription>
           </Field>
+        </FormSection>
+
+        <FormSection title="Updates" description="New releases of MC Server Manager, which administrators install from the panel.">
+          <Field orientation="horizontal">
+            <Switch id="settings-check-updates" checked={form.checkUpdates} onCheckedChange={(checkUpdates) => set({ checkUpdates })} />
+            <FieldContent>
+              <FieldLabel htmlFor="settings-check-updates">Check for updates</FieldLabel>
+              <FieldDescription>
+                The master asks GitHub for the latest release every 6 hours. Administrators then see a notice and install it with a click.
+              </FieldDescription>
+            </FieldContent>
+          </Field>
+          {access.admin && <UpdateCheck />}
         </FormSection>
 
         <FormSection title="New nodes" description="Limits that nodes get when they are added. Change them for each node in its settings.">

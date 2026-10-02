@@ -42,6 +42,9 @@ func (m Mux) Handle(pattern string, need Need, h http.HandlerFunc) {
 
 // Denied is the error for a request that lacks a permission.
 func Denied(p Permission) error {
+	if p == Administrators {
+		return httpapi.Errorf(http.StatusForbidden, "Only administrators may do this.")
+	}
 	info, _ := lookup(p)
 	return httpapi.Errorf(http.StatusForbidden, "You need the permission %q for this. Ask an administrator for it.", info.Label)
 }
@@ -74,6 +77,9 @@ func All(needs ...Need) Need {
 		return "", true
 	}
 }
+
+// AdminsOnly needs the user to be an administrator, for what no other group may get.
+func AdminsOnly(_ *http.Request, g Grants) (Permission, bool) { return Administrators, g.admin }
 
 // SignedIn needs no permission. Handlers using it only show what the user may see, or
 // check the permissions for what a request names, e.g. the servers of a bulk install.

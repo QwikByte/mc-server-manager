@@ -46,11 +46,13 @@ type Settings struct {
 	NodeDefaults node.Limits `json:"nodeDefaults"`
 	// LogDays is how long log entries are kept.
 	LogDays int `json:"logDays"`
+	// CheckUpdates makes the master look for new releases, which administrators can install.
+	CheckUpdates bool `json:"checkUpdates"`
 }
 
 // defaults apply until the settings are changed, and to settings added later.
 func defaults() Settings {
-	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30}
+	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, CheckUpdates: true}
 }
 
 // Master describes the running master. Apart from its certificate, it only changes with a restart.
@@ -138,6 +140,9 @@ func (s *Service) NodeDefaults() node.Limits { return s.Get().NodeDefaults }
 func (s *Service) LogRetention() time.Duration {
 	return time.Duration(s.Get().LogDays) * 24 * time.Hour
 }
+
+// CheckUpdates implements update.Config.
+func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
 
 // SessionTTL is how long new sign-ins to the panel last.
 func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().SessionHours) * time.Hour }

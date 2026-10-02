@@ -13,6 +13,9 @@ service NodeService {
   // InstallCertificate activates a certificate issued for the key of the latest
   // CreateCSR call. New connections use it right away; no restart is needed.
   rpc InstallCertificate(InstallCertificateRequest) returns (InstallCertificateResponse);
+  // Update installs a release of MC Server Manager that is newer than the agent, in a
+  // systemd unit of its own. The agent restarts on it; servers keep running.
+  rpc Update(UpdateRequest) returns (UpdateResponse);
 }
 
 message GetInfoRequest {}
@@ -50,3 +53,10 @@ message InstallCertificateRequest {
 }
 
 message InstallCertificateResponse {}
+
+message UpdateRequest {
+  // Release to install, e.g. "v1.2.0".
+  string version = 1;
+}
+
+message UpdateResponse {}

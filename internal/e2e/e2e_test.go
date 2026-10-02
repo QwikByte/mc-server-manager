@@ -46,6 +46,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
+	"github.com/QwikByte/mc-server-manager/internal/master/update"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -174,6 +175,7 @@ type master struct {
 	logs       *logs.Store
 	enrollAddr string
 	modrinth   *fakeModrinth
+	update     update.Options
 }
 
 func startMaster(t *testing.T) *master {
@@ -200,7 +202,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t),
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), update: update.Options{DataDir: dir},
 	}
 }
 
@@ -213,7 +215,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
 		Networks: network.NewService(m.db, nodes), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
-		Logs: m.logs,
+		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
 	}
 }
 

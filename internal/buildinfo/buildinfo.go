@@ -12,10 +12,13 @@ var Version = "dev"
 // release matches the versions of releases, like the installer does.
 var release = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$`)
 
+// IsRelease tells whether v is the version of a release, e.g. v1.2.0 or v1.3.0-rc.1.
+func IsRelease(v string) bool { return release.MatchString(v) }
+
 // InstallScript is the URL of the installer of this version, or of the latest release for
 // builds that aren't one.
 func InstallScript() string {
-	if release.MatchString(Version) {
+	if IsRelease(Version) {
 		return Repository + "/releases/download/" + Version + "/install.sh"
 	}
 	return Repository + "/releases/latest/download/install.sh"

@@ -4,7 +4,7 @@
 #   install.sh master [--public-host <host>] [--admin <name>]   the panel and control plane
 #   install.sh agent [--join <token>] [--install-docker]         a node that runs Minecraft servers
 #   install.sh all [...]                                         both on this machine, connected to each other
-#   install.sh update                                            updates what is installed
+#   install.sh update [--only master|agent]                      updates what is installed
 #
 # Options: --version <vX.Y.Z> installs that release instead of the one this script belongs to.
 # Packages: .deb (apt), .rpm (dnf, yum, zypper) and Arch Linux (pacman), for x86_64 and arm64.
@@ -15,7 +15,7 @@ version=latest
 readonly REPO=https://github.com/QwikByte/mc-server-manager
 readonly ENROLL_PORT=9443 AGENT_PORT=7443
 
-public_host="" admin=admin join="" install_docker=no local_agent=no fresh_master=no password=""
+public_host="" admin=admin join="" install_docker=no only="" local_agent=no fresh_master=no password=""
 
 log() { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2; }
@@ -25,7 +25,7 @@ has_tty() { (: </dev/tty) 2>/dev/null; }
 installed() { command -v "$1" >/dev/null; }
 
 usage() {
-  die "Usage: install.sh master|agent|all|update [--version <vX.Y.Z>] [--public-host <host>] [--admin <name>] [--join <token>] [--install-docker]"
+  die "Usage: install.sh master|agent|all|update [--version <vX.Y.Z>] [--public-host <host>] [--admin <name>] [--join <token>] [--install-docker] [--only master|agent]"
 }
 
 # ask asks on the terminal and prints the answer, or the default for an empty one. Without a
@@ -45,6 +45,7 @@ parse_args() {
       --admin) admin=${2:?--admin needs a value}; shift ;;
       --join) join=${2:?--join needs a value}; shift ;;
       --install-docker) install_docker=yes ;;
+      --only) only=${2:?--only needs a value}; shift ;;
       *) usage ;;
     esac
     shift
@@ -84,13 +85,18 @@ install_package() {
   fetch -o "$tmp/$file" "$REPO/releases/download/$version/$file"
   (cd "$tmp" && grep -E "^[0-9a-f]{64}  $file\$" checksums.txt | sha256sum -c --strict --quiet) ||
     die "The checksum of $file does not match, the download is broken."
+  # Another installation may be running, e.g. an update of the master on the same machine:
+  # wait up to 5 minutes for it. dnf and yum wait on their own.
   if installed apt-get; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --allow-downgrades \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --allow-downgrades -o DPkg::Lock::Timeout=300 \
       -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$tmp/$file" >/dev/null
   elif installed dnf; then dnf install -y -q "$tmp/$file" >/dev/null
   elif installed yum; then yum install -y -q "$tmp/$file" >/dev/null
-  elif installed zypper; then zypper --non-interactive -q install --allow-unsigned-rpm "$tmp/$file" >/dev/null
-  else pacman -U --noconfirm --needed "$tmp/$file" >/dev/null
+  elif installed zypper; then ZYPP_LOCK_TIMEOUT=300 zypper --non-interactive -q install --allow-unsigned-rpm "$tmp/$file" >/dev/null
+  else
+    local i
+    for ((i = 0; i < 300; i++)); do [ -e /var/lib/pacman/db.lck ] || break; sleep 1; done
+    pacman -U --noconfirm --needed "$tmp/$file" >/dev/null
   fi
 }
 
@@ -206,8 +212,8 @@ main() {
   local mode=${1:-}
   (($#)) && shift
   parse_args "$@"
-  case $mode in
-    master | agent | all | update) ;;
+  case $mode:$only in
+    master: | agent: | all: | update: | update:master | update:agent) ;;
     *) usage ;;
   esac
   check_system
@@ -227,9 +233,12 @@ main() {
       summary_agent
       ;;
     update)
-      installed mcsm-master || installed mcsm-agent || die "Neither mcsm-master nor mcsm-agent is installed."
-      if installed mcsm-master; then install_package mcsm-master; fi
-      if installed mcsm-agent; then install_package mcsm-agent; fi
+      local program updated=()
+      for program in mcsm-master mcsm-agent; do
+        if [[ -z "$only" || "$program" == "mcsm-$only" ]] && installed "$program"; then updated+=("$program"); fi
+      done
+      ((${#updated[@]})) || die "Nothing to update: ${only:+mcsm-$only is }not installed."
+      for program in "${updated[@]}"; do install_package "$program"; done
       log "Updated to $version. Running services were restarted."
       ;;
   esac

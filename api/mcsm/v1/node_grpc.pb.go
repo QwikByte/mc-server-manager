@@ -22,6 +22,7 @@ const (
 	NodeService_GetInfo_FullMethodName            = "/mcsm.v1.NodeService/GetInfo"
 	NodeService_CreateCSR_FullMethodName          = "/mcsm.v1.NodeService/CreateCSR"
 	NodeService_InstallCertificate_FullMethodName = "/mcsm.v1.NodeService/InstallCertificate"
+	NodeService_Update_FullMethodName             = "/mcsm.v1.NodeService/Update"
 )
 
 // NodeServiceClient is the client API for NodeService service.
@@ -37,6 +38,9 @@ type NodeServiceClient interface {
 	// InstallCertificate activates a certificate issued for the key of the latest
 	// CreateCSR call. New connections use it right away; no restart is needed.
 	InstallCertificate(ctx context.Context, in *InstallCertificateRequest, opts ...grpc.CallOption) (*InstallCertificateResponse, error)
+	// Update installs a release of MC Server Manager that is newer than the agent, in a
+	// systemd unit of its own. The agent restarts on it; servers keep running.
+	Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error)
 }
 
 type nodeServiceClient struct {
@@ -77,6 +81,16 @@ func (c *nodeServiceClient) InstallCertificate(ctx context.Context, in *InstallC
 	return out, nil
 }
 
+func (c *nodeServiceClient) Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateResponse)
+	err := c.cc.Invoke(ctx, NodeService_Update_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NodeServiceServer is the server API for NodeService service.
 // All implementations must embed UnimplementedNodeServiceServer
 // for forward compatibility.
@@ -90,6 +104,9 @@ type NodeServiceServer interface {
 	// InstallCertificate activates a certificate issued for the key of the latest
 	// CreateCSR call. New connections use it right away; no restart is needed.
 	InstallCertificate(context.Context, *InstallCertificateRequest) (*InstallCertificateResponse, error)
+	// Update installs a release of MC Server Manager that is newer than the agent, in a
+	// systemd unit of its own. The agent restarts on it; servers keep running.
+	Update(context.Context, *UpdateRequest) (*UpdateResponse, error)
 	mustEmbedUnimplementedNodeServiceServer()
 }
 
@@ -108,6 +125,9 @@ func (UnimplementedNodeServiceServer) CreateCSR(context.Context, *CreateCSRReque
 }
 func (UnimplementedNodeServiceServer) InstallCertificate(context.Context, *InstallCertificateRequest) (*InstallCertificateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InstallCertificate not implemented")
+}
+func (UnimplementedNodeServiceServer) Update(context.Context, *UpdateRequest) (*UpdateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Update not implemented")
 }
 func (UnimplementedNodeServiceServer) mustEmbedUnimplementedNodeServiceServer() {}
 func (UnimplementedNodeServiceServer) testEmbeddedByValue()                     {}
@@ -184,6 +204,24 @@ func _NodeService_InstallCertificate_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NodeService_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeServiceServer).Update(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeService_Update_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeServiceServer).Update(ctx, req.(*UpdateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NodeService_ServiceDesc is the grpc.ServiceDesc for NodeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -202,6 +240,10 @@ var NodeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InstallCertificate",
 			Handler:    _NodeService_InstallCertificate_Handler,
+		},
+		{
+			MethodName: "Update",
+			Handler:    _NodeService_Update_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

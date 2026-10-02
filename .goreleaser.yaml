@@ -69,6 +69,15 @@ nfpms:
         dst: /usr/lib/systemd/system/mcsm-master.service
       - src: packaging/master/sysusers.conf
         dst: /usr/lib/sysusers.d/mcsm-master.conf
+      - src: packaging/master/mcsm-master-update.service
+        dst: /usr/lib/systemd/system/mcsm-master-update.service
+      - src: packaging/master/mcsm-master-update.path
+        dst: /usr/lib/systemd/system/mcsm-master-update.path
+      # Updates from the panel run the installer of the installed release.
+      - src: bin/install.sh
+        dst: /usr/lib/mcsm-master/install.sh
+        file_info:
+          mode: 0755
       - src: packaging/master/master.env
         dst: /etc/mcsm/master.env
         type: config|noreplace
@@ -88,6 +97,10 @@ nfpms:
     contents:
       - src: packaging/agent/mcsm-agent.service
         dst: /usr/lib/systemd/system/mcsm-agent.service
+      - src: bin/install.sh
+        dst: /usr/lib/mcsm-agent/install.sh
+        file_info:
+          mode: 0755
       - src: packaging/agent/agent.env
         dst: /etc/mcsm/agent.env
         type: config|noreplace

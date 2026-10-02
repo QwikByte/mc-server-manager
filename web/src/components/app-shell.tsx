@@ -10,6 +10,7 @@ import { useAccess } from "@/features/access/use-access"
 import { meQuery, useLogout } from "@/features/auth/api"
 import { PasswordDialog } from "@/features/auth/password-dialog"
 import { LogAlerts } from "@/features/logs/log-alerts"
+import { UpdateBanner } from "@/features/updates/update-banner"
 
 /** A sidebar on large screens, a bar at the top on small ones. */
 export function AppShell() {
@@ -81,6 +82,7 @@ export function AppShell() {
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-10 md:py-10">
         <div className="mx-auto max-w-6xl">
+          {access.admin && <UpdateBanner />}
           <Outlet />
         </div>
       </main>

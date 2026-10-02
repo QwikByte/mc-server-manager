@@ -8,6 +8,8 @@ export interface Access {
   can: (p: Permission, nodeId?: string, serverId?: string) => boolean
   /** Whether p applies anywhere, or anywhere on a node. */
   canSomewhere: (p: Permission, nodeId?: string) => boolean
+  /** Whether the user is in the Administrators group, for what no other group may get, e.g. updates. */
+  admin: boolean
 }
 
 /** The permissions of the signed-in user, which the panel uses to only offer what is allowed. The master checks them anyway. */
@@ -19,6 +21,7 @@ export function useAccess(): Access {
 export function accessOf(grants?: Grants): Access {
   const scope = (p: Permission) => (grants?.admin ? { all: true, nodes: [], servers: [] } : grants?.permissions[p])
   return {
+    admin: !!grants?.admin,
     can: (p, nodeId, serverId) => {
       const s = scope(p)
       if (!s || s.all || !nodeId) return !!s?.all

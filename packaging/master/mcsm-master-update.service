@@ -1,0 +1,14 @@
+[Unit]
+Description=Update MC Server Manager to its latest release
+Documentation=https://github.com/QwikByte/mc-server-manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Runs as root to install packages, but takes no input from the master: it installs the
+# latest release, after checking its checksums, and the master restarts on it. The master
+# then updates the agents, also one on this machine.
+Type=oneshot
+ExecStartPre=rm -f /var/lib/mcsm-master/update-request
+ExecStart=/usr/lib/mcsm-master/install.sh update --only master --version latest
+TimeoutStartSec=15min
