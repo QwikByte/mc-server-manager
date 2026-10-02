@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,9 @@ import (
 const (
 	// DefaultAPI describes the latest release; GitHub leaves pre-releases out.
 	DefaultAPI = "https://api.github.com/repos/QwikByte/mc-server-manager/releases/latest"
+	// DefaultPage redirects to the latest release. It only tells its version, but GitHub
+	// doesn't limit how often an IP address asks for it, unlike the API.
+	DefaultPage = buildinfo.Repository + "/releases/latest"
 	// DefaultUnit makes systemd install the latest release when the master asks for it.
 	DefaultUnit = "/usr/lib/systemd/system/mcsm-master-update.path"
 
@@ -42,10 +46,11 @@ const (
 
 // Release is a published release of MC Server Manager.
 type Release struct {
-	Version     string    `json:"version"`
+	Version string `json:"version"`
+	// Notes and PublishedAt are empty if the version comes from the release page.
 	Notes       string    `json:"notes"`
 	URL         string    `json:"url"`
-	PublishedAt time.Time `json:"publishedAt"`
+	PublishedAt time.Time `json:"publishedAt,omitzero"`
 }
 
 // Status is what administrators see about updates.
@@ -83,6 +88,7 @@ type Options struct {
 	// DataDir is the master's; mcsm-master-update.path watches the file update-request in it.
 	DataDir string
 	API     string // DefaultAPI if empty
+	Page    string // DefaultPage if empty
 	Unit    string // DefaultUnit if empty
 }
 
@@ -91,6 +97,7 @@ type Service struct {
 	config Config
 	client *http.Client
 	api    string
+	page   string
 	unit   string
 	// request makes systemd update the master, followUp makes the master update the
 	// agents once it runs the new release.
@@ -106,8 +113,12 @@ type Service struct {
 
 func New(nodes *node.Service, config Config, o Options) *Service {
 	return &Service{
-		nodes: nodes, config: config, client: &http.Client{Timeout: 30 * time.Second},
-		api: cmp.Or(o.API, DefaultAPI), unit: cmp.Or(o.Unit, DefaultUnit),
+		nodes: nodes, config: config, api: cmp.Or(o.API, DefaultAPI), page: cmp.Or(o.Page, DefaultPage), unit: cmp.Or(o.Unit, DefaultUnit),
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+			// The release page's redirect tells the version, so it isn't followed.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 		request: filepath.Join(o.DataDir, "update-request"), followUp: filepath.Join(o.DataDir, "update-agents"),
 		agents: map[string]Progress{},
 	}
@@ -152,7 +163,8 @@ func (s *Service) Check(ctx context.Context) {
 	}
 }
 
-// fetch returns the latest release, or nil if there is none yet.
+// fetch returns the latest release, or nil if there is none yet. While GitHub's API limits
+// the requests of this IP address, it reads the version from the release page instead.
 func (s *Service) fetch(ctx context.Context) (*Release, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.api, nil)
 	if err != nil {
@@ -168,6 +180,8 @@ func (s *Service) fetch(ctx context.Context) (*Release, error) {
 	case http.StatusOK:
 	case http.StatusNotFound:
 		return nil, nil
+	case http.StatusForbidden, http.StatusTooManyRequests:
+		return s.fromPage(ctx)
 	default:
 		return nil, fmt.Errorf("GitHub answered %s", res.Status)
 	}
@@ -179,10 +193,35 @@ func (s *Service) fetch(ctx context.Context) (*Release, error) {
 	if err := json.NewDecoder(io.LimitReader(res.Body, maxResponse)).Decode(&r); err != nil {
 		return nil, fmt.Errorf("read the latest release: %w", err)
 	}
-	if !buildinfo.IsRelease(r.Tag) {
-		return nil, fmt.Errorf("the latest release has the unexpected version %q", r.Tag)
+	return newRelease(r.Tag, r.Body, r.Published)
+}
+
+// fromPage reads the version of the latest release from where the release page redirects.
+func (s *Service) fromPage(ctx context.Context) (*Release, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.page, nil)
+	if err != nil {
+		return nil, err
 	}
-	return &Release{r.Tag, r.Body, buildinfo.Repository + "/releases/tag/" + r.Tag, r.Published}, nil
+	res, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	res.Body.Close()
+	if res.StatusCode/100 != 3 {
+		return nil, fmt.Errorf("GitHub answered %s", res.Status)
+	}
+	// Without a release, the page redirects to the list of releases.
+	if tag, ok := strings.CutPrefix(res.Header.Get("Location"), buildinfo.Repository+"/releases/tag/"); ok {
+		return newRelease(tag, "", time.Time{})
+	}
+	return nil, nil
+}
+
+func newRelease(tag, notes string, published time.Time) (*Release, error) {
+	if !buildinfo.IsRelease(tag) {
+		return nil, fmt.Errorf("the latest release has the unexpected version %q", tag)
+	}
+	return &Release{tag, notes, buildinfo.Repository + "/releases/tag/" + tag, published}, nil
 }
 
 // available tells whether the latest release is newer than the master. Callers hold mu.

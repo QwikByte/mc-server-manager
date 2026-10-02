@@ -23,9 +23,15 @@ import (
 func TestUpdates(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	var answer atomic.Int32 // what GitHub answers
+	var answer atomic.Int32 // what GitHub's API answers
 	answer.Store(http.StatusNotFound)
-	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var page atomic.Value // where the release page redirects
+	page.Store(buildinfo.Repository + "/releases")
+	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/page" {
+			http.Redirect(w, r, page.Load().(string), http.StatusFound)
+			return
+		}
 		if code := int(answer.Load()); code != http.StatusOK {
 			w.WriteHeader(code)
 			return
@@ -33,7 +39,7 @@ func TestUpdates(t *testing.T) {
 		fmt.Fprint(w, `{"tag_name": "v99.0.0", "body": "Faster backups", "published_at": "2026-10-01T12:00:00Z", "html_url": "https://example.com"}`)
 	}))
 	t.Cleanup(github.Close)
-	m.update.API, m.update.Unit = github.URL, filepath.Join(t.TempDir(), "mcsm-master-update.path")
+	m.update.API, m.update.Page, m.update.Unit = github.URL, github.URL+"/page", filepath.Join(t.TempDir(), "mcsm-master-update.path")
 	api := apiClient{t: t, url: m.panel(t).URL}
 	post := func(path string) (st update.Status) {
 		api.do("POST", path, nil, http.StatusOK, &st)
@@ -48,6 +54,17 @@ func TestUpdates(t *testing.T) {
 	answer.Store(http.StatusBadGateway)
 	if st = post("/api/update/check"); st.CheckError != "GitHub answered 502 Bad Gateway" {
 		t.Fatalf("check error = %q", st.CheckError)
+	}
+
+	// While the API limits requests, the version comes from the release page, without notes.
+	answer.Store(http.StatusForbidden)
+	if st = post("/api/update/check"); st.Latest != nil || st.CheckError != "" {
+		t.Fatalf("status without a release on the page = %+v", st)
+	}
+	page.Store(buildinfo.Repository + "/releases/tag/v99.0.1")
+	st = post("/api/update/check")
+	if want := (update.Release{Version: "v99.0.1", URL: buildinfo.Repository + "/releases/tag/v99.0.1"}); st.Latest == nil || *st.Latest != want {
+		t.Fatalf("latest release from the page = %+v, want %+v", st.Latest, want)
 	}
 
 	// A newer release is offered with a link to its tag, wherever the API points.

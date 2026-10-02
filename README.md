@@ -86,7 +86,9 @@ connects its agent, which then only accepts connections from the machine itself.
 release notes and install it with **Install now**: the master installs the release, restarts on it, and then updates
 every agent to its version, also the one on its own machine. Running services restart; Minecraft servers keep running.
 Agents that were offline are listed with a button to update them later. The check can be turned off in the settings,
-e.g. for a master without internet access. On the command line, `… | sudo bash -s -- update` updates what is
+e.g. for a master without internet access. While GitHub's API limits the requests of the master's IP address (60 an
+hour, shared with everything behind the same address), the master reads only the version from the release page, and
+the panel links to the release notes on GitHub. On the command line, `… | sudo bash -s -- update` updates what is
 installed; update the master first, then the nodes.
 
 | Where                                         | What                                                                                           |

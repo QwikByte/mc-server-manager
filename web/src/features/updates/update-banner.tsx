@@ -53,7 +53,7 @@ function Available({ status, release }: { status: UpdateStatus; release: Release
   return (
     <Callout icon={SparkleIcon} title={`MC Server Manager ${release.version} is available`}>
       <p>
-        You run {status.version}. The new release was published on {formatDate(release.publishedAt)}.
+        You run {status.version}.{release.publishedAt && ` The new release was published on ${formatDate(release.publishedAt)}.`}
         {!status.updatable && " This master wasn't installed from a package, so update it on its host:"}
       </p>
       {!status.updatable && <CopyField label="Update command" prefix="$" value={updateCommand} />}
@@ -140,10 +140,10 @@ function ReleaseNotes({ release }: { release: Release }) {
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>What's new in {release.version}</DialogTitle>
-          <DialogDescription>Published on {formatDate(release.publishedAt)}.</DialogDescription>
+          {release.publishedAt && <DialogDescription>Published on {formatDate(release.publishedAt)}.</DialogDescription>}
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto rounded-lg bg-muted/50 p-4 text-sm whitespace-pre-wrap">
-          {release.notes.trim() || "This release has no notes."}
+          {release.notes.trim() || "Read the notes of this release on GitHub."}
         </div>
         <DialogFooter>
           <Button variant="outline" asChild>
