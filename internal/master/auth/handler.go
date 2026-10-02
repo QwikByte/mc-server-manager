@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -31,18 +32,33 @@ func UserFrom(ctx context.Context) (User, bool) {
 	return user, ok
 }
 
-// Register adds the routes that require a session.
+// Register adds the routes for the signed-in user's own account. They need a session but
+// no permission.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/auth/me", h.me)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
+	mux.HandleFunc("PUT /api/auth/password", h.changePassword)
 }
 
-// Login is the only public API route.
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	if !h.limiter.allow(r) {
-		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusTooManyRequests, "Too many sign-in attempts. Wait a minute and try again."))
-		return
+// RegisterPublic adds the routes that work without a session: signing in and setting a
+// password with a setup link. They are rate limited per client together.
+func (h *Handler) RegisterPublic(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/auth/login", h.limited(h.login))
+	mux.HandleFunc("POST /api/auth/setup/check", h.limited(h.checkSetup))
+	mux.HandleFunc("POST /api/auth/setup", h.limited(h.setup))
+}
+
+func (h *Handler) limited(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !h.limiter.allow(r) {
+			httpapi.WriteError(w, r, httpapi.Errorf(http.StatusTooManyRequests, "Too many attempts. Wait a minute and try again."))
+			return
+		}
+		next(w, r)
 	}
+}
+
+func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -62,6 +78,66 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, sessionCookie(token, int(ttl.Seconds())))
 	httpapi.WriteJSON(w, http.StatusOK, user)
+}
+
+// checkSetup tells whose password a setup link sets, before the user chooses one.
+func (h *Handler) checkSetup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	user, err := h.svc.SetupUser(r.Context(), req.Token)
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, user)
+}
+
+// setup sets the password with a setup link and signs the user in.
+func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	ttl := h.sessionTTL()
+	user, token, err := h.svc.Setup(r.Context(), req.Token, req.Password, ttl)
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	slog.Info("password set with a setup link", "user", user.Username)
+	http.SetCookie(w, sessionCookie(token, int(ttl.Seconds())))
+	httpapi.WriteJSON(w, http.StatusOK, user)
+}
+
+// changePassword changes the signed-in user's password; other sessions of the user end.
+func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Current string `json:"current"`
+		New     string `json:"new"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	user, _ := UserFrom(r.Context())
+	var keep string
+	if c, err := r.Cookie(cookieName); err == nil {
+		keep = c.Value
+	}
+	if err := h.svc.ChangePassword(r.Context(), user.ID, req.Current, req.New, keep); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {

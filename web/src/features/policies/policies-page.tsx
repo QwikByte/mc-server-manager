@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { TaskCard } from "@/features/schedules/task-card"
 import { actions, describePolicy, policies, warns } from "./api"
 
@@ -19,6 +20,7 @@ const newPolicy = (
 )
 
 export function PoliciesPage() {
+  const manage = useAccess().can("policies.manage")
   const { data: list, isPending, error } = useQuery(policies.tasksQuery)
   return (
     <>
@@ -27,7 +29,7 @@ export function PoliciesPage() {
         tone="warning"
         title="Policies"
         description="Rules for servers or whole nodes: restart them every night, keep opening hours or run console commands at set times."
-        actions={newPolicy}
+        actions={manage && newPolicy}
       />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -44,7 +46,7 @@ export function PoliciesPage() {
           title="No policies yet"
           description="Create a policy to restart servers every night at 4:00, for example, with a countdown for the players."
         >
-          {newPolicy}
+          {manage && newPolicy}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
@@ -52,6 +54,7 @@ export function PoliciesPage() {
             const { action, warnings } = policy.settings
             return (
               <TaskCard
+                manage={manage}
                 key={policy.id}
                 task={policy}
                 taskApi={policies}

@@ -13,7 +13,7 @@ import (
 func TestTemplates(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 	input := func(change func(map[string]any)) map[string]any {
 		in := map[string]any{
 			"name": "Survival", "description": "Paper with permissions", "type": "paper", "version": "", "memoryMb": 4096,

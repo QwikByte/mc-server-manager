@@ -14,10 +14,12 @@ import { getRouteApi, Outlet, useNavigate } from "@tanstack/react-router"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { BackLink } from "@/components/back-link"
+import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { TabLink } from "@/components/tab-link"
 import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
 import { formatMegabytes } from "@/lib/format"
 import { useServer } from "./api"
@@ -28,15 +30,19 @@ import { displayVersion, serverLook, serverType } from "./server-types"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
 
-/** Tabs of a server; label is a function for tabs that some types of servers don't have. */
+/**
+ * Tabs of a server with the permission they need; label is a function for tabs that some
+ * types of servers don't have.
+ */
 const tabs = [
-  { to: "/nodes/$nodeId/servers/$serverId", label: () => "Console", icon: TerminalIcon, exact: true },
-  { to: "/nodes/$nodeId/servers/$serverId/files", label: () => "Files", icon: FolderIcon, exact: false },
+  { to: "/nodes/$nodeId/servers/$serverId", label: () => "Console", icon: TerminalIcon, exact: true, permission: "console.view" },
+  { to: "/nodes/$nodeId/servers/$serverId/files", label: () => "Files", icon: FolderIcon, exact: false, permission: "files.read" },
   {
     to: "/nodes/$nodeId/servers/$serverId/properties",
     label: (type: string) => (serverType(type).proxy ? undefined : "Properties"),
     icon: SlidersHorizontalIcon,
     exact: false,
+    permission: "properties.edit",
   },
   {
     to: "/nodes/$nodeId/servers/$serverId/plugins",
@@ -46,13 +52,21 @@ const tabs = [
     },
     icon: PuzzlePieceIcon,
     exact: false,
+    permission: "servers.view",
   },
-  { to: "/nodes/$nodeId/servers/$serverId/backups", label: () => "Backups", icon: ArchiveIcon, exact: false },
-  { to: "/nodes/$nodeId/servers/$serverId/settings", label: () => "Settings", icon: GearIcon, exact: false },
+  { to: "/nodes/$nodeId/servers/$serverId/backups", label: () => "Backups", icon: ArchiveIcon, exact: false, permission: "backups.view" },
+  {
+    to: "/nodes/$nodeId/servers/$serverId/settings",
+    label: () => "Settings",
+    icon: GearIcon,
+    exact: false,
+    permission: "servers.settings",
+  },
 ] as const
 
 /** Header and tabs of a server; the tabs are child routes. */
 export function ServerPage() {
+  const { can } = useAccess()
   const { nodeId, serverId } = route.useParams()
   const navigate = useNavigate()
   const { data: node } = useQuery(nodeQuery(nodeId))
@@ -94,7 +108,7 @@ export function ServerPage() {
           <Tabs label="Server">
             {tabs
               .map((tab) => ({ ...tab, label: tab.label(server.type) }))
-              .filter((tab) => tab.label)
+              .filter((tab) => tab.label && can(tab.permission, nodeId, serverId))
               .map(({ to, label, icon: Icon, exact }) => (
                 <TabLink key={to} to={to} params={{ nodeId, serverId }} activeOptions={{ exact, includeSearch: false }}>
                   <Icon className="size-4" weight="duotone" />
@@ -110,7 +124,19 @@ export function ServerPage() {
 }
 
 export function ServerConsole() {
+  const { can } = useAccess()
   const { nodeId, serverId } = route.useParams()
   const { server } = useServer(nodeId, serverId)
-  return server ? <Console nodeId={nodeId} server={server} /> : null
+  if (!server) return null
+  if (!can("console.view", nodeId, serverId)) {
+    return (
+      <EmptyState
+        icon={TerminalIcon}
+        tone="neutral"
+        title="No console"
+        description="Your groups don't let you read the console of this server."
+      />
+    )
+  }
+  return <Console nodeId={nodeId} server={server} />
 }

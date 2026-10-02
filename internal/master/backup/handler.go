@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -78,13 +79,13 @@ type Handler struct{ nodes Nodes }
 
 func NewHandler(nodes Nodes) *Handler { return &Handler{nodes: nodes} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
+func (h *Handler) Register(mux access.Mux) {
 	const base = "/api/nodes/{node}/servers/{id}/backups"
-	mux.HandleFunc("GET "+base, h.list)
-	mux.HandleFunc("POST "+base, h.create)
-	mux.HandleFunc("POST "+base+"/{backup}/restore", h.restore)
-	mux.HandleFunc("DELETE "+base+"/{backup}", h.delete)
-	mux.HandleFunc("GET "+base+"/{backup}/download", h.download)
+	mux.Handle("GET "+base, access.OnServer(access.BackupsView), h.list)
+	mux.Handle("POST "+base, access.OnServer(access.BackupsCreate), h.create)
+	mux.Handle("POST "+base+"/{backup}/restore", access.OnServer(access.BackupsRestore), h.restore)
+	mux.Handle("DELETE "+base+"/{backup}", access.OnServer(access.BackupsDelete), h.delete)
+	mux.Handle("GET "+base+"/{backup}/download", access.OnServer(access.BackupsView), h.download)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

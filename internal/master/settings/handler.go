@@ -3,6 +3,7 @@ package settings
 import (
 	"net/http"
 
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -10,9 +11,9 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/settings", h.get)
-	mux.HandleFunc("PUT /api/settings", h.update)
+func (h *Handler) Register(mux access.Mux) {
+	mux.Handle("GET /api/settings", access.Everywhere(access.SettingsView), h.get)
+	mux.Handle("PUT /api/settings", access.Everywhere(access.SettingsEdit), h.update)
 }
 
 type view struct {

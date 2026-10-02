@@ -7,6 +7,7 @@ import { IconTile } from "@/components/icon-tile"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useAccess } from "@/features/access/use-access"
 import { type Node, nodesQuery } from "@/features/nodes/api"
 import { NodeSettingsDialog } from "@/features/nodes/node-settings-dialog"
 import { NodeStatusBadge } from "@/features/nodes/node-status"
@@ -51,14 +52,15 @@ export function AgentsSettingsPage() {
         </Table>
       </div>
       <Callout className="mt-6" title="Only the node decides where data is stored">
-        Agents accept commands from this master and from their local CLI only. Storage locations can't be added from the panel:
-        run <span className="font-mono">sudo mcsm-agent storage add &lt;name&gt; &lt;path&gt;</span> on the node.
+        Agents accept commands from this master and from their local CLI only. Storage locations can't be added from the panel: run{" "}
+        <span className="font-mono">sudo mcsm-agent storage add &lt;name&gt; &lt;path&gt;</span> on the node.
       </Callout>
     </>
   )
 }
 
 function AgentRow({ node }: { node: Node }) {
+  const { can } = useAccess()
   return (
     <TableRow>
       <TableCell>
@@ -93,21 +95,23 @@ function AgentRow({ node }: { node: Node }) {
       <TableCell className="hidden xl:table-cell">{node.defaultStorage}</TableCell>
       <TableCell>
         <span className="flex justify-end gap-1">
-          {node.enrolledAt && (
+          {node.enrolledAt && can("terminal.use") && (
             <Button variant="ghost" size="icon-sm" asChild>
               <Link to="/settings/terminal" search={{ target: node.id }} aria-label={`Terminal of ${node.name}`} title="Terminal">
                 <TerminalWindowIcon />
               </Link>
             </Button>
           )}
-          <NodeSettingsDialog
-            node={node}
-            trigger={
-              <Button variant="ghost" size="icon-sm" aria-label={`Settings of ${node.name}`} title="Settings">
-                <GearIcon />
-              </Button>
-            }
-          />
+          {can("nodes.edit", node.id) && (
+            <NodeSettingsDialog
+              node={node}
+              trigger={
+                <Button variant="ghost" size="icon-sm" aria-label={`Settings of ${node.name}`} title="Settings">
+                  <GearIcon />
+                </Button>
+              }
+            />
+          )}
         </span>
       </TableCell>
     </TableRow>

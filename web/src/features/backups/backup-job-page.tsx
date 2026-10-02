@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { nodesQuery } from "@/features/nodes/api"
 import type { TaskInput } from "@/features/schedules/api"
 import { TaskForm } from "@/features/schedules/task-form"
@@ -18,6 +19,7 @@ import { LocationField, SelectionField } from "./backup-fields"
 const route = getRouteApi("/_app/backups/$jobId")
 
 export function BackupJobPage() {
+  const manage = useAccess().can("backupjobs.manage")
   const { jobId } = route.useParams()
   const { data: job, isPending, error } = useQuery(jobs.taskQuery(jobId))
   const save = jobs.useSaveTask(jobId)
@@ -31,14 +33,17 @@ export function BackupJobPage() {
       ) : (
         <>
           <PageHeader icon={ArchiveIcon} tone="info" title={job.name} description="A job that backs up servers on a schedule." />
-          <JobForm
-            // Remounting on save resets the form to what was stored.
-            key={JSON.stringify(job)}
-            initial={{ name: job.name, enabled: job.enabled, schedule: job.schedule, targets: job.targets, settings: job.settings }}
-            submitLabel="Save job"
-            save={save}
-            onSaved={(j) => toast.success(`Saved ${j.name}`)}
-          />
+          {/* Without the permission to manage jobs, the job is only shown. */}
+          <fieldset disabled={!manage} className="contents">
+            <JobForm
+              // Remounting on save resets the form to what was stored.
+              key={JSON.stringify(job)}
+              initial={{ name: job.name, enabled: job.enabled, schedule: job.schedule, targets: job.targets, settings: job.settings }}
+              submitLabel="Save job"
+              save={save}
+              onSaved={(j) => toast.success(`Saved ${j.name}`)}
+            />
+          </fieldset>
         </>
       )}
     </>

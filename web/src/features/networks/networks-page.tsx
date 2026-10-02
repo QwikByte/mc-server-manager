@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { type Network, networksQuery } from "./api"
 import { CreateNetworkDialog } from "./create-network-dialog"
@@ -14,6 +15,7 @@ import { ServerLabel } from "./server-label"
 import { findServer } from "./servers"
 
 export function NetworksPage() {
+  const manage = useAccess().can("networks.manage")
   const { data: networks, isPending, error } = useQuery(networksQuery)
   const { data: servers } = useQuery(allServersQuery)
 
@@ -24,7 +26,7 @@ export function NetworksPage() {
         tone="violet"
         title="Networks"
         description="Players join through a Velocity proxy and switch between the servers behind it."
-        actions={<CreateNetworkDialog />}
+        actions={manage && <CreateNetworkDialog />}
       />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -41,7 +43,7 @@ export function NetworksPage() {
           title="No networks yet"
           description="Create a Velocity proxy and a Paper or Purpur server on your nodes, then connect them to a network."
         >
-          <CreateNetworkDialog />
+          {manage && <CreateNetworkDialog />}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">

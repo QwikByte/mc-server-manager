@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import type { Target } from "@/features/servers/api"
 import { api } from "@/lib/api"
 
 /** When a task runs: at the times of day on the weekdays, in a time zone. */
@@ -8,12 +9,6 @@ export interface Schedule {
   /** Times of day as HH:MM. */
   times: string[]
   timeZone: string
-}
-
-/** A server, or all servers of a node (including later ones) if serverId is empty. */
-export interface Target {
-  nodeId: string
-  serverId: string
 }
 
 /** A task that runs on servers on a schedule: a backup job or a policy. */

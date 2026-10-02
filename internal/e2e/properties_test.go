@@ -15,7 +15,7 @@ func TestServerProperties(t *testing.T) {
 	a := m.startAgent(t, "node-1")
 	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	proxy := m.createServer(t, a, "Proxy", mcsmv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 	path := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID + "/properties"
 	change := func(props map[string]string, status int) {
 		t.Helper()

@@ -3,9 +3,11 @@ package node
 import (
 	"context"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -15,14 +17,15 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/nodes", h.list)
-	mux.HandleFunc("POST /api/nodes", h.create)
-	mux.HandleFunc("GET /api/nodes/{id}", h.get)
-	mux.HandleFunc("PUT /api/nodes/{id}", h.update)
-	mux.HandleFunc("DELETE /api/nodes/{id}", h.delete)
-	mux.HandleFunc("POST /api/nodes/{id}/join-token", h.joinToken)
-	mux.HandleFunc("POST /api/nodes/{id}/certificate", h.renewCertificate)
+// Register adds the routes. Users see the nodes on which they may see the node or servers.
+func (h *Handler) Register(mux access.Mux) {
+	mux.Handle("GET /api/nodes", access.SignedIn, h.list)
+	mux.Handle("POST /api/nodes", access.Everywhere(access.NodesEnroll), h.create)
+	mux.Handle("GET /api/nodes/{id}", access.SignedIn, h.get)
+	mux.Handle("PUT /api/nodes/{id}", access.OnNode(access.NodesEdit, "id"), h.update)
+	mux.Handle("DELETE /api/nodes/{id}", access.OnNode(access.NodesDelete, "id"), h.delete)
+	mux.Handle("POST /api/nodes/{id}/join-token", access.Everywhere(access.NodesEnroll), h.joinToken)
+	mux.Handle("POST /api/nodes/{id}/certificate", access.OnNode(access.NodesCertificates, "id"), h.renewCertificate)
 }
 
 type view struct {
@@ -77,6 +80,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	grants := access.From(r.Context())
+	nodes = slices.DeleteFunc(nodes, func(n Node) bool { return !grants.SeesNode(n.ID) })
 	views := make([]view, len(nodes))
 	var wg sync.WaitGroup
 	for i, n := range nodes {
@@ -88,6 +93,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+	if err == nil && !access.From(r.Context()).SeesNode(n.ID) {
+		err = access.Denied(access.NodesView)
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return

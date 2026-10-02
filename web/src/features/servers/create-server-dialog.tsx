@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useAccess } from "@/features/access/use-access"
 import {
   Select,
   SelectContent,
@@ -71,7 +72,9 @@ export function CreateServerDialog({
   const create = useCreateServer()
   const navigate = useNavigate()
   const { data: templates = [] } = useQuery({ ...templatesQuery, enabled: open && !fixedTemplate })
-  const { data: nodes = [], isPending: nodesPending } = useQuery({ ...nodesQuery, enabled: open && !fixedNode })
+  const { can } = useAccess()
+  const { data: allNodes = [], isPending: nodesPending } = useQuery({ ...nodesQuery, enabled: open && !fixedNode })
+  const nodes = allNodes.filter((n) => can("servers.create", n.id))
   const nodeId = fixedNode ?? form.nodeId ?? nodes.find((n) => n.status === "online")?.id
   const template = fixedTemplate ?? templates.find((t) => t.id === form.templateId)
   const { data: node } = useQuery({ ...nodeQuery(nodeId ?? ""), enabled: open && !!nodeId })

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -14,20 +15,21 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/templates", func(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Register(mux access.Mux) {
+	view, manage := access.Everywhere(access.TemplatesView), access.Everywhere(access.TemplatesManage)
+	mux.Handle("GET /api/templates", view, func(w http.ResponseWriter, r *http.Request) {
 		templates, err := h.svc.List(r.Context())
 		write(w, r, http.StatusOK, templates, err)
 	})
-	mux.HandleFunc("POST /api/templates", h.save(http.StatusCreated, func(ctx context.Context, _ string, in Input) (Template, error) {
+	mux.Handle("POST /api/templates", manage, h.save(http.StatusCreated, func(ctx context.Context, _ string, in Input) (Template, error) {
 		return h.svc.Create(ctx, in)
 	}))
-	mux.HandleFunc("GET /api/templates/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /api/templates/{id}", view, func(w http.ResponseWriter, r *http.Request) {
 		t, err := h.svc.Get(r.Context(), r.PathValue("id"))
 		write(w, r, http.StatusOK, t, err)
 	})
-	mux.HandleFunc("PUT /api/templates/{id}", h.save(http.StatusOK, h.svc.Update))
-	mux.HandleFunc("DELETE /api/templates/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("PUT /api/templates/{id}", manage, h.save(http.StatusOK, h.svc.Update))
+	mux.Handle("DELETE /api/templates/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
 		write(w, r, http.StatusNoContent, nil, h.svc.Delete(r.Context(), r.PathValue("id")))
 	})
 }

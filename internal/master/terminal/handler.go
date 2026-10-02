@@ -21,6 +21,7 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agentcli"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
@@ -54,8 +55,9 @@ type Handler struct {
 
 func NewHandler(nodes Nodes, master Master) *Handler { return &Handler{nodes: nodes, master: master} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/terminal", h.run)
+// Register adds the route; besides the terminal permission, every command needs its own.
+func (h *Handler) Register(mux access.Mux) {
+	mux.Handle("POST /api/terminal", access.Everywhere(access.Terminal), h.run)
 }
 
 // run runs a command line on a target and streams its output as JSON lines: {"output": …}
@@ -116,20 +118,22 @@ func parse(line string) ([]string, error) {
 	return args, nil
 }
 
-// root returns the commands of a target: the master or the agent of a node.
+// root returns the commands of a target: the master or the agent of a node. Each command
+// checks the permission it needs before it runs.
 func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, error) {
-	root := &cobra.Command{SilenceUsage: true, SilenceErrors: true}
-	root.CompletionOptions.DisableDefaultCmd = true
 	if target == MasterTarget {
-		root.Use, root.Short = "mcsm-master", "Commands of the master. Choose a node to run the commands of its agent."
+		root := guarded("mcsm-master", "Commands of the master. Choose a node to run the commands of its agent.", h.masterChecks())
 		root.AddCommand(h.masterCommands()...)
 		return root, nil
 	}
 	n, err := h.nodes.Get(ctx, target)
+	if err == nil && !access.From(ctx).SeesNode(n.ID) {
+		err = access.Denied(access.ServersView)
+	}
 	if err != nil {
 		return nil, err
 	}
-	root.Use, root.Short = "mcsm-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations can only be changed on the node itself.", n.Name)
+	root := guarded("mcsm-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations can only be changed on the node itself.", n.Name), agentChecks(n.ID))
 	root.AddCommand(agentcli.Commands(func(ctx context.Context, fn func(grpc.ClientConnInterface) error) error {
 		conn, err := h.nodes.Conn(ctx, n.ID)
 		if err != nil {

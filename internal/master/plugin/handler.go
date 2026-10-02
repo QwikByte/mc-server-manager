@@ -11,6 +11,7 @@ import (
 	"time"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 )
@@ -28,14 +29,16 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/plugins/search", h.search)
-	mux.HandleFunc("GET /api/plugins/icons/{project}/{file}", h.icon)
-	mux.HandleFunc("POST /api/plugins/install", h.install)
+// Register adds the routes. Searching Modrinth needs no permission; installing on many
+// servers at once checks the permission for each of them.
+func (h *Handler) Register(mux access.Mux) {
+	mux.Handle("GET /api/plugins/search", access.SignedIn, h.search)
+	mux.Handle("GET /api/plugins/icons/{project}/{file}", access.SignedIn, h.icon)
+	mux.Handle("POST /api/plugins/install", access.SignedIn, h.install)
 	const base = "/api/nodes/{node}/servers/{id}/plugins"
-	mux.HandleFunc("GET "+base, h.list)
-	mux.HandleFunc("PUT "+base+"/{file}", h.upload)
-	mux.HandleFunc("DELETE "+base+"/{file}", h.remove)
+	mux.Handle("GET "+base, access.OnServer(access.ServersView), h.list)
+	mux.Handle("PUT "+base+"/{file}", access.OnServer(access.Plugins), h.upload)
+	mux.Handle("DELETE "+base+"/{file}", access.OnServer(access.Plugins), h.remove)
 }
 
 type hit struct {
@@ -113,6 +116,9 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 		return
 	case len(req.Servers) == 0 || len(req.Servers) > maxServers || len(slices.Compact(slices.SortedFunc(slices.Values(req.Servers), compareRefs))) != len(req.Servers):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", maxServers))
+		return
+	case slices.ContainsFunc(req.Servers, func(s Ref) bool { return !access.From(r.Context()).On(access.Plugins, s.NodeID, s.ServerID) }):
+		httpapi.WriteError(w, r, access.Denied(access.Plugins))
 		return
 	}
 	// The installation finishes even if the browser goes away.

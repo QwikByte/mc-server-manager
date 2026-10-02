@@ -25,7 +25,7 @@ func TestBackups(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
 	srv := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 	base := "/api/nodes/" + srv.NodeID + "/servers/" + srv.ServerID
 	data := filepath.Join(a.runtime.dir, srv.ServerID)
 	write := func(name, content string) {
@@ -128,7 +128,7 @@ func TestPolicies(t *testing.T) {
 	a := m.startAgent(t, "node-1")
 	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	survival := m.createServer(t, a, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
-	api := apiClient{t, m.panel(t).URL}
+	api := apiClient{t: t, url: m.panel(t).URL}
 	api.do("POST", "/api/nodes/"+lobby.NodeID+"/servers/"+lobby.ServerID+"/start", nil, http.StatusNoContent, nil)
 	policy := func(name string, settings map[string]any) map[string]any {
 		return map[string]any{

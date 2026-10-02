@@ -3,12 +3,11 @@ import { useQuery } from "@tanstack/react-query"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { nodesQuery } from "@/features/nodes/api"
-import { allServersQuery } from "@/features/servers/api"
-import type { Target } from "./api"
+import { allServersQuery, type Target } from "./api"
 
 const same = (a: Target, b: Target) => a.nodeId === b.nodeId && a.serverId === b.serverId
 
-/** Chooses the servers a task runs on: whole nodes, including servers created later, or single servers. */
+/** Chooses servers, e.g. those a task runs on: whole nodes, including servers created later, or single servers. */
 export function TargetsField({ value, onChange }: { value: Target[]; onChange: (targets: Target[]) => void }) {
   const { data: nodes, isPending } = useQuery(nodesQuery)
   const { data: servers = [] } = useQuery(allServersQuery)

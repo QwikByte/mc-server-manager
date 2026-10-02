@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import type { TaskInput } from "./api"
 import { ScheduleField } from "./schedule-field"
-import { TargetsField } from "./targets-field"
+import { TargetsField } from "@/features/servers/targets-field"
 
 /**
  * Edits a task: its name, schedule and servers, and the settings of its kind, which

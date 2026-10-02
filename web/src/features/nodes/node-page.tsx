@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
 import { formatBytes, formatDate, formatMegabytes } from "@/lib/format"
@@ -30,6 +31,7 @@ import { StorageList } from "./storage-list"
 const route = getRouteApi("/_app/nodes/$nodeId")
 
 export function NodePage() {
+  const { can } = useAccess()
   const { nodeId } = route.useParams()
   const { data: node, isPending, error } = useQuery(nodeQuery(nodeId))
 
@@ -50,8 +52,8 @@ export function NodePage() {
             description={<span className="font-mono">{node.address}</span>}
             actions={
               <>
-                <NodeSettingsDialog node={node} />
-                {node.enrolledAt && (
+                {can("nodes.edit", node.id) && <NodeSettingsDialog node={node} />}
+                {node.enrolledAt && can("terminal.use") && (
                   <Button variant="outline" asChild>
                     <Link to="/settings/terminal" search={{ target: node.id }}>
                       <TerminalWindowIcon />
@@ -59,9 +61,9 @@ export function NodePage() {
                     </Link>
                   </Button>
                 )}
-                {node.status === "online" && <RenewCertificateButton node={node} />}
-                {node.enrolledAt && <NewJoinTokenButton node={node} />}
-                <RemoveNodeButton node={node} />
+                {node.status === "online" && can("nodes.certificates", node.id) && <RenewCertificateButton node={node} />}
+                {node.enrolledAt && can("nodes.enroll") && <NewJoinTokenButton node={node} />}
+                {can("nodes.delete", node.id) && <RemoveNodeButton node={node} />}
               </>
             }
           />
@@ -69,7 +71,7 @@ export function NodePage() {
             <>
               <NodeFacts node={node} info={node.info} />
               <ServerList nodeId={node.id} />
-              {node.info.storage && <StorageList locations={node.info.storage} />}
+              {node.info.storage && can("nodes.view", node.id) && <StorageList locations={node.info.storage} />}
             </>
           ) : node.status === "pending" ? (
             <EmptyState
@@ -78,7 +80,7 @@ export function NodePage() {
               title="Connect the agent"
               description="This node has no connected agent yet. Create a join token and run the enrollment command on the node."
             >
-              <NewJoinTokenButton node={node} variant="default" />
+              {can("nodes.enroll") && <NewJoinTokenButton node={node} variant="default" />}
             </EmptyState>
           ) : (
             <EmptyState

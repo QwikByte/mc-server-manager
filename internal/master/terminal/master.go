@@ -3,6 +3,7 @@ package terminal
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
 
@@ -117,12 +119,14 @@ type nodeProbe struct {
 	state, version, certificate string
 }
 
-// probe asks the agents of all nodes for their state at once.
+// probe asks the agents of the nodes the user may see for their state at once.
 func (h *Handler) probe(ctx context.Context) ([]nodeProbe, error) {
 	nodes, err := h.nodes.List(ctx)
 	if err != nil {
 		return nil, err
 	}
+	grants := access.From(ctx)
+	nodes = slices.DeleteFunc(nodes, func(n node.Node) bool { return !grants.Somewhere(access.NodesView, n.ID) })
 	probes := make([]nodeProbe, len(nodes))
 	var wg sync.WaitGroup
 	for i, n := range nodes {

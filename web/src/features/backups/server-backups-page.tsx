@@ -23,6 +23,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
 import { covers } from "@/features/schedules/api"
 import { describeSchedule } from "@/features/schedules/describe"
@@ -35,10 +36,12 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/backups")
 
 /** The Backups tab of a server. */
 export function ServerBackupsPage() {
+  const { can } = useAccess()
   const { nodeId, serverId } = route.useParams()
   const { server } = useServer(nodeId, serverId)
   const { data: backups, isPending, error } = useQuery(backupsQuery(nodeId, serverId))
-  const { data: jobList = [] } = useQuery(jobs.tasksQuery)
+  const { data: jobList = [] } = useQuery({ ...jobs.tasksQuery, enabled: can("backupjobs.view") })
+  const create = can("backups.create", nodeId, serverId)
   const covering = jobList.filter((j) => j.enabled && covers(j.targets, nodeId, serverId))
 
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />
@@ -50,36 +53,48 @@ export function ServerBackupsPage() {
       title={`${backups.length} ${backups.length === 1 ? "backup" : "backups"}`}
       description={`${formatBytes(total)} on the node. Restoring replaces what a backup contains.`}
       className="mt-0"
-      actions={<CreateBackupDialog nodeId={nodeId} server={server} />}
+      actions={create && <CreateBackupDialog nodeId={nodeId} server={server} />}
     >
-      <Callout tone={covering.length > 0 ? "info" : "neutral"} icon={ClockIcon} className="mb-4">
-        {covering.length > 0 ? (
-          <>
-            Backed up by{" "}
-            {covering.map((j, i) => (
-              <span key={j.id}>
-                {i > 0 && ", "}
-                <Link to="/backups/$jobId" params={{ jobId: j.id }} className="font-medium underline-offset-4 hover:underline">
-                  {j.name}
-                </Link>{" "}
-                ({describeSchedule(j.schedule).toLowerCase()})
-              </span>
-            ))}
-            .
-          </>
-        ) : (
-          <>
-            No backup job covers this server.{" "}
-            <Link to="/backups/new" className="font-medium underline-offset-4 hover:underline">
-              Create a job
-            </Link>{" "}
-            to back it up on a schedule.
-          </>
-        )}
-      </Callout>
+      {can("backupjobs.view") && (
+        <Callout tone={covering.length > 0 ? "info" : "neutral"} icon={ClockIcon} className="mb-4">
+          {covering.length > 0 ? (
+            <>
+              Backed up by{" "}
+              {covering.map((j, i) => (
+                <span key={j.id}>
+                  {i > 0 && ", "}
+                  <Link to="/backups/$jobId" params={{ jobId: j.id }} className="font-medium underline-offset-4 hover:underline">
+                    {j.name}
+                  </Link>{" "}
+                  ({describeSchedule(j.schedule).toLowerCase()})
+                </span>
+              ))}
+              .
+            </>
+          ) : (
+            <>
+              No backup job covers this server.
+              {can("backupjobs.manage") && (
+                <>
+                  {" "}
+                  <Link to="/backups/new" className="font-medium underline-offset-4 hover:underline">
+                    Create a job
+                  </Link>{" "}
+                  to back it up on a schedule.
+                </>
+              )}
+            </>
+          )}
+        </Callout>
+      )}
       {backups.length === 0 ? (
-        <EmptyState icon={ArchiveIcon} tone="info" title="No backups yet" description="Back up the server now, e.g. before an update.">
-          <CreateBackupDialog nodeId={nodeId} server={server} />
+        <EmptyState
+          icon={ArchiveIcon}
+          tone="info"
+          title="No backups yet"
+          description={create ? "Back up the server now, e.g. before an update." : "The server has no backups."}
+        >
+          {create && <CreateBackupDialog nodeId={nodeId} server={server} />}
         </EmptyState>
       ) : (
         <ul className="surface divide-y rounded-xl">
@@ -93,6 +108,7 @@ export function ServerBackupsPage() {
 }
 
 function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server; backup: Backup }) {
+  const { can } = useAccess()
   const { restore, remove } = useBackups(nodeId, server.id)
   const created = formatDateTime(backup.createdAt)
   return (
@@ -115,48 +131,52 @@ function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server;
             <span className="max-sm:sr-only">Download</span>
           </a>
         </Button>
-        <ConfirmDialog
-          trigger={
-            <Button size="sm" variant="outline" disabled={restore.isPending}>
-              <ArrowCounterClockwiseIcon />
-              <span className="max-sm:sr-only">Restore</span>
-            </Button>
-          }
-          title={`Restore the backup of ${created}?`}
-          description={`This replaces ${describeContent(backup.paths).toLowerCase()} of ${server.name} with the backed up state; what was added since is removed.${
-            server.state === "stopped" ? "" : " The server stops meanwhile and starts again."
-          }`}
-          action="Restore"
-          destructive
-          onConfirm={() =>
-            toast.promise(restore.mutateAsync(backup.id), {
-              loading: `Restoring ${server.name}…`,
-              success: `Restored the backup of ${created}`,
-              error: (e: Error) => e.message,
-            })
-          }
-        />
-        <ConfirmDialog
-          trigger={
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label={`Delete the backup of ${created}`}
-              title="Delete"
-              disabled={remove.isPending}
-              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            >
-              <TrashIcon />
-            </Button>
-          }
-          title={`Delete the backup of ${created}?`}
-          description="The backup is deleted from the node. This can't be undone."
-          action="Delete backup"
-          destructive
-          onConfirm={() =>
-            remove.mutate(backup.id, { onSuccess: () => toast.success("Deleted the backup"), onError: (e) => toast.error(e.message) })
-          }
-        />
+        {can("backups.restore", nodeId, server.id) && (
+          <ConfirmDialog
+            trigger={
+              <Button size="sm" variant="outline" disabled={restore.isPending}>
+                <ArrowCounterClockwiseIcon />
+                <span className="max-sm:sr-only">Restore</span>
+              </Button>
+            }
+            title={`Restore the backup of ${created}?`}
+            description={`This replaces ${describeContent(backup.paths).toLowerCase()} of ${server.name} with the backed up state; what was added since is removed.${
+              server.state === "stopped" ? "" : " The server stops meanwhile and starts again."
+            }`}
+            action="Restore"
+            destructive
+            onConfirm={() =>
+              toast.promise(restore.mutateAsync(backup.id), {
+                loading: `Restoring ${server.name}…`,
+                success: `Restored the backup of ${created}`,
+                error: (e: Error) => e.message,
+              })
+            }
+          />
+        )}
+        {can("backups.delete", nodeId, server.id) && (
+          <ConfirmDialog
+            trigger={
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`Delete the backup of ${created}`}
+                title="Delete"
+                disabled={remove.isPending}
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <TrashIcon />
+              </Button>
+            }
+            title={`Delete the backup of ${created}?`}
+            description="The backup is deleted from the node. This can't be undone."
+            action="Delete backup"
+            destructive
+            onConfirm={() =>
+              remove.mutate(backup.id, { onSuccess: () => toast.success("Deleted the backup"), onError: (e) => toast.error(e.message) })
+            }
+          />
+        )}
       </div>
     </li>
   )

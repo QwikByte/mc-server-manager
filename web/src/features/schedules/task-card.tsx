@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button"
 import { nodesQuery } from "@/features/nodes/api"
 import { allServersQuery } from "@/features/servers/api"
 import { formatDateTime } from "@/lib/format"
-import type { Task, TaskApi, Target } from "./api"
+import type { Target } from "@/features/servers/api"
+import type { Task, TaskApi } from "./api"
 import { describeSchedule } from "./describe"
 
 function taskStatus(task: Task<unknown>): Status {
@@ -35,6 +36,7 @@ export function TaskCard<S>({
   summary,
   edit,
   confirmRun,
+  manage,
 }: {
   task: Task<S>
   taskApi: TaskApi<S>
@@ -44,6 +46,8 @@ export function TaskCard<S>({
   summary: ReactNode
   edit: ReactElement
   confirmRun?: string
+  /** Whether the user may run, change and delete the task. */
+  manage: boolean
 }) {
   const run = taskApi.useRunTask()
   const remove = taskApi.useDeleteTask()
@@ -83,7 +87,7 @@ export function TaskCard<S>({
         {task.lastRun ? `Last run ${formatDateTime(task.lastRun.at)}` : "Never run"}
         {task.nextRun && ` · next ${formatDateTime(task.nextRun)}`}
       </p>
-      <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-4">
+      <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-4" hidden={!manage}>
         {confirmRun ? (
           <ConfirmDialog trigger={runButton} title={`Run ${task.name} now?`} description={confirmRun} action="Run now" onConfirm={start} />
         ) : (

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
@@ -36,42 +37,49 @@ type Networks interface {
 	CheckRemovable(ctx context.Context, nodeID, serverID string) error
 }
 
-// Tasks forget deleted servers, so that backup jobs and policies no longer run on them.
-type Tasks interface {
+// Forgetter forgets deleted servers, e.g. so that backup jobs no longer run on them and
+// groups no longer grant permissions on them.
+type Forgetter interface {
 	Forget(ctx context.Context, nodeID, serverID string) error
 }
 
 type Handler struct {
 	nodes    Nodes
 	networks Networks
-	tasks    Tasks
+	forget   []Forgetter
 }
 
-func NewHandler(nodes Nodes, networks Networks, tasks Tasks) *Handler {
-	return &Handler{nodes: nodes, networks: networks, tasks: tasks}
+func NewHandler(nodes Nodes, networks Networks, forget ...Forgetter) *Handler {
+	return &Handler{nodes: nodes, networks: networks, forget: forget}
 }
 
-func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/servers", h.listAll)
-	mux.HandleFunc("GET /api/nodes/{node}/servers", h.list)
-	mux.HandleFunc("POST /api/nodes/{node}/servers", h.create)
-	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/start", h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.StartServer(ctx, &mcsmv1.StartServerRequest{Id: id})
-		return err
-	}))
-	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/stop", h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
-		return err
-	}))
-	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/restart", h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
-		return err
-	}))
-	mux.HandleFunc("DELETE /api/nodes/{node}/servers/{id}", h.delete)
-	mux.HandleFunc("PUT /api/nodes/{node}/servers/{id}", h.update)
-	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/duplicate", h.duplicate)
-	mux.HandleFunc("GET /api/nodes/{node}/servers/{id}/logs", h.logs)
-	mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/command", h.command)
+// Register adds the routes. The lists only contain the servers the user may see.
+func (h *Handler) Register(mux access.Mux) {
+	mux.Handle("GET /api/servers", access.SignedIn, h.listAll)
+	mux.Handle("GET /api/nodes/{node}/servers", access.SignedIn, h.list)
+	mux.Handle("POST /api/nodes/{node}/servers", access.OnNode(access.ServersCreate, "node"), h.create)
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart),
+		h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
+			_, err := c.StartServer(ctx, &mcsmv1.StartServerRequest{Id: id})
+			return err
+		}))
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/stop", access.OnServer(access.ServersStop),
+		h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
+			_, err := c.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
+			return err
+		}))
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/restart", access.OnServer(access.ServersRestart),
+		h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
+			_, err := c.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
+			return err
+		}))
+	mux.Handle("DELETE /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersDelete), h.delete)
+	mux.Handle("PUT /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersSettings), h.update)
+	// The copy contains all files of the server.
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/duplicate",
+		access.All(access.OnNode(access.ServersCreate, "node"), access.OnServer(access.FilesRead)), h.duplicate)
+	mux.Handle("GET /api/nodes/{node}/servers/{id}/logs", access.OnServer(access.ConsoleView), h.logs)
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/command", access.OnServer(access.ConsoleCommands), h.command)
 }
 
 type view struct {
@@ -133,10 +141,11 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	grants := access.From(r.Context())
 	perNode := make([][]nodeServer, len(nodes))
 	var wg sync.WaitGroup
 	for i, n := range nodes {
-		if n.EnrolledAt == nil {
+		if n.EnrolledAt == nil || !grants.Somewhere(access.ServersView, n.ID) {
 			continue
 		}
 		wg.Go(func() {
@@ -151,7 +160,9 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 				return // offline nodes are left out
 			}
 			for _, s := range res.GetServers() {
-				perNode[i] = append(perNode[i], nodeServer{toView(s), n.ID, n.Name})
+				if grants.On(access.ServersView, n.ID, s.GetId()) {
+					perNode[i] = append(perNode[i], nodeServer{toView(s), n.ID, n.Name})
+				}
 			}
 		})
 	}
@@ -176,9 +187,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	grants, nodeID := access.From(r.Context()), r.PathValue("node")
 	views := make([]view, 0, len(res.GetServers()))
 	for _, s := range res.GetServers() {
-		views = append(views, toView(s))
+		if grants.On(access.ServersView, nodeID, s.GetId()) {
+			views = append(views, toView(s))
+		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, views)
 }
@@ -326,8 +340,10 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_, err = c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
 	}
-	if err == nil {
-		err = h.tasks.Forget(ctx, nodeID, id)
+	for _, f := range h.forget {
+		if err == nil {
+			err = f.Forget(ctx, nodeID, id)
+		}
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)

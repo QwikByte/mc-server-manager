@@ -7,7 +7,7 @@ import { properties } from "@codemirror/legacy-modes/mode/properties"
 import { shell } from "@codemirror/legacy-modes/mode/shell"
 import { toml } from "@codemirror/legacy-modes/mode/toml"
 import { xml } from "@codemirror/legacy-modes/mode/xml"
-import type { Extension } from "@codemirror/state"
+import { EditorState, type Extension } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
 import { tags as t } from "@lezer/highlight"
 import { basicSetup } from "codemirror"
@@ -61,11 +61,13 @@ export function CodeEditor({
   ref,
   value,
   filename,
+  readOnly = false,
   onChange,
 }: {
   ref: Ref<EditorHandle>
   value: string
   filename: string
+  readOnly?: boolean
   onChange: () => void
 }) {
   const parent = useRef<HTMLDivElement>(null)
@@ -89,11 +91,12 @@ export function CodeEditor({
         syntaxHighlighting(highlight),
         EditorView.updateListener.of((u) => u.docChanged && changed.current()),
         EditorView.contentAttributes.of({ "aria-label": `Contents of ${filename}` }),
+        EditorState.readOnly.of(readOnly),
       ],
     })
     view.current = editor
     return () => editor.destroy()
-  }, [value, filename])
+  }, [value, filename, readOnly])
 
   return (
     <div

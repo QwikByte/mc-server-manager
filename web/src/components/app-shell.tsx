@@ -1,46 +1,26 @@
-import {
-  ArchiveIcon,
-  CalendarCheckIcon,
-  GearSixIcon,
-  GraphIcon,
-  HardDrivesIcon,
-  PuzzlePieceIcon,
-  SignOutIcon,
-  StackIcon,
-} from "@phosphor-icons/react"
+import { SignOutIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { Fragment } from "react"
 import { Logo } from "@/components/logo"
+import { navigation } from "@/components/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
+import { useAccess } from "@/features/access/use-access"
 import { meQuery, useLogout } from "@/features/auth/api"
-
-const navigation = [
-  {
-    title: "Manage",
-    links: [
-      { to: "/nodes", label: "Nodes", icon: HardDrivesIcon },
-      { to: "/networks", label: "Networks", icon: GraphIcon },
-      { to: "/templates", label: "Templates", icon: StackIcon },
-      { to: "/plugins", label: "Plugins", icon: PuzzlePieceIcon },
-      { to: "/backups", label: "Backups", icon: ArchiveIcon },
-      { to: "/policies", label: "Policies", icon: CalendarCheckIcon },
-    ],
-  },
-  { title: "System", links: [{ to: "/settings", label: "Settings", icon: GearSixIcon }] },
-] as const
+import { PasswordDialog } from "@/features/auth/password-dialog"
 
 /** A sidebar on large screens, a bar at the top on small ones. */
 export function AppShell() {
   const { data: user } = useQuery(meQuery)
+  const access = useAccess()
   const logout = useLogout()
   const navigate = useNavigate()
 
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
       <aside className="sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b bg-sidebar/80 px-3 py-2.5 backdrop-blur-xl md:h-svh md:w-64 md:flex-col md:items-stretch md:gap-8 md:border-r md:border-b-0 md:px-4 md:py-6">
-        <Link to="/nodes" className="flex items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring md:px-2">
+        <Link to="/" className="flex items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring md:px-2">
           <Logo />
           <span className="leading-tight max-md:sr-only">
             <span className="block text-sm font-bold tracking-tight">MC Server Manager</span>
@@ -48,23 +28,26 @@ export function AppShell() {
           </span>
         </Link>
         <nav aria-label="Main" className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] md:flex-col md:overflow-visible">
-          {navigation.map(({ title, links }) => (
-            <Fragment key={title}>
-              <p className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase not-first:pt-5 max-md:hidden">
-                {title}
-              </p>
-              {links.map(({ to, label, icon: Icon }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className="group flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[status=active]:bg-primary/10 data-[status=active]:text-primary md:px-3"
-                >
-                  <Icon className="size-5" weight="duotone" />
-                  <span className="max-sm:sr-only">{label}</span>
-                </Link>
-              ))}
-            </Fragment>
-          ))}
+          {navigation
+            .map(({ title, links }) => ({ title, links: links.filter((l) => l.visible(access)) }))
+            .filter(({ links }) => links.length > 0)
+            .map(({ title, links }) => (
+              <Fragment key={title}>
+                <p className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase not-first:pt-5 max-md:hidden">
+                  {title}
+                </p>
+                {links.map(({ to, label, icon: Icon }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    className="group flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[status=active]:bg-primary/10 data-[status=active]:text-primary md:px-3"
+                  >
+                    <Icon className="size-5" weight="duotone" />
+                    <span className="max-sm:sr-only">{label}</span>
+                  </Link>
+                ))}
+              </Fragment>
+            ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:gap-3">
           <ThemeToggle className="md:w-full" />
@@ -79,6 +62,7 @@ export function AppShell() {
               <span className="block truncate text-sm font-semibold">{user?.username}</span>
               <span className="block text-xs text-muted-foreground">Signed in</span>
             </span>
+            {user && <PasswordDialog username={user.username} />}
             <Button
               variant="ghost"
               size="icon-sm"

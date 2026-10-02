@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { TaskCard } from "@/features/schedules/task-card"
 import { describeSelection, jobs } from "./api"
 
@@ -19,6 +20,7 @@ const newJob = (
 )
 
 export function BackupJobsPage() {
+  const manage = useAccess().can("backupjobs.manage")
   const { data: list, isPending, error } = useQuery(jobs.tasksQuery)
   return (
     <>
@@ -27,7 +29,7 @@ export function BackupJobsPage() {
         tone="info"
         title="Backups"
         description="Jobs back up servers on a schedule and keep their newest backups. The backups of a server are in its Backups tab."
-        actions={newJob}
+        actions={manage && newJob}
       />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -44,12 +46,13 @@ export function BackupJobsPage() {
           title="No backup jobs yet"
           description="Create a job to back up servers or whole nodes every night, for example."
         >
-          {newJob}
+          {manage && newJob}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
           {list.map((job) => (
             <TaskCard
+              manage={manage}
               key={job.id}
               task={job}
               taskApi={jobs}
