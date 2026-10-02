@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -37,6 +39,12 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 	"github.com/QwikByte/mc-server-manager/web"
 )
+
+// RestartExit is the error serve returns when an administrator restarts the master from the
+// panel. The program exits with it as code, for which its service manager starts it again.
+type RestartExit int
+
+func (r RestartExit) Error() string { return fmt.Sprintf("restart with exit code %d", int(r)) }
 
 func serve(ctx context.Context, cfg config) error {
 	proxies, err := auth.ParseProxies(cfg.trustedProxies)
@@ -68,6 +76,7 @@ func serve(ctx context.Context, cfg config) error {
 	conf, err := settings.Load(ctx, db, settings.Master{
 		Version: buildinfo.Version, StartedAt: time.Now(), PanelDefaultAddr: cfg.httpAddr, PanelTLS: cfg.tlsCert != "",
 		EnrollListenAddr: cfg.enrollAddr, EnrollAddr: publicAddr, CAFingerprint: pki.Fingerprint(ca.Cert),
+		Restartable: cfg.restartCode != 0,
 	}, masterCert)
 	if err != nil {
 		return err
@@ -116,11 +125,23 @@ func serve(ctx context.Context, cfg config) error {
 	go updates.Run(ctx)
 	usageStore := usage.NewStore(db, nodes)
 	go usageStore.Run(ctx)
+	// restarted is closed when an administrator restarts the master. Moves would be cut off.
+	restarted, once := make(chan struct{}), sync.Once{}
+	var restart func() error
+	if cfg.restartCode != 0 {
+		restart = func() error {
+			err := moves.CheckIdle()
+			if err == nil {
+				once.Do(func() { close(restarted) })
+			}
+			return err
+		}
+	}
 	httpServer := &http.Server{
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
-			Usage: usageStore, Moves: moves,
+			Usage: usageStore, Moves: moves, Restart: restart,
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -137,18 +158,27 @@ func serve(ctx context.Context, cfg config) error {
 	slog.Info("Master started", "version", buildinfo.Version, "panel", conf.Master().PanelAddr,
 		"enrollment", cfg.enrollAddr, "public_enrollment", conf.EnrollAddr(), "ca_fingerprint", pki.Fingerprint(ca.Cert))
 
+	restarting := false
 	select {
 	case err = <-errc:
 	case <-ctx.Done():
+	case <-restarted:
+		restarting = true
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	grpcServer.GracefulStop()
 	err = errors.Join(err, httpServer.Shutdown(shutdownCtx))
-	if err != nil {
+	switch {
+	case err != nil:
 		slog.Error("Master stopped", "err", err)
-	} else {
+	case restarting:
+		slog.Info("Master stopped to restart")
+	default:
 		slog.Info("Master stopped")
+	}
+	if restarting {
+		return RestartExit(cfg.restartCode)
 	}
 	return err
 }
@@ -167,6 +197,8 @@ type Services struct {
 	Updates   *update.Service
 	Usage     *usage.Store
 	Moves     *server.Moves
+	// Restart restarts the master, if its service manager starts it again; otherwise nil.
+	Restart func() error
 }
 
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
@@ -189,7 +221,7 @@ func API(s Services) *http.ServeMux {
 	api := http.NewServeMux()
 	m := access.NewMux(api, s.Moves.Guard, s.Logs.Audit())
 	access.NewHandler(s.Access, s.Users).Register(m)
-	settings.NewHandler(s.Settings).Register(m)
+	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes).Register(m)

@@ -18,6 +18,7 @@ import { LimitsFields } from "@/features/nodes/limits-fields"
 import { UpdateCheck } from "@/features/updates/update-check"
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format"
 import { type Master, type MasterSettings, type SettingsView, settingsQuery, useUpdateSettings } from "./api"
+import { RestartButton } from "./restart-button"
 
 /** The General tab: the running master and its settings. */
 export function GeneralSettingsPage() {
@@ -26,18 +27,28 @@ export function GeneralSettingsPage() {
   if (error) return <ErrorCallout error={error} />
   return (
     <>
-      <MasterFacts master={data.master} effectiveEnrollAddr={data.settings.enrollAddr || data.master.enrollAddr} />
+      {/* Remounting after a restart measures the uptime from now. */}
+      <MasterFacts key={data.master.startedAt} master={data.master} settings={data.settings} />
       {/* Remounting on save resets the form to what the master stored. */}
       <SettingsForm key={JSON.stringify(data.settings)} view={data} />
     </>
   )
 }
 
-function MasterFacts({ master, effectiveEnrollAddr }: { master: Master; effectiveEnrollAddr: string }) {
+/** Where the panel listens after the next start of the master. */
+const nextPanelAddr = (settings: MasterSettings, master: Master) => settings.panelAddr || master.panelDefaultAddr
+
+/** Whether the signed-in user can restart the master from the panel. */
+function useCanRestart(master: Master) {
+  return useAccess().admin && master.restartable
+}
+
+function MasterFacts({ master, settings }: { master: Master; settings: MasterSettings }) {
   const [openedAt] = useState(Date.now)
+  const canRestart = useCanRestart(master)
   const details: [string, string][] = [
     ["Enrollment endpoint", master.enrollListenAddr],
-    ["Join tokens connect to", effectiveEnrollAddr],
+    ["Join tokens connect to", settings.enrollAddr || master.enrollAddr],
     ["CA fingerprint (SHA-256)", master.caFingerprint],
   ]
   return (
@@ -56,14 +67,17 @@ function MasterFacts({ master, effectiveEnrollAddr }: { master: Master; effectiv
           Renewed automatically
         </StatCard>
       </div>
-      <dl className="mt-4 surface grid gap-x-6 gap-y-4 rounded-xl px-5 py-4 md:grid-cols-[auto_auto_1fr]">
-        {details.map(([term, value]) => (
-          <div key={term} className="min-w-0">
-            <dt className="text-xs text-muted-foreground">{term}</dt>
-            <dd className="mt-0.5 font-mono text-sm font-medium break-all">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className="mt-4 surface flex flex-wrap items-center gap-x-6 gap-y-4 rounded-xl px-5 py-4">
+        <dl className="grid min-w-0 flex-1 gap-x-6 gap-y-4 md:grid-cols-[auto_auto_1fr]">
+          {details.map(([term, value]) => (
+            <div key={term} className="min-w-0">
+              <dt className="text-xs text-muted-foreground">{term}</dt>
+              <dd className="mt-0.5 font-mono text-sm font-medium break-all">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {canRestart && <RestartButton master={master} next={nextPanelAddr(settings, master)} />}
+      </div>
     </>
   )
 }
@@ -104,13 +118,15 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               className="font-mono"
               placeholder={master.panelDefaultAddr}
               maxLength={47}
+              disabled={!access.admin}
               value={form.panelAddr}
               onChange={(e) => set({ panelAddr: e.target.value })}
             />
             <FieldDescription>
               IP address and port, e.g. <span className="font-mono">0.0.0.0:8080</span> for all interfaces, with a port from 1024 on. Leave it
               empty to use <span className="font-mono">{master.panelDefaultAddr}</span> from the command line, which the panel also falls back
-              to if it can't listen at this address. Browsers only sign in over HTTPS, e.g. through a reverse proxy.
+              to if it can't listen at this address. Browsers only sign in over HTTPS, e.g. through a reverse proxy. Only administrators can
+              change it, as it can open the panel to other networks.
             </FieldDescription>
           </Field>
           <PanelRestartNotice settings={settings} master={master} />
@@ -216,7 +232,8 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
 
 /** Tells where the panel listens until the master starts again, if the settings name another address. */
 function PanelRestartNotice({ settings, master }: { settings: MasterSettings; master: Master }) {
-  const next = settings.panelAddr || master.panelDefaultAddr
+  const canRestart = useCanRestart(master)
+  const next = nextPanelAddr(settings, master)
   if (next === master.panelAddr) return null
   return (
     <Callout tone={master.panelAddrError ? "warning" : "info"} icon={ArrowClockwiseIcon} role="status" title="Applies after a restart">
@@ -229,6 +246,11 @@ function PanelRestartNotice({ settings, master }: { settings: MasterSettings; ma
         <p className="mt-1">
           When it started last, it couldn't listen at the address from the settings: <span className="font-mono">{master.panelAddrError}</span>
         </p>
+      )}
+      {canRestart && (
+        <div className="mt-3">
+          <RestartButton master={master} next={next} label="Restart now" />
+        </div>
       )}
     </Callout>
   )

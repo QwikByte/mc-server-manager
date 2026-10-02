@@ -8,7 +8,11 @@ Wants=network-online.target mcsm-master-update.path
 User=mcsm
 Group=mcsm
 EnvironmentFile=-/etc/mcsm/master.env
-ExecStart=/usr/bin/mcsm-master --data-dir /var/lib/mcsm-master serve $MCSM_MASTER_OPTS
+ExecStart=/usr/bin/mcsm-master --data-dir /var/lib/mcsm-master serve --restart-exit-code 75 $MCSM_MASTER_OPTS
+# Administrators restart the master from the panel: it stops and exits with 75, then
+# systemd starts it again, also reading master.env again.
+SuccessExitStatus=75
+RestartForceExitStatus=75
 StateDirectory=mcsm-master
 StateDirectoryMode=0700
 LogsDirectory=mcsm-master

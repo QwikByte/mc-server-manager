@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -29,5 +30,21 @@ func TestMovesGuard(t *testing.T) {
 	moves.update("s1", func(m *Move) { now := time.Now(); m.FinishedAt = &now })
 	if code := call("POST /api/nodes/{node}/servers/{id}/start", "POST"); code != http.StatusNoContent || moves.Busy("s1") {
 		t.Fatalf("change after the move: %d", code)
+	}
+}
+
+// Restarting the master would cut moves off.
+func TestMovesCheckIdle(t *testing.T) {
+	moves := NewMoves()
+	if err := moves.CheckIdle(); err != nil {
+		t.Fatal(err)
+	}
+	moves.start(&Move{ServerID: "s1", ServerName: "Lobby", StartedAt: time.Now()})
+	if err := moves.CheckIdle(); err == nil || !strings.Contains(err.Error(), "Lobby is moving") {
+		t.Fatalf("while moving: %v", err)
+	}
+	moves.update("s1", func(m *Move) { now := time.Now(); m.FinishedAt = &now })
+	if err := moves.CheckIdle(); err != nil {
+		t.Fatalf("after the move: %v", err)
 	}
 }

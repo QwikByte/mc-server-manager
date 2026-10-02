@@ -77,6 +77,8 @@ type Master struct {
 	EnrollAddr           string    `json:"enrollAddr"`
 	CAFingerprint        string    `json:"caFingerprint"`
 	CertificateExpiresAt time.Time `json:"certificateExpiresAt"`
+	// Restartable tells whether administrators can restart the master from the panel.
+	Restartable bool `json:"restartable"`
 }
 
 type Service struct {

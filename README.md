@@ -251,10 +251,12 @@ only shows to users with the permission for it.
 
 - **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings.
   The address the panel listens at (it replaces `--http-addr`; empty uses the flag again) applies when the master starts
-  again, e.g. with `systemctl restart mcsm-master` or the next update; the page says so until then. It is checked when
-  saved, and if the master can't listen there when it starts, e.g. because another program took the port, the panel
-  falls back to `--http-addr` and shows why, so a wrong address can't lock you out. The other settings apply right
-  away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
+  again, e.g. with **Restart master** or the next update; the page says so until then. Only administrators change it,
+  as it can open the panel to other networks. It is checked when saved, and if the master can't listen there when it
+  starts, e.g. because another program took the port, the panel falls back to `--http-addr` and shows why, so a wrong
+  address can't lock you out. **Restart master**, for administrators, stops the master and lets systemd start it again
+  (also reading `master.env` again), unless servers are moving to another node; Minecraft servers keep running. The
+  other settings apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
   flag again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel
   last (1 hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default),
   the port range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can

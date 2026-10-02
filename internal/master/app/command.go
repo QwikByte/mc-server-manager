@@ -36,6 +36,7 @@ type config struct {
 	tlsCert        string
 	tlsKey         string
 	trustedProxies []string
+	restartCode    int
 	enrollAddr     string
 	publicAddr     string
 	log            logging.Options
@@ -49,6 +50,8 @@ func Command() *cobra.Command {
 		Short:        "Admin panel and control plane of MC Server Manager",
 		Version:      buildinfo.Version,
 		SilenceUsage: true,
+		// main prints errors, except a restart.
+		SilenceErrors: true,
 	}
 	root.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "/var/lib/mcsm-master", "directory for the database and the certificate authority")
 
@@ -63,6 +66,7 @@ func Command() *cobra.Command {
 	f.StringVar(&cfg.tlsCert, "tls-cert", "", "TLS certificate of the admin panel; omit behind a TLS-terminating reverse proxy")
 	f.StringVar(&cfg.tlsKey, "tls-key", "", "TLS private key of the admin panel")
 	f.StringSliceVar(&cfg.trustedProxies, "trusted-proxy", nil, "IP addresses or CIDR networks of reverse proxies whose X-Forwarded-For or X-Real-IP header tells the client's address for the sign-in rate limit and the log, e.g. 127.0.0.1")
+	f.IntVar(&cfg.restartCode, "restart-exit-code", 0, "exit code for which the service manager starts the master again, e.g. systemd's RestartForceExitStatus; with it, administrators can restart the master from the panel")
 	f.StringVar(&cfg.enrollAddr, "enroll-addr", ":9443", "listen address of the enrollment endpoint")
 	f.StringVar(&cfg.publicAddr, "public-enroll-addr", "", "host:port agents use to reach the enrollment endpoint (default <hostname>:<enroll port>); the panel's settings can replace it")
 	cfg.log.AddFlags(f)

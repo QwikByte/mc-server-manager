@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,7 +15,13 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := app.Command().ExecuteContext(ctx); err != nil {
+	err := app.Command().ExecuteContext(ctx)
+	var restart app.RestartExit
+	switch {
+	case errors.As(err, &restart):
+		os.Exit(int(restart)) // its service manager starts the master again
+	case err != nil:
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }

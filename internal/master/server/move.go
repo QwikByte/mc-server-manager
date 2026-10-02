@@ -69,6 +69,18 @@ func (m *Moves) Busy(serverID string) bool {
 	return mv != nil && mv.FinishedAt == nil
 }
 
+// CheckIdle refuses to cut off moves in progress, e.g. by restarting the master.
+func (m *Moves) CheckIdle() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, mv := range m.moves {
+		if mv.FinishedAt == nil {
+			return httpapi.Errorf(http.StatusConflict, "%s is moving to another node. Try again when it is done.", mv.ServerName)
+		}
+	}
+	return nil
+}
+
 // Check refuses changes to a server while it moves, as they would be lost.
 func (m *Moves) Check(serverID string) error {
 	if m.Busy(serverID) {
