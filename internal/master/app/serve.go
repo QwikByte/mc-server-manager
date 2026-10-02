@@ -33,6 +33,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/master/terminal"
 	"github.com/QwikByte/mc-server-manager/internal/master/update"
+	"github.com/QwikByte/mc-server-manager/internal/master/usage"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 	"github.com/QwikByte/mc-server-manager/web"
 )
@@ -99,11 +100,14 @@ func serve(ctx context.Context, cfg config) error {
 	}
 	updates := update.New(nodes, conf, update.Options{DataDir: cfg.dataDir})
 	go updates.Run(ctx)
+	usageStore := usage.NewStore(db, nodes)
+	go usageStore.Run(ctx)
 	httpServer := &http.Server{
 		Addr: cfg.httpAddr,
 		Handler: Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
+			Usage: usageStore,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -148,6 +152,7 @@ type Services struct {
 	Tasks     *schedule.Service
 	Logs      *logs.Store
 	Updates   *update.Service
+	Usage     *usage.Store
 }
 
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
@@ -174,7 +179,7 @@ func API(s Services) *http.ServeMux {
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tasks, s.Access).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tasks, s.Access, s.Usage).Register(m)
 	network.NewHandler(s.Networks).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
@@ -184,6 +189,7 @@ func API(s Services) *http.ServeMux {
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
 	update.NewHandler(s.Updates).Register(m)
+	usage.NewHandler(s.Usage).Register(m)
 	return api
 }
 

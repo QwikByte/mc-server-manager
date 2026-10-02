@@ -23,6 +23,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime/docker"
 	"github.com/QwikByte/mc-server-manager/internal/agent/server"
+	"github.com/QwikByte/mc-server-manager/internal/agent/stats"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
@@ -57,6 +58,7 @@ func serve(ctx context.Context, cfg config) error {
 	svc := newServices(rt, identity, locations, buf, slog.Default())
 	remote := svc.grpcServer(agentlogs.FromMaster, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
 	localSrv := svc.grpcServer(agentlogs.FromLocal, grpc.Creds(local.NewCredentials()))
+	go svc.stats.Run(ctx)
 
 	tcpListener, err := net.Listen("tcp", cfg.listenAddr)
 	if err != nil {
@@ -104,6 +106,7 @@ type services struct {
 	properties *properties.Service
 	plugin     *plugin.Service
 	backup     *backup.Service
+	stats      *stats.Service
 	log        *agentlogs.Service
 	calls      *slog.Logger
 }
@@ -118,6 +121,7 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 		properties: properties.NewService(rt),
 		plugin:     plugin.NewService(rt),
 		backup:     backups,
+		stats:      stats.NewService(rt),
 		log:        agentlogs.NewService(buf),
 		calls:      calls,
 	}
@@ -132,6 +136,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 	mcsmv1.RegisterPropertiesServiceServer(srv, s.properties)
 	mcsmv1.RegisterPluginServiceServer(srv, s.plugin)
 	mcsmv1.RegisterBackupServiceServer(srv, s.backup)
+	mcsmv1.RegisterStatsServiceServer(srv, s.stats)
 	mcsmv1.RegisterLogServiceServer(srv, s.log)
 	return srv
 }

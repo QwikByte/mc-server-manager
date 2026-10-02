@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { StatCard } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { niceMax } from "@/lib/chart"
 import { cn } from "@/lib/utils"
 import { type LogBucket, type LogFilter, statsQuery } from "./api"
 import { levels } from "./meta"
@@ -16,12 +17,6 @@ const series = [
 const count = new Intl.NumberFormat()
 const hourOf = (b: LogBucket) => new Date(b.start).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
 const totalOf = (b: LogBucket) => b.debug + b.info + b.warn + b.error
-
-/** Rounds up to 1, 2, 2.5 or 5 times a power of ten, for the top of the axis. */
-function niceMax(value: number) {
-  const power = 10 ** Math.floor(Math.log10(Math.max(value, 1)))
-  return [1, 2, 2.5, 5, 10].map((m) => m * power).find((v) => v >= value) ?? value
-}
 
 /** Key figures and a chart of the last 24 hours, for the entries of a filter. */
 export function LogOverview({ filter, onSelectHour }: { filter: LogFilter; onSelectHour: (start: Date) => void }) {

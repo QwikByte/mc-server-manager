@@ -1,5 +1,6 @@
 import {
   ArchiveIcon,
+  ChartLineIcon,
   ClockCounterClockwiseIcon,
   FolderIcon,
   GearIcon,
@@ -37,6 +38,7 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
  */
 const tabs = [
   { to: "/nodes/$nodeId/servers/$serverId", label: () => "Console", icon: TerminalIcon, exact: true, permission: "console.view" },
+  { to: "/nodes/$nodeId/servers/$serverId/usage", label: () => "Usage", icon: ChartLineIcon, exact: false, permission: "servers.view" },
   { to: "/nodes/$nodeId/servers/$serverId/files", label: () => "Files", icon: FolderIcon, exact: false, permission: "files.read" },
   {
     to: "/nodes/$nodeId/servers/$serverId/properties",

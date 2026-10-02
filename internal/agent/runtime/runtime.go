@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
@@ -82,6 +83,20 @@ type NetworkBackend struct {
 	Address  string
 }
 
+// Usage is what a running server uses. CPU time and network traffic count up from the
+// start of the server.
+type Usage struct {
+	CPUTime     time.Duration
+	MemoryBytes uint64
+	// MemoryLimit is the most memory the server may use; 0 if it isn't limited.
+	MemoryLimit uint64
+	NetRxBytes  uint64
+	NetTxBytes  uint64
+	// Host is the address at which the agent reaches the ports of the server, e.g. its
+	// console port; empty if it can't.
+	Host string
+}
+
 // Info describes the runtime and the machine it runs on.
 type Info struct {
 	Name        string // e.g. "docker 29.0.0"
@@ -103,6 +118,8 @@ type Runtime interface {
 	Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error]
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, id, command string) (string, error)
+	// Usage returns what a running server uses, or ErrNotRunning.
+	Usage(ctx context.Context, id string) (Usage, error)
 	// Update replaces the settings of a server, keeping its type, data and network role.
 	// A running server restarts.
 	Update(ctx context.Context, spec Spec) error

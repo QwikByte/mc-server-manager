@@ -114,6 +114,19 @@ func Write(dir *datadir.Dir, changes map[string]string) error {
 	return dir.WriteFile(file, []byte(update(parse(string(data)), changes)))
 }
 
+// Read returns all properties of server.properties, also the secret ones, for the agent's
+// own use. A missing file has none.
+func Read(dir *datadir.Dir) (map[string]string, error) {
+	data, err := dir.ReadOptional(file)
+	props := map[string]string{}
+	for _, e := range parse(string(data)) {
+		if e.key != "" {
+			props[e.key] = e.value
+		}
+	}
+	return props, err
+}
+
 // validate returns a message for the operator if the changes are invalid.
 func validate(changes, locked map[string]string) string {
 	if len(changes) > maxChanges {

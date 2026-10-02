@@ -48,6 +48,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/master/update"
+	"github.com/QwikByte/mc-server-manager/internal/master/usage"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -216,7 +217,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
 		Networks: network.NewService(m.db, nodes), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
-		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
+		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes),
 	}
 }
 
@@ -416,6 +417,16 @@ func (f *fakeRuntime) SendCommand(_ context.Context, _, command string) (string,
 	defer f.mu.Unlock()
 	f.commands = append(f.commands, command)
 	return "§6ran " + command, nil
+}
+
+func (f *fakeRuntime) Usage(_ context.Context, id string) (runtime.Usage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	i := slices.IndexFunc(f.servers, func(s runtime.Server) bool { return s.ID == id })
+	if i < 0 || f.servers[i].State == mcsmv1.ServerState_SERVER_STATE_STOPPED {
+		return runtime.Usage{}, runtime.ErrNotRunning
+	}
+	return runtime.Usage{MemoryBytes: 512 << 20, MemoryLimit: 1 << 30}, nil
 }
 
 func (f *fakeRuntime) consoleCommands() []string {

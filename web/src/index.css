@@ -34,6 +34,8 @@
   --color-warning: var(--warning);
   --color-info: var(--info);
   --color-violet: var(--violet);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
   --color-console: var(--console);
   --color-console-foreground: var(--console-foreground);
   --color-console-muted: var(--console-muted);
@@ -87,6 +89,9 @@
   --console-command: #34d399;
   --console-warn: #fbbf24;
   --console-error: #fb7185;
+  /* Series of charts, apart from the status colours; checked for colour vision deficiencies. */
+  --series-1: #2a78d6;
+  --series-2: #b5338a;
   /* Syntax colours of the file editor, which shares the console's dark surface. */
   --code-string: #fcd34d;
   --code-literal: #93c5fd;
@@ -95,6 +100,8 @@
 
 .dark {
   color-scheme: dark;
+  --series-1: #3987e5;
+  --series-2: #c2409a;
   --background: #0a0d14;
   --foreground: #e9ecf3;
   --card: #11151f;

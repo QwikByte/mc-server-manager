@@ -1,0 +1,199 @@
+// Package usage keeps a history of what nodes and their servers use, from the
+// measurements of the agents, and serves it to the panel along with the latest one.
+package usage
+
+import (
+	"context"
+	"database/sql"
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	"github.com/QwikByte/mc-server-manager/internal/logging"
+	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/mc-server-manager/internal/master/node"
+)
+
+const (
+	sampleInterval = time.Minute
+	retention      = 7 * 24 * time.Hour
+	statsTimeout   = 10 * time.Second
+)
+
+// Ranges are the time spans a history covers, with the step its averages are taken over.
+var Ranges = map[string]struct{ Span, Step time.Duration }{
+	"day":  {24 * time.Hour, 5 * time.Minute},
+	"week": {retention, 30 * time.Minute},
+}
+
+// Nodes provides the nodes and connections to their agents.
+type Nodes interface {
+	List(ctx context.Context) ([]node.Node, error)
+	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
+}
+
+// Store keeps what nodes and servers used during the last week.
+type Store struct {
+	db    *sql.DB
+	nodes Nodes
+}
+
+func NewStore(db *sql.DB, nodes Nodes) *Store { return &Store{db: db, nodes: nodes} }
+
+// Run records the latest measurement of every agent each minute until ctx ends.
+func (s *Store) Run(ctx context.Context) {
+	t := time.NewTicker(sampleInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			s.sample(ctx, now)
+		}
+	}
+}
+
+func (s *Store) sample(ctx context.Context, now time.Time) {
+	nodes, err := s.nodes.List(ctx)
+	if err != nil {
+		slog.Warn("Can't record the usage of the nodes", logging.Nodes, "err", err)
+		return
+	}
+	var wg sync.WaitGroup
+	for _, n := range nodes {
+		if n.EnrolledAt == nil {
+			continue
+		}
+		wg.Go(func() {
+			stats, err := s.Latest(ctx, n.ID)
+			if err == nil {
+				err = s.add(ctx, n.ID, now, stats)
+			}
+			if err != nil { // offline nodes are left out
+				slog.Debug("Can't record the usage of a node", logging.Nodes, logging.KeyNode, n.ID, "err", err)
+			}
+		})
+	}
+	wg.Wait()
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM usage_samples WHERE time < ?`, now.Add(-retention).Unix()); err != nil {
+		slog.Warn("Can't delete old usage", logging.Nodes, "err", err)
+	}
+}
+
+// Latest asks the agent of a node for its latest measurement.
+func (s *Store) Latest(ctx context.Context, nodeID string) (*mcsmv1.GetStatsResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, statsTimeout)
+	defer cancel()
+	conn, err := s.nodes.Conn(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	res, err := mcsmv1.NewStatsServiceClient(conn).GetStats(ctx, &mcsmv1.GetStatsRequest{})
+	if status.Code(err) == codes.Unimplemented {
+		err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of this node to see what it uses.")
+	}
+	return res, err
+}
+
+// add records the node and its running servers.
+func (s *Store) add(ctx context.Context, nodeID string, at time.Time, stats *mcsmv1.GetStatsResponse) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	insert, err := tx.PrepareContext(ctx, `
+		INSERT INTO usage_samples (time, node_id, server_id, cpu_millis, memory_bytes, net_received, net_sent, disk_bytes, players, tps)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer insert.Close()
+	n := stats.GetNode()
+	if _, err := insert.ExecContext(ctx, at.Unix(), nodeID, "", n.GetCpuMillis(), n.GetMemoryUsedBytes(), 0, 0, 0, nil, nil); err != nil {
+		return err
+	}
+	for _, srv := range stats.GetServers() {
+		if !srv.GetRunning() {
+			continue
+		}
+		var players, tps any
+		if p := srv.GetPlayers(); p != nil {
+			players = p.GetOnline()
+		}
+		if srv.GetTps() > 0 {
+			tps = srv.GetTps()
+		}
+		if _, err := insert.ExecContext(ctx, at.Unix(), nodeID, srv.GetId(), srv.GetCpuMillis(), srv.GetMemoryBytes(),
+			srv.GetNetworkReceivedBytesPerSecond(), srv.GetNetworkSentBytesPerSecond(), srv.GetDiskBytes(), players, tps); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// Point is what a node or server used on average during a step of a history.
+type Point struct {
+	Time            time.Time `json:"time"`
+	CPUMillis       float64   `json:"cpuMillis"`
+	MemoryBytes     float64   `json:"memoryBytes"`
+	NetworkReceived float64   `json:"networkReceived"`
+	NetworkSent     float64   `json:"networkSent"`
+	DiskBytes       int64     `json:"diskBytes"`
+	// Players is the most players during the step.
+	Players *int64   `json:"players"`
+	TPS     *float64 `json:"tps"`
+}
+
+// History returns the usage of a node, or of one of its servers, since span ago, with the
+// averages of each step. Steps in which it didn't run are missing.
+func (s *Store) History(ctx context.Context, nodeID, serverID string, span, step time.Duration) ([]Point, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT time / ?1 * ?1 AS start, AVG(cpu_millis), AVG(memory_bytes), AVG(net_received), AVG(net_sent),
+			MAX(disk_bytes), MAX(players), AVG(tps)
+		FROM usage_samples WHERE node_id = ?2 AND server_id = ?3 AND time >= ?4
+		GROUP BY start ORDER BY start`,
+		int64(step.Seconds()), nodeID, serverID, time.Now().Add(-span).Unix())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	points := []Point{}
+	for rows.Next() {
+		var p Point
+		var start int64
+		var players sql.NullInt64
+		var tps sql.NullFloat64
+		if err := rows.Scan(&start, &p.CPUMillis, &p.MemoryBytes, &p.NetworkReceived, &p.NetworkSent, &p.DiskBytes, &players, &tps); err != nil {
+			return nil, err
+		}
+		p.Time = time.Unix(start, 0)
+		if players.Valid {
+			p.Players = &players.Int64
+		}
+		if tps.Valid {
+			p.TPS = &tps.Float64
+		}
+		points = append(points, p)
+	}
+	return points, rows.Err()
+}
+
+// Forget deletes the history of a deleted server.
+func (s *Store) Forget(ctx context.Context, nodeID, serverID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM usage_samples WHERE node_id = ? AND server_id = ?`, nodeID, serverID)
+	return err
+}
+
+// Move keeps the history of a server that moved to another node.
+func (s *Store) Move(ctx context.Context, serverID, from, to string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE usage_samples SET node_id = ? WHERE node_id = ? AND server_id = ?`, to, from, serverID)
+	return err
+}
