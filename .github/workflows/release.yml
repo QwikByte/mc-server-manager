@@ -3,12 +3,20 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Releases main from the Actions tab: the workflow creates the tag itself.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, e.g. v1.2.0, or v1.3.0-rc.1 for a pre-release
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   release:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write # publishes the release
@@ -27,12 +35,27 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: go test -race ./...
+      # Tags pushed with the workflow's token start no further workflow, so this run releases it.
+      # A run that failed after pushing the tag can be repeated for the same commit.
+      - name: Tag the release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::Invalid version: $VERSION"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            [ "$(git rev-list -n 1 "$VERSION")" = "$(git rev-parse HEAD)" ] || { echo "::error::$VERSION already tags another commit"; exit 1; }
+          else
+            git tag "$VERSION"
+            git push origin "$VERSION"
+          fi
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.version || github.ref_name }}
       # Proves that the files of the release were built here, from this tag:
       # gh attestation verify <file> --repo QwikByte/mc-server-manager
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

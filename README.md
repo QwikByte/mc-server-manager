@@ -407,9 +407,10 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 | `make generate` | Regenerates the gRPC code after changing `api/**/*.proto`                      |
 | `make packages` | Builds the packages and archives of a release into `dist/`, without publishing |
 
-**Releasing.** Pushing a tag `vX.Y.Z`, or `vX.Y.Z-rc.N` for a pre-release, runs the release workflow: it tests, builds
-the panel and both programs with [GoReleaser](https://goreleaser.com) and publishes a GitHub release with the packages,
-archives, checksums, attestations and the installer, which installs the version it belongs to.
+**Releasing.** The release workflow tests, builds the panel and both programs with [GoReleaser](https://goreleaser.com)
+and publishes a GitHub release with the packages, archives, checksums, attestations and the installer, which installs
+the version it belongs to. Start it under **Actions → Release → Run workflow** with a version `vX.Y.Z`, or `vX.Y.Z-rc.N`
+for a pre-release: it tags the newest commit of `main`. Pushing such a tag runs it too:
 
 ```sh
 git tag v1.2.0 && git push origin v1.2.0
