@@ -82,8 +82,12 @@ Allow port 7443 only from the master's IP address.
 **Everything on one machine.** `… | sudo bash -s -- all` installs master and agent, registers the machine as node and
 connects its agent, which then only accepts connections from the machine itself.
 
-**Updates.** `… | sudo bash -s -- update` updates what is installed to the latest release. Running services restart;
-Minecraft servers keep running. Update the master first, then the nodes.
+**Updates.** The master looks for a new release every 6 hours. Administrators then see a notice in the panel with the
+release notes and install it with **Install now**: the master installs the release, restarts on it, and then updates
+every agent to its version, also the one on its own machine. Running services restart; Minecraft servers keep running.
+Agents that were offline are listed with a button to update them later. The check can be turned off in the settings,
+e.g. for a master without internet access. On the command line, `… | sudo bash -s -- update` updates what is
+installed; update the master first, then the nodes.
 
 | Where                                         | What                                                                                           |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -211,8 +215,9 @@ only shows to users with the permission for it.
 - **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings,
   which apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
   flag again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel
-  last (1 hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default) and
-  the port range and memory reserve that new nodes get.
+  last (1 hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default),
+  the port range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can
+  also look for an update right away.
 - **Agents** lists all nodes with their agent version, certificate and settings, which can be changed there too.
 - **Terminal** runs the commands of `mcsm-agent` (`status`, `server …`, `backup …`) on any node, and the master's own
   commands: `status`, `node list`, `node renew <node>` and `logs`. `help` lists them; output streams in as it happens, e.g.
@@ -237,6 +242,7 @@ Users get their permissions from groups; a user can be in several groups and has
   or groups need the permission for all servers. Other permissions, e.g. for networks or policies, apply everywhere,
   because they act on any server.
 - **Administrators.** The built-in Administrators group has every permission, also those that later versions add.
+  Only its members see and install updates; no permission allows that to other groups.
   `mcsm-master user add` creates administrators, e.g. the first one or after losing access. Existing users became
   administrators with this version.
 - **Invitations.** New users get a setup link (valid for three days, usable once) to choose their password; the same
@@ -311,6 +317,11 @@ Users get their permissions from groups; a user can be in several groups and has
   carry build provenance attestations, signed through GitHub, that tie them to the release workflow and the tagged
   commit. The master runs as its own system user with a hardened systemd unit, and refuses a data directory of another
   user, so a command run as root can't leave files there that lock the master out.
+- **Updates.** The master can't install anything itself. To update, it only creates a file that makes systemd start
+  `mcsm-master-update`, which runs as root but takes no input from the master: it installs the latest release with the
+  installer of the installed package, checking the checksums. Agents only install releases newer than themselves, so even
+  a compromised master can't downgrade a node to a vulnerable version, and the version must have the form of a release.
+  `systemctl mask mcsm-master-update.path` forbids updates from the panel.
 
 ## Repository layout
 
@@ -331,6 +342,7 @@ internal/master/
   settings/             settings of the master that the panel changes, and a description of the running master
   terminal/             runs the commands of the master and of the agents for the panel
   node/                 node registry, enrollment, agent connections
+  update/               looks for new releases, updates the master through systemd and the agents after it
   server/               server API, forwarded to the node's agent
   network/              networks of servers behind a proxy, applied through the agents
   files/                file manager, streamed between the browser and the agent
@@ -347,7 +359,7 @@ internal/master/
 internal/agent/
   app/                  wiring, listeners, local CLI
   enroll/               enrollment client
-  node/                 machine info
+  node/                 machine info, certificate renewal, updates of the node
   server/               server lifecycle and input validation
   storage/              storage locations allowed for server data
   datadir/              confined access to a server's data, owned by the server's user
@@ -362,7 +374,7 @@ internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, nodes, servers, files, properties, networks, plugins, templates, backups, policies,
                         schedules (shared by backups and policies), settings, terminal, logs,
-                        access (users, groups and the permission checks of the panel)
+                        access (users, groups and the permission checks of the panel), updates
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

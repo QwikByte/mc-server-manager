@@ -56,6 +56,10 @@ const (
 	GroupsManage Permission = "groups.manage"
 )
 
+// Administrators is no permission but the built-in group, for what only its members may do,
+// e.g. updating MC Server Manager. Groups can't be given it.
+const Administrators Permission = "administrators"
+
 // Info describes a permission for the panel.
 type Info struct {
 	ID          Permission `json:"id"`

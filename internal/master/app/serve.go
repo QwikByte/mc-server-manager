@@ -32,6 +32,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
 	"github.com/QwikByte/mc-server-manager/internal/master/terminal"
+	"github.com/QwikByte/mc-server-manager/internal/master/update"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 	"github.com/QwikByte/mc-server-manager/web"
 )
@@ -96,11 +97,13 @@ func serve(ctx context.Context, cfg config) error {
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
+	updates := update.New(nodes, conf, update.Options{DataDir: cfg.dataDir})
+	go updates.Run(ctx)
 	httpServer := &http.Server{
 		Addr: cfg.httpAddr,
 		Handler: Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
-			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore,
+			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -144,6 +147,7 @@ type Services struct {
 	Templates *template.Service
 	Tasks     *schedule.Service
 	Logs      *logs.Store
+	Updates   *update.Service
 }
 
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
@@ -179,6 +183,7 @@ func API(s Services) *http.ServeMux {
 	backup.NewHandler(s.Nodes).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
+	update.NewHandler(s.Updates).Register(m)
 	return api
 }
 
