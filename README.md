@@ -59,7 +59,8 @@ the node has minus a reserve for the system (1 GB unless changed). Name and agen
 Releases contain packages for Debian, Ubuntu and their derivatives (`.deb`), Fedora, RHEL, Rocky Linux, AlmaLinux and
 openSUSE (`.rpm`) and Arch Linux, each for x86_64 and arm64. Only Linux with systemd is supported. The installer picks
 the package, checks its checksum and sets everything up. Running it again updates, and `--version vX.Y.Z` installs a
-certain release.
+certain release. While another installation of packages runs, e.g. the automatic updates of a new server, it waits up
+to 10 minutes and says so.
 
 **Master**, the panel:
 
@@ -69,6 +70,7 @@ curl -fsSL https://github.com/QwikByte/mc-server-manager/releases/latest/downloa
 
 It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), and for the password
 of the first administrator, `admin` unless `--admin` names another (without a terminal, it generates one and shows it).
+The password needs at least 12 characters and isn't shown while you type it.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
 `cdn.modrinth.com`. The panel listens on `127.0.0.1:8080`; serve it over HTTPS with a reverse proxy, e.g. with
 [Caddy](https://caddyserver.com) and this `Caddyfile`, which also gets the certificate:
