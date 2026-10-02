@@ -22,3 +22,14 @@ export function formatDate(iso: string): string {
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
 }
+
+/** Formats a duration in its largest whole unit in the viewer's locale, e.g. "3 days" or "5 minutes". */
+export function formatDuration(ms: number): string {
+  const units = [
+    ["day", 86_400_000],
+    ["hour", 3_600_000],
+    ["minute", 60_000],
+  ] as const
+  const [unit, size] = units.find(([, size]) => ms >= size) ?? units[2]
+  return new Intl.NumberFormat(undefined, { style: "unit", unit, unitDisplay: "long" }).format(Math.floor(ms / size))
+}

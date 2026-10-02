@@ -1,12 +1,22 @@
-import { CpuIcon, CubeIcon, HardDrivesIcon, MemoryIcon, PlugsIcon, ShieldCheckIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import {
+  CpuIcon,
+  CubeIcon,
+  HardDrivesIcon,
+  MemoryIcon,
+  PlugsIcon,
+  ShieldCheckIcon,
+  TerminalWindowIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { getRouteApi } from "@tanstack/react-router"
+import { getRouteApi, Link } from "@tanstack/react-router"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { Meter } from "@/components/meter"
 import { BackLink } from "@/components/back-link"
 import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
@@ -41,6 +51,14 @@ export function NodePage() {
             actions={
               <>
                 <NodeSettingsDialog node={node} />
+                {node.enrolledAt && (
+                  <Button variant="outline" asChild>
+                    <Link to="/settings/terminal" search={{ target: node.id }}>
+                      <TerminalWindowIcon />
+                      Terminal
+                    </Link>
+                  </Button>
+                )}
                 {node.status === "online" && <RenewCertificateButton node={node} />}
                 {node.enrolledAt && <NewJoinTokenButton node={node} />}
                 <RemoveNodeButton node={node} />

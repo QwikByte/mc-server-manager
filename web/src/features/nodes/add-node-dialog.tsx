@@ -51,7 +51,7 @@ export function AddNodeDialog() {
               <DialogTitle>Connect {create.data.node.name}</DialogTitle>
               <DialogDescription>The node was added. Connect its agent to start hosting servers.</DialogDescription>
             </DialogHeader>
-            <EnrollSteps joinToken={create.data.joinToken} />
+            <EnrollSteps token={create.data} />
             <DialogFooter>
               <DialogClose asChild>
                 <Button>Done</Button>

@@ -180,6 +180,31 @@ const pluginsRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/plugins/plugins-page"), "PluginsPage"),
 })
 
+const settingsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings",
+  component: lazyRouteComponent(() => import("@/features/settings/settings-layout"), "SettingsLayout"),
+})
+const generalSettingsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/",
+  component: lazyRouteComponent(() => import("@/features/settings/general-page"), "GeneralSettingsPage"),
+})
+const agentsSettingsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "agents",
+  component: lazyRouteComponent(() => import("@/features/settings/agents-page"), "AgentsSettingsPage"),
+})
+const terminalRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "terminal",
+  // target is the ID of the node whose agent runs the commands; without it, the master does.
+  validateSearch: (search: Record<string, unknown>): { target?: string } => ({
+    target: typeof search.target === "string" && search.target ? search.target : undefined,
+  }),
+  component: lazyRouteComponent(() => import("@/features/terminal/terminal-page"), "TerminalPage"),
+})
+
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
@@ -207,6 +232,7 @@ export const router = createRouter({
       newPolicyRoute,
       policyRoute,
       pluginsRoute,
+      settingsRoute.addChildren([generalSettingsRoute, agentsSettingsRoute, terminalRoute]),
     ]),
   ]),
   context: { queryClient },

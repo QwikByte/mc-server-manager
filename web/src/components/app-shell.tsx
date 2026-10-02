@@ -1,18 +1,34 @@
-import { ArchiveIcon, CalendarCheckIcon, GraphIcon, HardDrivesIcon, PuzzlePieceIcon, SignOutIcon, StackIcon } from "@phosphor-icons/react"
+import {
+  ArchiveIcon,
+  CalendarCheckIcon,
+  GearSixIcon,
+  GraphIcon,
+  HardDrivesIcon,
+  PuzzlePieceIcon,
+  SignOutIcon,
+  StackIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useNavigate } from "@tanstack/react-router"
+import { Fragment } from "react"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { meQuery, useLogout } from "@/features/auth/api"
 
 const navigation = [
-  { to: "/nodes", label: "Nodes", icon: HardDrivesIcon },
-  { to: "/networks", label: "Networks", icon: GraphIcon },
-  { to: "/templates", label: "Templates", icon: StackIcon },
-  { to: "/plugins", label: "Plugins", icon: PuzzlePieceIcon },
-  { to: "/backups", label: "Backups", icon: ArchiveIcon },
-  { to: "/policies", label: "Policies", icon: CalendarCheckIcon },
+  {
+    title: "Manage",
+    links: [
+      { to: "/nodes", label: "Nodes", icon: HardDrivesIcon },
+      { to: "/networks", label: "Networks", icon: GraphIcon },
+      { to: "/templates", label: "Templates", icon: StackIcon },
+      { to: "/plugins", label: "Plugins", icon: PuzzlePieceIcon },
+      { to: "/backups", label: "Backups", icon: ArchiveIcon },
+      { to: "/policies", label: "Policies", icon: CalendarCheckIcon },
+    ],
+  },
+  { title: "System", links: [{ to: "/settings", label: "Settings", icon: GearSixIcon }] },
 ] as const
 
 /** A sidebar on large screens, a bar at the top on small ones. */
@@ -32,16 +48,22 @@ export function AppShell() {
           </span>
         </Link>
         <nav aria-label="Main" className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] md:flex-col md:overflow-visible">
-          <p className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase max-md:hidden">Manage</p>
-          {navigation.map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              className="group flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[status=active]:bg-primary/10 data-[status=active]:text-primary md:px-3"
-            >
-              <Icon className="size-5" weight="duotone" />
-              <span className="max-sm:sr-only">{label}</span>
-            </Link>
+          {navigation.map(({ title, links }) => (
+            <Fragment key={title}>
+              <p className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase not-first:pt-5 max-md:hidden">
+                {title}
+              </p>
+              {links.map(({ to, label, icon: Icon }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className="group flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[status=active]:bg-primary/10 data-[status=active]:text-primary md:px-3"
+                >
+                  <Icon className="size-5" weight="duotone" />
+                  <span className="max-sm:sr-only">{label}</span>
+                </Link>
+              ))}
+            </Fragment>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:gap-3">

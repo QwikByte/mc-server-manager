@@ -21,15 +21,25 @@ export interface StorageLocation {
   totalBytes: number
 }
 
-/** Settings that apply to the servers of a node. */
-export interface NodeSettings {
-  /** Storage location preselected for new servers. */
-  defaultStorage: string
+/** Limits for the servers of a node; new nodes get the defaults of the master's settings. */
+export interface NodeLimits {
   /** Port range of servers; null allows any port. */
   portMin: number | null
   portMax: number | null
   /** Memory kept free for the system; null allows assigning more than the node has. */
   memoryReserveMb: number | null
+}
+
+/** Settings that apply to the servers of a node. */
+export interface NodeSettings extends NodeLimits {
+  /** Storage location preselected for new servers. */
+  defaultStorage: string
+}
+
+/** A join token works once, until it expires. */
+export interface JoinToken {
+  joinToken: string
+  joinTokenExpiresAt: string
 }
 
 export interface Node extends NodeSettings {
@@ -70,7 +80,7 @@ export const nodeQuery = (id: string) =>
 export function useCreateNode() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string; address: string }) => api<{ node: Node; joinToken: string }>("/nodes", { body: input }),
+    mutationFn: (input: { name: string; address: string }) => api<JoinToken & { node: Node }>("/nodes", { body: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey }),
   })
 }
@@ -85,7 +95,7 @@ export function useUpdateNode(id: string) {
 
 export function useNewJoinToken(id: string) {
   return useMutation({
-    mutationFn: () => api<{ joinToken: string }>(`/nodes/${id}/join-token`, { method: "POST" }),
+    mutationFn: () => api<JoinToken>(`/nodes/${id}/join-token`, { method: "POST" }),
   })
 }
 
