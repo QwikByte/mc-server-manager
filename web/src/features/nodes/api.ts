@@ -40,6 +40,8 @@ export interface NodeSettings extends NodeLimits {
 export interface JoinToken {
   joinToken: string
   joinTokenExpiresAt: string
+  /** Installs the agent in the master's version on the node and enrolls it with the token. */
+  installCommand: string
 }
 
 export interface Node extends NodeSettings {
