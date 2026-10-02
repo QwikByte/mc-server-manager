@@ -4,10 +4,10 @@ import { api } from "@/lib/api"
 /** A published release of MC Server Manager. */
 export interface Release {
   version: string
-  /** Release notes, as written on GitHub. */
+  /** Release notes, as written on GitHub; empty when GitHub's API limited the master's requests. */
   notes: string
   url: string
-  publishedAt: string
+  publishedAt?: string
 }
 
 /** An update that was asked for and hasn't finished yet, or failed. */
