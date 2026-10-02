@@ -137,7 +137,12 @@ func serve(ctx context.Context, cfg config) error {
 			return err
 		}
 	}
+	// Requests in flight end when the master stops, so that streams such as the warnings
+	// the panel follows don't hold it up until the timeout.
+	requests, endRequests := context.WithCancel(context.Background())
+	defer endRequests()
 	httpServer := &http.Server{
+		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
@@ -145,6 +150,7 @@ func serve(ctx context.Context, cfg config) error {
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	httpServer.RegisterOnShutdown(endRequests)
 
 	errc := make(chan error, 2)
 	go func() { errc <- grpcServer.Serve(enrollListener) }()
