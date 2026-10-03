@@ -18,7 +18,6 @@ export function PluginsPage() {
         icon={PuzzlePieceIcon}
         tone="warning"
         title={t("Plugins & mods")}
-        description={t("Install plugins and mods from Modrinth on any number of your servers.")}
         actions={
           <Select value={type} onValueChange={setType}>
             <SelectTrigger aria-label={t("Software")} className="w-44">

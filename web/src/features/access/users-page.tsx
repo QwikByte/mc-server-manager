@@ -32,10 +32,11 @@ export function UsersPage() {
   if (error) return <ErrorCallout error={error} />
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{t("Users get their permissions from their groups.")}</p>
-        {manage && <InviteDialog groups={groups} />}
-      </div>
+      {manage && (
+        <div className="mb-4 flex justify-end">
+          <InviteDialog groups={groups} />
+        </div>
+      )}
       <div className="surface overflow-hidden rounded-xl">
         <Table>
           <TableHeader>

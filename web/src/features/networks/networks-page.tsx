@@ -22,13 +22,7 @@ export function NetworksPage() {
 
   return (
     <>
-      <PageHeader
-        icon={GraphIcon}
-        tone="violet"
-        title={t("Networks")}
-        description={t("Players join through a Velocity proxy and switch between the servers behind it.")}
-        actions={manage && <CreateNetworkDialog />}
-      />
+      <PageHeader icon={GraphIcon} tone="violet" title={t("Networks")} actions={manage && <CreateNetworkDialog />} />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (

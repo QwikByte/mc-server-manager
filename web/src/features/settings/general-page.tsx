@@ -211,10 +211,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
     <form onSubmit={submit} className="mt-10 surface rounded-2xl px-5 sm:px-8">
       {/* Without the permission to change them, the settings are only shown. */}
       <fieldset disabled={!editable} className="contents">
-        <FormSection
-          title={t("Panel")}
-          description={t("Where this panel can be reached, and how it serves HTTPS. Changes apply when the master starts again.")}
-        >
+        <FormSection title={t("Panel")}>
           <Field>
             <FieldLabel htmlFor="settings-panel-addr">{t("Listen address")}</FieldLabel>
             <Input
@@ -241,7 +238,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
           <PanelRestartNotice settings={settings} master={master} />
         </FormSection>
 
-        <FormSection title={t("Enrollment")} description={t("How new agents reach the master with their join token.")}>
+        <FormSection title={t("Enrollment")}>
           <Field>
             <FieldLabel htmlFor="settings-enroll-addr">{t("Enrollment address")}</FieldLabel>
             <Input
@@ -273,7 +270,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
           </Field>
         </FormSection>
 
-        <FormSection title={t("Sign-in")} description={t("Sessions of administrators in this panel.")}>
+        <FormSection title={t("Sign-in")}>
           <Field>
             <FieldLabel htmlFor="settings-session">{t("Sessions last")}</FieldLabel>
             <NumberInput
@@ -288,7 +285,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
           </Field>
         </FormSection>
 
-        <FormSection title={t("Log")} description={t("What the master and its agents did and what went wrong, shown on the Logs page.")}>
+        <FormSection title={t("Log")}>
           <Field>
             <FieldLabel htmlFor="settings-log-days">{t("Keep entries for")}</FieldLabel>
             <NumberInput
@@ -307,10 +304,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
           </Field>
         </FormSection>
 
-        <FormSection
-          title={t("Updates")}
-          description={t("New releases of MC Server Manager, which administrators install from the panel.")}
-        >
+        <FormSection title={t("Updates")}>
           <Field orientation="horizontal">
             <Switch id="settings-check-updates" checked={form.checkUpdates} onCheckedChange={(checkUpdates) => set({ checkUpdates })} />
             <FieldContent>
@@ -325,10 +319,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
           {access.admin && <UpdateCheck />}
         </FormSection>
 
-        <FormSection
-          title={t("New nodes")}
-          description={t("Limits that nodes get when they are added. Change them for each node in its settings.")}
-        >
+        <FormSection title={t("New nodes")}>
           <LimitsFields
             id="settings-node-defaults"
             form={form.nodeDefaults}

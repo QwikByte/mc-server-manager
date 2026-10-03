@@ -1,8 +1,6 @@
-import { ShieldCheckIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
 import { t } from "i18next"
-import { Callout } from "@/components/callout"
 import { StatusDot } from "@/components/status"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -47,11 +45,6 @@ export function TerminalPage() {
         </Select>
       </Field>
       <Terminal target={node?.id ?? masterTarget} prompt={node ? `mcsm-agent@${node.name}` : "mcsm-master"} />
-      <Callout className="mt-6" icon={ShieldCheckIcon} title={t("Not a shell")}>
-        {t(
-          "The commands of an agent are those of mcsm-agent on the node. They reach it through the master's mutually authenticated connection, like everything the panel does, and nothing runs in a shell. Storage locations and enrollment can only be changed in the CLI on the node itself. The master logs every command with your user name.",
-        )}
-      </Callout>
     </>
   )
 }

@@ -40,7 +40,6 @@ export function NetworkPage() {
             icon={GraphIcon}
             tone="violet"
             title={network.name}
-            description={proxy ? t("Players connect to {{node}} at port {{port}}.", { node: proxy.nodeName, port: proxy.port }) : undefined}
             actions={
               manage && (
                 <>

@@ -34,10 +34,7 @@ export function SetupPage() {
     )
   }
   return (
-    <AuthLayout
-      title={user ? t("Welcome, {{name}}", { name: user.username }) : t("Welcome")}
-      description={t("Choose the password for your account.")}
-    >
+    <AuthLayout title={user ? t("Welcome, {{name}}", { name: user.username }) : t("Welcome")}>
       {isPending ? <Skeleton className="h-52 rounded-xl" /> : <PasswordForm token={token} username={user.username} />}
     </AuthLayout>
   )

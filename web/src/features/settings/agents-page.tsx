@@ -2,8 +2,7 @@ import { GearIcon, HardDrivesIcon, TerminalWindowIcon } from "@phosphor-icons/re
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
-import { Trans } from "react-i18next"
-import { Callout, ErrorCallout } from "@/components/callout"
+import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { Button } from "@/components/ui/button"
@@ -22,12 +21,7 @@ export function AgentsSettingsPage() {
   if (error) return <ErrorCallout error={error} />
   if (nodes.length === 0) {
     return (
-      <EmptyState
-        icon={HardDrivesIcon}
-        tone="info"
-        title={t("No agents yet")}
-        description={t("Add a node to connect its agent to this master.")}
-      >
+      <EmptyState icon={HardDrivesIcon} tone="info" title={t("No agents yet")}>
         <Button asChild>
           <Link to="/nodes">{t("Go to nodes")}</Link>
         </Button>
@@ -35,36 +29,28 @@ export function AgentsSettingsPage() {
     )
   }
   return (
-    <>
-      <div className="surface overflow-hidden rounded-xl">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("Node")}</TableHead>
-              <TableHead className="hidden md:table-cell">{t("Agent")}</TableHead>
-              <TableHead className="hidden lg:table-cell">{t("Certificate")}</TableHead>
-              <TableHead className="hidden sm:table-cell">{t("Ports")}</TableHead>
-              <TableHead className="hidden sm:table-cell">{t("Memory")}</TableHead>
-              <TableHead className="hidden xl:table-cell">{t("Storage")}</TableHead>
-              <TableHead>
-                <span className="sr-only">{t("Actions")}</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {nodes.map((node) => (
-              <AgentRow key={node.id} node={node} />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <Callout className="mt-6" title={t("Only the node decides where data is stored")}>
-        <Trans
-          i18nKey="Agents accept commands from this master and from their local CLI only. Storage locations can't be added from the panel: run <command/> on the node."
-          components={{ command: <span className="font-mono">sudo mcsm-agent storage add &lt;name&gt; &lt;path&gt;</span> }}
-        />
-      </Callout>
-    </>
+    <div className="surface overflow-hidden rounded-xl">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("Node")}</TableHead>
+            <TableHead className="hidden md:table-cell">{t("Agent")}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t("Certificate")}</TableHead>
+            <TableHead className="hidden sm:table-cell">{t("Ports")}</TableHead>
+            <TableHead className="hidden sm:table-cell">{t("Memory")}</TableHead>
+            <TableHead className="hidden xl:table-cell">{t("Storage")}</TableHead>
+            <TableHead>
+              <span className="sr-only">{t("Actions")}</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {nodes.map((node) => (
+            <AgentRow key={node.id} node={node} />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 

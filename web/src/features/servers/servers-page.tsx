@@ -34,11 +34,7 @@ export function ServersPage() {
 
   return (
     <>
-      <PageHeader
-        icon={CubeIcon}
-        title={t("Servers")}
-        description={t("The servers on all nodes. They are created on the page of a node.")}
-      />
+      <PageHeader icon={CubeIcon} title={t("Servers")} />
       {offline.length > 0 && (
         <Callout tone="warning" icon={WifiSlashIcon} title={t("Some nodes are offline")} className="mb-6">
           {t("The servers on {{nodes}} aren't listed until they are back.", {

@@ -33,12 +33,7 @@ export function PolicyPage() {
         <ErrorCallout error={error} />
       ) : (
         <>
-          <PageHeader
-            icon={CalendarCheckIcon}
-            tone="warning"
-            title={policy.name}
-            description={t(actions[policy.settings.action].description)}
-          />
+          <PageHeader icon={CalendarCheckIcon} tone="warning" title={policy.name} />
           {/* Without the permission to manage policies, the policy is only shown. */}
           <fieldset disabled={!manage} className="contents">
             <PolicyForm
@@ -68,12 +63,7 @@ export function NewPolicyPage() {
   return (
     <>
       <BackLink to="/policies">{t("Policies")}</BackLink>
-      <PageHeader
-        icon={CalendarCheckIcon}
-        tone="warning"
-        title={t("New policy")}
-        description={t("Restart, stop or start servers or whole nodes at set times, or run console commands.")}
-      />
+      <PageHeader icon={CalendarCheckIcon} tone="warning" title={t("New policy")} />
       <PolicyForm
         initial={emptyPolicy}
         submitLabel={t("Create policy")}
@@ -110,7 +100,7 @@ function PolicyForm({
       onSubmit={(input) => save.mutate(input, { onSuccess: onSaved })}
     >
       {(settings, set) => (
-        <FormSection title={t("Action")} description={t("What happens at the scheduled times.")}>
+        <FormSection title={t("Action")}>
           <RadioGroup
             value={settings.action}
             onValueChange={(action) => set({ action: action as PolicyAction })}

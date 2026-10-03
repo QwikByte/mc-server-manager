@@ -14,12 +14,10 @@ import { TargetsField } from "@/features/servers/targets-field"
 
 const texts = {
   job: {
-    general: msg("What the job is called, and whether it runs on its schedule."),
     paused: msg("A paused job only runs when you start it."),
     unsaved: msg("Your changes to the job haven't been saved."),
   },
   policy: {
-    general: msg("What the policy is called, and whether it runs on its schedule."),
     paused: msg("A paused policy only runs when you start it."),
     unsaved: msg("Your changes to the policy haven't been saved."),
   },
@@ -58,7 +56,7 @@ export function TaskForm<S>({
 
   return (
     <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
-      <FormSection title={t("General")} description={t(texts[kind].general)}>
+      <FormSection title={t("General")}>
         <Field>
           <FieldLabel htmlFor="task-name">{t("Name")}</FieldLabel>
           <Input id="task-name" required maxLength={64} value={form.name} onChange={(e) => set({ name: e.target.value })} />
@@ -74,11 +72,11 @@ export function TaskForm<S>({
 
       {children(form.settings, (change) => set({ settings: { ...form.settings, ...change } }))}
 
-      <FormSection title={t("Schedule")} description={t("When it runs. Runs missed while the master was down are skipped.")}>
+      <FormSection title={t("Schedule")}>
         <ScheduleField value={form.schedule} onChange={(schedule) => set({ schedule })} />
       </FormSection>
 
-      <FormSection title={t("Servers")} description={t("Where it runs. A whole node includes the servers created later.")}>
+      <FormSection title={t("Servers")}>
         <TargetsField value={form.targets} onChange={(targets) => set({ targets })} />
       </FormSection>
 

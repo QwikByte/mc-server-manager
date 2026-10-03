@@ -82,20 +82,17 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
 
   return (
     <div className="pb-24">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <InputGroup className="w-full sm:max-w-xs">
-          <InputGroupAddon>
-            <MagnifyingGlassIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            placeholder={t("Search settings")}
-            aria-label={t("Search settings")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </InputGroup>
-        <p className="text-sm text-muted-foreground">{t("The server reads these settings when it starts.")}</p>
-      </div>
+      <InputGroup className="mb-8 w-full sm:max-w-xs">
+        <InputGroupAddon>
+          <MagnifyingGlassIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          placeholder={t("Search settings")}
+          aria-label={t("Search settings")}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </InputGroup>
       {keys.length === 0 && <p className="text-sm text-muted-foreground">{t("No setting matches your search.")}</p>}
       {groups.map((group) => {
         const inGroup = keys.filter((key) => definition(key).group === group)

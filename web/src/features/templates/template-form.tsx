@@ -69,7 +69,7 @@ export function TemplateForm({
 
   return (
     <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
-      <FormSection title={t("General")} description={t("What the template is for, and the software of its servers.")}>
+      <FormSection title={t("General")}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor="template-name">{t("Name")}</FieldLabel>
@@ -138,11 +138,11 @@ export function TemplateForm({
         </div>
       </FormSection>
 
-      <FormSection title={t("Starting")} description={t("When the servers start on their own.")}>
+      <FormSection title={t("Starting")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
       </FormSection>
 
-      <FormSection title={t("Java")} description={t("The Java runtime and the options the servers start with.")}>
+      <FormSection title={t("Java")}>
         {!type.proxy && <JavaFields java={form.java} aikarFlags={form.aikarFlags} onChange={set} />}
         <JvmOptionsField value={form.jvmOptions} onChange={(jvmOptions) => set({ jvmOptions })} />
         <CpuLimitField value={form.cpuLimit} onChange={(cpuLimit) => set({ cpuLimit })} />
@@ -150,7 +150,7 @@ export function TemplateForm({
 
       {!type.proxy && (
         // i18next-instrument-ignore-next-line: the name of the file
-        <FormSection title="server.properties" description={t("Written before the first start of each server.")}>
+        <FormSection title="server.properties">
           <Field>
             <FieldLabel htmlFor="template-properties">{t("Properties")}</FieldLabel>
             <Textarea
@@ -170,10 +170,7 @@ export function TemplateForm({
       )}
 
       {type.addons && (
-        <FormSection
-          title={type.addons.kind === "mods" ? t("Mods") : t("Plugins")}
-          description={t("Installed from Modrinth in the newest release that suits each new server.")}
-        >
+        <FormSection title={type.addons.kind === "mods" ? t("Mods") : t("Plugins")}>
           {form.plugins.length > 0 && (
             <ul className="flex flex-wrap gap-2">
               {form.plugins.map((p) => (
