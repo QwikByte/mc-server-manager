@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { formatDate } from "@/lib/format"
 import { type Release, type UpdateStatus, updateCommand, updateQuery, updating, useUpdateAction } from "./api"
+import { Markdown } from "./markdown"
 
 const onError = { onError: (e: Error) => toast.error(e.message) }
 
@@ -142,8 +143,8 @@ function ReleaseNotes({ release }: { release: Release }) {
           <DialogTitle>What's new in {release.version}</DialogTitle>
           {release.publishedAt && <DialogDescription>Published on {formatDate(release.publishedAt)}.</DialogDescription>}
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto rounded-lg bg-muted/50 p-4 text-sm whitespace-pre-wrap">
-          {release.notes.trim() || "Read the notes of this release on GitHub."}
+        <div className="max-h-[60vh] overflow-y-auto rounded-lg bg-muted/50 p-4">
+          <Markdown text={release.notes.trim() || "Read the notes of this release on GitHub."} />
         </div>
         <DialogFooter>
           <Button variant="outline" asChild>
