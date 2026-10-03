@@ -386,7 +386,9 @@ type WriteFileHeader struct {
 	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
 	Path     string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	// Replace an existing file; otherwise writing to an existing file fails.
-	Overwrite     bool `protobuf:"varint,3,opt,name=overwrite,proto3" json:"overwrite,omitempty"`
+	Overwrite bool `protobuf:"varint,3,opt,name=overwrite,proto3" json:"overwrite,omitempty"`
+	// Size of the file if known, so that one that doesn't fit is refused before it is sent.
+	Size          int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -440,6 +442,13 @@ func (x *WriteFileHeader) GetOverwrite() bool {
 		return x.Overwrite
 	}
 	return false
+}
+
+func (x *WriteFileHeader) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
 }
 
 type WriteFileResponse struct {
@@ -889,11 +898,12 @@ const file_mcsm_v1_file_proto_rawDesc = "" +
 	"\x10WriteFileRequest\x122\n" +
 	"\x06header\x18\x01 \x01(\v2\x18.mcsm.v1.WriteFileHeaderH\x00R\x06header\x12\x14\n" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
-	"\acontent\"`\n" +
+	"\acontent\"t\n" +
 	"\x0fWriteFileHeader\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1c\n" +
-	"\toverwrite\x18\x03 \x01(\bR\toverwrite\":\n" +
+	"\toverwrite\x18\x03 \x01(\bR\toverwrite\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\":\n" +
 	"\x11WriteFileResponse\x12%\n" +
 	"\x04file\x18\x01 \x01(\v2\x11.mcsm.v1.FileInfoR\x04file\"m\n" +
 	"\x17ArchiveDirectoryRequest\x12\x1b\n" +

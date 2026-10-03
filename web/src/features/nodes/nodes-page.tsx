@@ -100,7 +100,7 @@ function NodeCard({ node, servers }: { node: Node; servers?: NodeServer[] }) {
         <IconTile icon={HardDrivesIcon} tone="info" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{node.name}</p>
-          <p className="truncate font-mono text-xs text-muted-foreground">{node.address}</p>
+          {node.address && <p className="truncate font-mono text-xs text-muted-foreground">{node.address}</p>}
         </div>
         <NodeStatusBadge status={node.status} />
       </div>
@@ -129,7 +129,7 @@ function NodeCard({ node, servers }: { node: Node; servers?: NodeServer[] }) {
         </p>
       )}
       <div className="mt-auto flex items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground">
-        <span className="truncate">{info ? `${info.os} · agent ${info.agentVersion}` : "No agent connected"}</span>
+        <span className="truncate">{info ? [info.os, info.agentVersion && `agent ${info.agentVersion}`].filter(Boolean).join(" · ") : "No agent connected"}</span>
         <ArrowRightIcon className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
       </div>
     </Link>

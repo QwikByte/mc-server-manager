@@ -1,8 +1,17 @@
 package e2e
 
 import (
+	"net"
 	"net/http"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+
+	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	agentenroll "github.com/QwikByte/mc-server-manager/internal/agent/enroll"
+	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
 func TestNodeSettings(t *testing.T) {
@@ -47,4 +56,35 @@ func TestNodeSettings(t *testing.T) {
 	// Without a reserve, memory isn't limited.
 	api.do("PUT", path, settings(func(s map[string]any) { s["memoryReserveMb"] = nil }), http.StatusOK, nil)
 	api.do("PUT", path+"/servers/"+lobby, update, http.StatusOK, nil)
+}
+
+// The enrollment endpoint checks the join token before it signs a certificate, and slows
+// down clients that keep trying.
+func TestEnrollmentChecks(t *testing.T) {
+	m := startMaster(t)
+	n, token, err := m.nodes.Create(t.Context(), "node-1", "127.0.0.1:7443")
+	check(t, err)
+	guesser := peer.NewContext(t.Context(), &peer.Peer{Addr: &net.TCPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 1234}})
+	enroll := func(secret string, csr []byte) codes.Code {
+		_, err := m.nodes.Enroll(guesser, &mcsmv1.EnrollRequest{NodeId: n.ID, Secret: secret, CsrDer: csr})
+		return status.Code(err)
+	}
+
+	// An invalid request doesn't use up the token, a wrong token gets nothing signed.
+	if code := enroll(token.Secret, []byte("not a CSR")); code != codes.InvalidArgument {
+		t.Fatalf("invalid CSR: %v", code)
+	}
+	csr, err := pki.NewCSR(pki.NewKey())
+	check(t, err)
+	for range 4 {
+		if code := enroll("guessed", csr); code != codes.PermissionDenied {
+			t.Fatalf("wrong token: %v", code)
+		}
+	}
+	if code := enroll(token.Secret, csr); code != codes.ResourceExhausted {
+		t.Fatalf("client over its budget: %v", code)
+	}
+
+	// Other clients still enroll with the token.
+	check(t, agentenroll.Run(t.Context(), token.String(), t.TempDir()))
 }
