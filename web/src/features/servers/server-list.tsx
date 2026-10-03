@@ -1,4 +1,4 @@
-import { CpuIcon, CubeIcon, HashIcon, MemoryIcon, UsersIcon } from "@phosphor-icons/react"
+import { CpuIcon, CubeIcon, HardDrivesIcon, HashIcon, MemoryIcon, UsersIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { ErrorCallout } from "@/components/callout"
@@ -48,8 +48,11 @@ export function ServerList({ nodeId }: { nodeId: string }) {
   )
 }
 
-/** The whole card opens the server; its buttons sit above the link. Running servers show what they use. */
-function ServerCard({ nodeId, server, usage }: { nodeId: string; server: Server; usage?: ServerUsage }) {
+/**
+ * The whole card opens the server; its buttons sit above the link. Running servers show what they
+ * use. Cards of servers on different nodes show the node's name.
+ */
+export function ServerCard({ nodeId, nodeName, server, usage }: { nodeId: string; nodeName?: string; server: Server; usage?: ServerUsage }) {
   const live = usage?.running ? usage : undefined
   const look = serverLook(server.type)
   return (
@@ -71,6 +74,7 @@ function ServerCard({ nodeId, server, usage }: { nodeId: string; server: Server;
         <ServerStateBadge state={server.state} />
       </div>
       <div className="flex flex-wrap gap-2">
+        {nodeName && <Chip icon={HardDrivesIcon}>{nodeName}</Chip>}
         <Chip icon={HashIcon}>
           <span className="font-mono">{server.port}</span>
         </Chip>

@@ -1,4 +1,4 @@
-import { ArchiveIcon, CalendarCheckIcon, GearSixIcon, GraphIcon, HardDrivesIcon, PuzzlePieceIcon, ScrollIcon, StackIcon } from "@phosphor-icons/react"
+import { ArchiveIcon, CalendarCheckIcon, CubeIcon, GearSixIcon, GraphIcon, HardDrivesIcon, PuzzlePieceIcon, ScrollIcon, StackIcon } from "@phosphor-icons/react"
 import type { Access } from "@/features/access/use-access"
 import { seesSettings } from "@/features/settings/tabs"
 
@@ -13,6 +13,7 @@ export const navigation = [
         icon: HardDrivesIcon,
         visible: (a: Access) => a.canSomewhere("nodes.view") || a.canSomewhere("servers.view"),
       },
+      { to: "/servers", label: "Servers", icon: CubeIcon, visible: (a: Access) => a.canSomewhere("servers.view") },
       { to: "/networks", label: "Networks", icon: GraphIcon, visible: (a: Access) => a.can("networks.view") },
       { to: "/templates", label: "Templates", icon: StackIcon, visible: (a: Access) => a.can("templates.view") },
       { to: "/plugins", label: "Plugins", icon: PuzzlePieceIcon, visible: (a: Access) => a.canSomewhere("plugins.manage") },
