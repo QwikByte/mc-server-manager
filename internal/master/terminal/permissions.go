@@ -33,11 +33,18 @@ func guarded(use, short string, checks map[string]check) *cobra.Command {
 		if cmd.Name() == "help" {
 			return nil
 		}
-		c, ok := checks[strings.TrimPrefix(cmd.CommandPath(), use+" ")]
+		path := strings.TrimPrefix(cmd.CommandPath(), use+" ")
+		c, ok := checks[path]
 		if !ok {
 			return errUnchecked
 		}
-		return c(cmd.Context(), access.From(cmd.Context()), args)
+		if err := c(cmd.Context(), access.From(cmd.Context()), args); err != nil {
+			return err
+		}
+		if follows(cmd, path) {
+			limit(cmd)
+		}
+		return nil
 	}
 	return root
 }

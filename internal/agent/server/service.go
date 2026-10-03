@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"google.golang.org/grpc/codes"
@@ -297,11 +298,19 @@ func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.Server
 	if !runtime.ValidID(req.GetId()) {
 		return status.Error(codes.InvalidArgument, "invalid server ID")
 	}
-	for line, err := range s.rt.Logs(stream.Context(), req.GetId(), int(min(req.GetTail(), maxTail))) {
+	var after time.Time
+	if req.GetAfterUnixNano() > 0 {
+		after = time.Unix(0, req.GetAfterUnixNano())
+	}
+	for line, err := range s.rt.Logs(stream.Context(), req.GetId(), int(min(req.GetTail(), maxTail)), after) {
 		if err != nil {
 			return toStatus(err)
 		}
-		if err := stream.Send(&mcsmv1.StreamLogsResponse{Line: plain(line)}); err != nil {
+		res := &mcsmv1.StreamLogsResponse{Line: plain(line.Text)}
+		if !line.Time.IsZero() {
+			res.TimeUnixNano = line.Time.UnixNano()
+		}
+		if err := stream.Send(res); err != nil {
 			return err
 		}
 	}

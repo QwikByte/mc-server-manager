@@ -151,5 +151,5 @@ export function ServerConsole() {
       />
     )
   }
-  return <Console nodeId={nodeId} server={server} />
+  return <Console key={`${nodeId}/${server.id}`} nodeId={nodeId} server={server} />
 }

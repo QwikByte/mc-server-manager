@@ -19,6 +19,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -104,14 +105,21 @@ func TestEnrollAndControlNode(t *testing.T) {
 		t.Fatalf("command output = %q", out.GetOutput())
 	}
 
-	// The master relays the console to the browser as Server-Sent Events.
-	res, err := http.Get(m.panel(t).URL + "/api/nodes/" + a.node.ID + "/servers/" + id + "/logs")
-	check(t, err)
-	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	check(t, err)
-	if want := "data: [INFO]: Starting\n\ndata: [INFO]: Done\n\nevent: end\ndata:\n\n"; string(body) != want {
-		t.Fatalf("event stream = %q, want %q", body, want)
+	// The master relays the console to the browser as Server-Sent Events, whose IDs let a
+	// browser that connects again continue after the last line it got.
+	consoleURL := m.panel(t).URL + "/api/nodes/" + a.node.ID + "/servers/" + id + "/logs"
+	for query, want := range map[string]string{
+		"":                  "id: 1000000001\ndata: [INFO]: Starting\n\nid: 1000000002\ndata: [INFO]: Done\n\nevent: end\ndata:\n\n",
+		"?after=1000000001": "id: 1000000002\ndata: [INFO]: Done\n\nevent: end\ndata:\n\n",
+	} {
+		res, err := http.Get(consoleURL + query)
+		check(t, err)
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		check(t, err)
+		if string(body) != want {
+			t.Fatalf("event stream%s = %q, want %q", query, body, want)
+		}
 	}
 
 	// Invalid requests are rejected by the agent.
@@ -435,10 +443,11 @@ func (f *fakeRuntime) Remove(_ context.Context, id string) error {
 	return os.RemoveAll(filepath.Join(f.dir, id))
 }
 
-func (f *fakeRuntime) Logs(context.Context, string, int) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
-		for _, line := range []string{"\x1b[32m[INFO]: Starting\x1b[m", "[INFO]: Done\r"} {
-			if !yield(line, nil) {
+func (f *fakeRuntime) Logs(_ context.Context, _ string, _ int, after time.Time) iter.Seq2[runtime.LogLine, error] {
+	return func(yield func(runtime.LogLine, error) bool) {
+		for i, text := range []string{"\x1b[32m[INFO]: Starting\x1b[m", "[INFO]: Done\r"} {
+			line := runtime.LogLine{Time: time.Unix(1, int64(i+1)), Text: text}
+			if line.Time.After(after) && !yield(line, nil) {
 				return
 			}
 		}

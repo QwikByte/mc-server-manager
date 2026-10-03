@@ -355,7 +355,9 @@ Users get their permissions from groups; a user can be in several groups and has
   manager.
 - **Permissions.** Every API route states the permission it needs when it is registered, so none can be added
   without; the terminal checks each command the same way and refuses commands without a check. Permissions are loaded
-  for every request, so changes, disabling and deleting apply right away; disabled users are signed out. Users can only
+  for every request, so changes, disabling and deleting apply right away; disabled users are signed out. Streams that
+  follow output, the console and terminal commands such as `server logs`, end every 5 minutes, so the panel checks
+  the session and the permissions again; the console connects again on its own and continues. Users can only
   grant permissions they have themselves, within their own scope, and only manage users who have no more permissions
   than they do, so no one can raise their own permissions. The last enabled administrator can't be disabled, deleted or
   removed from the Administrators. The master logs every change with the user who made it, also denied attempts.

@@ -1120,7 +1120,10 @@ type StreamLogsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Number of past lines to send first, at most 1000.
-	Tail          uint32 `protobuf:"varint,2,opt,name=tail,proto3" json:"tail,omitempty"`
+	Tail uint32 `protobuf:"varint,2,opt,name=tail,proto3" json:"tail,omitempty"`
+	// Leaves out the past lines up to this time, e.g. those a client that connects again
+	// has already; 0 leaves out none.
+	AfterUnixNano int64 `protobuf:"varint,3,opt,name=after_unix_nano,json=afterUnixNano,proto3" json:"after_unix_nano,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1169,9 +1172,18 @@ func (x *StreamLogsRequest) GetTail() uint32 {
 	return 0
 }
 
+func (x *StreamLogsRequest) GetAfterUnixNano() int64 {
+	if x != nil {
+		return x.AfterUnixNano
+	}
+	return 0
+}
+
 type StreamLogsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Line          string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Line  string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	// When the server wrote the line; 0 if unknown.
+	TimeUnixNano  int64 `protobuf:"varint,2,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1211,6 +1223,13 @@ func (x *StreamLogsResponse) GetLine() string {
 		return x.Line
 	}
 	return ""
+}
+
+func (x *StreamLogsResponse) GetTimeUnixNano() int64 {
+	if x != nil {
+		return x.TimeUnixNano
+	}
+	return 0
 }
 
 type SendCommandRequest struct {
@@ -1814,12 +1833,14 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server\"%\n" +
 	"\x13DeleteServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x16\n" +
-	"\x14DeleteServerResponse\"7\n" +
+	"\x14DeleteServerResponse\"_\n" +
 	"\x11StreamLogsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04tail\x18\x02 \x01(\rR\x04tail\"(\n" +
+	"\x04tail\x18\x02 \x01(\rR\x04tail\x12&\n" +
+	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"N\n" +
 	"\x12StreamLogsResponse\x12\x12\n" +
-	"\x04line\x18\x01 \x01(\tR\x04line\">\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line\x12$\n" +
+	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\">\n" +
 	"\x12SendCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\"-\n" +

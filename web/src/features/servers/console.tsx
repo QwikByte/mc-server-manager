@@ -46,6 +46,8 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
   const frame = useRef(0)
   const history = useRef<string[]>([])
   const historyIndex = useRef(0)
+  // The ID of the latest line, so that connecting again continues after it.
+  const lastId = useRef("")
 
   const live = server.state !== "stopped"
   const proxy = serverType(server.type).proxy
@@ -61,22 +63,37 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
     })
   }
 
-  // Reconnects when the server starts or stops, so the console always shows the current run.
+  // Connects again when the state of the server changes, e.g. when it starts again after a
+  // crash, and when the master renews the stream to check the access again. The console
+  // continues after the latest line; without one, it shows the last lines afresh.
   useEffect(() => {
-    const source = new EventSource(`/api/nodes/${nodeId}/servers/${server.id}/logs`)
-    source.onopen = () => {
-      pending.current = []
-      setLines([])
-      setConnection("live")
+    let source: EventSource
+    const connect = () => {
+      source = new EventSource(`/api/nodes/${nodeId}/servers/${server.id}/logs?after=${lastId.current}`)
+      source.onopen = () => {
+        if (!lastId.current) {
+          pending.current = []
+          setLines([])
+        }
+        setConnection("live")
+      }
+      source.onmessage = (event) => {
+        lastId.current = event.lastEventId
+        append("log", event.data)
+      }
+      source.addEventListener("end", () => {
+        source.close()
+        setConnection("ended")
+      })
+      source.addEventListener("renew", () => {
+        source.close()
+        connect()
+      })
+      source.onerror = () => setConnection(source.readyState === EventSource.CLOSED ? "failed" : "lost")
     }
-    source.onmessage = (event) => append("log", event.data)
-    source.addEventListener("end", () => {
-      source.close()
-      setConnection("ended")
-    })
-    source.onerror = () => setConnection(source.readyState === EventSource.CLOSED ? "failed" : "lost")
+    connect()
     return () => source.close()
-  }, [nodeId, server.id, live])
+  }, [nodeId, server.id, server.state])
 
   useLayoutEffect(() => {
     const el = viewport.current
