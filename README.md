@@ -38,7 +38,8 @@ folders and backups leave them out the same way. Plugins and mods run with the s
 The settings of a server can be changed after it was created: name, Minecraft version, memory, port, Java
 version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
 The agent creates the container again with the same data; the old container is only removed once the new one
-exists.
+exists. A server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it
+changed, creates the container again the same way. The old image is removed once no server uses it.
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
 crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.

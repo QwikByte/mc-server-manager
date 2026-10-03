@@ -1,3 +1,4 @@
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useBlocker } from "@tanstack/react-router"
 import { type FormEvent, useState } from "react"
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { nodeQuery } from "@/features/nodes/api"
-import { type Server, type ServerSettings, useServer, useUpdateServer } from "./api"
+import { type Server, type ServerSettings, useServer, useUpdateImage, useUpdateServer } from "./api"
 import { serverType, splitOptions } from "./server-types"
 import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField } from "./settings-fields"
 
@@ -18,8 +19,56 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/settings")
 export function SettingsPage() {
   const { nodeId, serverId } = route.useParams()
   const { server } = useServer(nodeId, serverId)
+  if (!server) return null
   // Remounting on save resets the form to what the agent applied.
-  return server ? <SettingsForm key={JSON.stringify(settingsOf(server))} nodeId={nodeId} server={server} /> : null
+  return (
+    <div className="space-y-6">
+      <SettingsForm key={JSON.stringify(settingsOf(server))} nodeId={nodeId} server={server} />
+      <UpdateImage nodeId={nodeId} server={server} />
+    </div>
+  )
+}
+
+/** Servers keep the image they were created with, until it is updated here. */
+function UpdateImage({ nodeId, server }: { nodeId: string; server: Server }) {
+  const update = useUpdateImage(nodeId, server.id)
+  const running = server.state !== "stopped"
+  function run() {
+    toast.promise(update.mutateAsync(), {
+      loading: "Downloading the newest image…",
+      success: ({ updated }) =>
+        !updated ? `${server.name} has the newest image already` : running ? `Updated and restarted ${server.name}` : `Updated ${server.name}`,
+      error: (e: Error) => e.message,
+    })
+  }
+  const button = (
+    <Button variant="outline" disabled={update.isPending} onClick={running ? undefined : run}>
+      <ArrowsClockwiseIcon />
+      Update image
+    </Button>
+  )
+  return (
+    <section className="surface flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-5 sm:px-8" aria-label="Image">
+      <div className="max-w-xl space-y-1">
+        <h2 className="heading text-base">Image</h2>
+        <p className="text-sm text-muted-foreground">
+          A server keeps the Docker image it was created with. A newer one brings fixes, e.g. for Java.
+          {running && " If there is one, the server restarts."}
+        </p>
+      </div>
+      {running ? (
+        <ConfirmDialog
+          trigger={button}
+          title={`Update the image of ${server.name}?`}
+          description="If there is a newer image, the server's container is created again with the same data, so the server restarts."
+          action="Update image"
+          onConfirm={run}
+        />
+      ) : (
+        button
+      )}
+    </section>
+  )
 }
 
 function settingsOf(s: Server): ServerSettings {

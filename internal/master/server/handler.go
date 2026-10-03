@@ -82,6 +82,7 @@ func (h *Handler) Register(mux access.Mux) {
 		}))
 	mux.Handle("DELETE /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersDelete), h.delete)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersSettings), h.update)
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/update-image", access.OnServer(access.ServersSettings), h.updateImage)
 	// The copy contains all files of the server.
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/duplicate",
 		access.All(access.OnNode(access.ServersCreate, "node"), access.OnServer(access.FilesRead)), h.duplicate)
@@ -341,6 +342,22 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, toView(res.GetServer()))
+}
+
+// updateImage pulls the server's image again and, if it changed, recreates the container.
+func (h *Handler) updateImage(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), createTimeout)
+	defer cancel()
+	c, err := h.client(ctx, r)
+	var res *mcsmv1.UpdateImageResponse
+	if err == nil {
+		res, err = c.UpdateImage(ctx, &mcsmv1.UpdateImageRequest{Id: r.PathValue("id")})
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"updated": res.GetUpdated()})
 }
 
 // delete deletes a server with its data and backups, unless a network needs it.

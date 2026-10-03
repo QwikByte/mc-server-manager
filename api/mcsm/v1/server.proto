@@ -16,6 +16,9 @@ service ServerService {
   // UpdateServer changes the settings of a server. Its container is created again with
   // the same data, and a running server restarts.
   rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
+  // UpdateImage pulls the image of a server again, e.g. for a newer Java. If it changed, the
+  // container is created again with it, and a running server restarts.
+  rpc UpdateImage(UpdateImageRequest) returns (UpdateImageResponse);
   // StreamLogs sends the last lines of the server console, then follows it until the
   // server stops or the client disconnects. Each line has the time it was written, for
   // clients that connect again to continue after the last line they got.
@@ -161,6 +164,15 @@ message UpdateServerRequest {
 
 message UpdateServerResponse {
   Server server = 1;
+}
+
+message UpdateImageRequest {
+  string id = 1;
+}
+
+message UpdateImageResponse {
+  // updated tells whether the image changed. If not, the server was left alone.
+  bool updated = 1;
 }
 
 message DeleteServerRequest {

@@ -428,6 +428,16 @@ func (f *fakeRuntime) Update(_ context.Context, spec runtime.Spec) error {
 	return runtime.ErrNotFound
 }
 
+// UpdateImage finds a newer image for every server.
+func (f *fakeRuntime) UpdateImage(_ context.Context, id string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !slices.ContainsFunc(f.servers, func(s runtime.Server) bool { return s.ID == id }) {
+		return false, runtime.ErrNotFound
+	}
+	return true, nil
+}
+
 func (f *fakeRuntime) Restart(_ context.Context, id string) error {
 	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_RUNNING)
 }

@@ -270,6 +270,26 @@ func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
 	return d.recreate(ctx, spec, c.State.Running)
 }
 
+func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
+	c, spec, err := d.inspect(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if err := d.pull(ctx, imageRef(spec)); err != nil {
+		return false, err
+	}
+	img, err := d.cli.ImageInspect(ctx, imageRef(spec))
+	if err != nil || img.ID == c.Image {
+		return false, err
+	}
+	if err := d.recreate(ctx, spec, c.State.Running); err != nil {
+		return true, err
+	}
+	// The old image goes once no container uses it; Docker refuses to remove it before.
+	_, _ = d.cli.ImageRemove(ctx, c.Image, client.ImageRemoveOptions{PruneChildren: true})
+	return true, nil
+}
+
 func (d *Docker) Restart(ctx context.Context, id string) error {
 	_, err := d.cli.ContainerRestart(ctx, containerName(id), client.ContainerRestartOptions{Timeout: new(stopTimeoutSeconds)})
 	return notFound(err)

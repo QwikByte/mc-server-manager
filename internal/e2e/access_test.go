@@ -71,6 +71,7 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	for _, denied := range []struct{ method, path string }{
 		{"POST", path(survival) + "/restart"},
 		{"POST", path(lobby) + "/stop"},
+		{"POST", path(lobby) + "/update-image"},
 		{"DELETE", path(lobby)},
 		{"GET", path(lobby) + "/files"},
 		{"GET", "/api/networks"},
