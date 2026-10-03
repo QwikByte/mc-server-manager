@@ -19,7 +19,7 @@ jobs:
     if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # publishes the release
+      contents: write # creates the draft of the release
       id-token: write # signs the attestations
       attestations: write
     steps:
@@ -51,7 +51,7 @@ jobs:
           fi
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: "~> v2"
+          version: v2.18.2
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,3 +61,34 @@ jobs:
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: ./dist/checksums.txt
+
+  # Signs checksums.txt with the secret RELEASE_SIGNING_KEY and publishes the release. A job of its own,
+  # so that nothing of the build, e.g. a dependency of the panel, runs on a machine that has the key.
+  sign:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # publishes the release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.version || github.ref_name }}
+    steps:
+      - name: Sign the checksums
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          [ -n "$RELEASE_SIGNING_KEY" ] || { echo "::error::The secret RELEASE_SIGNING_KEY is missing"; exit 1; }
+          gh release download "$TAG" --pattern checksums.txt --pattern install.sh
+          openssl pkeyutl -sign -rawin -inkey /dev/stdin -in checksums.txt -out checksums.txt.sig <<<"$RELEASE_SIGNING_KEY"
+      # Fails if the secret doesn't belong to the key in the installer, which would refuse the release.
+      - name: Verify the signature with the release's installer
+        run: |
+          sha256sum -c --ignore-missing --strict checksums.txt
+          key=$(sed -n 's/^readonly RELEASE_KEY=//p' install.sh)
+          openssl pkeyutl -verify -pubin -rawin -in checksums.txt -sigfile checksums.txt.sig \
+            -inkey <(printf -- '-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----\n' "$key")
+      - name: Publish the release
+        run: |
+          gh release upload "$TAG" checksums.txt.sig --clobber
+          gh release edit "$TAG" --draft=false

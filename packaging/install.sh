@@ -11,6 +11,7 @@
 # --public-host, --panel-addr and --admin only apply when the master is installed for the first time;
 # later, the panel's settings change its addresses.
 # Packages: .deb (apt), .rpm (dnf, yum, zypper) and Arch Linux (pacman), for x86_64 and arm64.
+# Releases are verified with OpenSSL 3, so only current Linux systems are supported.
 # Questions: run as "sudo bash install.sh ..." to answer them. Piped to bash, it asks nothing,
 # generates the administrator's password and installs Docker only with --install-docker.
 set -Eeuo pipefail
@@ -18,6 +19,9 @@ set -Eeuo pipefail
 # The release workflow replaces "latest" with the version of the release.
 version=latest
 readonly REPO=https://github.com/QwikByte/mc-server-manager
+# The release workflow signs checksums.txt with this Ed25519 key, so a release is only installed if it was
+# published by MC Server Manager's release workflow, not just by someone who can change its releases.
+readonly RELEASE_KEY=MCowBQYDK2VwAyEA18ilyBW0qkWpfEqFR+rW5eQeGC3Sif4OiD8RKpEry5s=
 readonly ENROLL_PORT=9443 AGENT_PORT=7443 PANEL_ADDR=127.0.0.1:8080
 # A generated password goes here rather than into logs of provisioning tools, for root only.
 readonly PASSWORD_FILE=/etc/mcsm/admin-password
@@ -76,6 +80,8 @@ check_system() {
   elif installed pacman; then format=pkg.tar.zst
   else die "No supported package manager found (apt, dnf, yum, zypper or pacman). Install from the archives of a release instead."
   fi
+  [[ $(openssl version 2>/dev/null) =~ ^OpenSSL\ [3-9] ]] ||
+    die "Releases are verified with OpenSSL 3 or newer, which isn't installed. Current Linux systems are supported, e.g. Debian 12, Ubuntu 22.04 or RHEL 9 and newer."
   if [ "$version" = latest ]; then
     # GitHub redirects to the tag of the latest release.
     version=$(curl --proto '=https' --tlsv1.2 -fsS -o /dev/null -w '%{redirect_url}' "$REPO/releases/latest") || die "GitHub is not reachable."
@@ -87,6 +93,10 @@ check_system() {
   chmod 755 "$tmp" # apt reads local packages as its own user
   trap 'rm -rf "$tmp"' EXIT
   fetch -o "$tmp/checksums.txt" "$REPO/releases/download/$version/checksums.txt" || die "Release $version not found."
+  fetch -o "$tmp/checksums.txt.sig" "$REPO/releases/download/$version/checksums.txt.sig" || die "Release $version isn't signed."
+  printf -- '-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----\n' "$RELEASE_KEY" >"$tmp/release-key.pem"
+  openssl pkeyutl -verify -pubin -inkey "$tmp/release-key.pem" -rawin -in "$tmp/checksums.txt" -sigfile "$tmp/checksums.txt.sig" >/dev/null 2>&1 ||
+    die "The signature of release $version is invalid, so it isn't installed."
 }
 
 # wait_for_packages waits up to 10 minutes while another installation of packages runs, e.g.
