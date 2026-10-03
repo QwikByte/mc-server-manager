@@ -2,6 +2,7 @@ import { QueryCache, QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, createRoute, createRouter, lazyRouteComponent, Outlet, redirect } from "@tanstack/react-router"
 import { AppShell } from "@/components/app-shell"
 import { home } from "@/components/navigation"
+import { NotFound } from "@/components/not-found"
 import { Toaster } from "@/components/ui/sonner"
 import { accessQuery } from "@/features/access/api"
 import { accessOf } from "@/features/access/use-access"
@@ -65,6 +66,13 @@ const appRoute = createRoute({
     }
   },
   component: AppShell,
+})
+
+// Addresses that lead to no page show a hint within the panel, after signing in.
+const notFoundRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "$",
+  component: NotFound,
 })
 
 const indexRoute = createRoute({
@@ -303,6 +311,7 @@ export const router = createRouter({
         newGroupRoute,
         groupRoute,
       ]),
+      notFoundRoute,
     ]),
   ]),
   context: { queryClient },
