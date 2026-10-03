@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { toast } from "sonner"
 import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
@@ -20,7 +21,7 @@ export function TemplatePage() {
 
   return (
     <>
-      <BackLink to="/templates">Templates</BackLink>
+      <BackLink to="/templates">{t("Templates")}</BackLink>
       {isPending ? (
         <Skeleton className="h-96 rounded-xl" />
       ) : error ? (
@@ -34,10 +35,10 @@ export function TemplatePage() {
               // Remounting on save resets the form to what was stored.
               key={JSON.stringify(template)}
               initial={draftOf(template)}
-              submitLabel="Save template"
+              submitLabel={t("Save template")}
               pending={save.isPending}
               error={save.error}
-              onSubmit={(input) => save.mutate(input, { onSuccess: (t) => toast.success(`Saved ${t.name}`) })}
+              onSubmit={(input) => save.mutate(input, { onSuccess: (saved) => toast.success(t("Saved {{name}}", { name: saved.name })) })}
             />
           </fieldset>
         </>
@@ -51,17 +52,17 @@ export function NewTemplatePage() {
   const navigate = useNavigate()
   return (
     <>
-      <BackLink to="/templates">Templates</BackLink>
-      <PageHeader {...serverLook("paper")} title="New template" description="Set up what new servers start with." />
+      <BackLink to="/templates">{t("Templates")}</BackLink>
+      <PageHeader {...serverLook("paper")} title={t("New template")} description={t("Set up what new servers start with.")} />
       <TemplateForm
         initial={emptyTemplate}
-        submitLabel="Create template"
+        submitLabel={t("Create template")}
         pending={save.isPending}
         error={save.error}
         onSubmit={(input) =>
           save.mutate(input, {
-            onSuccess: (t) => {
-              toast.success(`Created ${t.name}`)
+            onSuccess: (created) => {
+              toast.success(t("Created {{name}}", { name: created.name }))
               void navigate({ to: "/templates", ignoreBlocker: true })
             },
           })

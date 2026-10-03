@@ -1,5 +1,6 @@
 import { PlusIcon, XIcon } from "@phosphor-icons/react"
 import { useBlocker } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
@@ -68,25 +69,25 @@ export function TemplateForm({
 
   return (
     <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
-      <FormSection title="General" description="What the template is for, and the software of its servers.">
+      <FormSection title={t("General")} description={t("What the template is for, and the software of its servers.")}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>
-            <FieldLabel htmlFor="template-name">Name</FieldLabel>
+            <FieldLabel htmlFor="template-name">{t("Name")}</FieldLabel>
             <Input
               id="template-name"
               required
               maxLength={64}
-              placeholder="Survival"
+              placeholder={t("Survival")}
               value={form.name}
               onChange={(e) => set({ name: e.target.value })}
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="template-type">Software</FieldLabel>
+            <FieldLabel htmlFor="template-type">{t("Software")}</FieldLabel>
             <Select
               value={form.type}
-              onValueChange={(t) =>
-                set({ type: t, memoryMb: form.memoryMb === defaults(form.type).memoryMb ? defaults(t).memoryMb : form.memoryMb })
+              onValueChange={(next) =>
+                set({ type: next, memoryMb: form.memoryMb === defaults(form.type).memoryMb ? defaults(next).memoryMb : form.memoryMb })
               }
             >
               <SelectTrigger id="template-type" className="w-full">
@@ -96,12 +97,12 @@ export function TemplateForm({
                 {[false, true].map((proxy) => (
                   <SelectGroup key={String(proxy)}>
                     {proxy && <SelectSeparator />}
-                    <SelectLabel>{proxy ? "Proxies for networks" : "Game servers"}</SelectLabel>
+                    <SelectLabel>{proxy ? t("Proxies for networks") : t("Game servers")}</SelectLabel>
                     {serverTypes
-                      .filter((t) => t.proxy === proxy)
-                      .map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
+                      .filter((s) => s.proxy === proxy)
+                      .map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
                         </SelectItem>
                       ))}
                   </SelectGroup>
@@ -111,12 +112,12 @@ export function TemplateForm({
           </Field>
         </div>
         <Field>
-          <FieldLabel htmlFor="template-description">Description</FieldLabel>
+          <FieldLabel htmlFor="template-description">{t("Description")}</FieldLabel>
           <Textarea
             id="template-description"
             rows={2}
             maxLength={500}
-            placeholder="Survival with permissions and an economy"
+            placeholder={t("Survival with permissions and an economy")}
             value={form.description}
             onChange={(e) => set({ description: e.target.value })}
           />
@@ -124,10 +125,10 @@ export function TemplateForm({
         <div className="grid gap-4 sm:grid-cols-2">
           {!type.proxy && (
             <Field>
-              <FieldLabel htmlFor="template-version">Minecraft version</FieldLabel>
+              <FieldLabel htmlFor="template-version">{t("Minecraft version")}</FieldLabel>
               <Input
                 id="template-version"
-                placeholder="Latest"
+                placeholder={t("Latest")}
                 value={form.version === "LATEST" ? "" : form.version}
                 onChange={(e) => set({ version: e.target.value.trim() || "LATEST" })}
               />
@@ -137,30 +138,32 @@ export function TemplateForm({
         </div>
       </FormSection>
 
-      <FormSection title="Starting" description="When the servers start on their own.">
+      <FormSection title={t("Starting")} description={t("When the servers start on their own.")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
       </FormSection>
 
-      <FormSection title="Java" description="The Java runtime and the options the servers start with.">
+      <FormSection title={t("Java")} description={t("The Java runtime and the options the servers start with.")}>
         {!type.proxy && <JavaFields java={form.java} aikarFlags={form.aikarFlags} onChange={set} />}
         <JvmOptionsField value={form.jvmOptions} onChange={(jvmOptions) => set({ jvmOptions })} />
         <CpuLimitField value={form.cpuLimit} onChange={(cpuLimit) => set({ cpuLimit })} />
       </FormSection>
 
       {!type.proxy && (
-        <FormSection title="server.properties" description="Written before the first start of each server.">
+        // i18next-instrument-ignore-next-line: the name of the file
+        <FormSection title="server.properties" description={t("Written before the first start of each server.")}>
           <Field>
-            <FieldLabel htmlFor="template-properties">Properties</FieldLabel>
+            <FieldLabel htmlFor="template-properties">{t("Properties")}</FieldLabel>
             <Textarea
               id="template-properties"
               rows={8}
               className="font-mono"
+              // i18next-instrument-ignore-next-line: an example of what to enter
               placeholder={"difficulty=hard\nmax-players=50\nmotd=Welcome!"}
               value={form.properties}
               onChange={(e) => set({ properties: e.target.value })}
             />
             <FieldDescription>
-              One property per line as key=value. The port, address and RCON are set by the manager and can't be changed here.
+              {t("One property per line as key=value. The port, address and RCON are set by the manager and can't be changed here.")}
             </FieldDescription>
           </Field>
         </FormSection>
@@ -168,8 +171,8 @@ export function TemplateForm({
 
       {type.addons && (
         <FormSection
-          title={type.addons.kind === "mods" ? "Mods" : "Plugins"}
-          description="Installed from Modrinth in the newest release that suits each new server."
+          title={type.addons.kind === "mods" ? t("Mods") : t("Plugins")}
+          description={t("Installed from Modrinth in the newest release that suits each new server.")}
         >
           {form.plugins.length > 0 && (
             <ul className="flex flex-wrap gap-2">
@@ -181,7 +184,7 @@ export function TemplateForm({
                     type="button"
                     size="icon-xs"
                     variant="ghost"
-                    aria-label={`Remove ${p.title}`}
+                    aria-label={t("Remove {{name}}", { name: p.title })}
                     onClick={() => set({ plugins: form.plugins.filter((x) => x.id !== p.id) })}
                   >
                     <XIcon />
@@ -203,15 +206,15 @@ export function TemplateForm({
       <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">
         {error && <FieldError className="mr-auto">{error.message}</FieldError>}
         <Button type="submit" disabled={!dirty || pending}>
-          {pending ? "Saving…" : submitLabel}
+          {pending ? t("Saving…") : submitLabel}
         </Button>
       </div>
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}
-        title="Discard your changes?"
-        description="Your changes to the template haven't been saved."
-        action="Discard changes"
+        title={t("Discard your changes?")}
+        description={t("Your changes to the template haven't been saved.")}
+        action={t("Discard changes")}
         destructive
         onConfirm={() => blocker.proceed?.()}
       />
@@ -228,7 +231,7 @@ function AddPlugins({
 }: {
   type: string
   version: string
-  kind: string
+  kind: "plugins" | "mods"
   chosen: Project[]
   onAdd: (p: Project) => void
 }) {
@@ -237,14 +240,16 @@ function AddPlugins({
       <DialogTrigger asChild>
         <Button type="button" variant="outline" className="w-fit">
           <PlusIcon />
-          Add {kind}
+          {kind === "mods" ? t("Add mods") : t("Add plugins")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add {kind} to the template</DialogTitle>
+          <DialogTitle>{kind === "mods" ? t("Add mods to the template") : t("Add plugins to the template")}</DialogTitle>
           <DialogDescription>
-            Only {kind} for {serverType(type).label} are shown. What they require is installed with them.
+            {kind === "mods"
+              ? t("Only mods for {{type}} are shown. What they require is installed with them.", { type: serverType(type).label })
+              : t("Only plugins for {{type}} are shown. What they require is installed with them.", { type: serverType(type).label })}
           </DialogDescription>
         </DialogHeader>
         <PluginSearch
@@ -253,7 +258,7 @@ function AddPlugins({
           autoFocus
           action={(hit) =>
             chosen.some((p) => p.id === hit.id) ? (
-              <Pill tone="success">Added</Pill>
+              <Pill tone="success">{t("Added")}</Pill>
             ) : (
               <Button
                 type="button"
@@ -262,7 +267,7 @@ function AddPlugins({
                 onClick={() => onAdd({ id: hit.id, slug: hit.slug, title: hit.title, icon: hit.icon })}
               >
                 <PlusIcon />
-                Add
+                {t("Add")}
               </Button>
             )
           }

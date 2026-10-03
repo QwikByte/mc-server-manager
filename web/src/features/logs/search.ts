@@ -1,11 +1,12 @@
+import { msg } from "@/lib/i18n"
 import type { Level, LogFilter, Source } from "./api"
 
 /** Time ranges the log page offers, with their length. */
 export const ranges = {
-  "1h": { label: "Last hour", ms: 3_600_000 },
-  "24h": { label: "Last 24 hours", ms: 86_400_000 },
-  "7d": { label: "Last 7 days", ms: 7 * 86_400_000 },
-  "30d": { label: "Last 30 days", ms: 30 * 86_400_000 },
+  "1h": { label: msg("Last hour"), ms: 3_600_000 },
+  "24h": { label: msg("Last 24 hours"), ms: 86_400_000 },
+  "7d": { label: msg("Last 7 days"), ms: 7 * 86_400_000 },
+  "30d": { label: msg("Last 30 days"), ms: 30 * 86_400_000 },
 } as const
 
 export type Range = keyof typeof ranges

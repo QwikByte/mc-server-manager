@@ -1,3 +1,4 @@
+import i18next from "i18next"
 import { type KeyboardEvent, type PointerEvent, useState } from "react"
 import { niceMax } from "@/lib/chart"
 import { cn } from "@/lib/utils"
@@ -62,7 +63,8 @@ export function TimeChart({
     const t = from + ((event.clientX - box.left) / box.width) * span
     let nearest: number | undefined
     points.forEach((p, i) => {
-      if (Math.abs(center(p) - t) <= stepMs && (nearest === undefined || Math.abs(center(p) - t) < Math.abs(center(points[nearest]) - t))) nearest = i
+      if (Math.abs(center(p) - t) <= stepMs && (nearest === undefined || Math.abs(center(p) - t) < Math.abs(center(points[nearest]) - t)))
+        nearest = i
     })
     setActive(nearest)
   }
@@ -99,7 +101,11 @@ export function TimeChart({
         <div
           role="group"
           tabIndex={0}
-          aria-label={`${title}, ${points.length} values. Use the arrow keys to read them.`}
+          aria-label={i18next.t("{{title}}, {{count}} values. Use the arrow keys to read them.", {
+            title,
+            count: points.length,
+            defaultValue_one: "{{title}}, {{count}} value. Use the arrow keys to read it.",
+          })}
           className="relative h-32 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onPointerMove={pick}
           onPointerLeave={() => setActive(undefined)}
@@ -112,7 +118,9 @@ export function TimeChart({
             ))}
           </div>
           {points.length === 0 ? (
-            <p className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">Nothing recorded in this time</p>
+            <p className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">
+              {i18next.t("Nothing recorded in this time")}
+            </p>
           ) : (
             <svg aria-hidden viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible">
               {series.map((s) =>
@@ -155,7 +163,10 @@ export function TimeChart({
                     <span
                       key={s.label}
                       aria-hidden
-                      className={cn("pointer-events-none absolute size-2.5 -translate-1/2 rounded-full ring-2 ring-card", tones[s.tone].key)}
+                      className={cn(
+                        "pointer-events-none absolute size-2.5 -translate-1/2 rounded-full ring-2 ring-card",
+                        tones[s.tone].key,
+                      )}
                       style={{ left: `${(x(center(shown)) / W) * 100}%`, top: `${(y(v) / H) * 100}%` }}
                     />
                   )

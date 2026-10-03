@@ -1,3 +1,5 @@
+import { t } from "i18next"
+import { Trans } from "react-i18next"
 import { CopyField } from "@/components/copy-field"
 import { formatDateTime } from "@/lib/format"
 import { type SetupLink, setupUrl } from "./api"
@@ -7,11 +9,15 @@ export function SetupLinkView({ username, link }: { username: string; link: Setu
   return (
     <div className="space-y-3 text-sm">
       <p>
-        Send this link to <span className="font-medium">{username}</span>. It sets the password once and works until{" "}
-        {formatDateTime(link.expiresAt)}.
+        <Trans
+          i18nKey="Send this link to <user/>. It sets the password once and works until <time/>."
+          components={{ user: <span className="font-medium">{username}</span>, time: <>{formatDateTime(link.expiresAt)}</> }}
+        />
       </p>
-      <CopyField label="Setup link" value={setupUrl(link)} />
-      <p className="text-xs text-muted-foreground">Anyone with the link can sign in as {username}, so share it only with them.</p>
+      <CopyField label={t("Setup link")} value={setupUrl(link)} />
+      <p className="text-xs text-muted-foreground">
+        {t("Anyone with the link can sign in as {{name}}, so share it only with them.", { name: username })}
+      </p>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { useState } from "react"
 import { StatCard } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -26,14 +27,19 @@ export function LogOverview({ filter, onSelectHour }: { filter: LogFilter; onSel
   return (
     <div className={cn("space-y-4 transition-opacity", isPlaceholderData && "opacity-60")}>
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        <StatCard icon={levels.info.icon} tone="info" label="Entries" value={count.format(buckets.reduce((n, b) => n + totalOf(b), 0))}>
-          last 24 hours
+        <StatCard
+          icon={levels.info.icon}
+          tone="info"
+          label={t("Entries")}
+          value={count.format(buckets.reduce((n, b) => n + totalOf(b), 0))}
+        >
+          {t("last 24 hours")}
         </StatCard>
-        <StatCard icon={levels.warn.icon} tone="warning" label="Warnings" value={count.format(sum("warn"))}>
-          denied or failed
+        <StatCard icon={levels.warn.icon} tone="warning" label={t("Warnings")} value={count.format(sum("warn"))}>
+          {t("denied or failed")}
         </StatCard>
-        <StatCard icon={levels.error.icon} tone="destructive" label="Errors" value={count.format(sum("error"))}>
-          failures to look into
+        <StatCard icon={levels.error.icon} tone="destructive" label={t("Errors")} value={count.format(sum("error"))}>
+          {t("failures to look into")}
         </StatCard>
       </div>
       <HourChart buckets={buckets} onSelectHour={onSelectHour} />
@@ -49,7 +55,7 @@ function HourChart({ buckets, onSelectHour }: { buckets: LogBucket[]; onSelectHo
   return (
     <figure className="surface rounded-xl p-4 sm:p-5">
       <figcaption className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <span className="text-sm font-semibold">Entries per hour</span>
+        <span className="text-sm font-semibold">{t("Entries per hour")}</span>
         <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {series.toReversed().map(({ key, fill }) => {
             const { plural, icon: Icon } = levels[key]
@@ -57,7 +63,7 @@ function HourChart({ buckets, onSelectHour }: { buckets: LogBucket[]; onSelectHo
               <span key={key} className="flex items-center gap-1.5">
                 <span aria-hidden className={cn("size-2.5 rounded-[3px]", fill)} />
                 <Icon aria-hidden className="size-3.5" weight="duotone" />
-                {plural}
+                {t(plural)}
               </span>
             )
           })}
@@ -78,7 +84,7 @@ function HourChart({ buckets, onSelectHour }: { buckets: LogBucket[]; onSelectHo
           </div>
           <div
             role="list"
-            aria-label="Entries per hour, select an hour to show its entries"
+            aria-label={t("Entries per hour, select an hour to show its entries")}
             className="relative flex h-full items-end gap-0.5"
           >
             {buckets.map((b, i) => (
@@ -86,7 +92,12 @@ function HourChart({ buckets, onSelectHour }: { buckets: LogBucket[]; onSelectHo
                 key={b.start}
                 type="button"
                 role="listitem"
-                aria-label={`${hourOf(b)}: ${b.info + b.debug} info, ${b.warn} warnings, ${b.error} errors`}
+                aria-label={t("{{hour}}: {{info}} info, {{warnings}} warnings, {{errors}} errors", {
+                  hour: hourOf(b),
+                  info: b.info + b.debug,
+                  warnings: b.warn,
+                  errors: b.error,
+                })}
                 onPointerEnter={() => setActive(i)}
                 onFocus={() => setActive(i)}
                 onBlur={() => setActive(undefined)}
@@ -114,12 +125,12 @@ function HourChart({ buckets, onSelectHour }: { buckets: LogBucket[]; onSelectHo
               // Centred over the hour, but kept within the chart.
               style={{ left: `clamp(0px, calc(${((active + 0.5) / buckets.length) * 100}% - 5.5rem), calc(100% - 11rem))` }}
             >
-              <p className="mb-2 font-medium text-muted-foreground">from {hourOf(shown)}</p>
+              <p className="mb-2 font-medium text-muted-foreground">{t("from {{hour}}", { hour: hourOf(shown) })}</p>
               {series.toReversed().map(({ key, fill }) => (
                 <p key={key} className="flex items-center gap-2">
                   <span aria-hidden className={cn("h-0.5 w-3 rounded-full", fill)} />
                   <span className="font-semibold tabular-nums">{count.format(key === "info" ? shown.info + shown.debug : shown[key])}</span>
-                  <span className="text-muted-foreground">{levels[key].plural}</span>
+                  <span className="text-muted-foreground">{t(levels[key].plural)}</span>
                 </p>
               ))}
             </div>

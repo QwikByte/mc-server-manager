@@ -1,31 +1,33 @@
+import { t } from "i18next"
 import { type CSSProperties, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { msg } from "@/lib/i18n"
 
 const colors: [code: string, name: string, hex: string][] = [
-  ["0", "Black", "#000000"],
-  ["1", "Dark blue", "#0000AA"],
-  ["2", "Dark green", "#00AA00"],
-  ["3", "Dark aqua", "#00AAAA"],
-  ["4", "Dark red", "#AA0000"],
-  ["5", "Dark purple", "#AA00AA"],
-  ["6", "Gold", "#FFAA00"],
-  ["7", "Gray", "#AAAAAA"],
-  ["8", "Dark gray", "#555555"],
-  ["9", "Blue", "#5555FF"],
-  ["a", "Green", "#55FF55"],
-  ["b", "Aqua", "#55FFFF"],
-  ["c", "Red", "#FF5555"],
-  ["d", "Light purple", "#FF55FF"],
-  ["e", "Yellow", "#FFFF55"],
-  ["f", "White", "#FFFFFF"],
+  ["0", msg("Black"), "#000000"],
+  ["1", msg("Dark blue"), "#0000AA"],
+  ["2", msg("Dark green"), "#00AA00"],
+  ["3", msg("Dark aqua"), "#00AAAA"],
+  ["4", msg("Dark red"), "#AA0000"],
+  ["5", msg("Dark purple"), "#AA00AA"],
+  ["6", msg("Gold"), "#FFAA00"],
+  ["7", msg("Gray"), "#AAAAAA"],
+  ["8", msg("Dark gray"), "#555555"],
+  ["9", msg("Blue"), "#5555FF"],
+  ["a", msg("Green"), "#55FF55"],
+  ["b", msg("Aqua"), "#55FFFF"],
+  ["c", msg("Red"), "#FF5555"],
+  ["d", msg("Light purple"), "#FF55FF"],
+  ["e", msg("Yellow"), "#FFFF55"],
+  ["f", msg("White"), "#FFFFFF"],
 ]
 const hex = Object.fromEntries(colors.map(([code, , value]) => [code, value]))
 const formats: [code: string, label: string, style: CSSProperties][] = [
-  ["l", "Bold", { fontWeight: 700 }],
-  ["o", "Italic", { fontStyle: "italic" }],
-  ["n", "Underline", { textDecoration: "underline" }],
-  ["m", "Strikethrough", { textDecoration: "line-through" }],
+  ["l", msg("Bold"), { fontWeight: 700 }],
+  ["o", msg("Italic"), { fontStyle: "italic" }],
+  ["n", msg("Underline"), { textDecoration: "underline" }],
+  ["m", msg("Strikethrough"), { textDecoration: "line-through" }],
 ]
 
 /** Splits a line into runs with Minecraft's § formatting codes applied. */
@@ -73,13 +75,13 @@ export function MotdField({
 
   return (
     <div className="grid gap-2">
-      <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Formatting">
+      <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label={t("Formatting")}>
         {colors.map(([code, name, color]) => (
           <button
             key={code}
             type="button"
-            title={name}
-            aria-label={`Insert colour ${name}`}
+            title={t(name)}
+            aria-label={t("Insert colour {{name}}", { name: t(name) })}
             disabled={disabled}
             onClick={() => insert(code)}
             className="size-6 rounded-md ring-1 ring-foreground/15 ring-inset outline-ring transition-transform hover:scale-110 focus-visible:outline-2 disabled:opacity-50 disabled:hover:scale-100"
@@ -92,8 +94,8 @@ export function MotdField({
             type="button"
             size="icon-xs"
             variant="outline"
-            title={label}
-            aria-label={`Insert ${label}`}
+            title={t(label)}
+            aria-label={t("Insert {{format}}", { format: t(label) })}
             disabled={disabled}
             onClick={() => insert(code)}
           >
@@ -101,7 +103,7 @@ export function MotdField({
           </Button>
         ))}
         <Button type="button" size="xs" variant="outline" disabled={disabled} onClick={() => insert("r")}>
-          Reset
+          {t("Reset")}
         </Button>
       </div>
       <Textarea
@@ -113,7 +115,7 @@ export function MotdField({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value.split("\n").slice(0, 2).join("\n"))}
       />
-      <div className="rounded-lg bg-console px-3 py-2.5 font-mono text-sm leading-5 text-[#AAAAAA]" aria-label="Preview">
+      <div className="rounded-lg bg-console px-3 py-2.5 font-mono text-sm leading-5 text-[#AAAAAA]" aria-label={t("Preview")}>
         {value.split("\n").map((line, i) => (
           <div key={i} className="min-h-5 whitespace-pre-wrap">
             {runs(line).map((run, j) => (

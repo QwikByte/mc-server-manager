@@ -1,6 +1,7 @@
 import { PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -48,7 +49,7 @@ export function CreateNetworkDialog() {
       { name: name.trim(), proxy, lobby },
       {
         onSuccess: (network) => {
-          toast.success(`Created ${network.name}`)
+          toast.success(t("Created {{name}}", { name: network.name }))
           void navigate({ to: "/networks/$networkId", params: { networkId: network.id } })
         },
       },
@@ -60,23 +61,23 @@ export function CreateNetworkDialog() {
       <DialogTrigger asChild>
         <Button>
           <PlusIcon />
-          Create network
+          {t("Create network")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Create network</DialogTitle>
+            <DialogTitle>{t("Create network")}</DialogTitle>
             <DialogDescription>
-              Connect a Velocity proxy with the server players join first. You can add more servers afterwards.
+              {t("Connect a Velocity proxy with the server players join first. You can add more servers afterwards.")}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="network-name">Name</FieldLabel>
+              <FieldLabel htmlFor="network-name">{t("Name")}</FieldLabel>
               <Input
                 id="network-name"
-                placeholder="Main network"
+                placeholder={t("Main network")}
                 required
                 maxLength={64}
                 value={name}
@@ -84,37 +85,39 @@ export function CreateNetworkDialog() {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="network-proxy">Proxy</FieldLabel>
+              <FieldLabel htmlFor="network-proxy">{t("Proxy")}</FieldLabel>
               <ServerSelect
                 id="network-proxy"
                 servers={availableServers(servers, networks, proxyTypes)}
                 value={proxy}
                 onChange={setProxy}
-                placeholder="Choose a Velocity proxy"
+                placeholder={t("Choose a Velocity proxy")}
               />
               <FieldDescription>
-                Players connect to the proxy. BungeeCord is not supported, as its forwarding can be spoofed.
+                {t("Players connect to the proxy. BungeeCord is not supported, as its forwarding can be spoofed.")}
               </FieldDescription>
             </Field>
             <Field>
-              <FieldLabel htmlFor="network-lobby">Lobby</FieldLabel>
+              <FieldLabel htmlFor="network-lobby">{t("Lobby")}</FieldLabel>
               <ServerSelect
                 id="network-lobby"
                 servers={availableServers(servers, networks, backendTypes)}
                 value={lobby}
                 onChange={setLobby}
-                placeholder="Choose a Paper or Purpur server"
+                placeholder={t("Choose a Paper or Purpur server")}
               />
-              <FieldDescription>Both servers restart. The lobby then only accepts players who join through the proxy.</FieldDescription>
+              <FieldDescription>
+                {t("Both servers restart. The lobby then only accepts players who join through the proxy.")}
+              </FieldDescription>
             </Field>
             {create.error && <FieldError>{create.error.message}</FieldError>}
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={create.isPending || !proxy || !lobby}>
-              {create.isPending ? "Creating…" : "Create network"}
+              {create.isPending ? t("Creating…") : t("Create network")}
             </Button>
           </DialogFooter>
         </form>

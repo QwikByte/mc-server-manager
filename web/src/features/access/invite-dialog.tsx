@@ -1,4 +1,5 @@
 import { UserPlusIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -43,32 +44,32 @@ export function InviteDialog({ groups }: { groups: Group[] }) {
       <DialogTrigger asChild>
         <Button>
           <UserPlusIcon />
-          Invite user
+          {t("Invite user")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         {invite.data ? (
           <>
             <DialogHeader>
-              <DialogTitle>Invited {invite.data.user.username}</DialogTitle>
-              <DialogDescription>The user can sign in after setting a password.</DialogDescription>
+              <DialogTitle>{t("Invited {{name}}", { name: invite.data.user.username })}</DialogTitle>
+              <DialogDescription>{t("The user can sign in after setting a password.")}</DialogDescription>
             </DialogHeader>
             <SetupLinkView username={invite.data.user.username} link={invite.data.setupLink} />
             <DialogFooter>
               <DialogClose asChild>
-                <Button>Done</Button>
+                <Button>{t("Done")}</Button>
               </DialogClose>
             </DialogFooter>
           </>
         ) : (
           <form onSubmit={submit} className="grid gap-6">
             <DialogHeader>
-              <DialogTitle>Invite user</DialogTitle>
-              <DialogDescription>You get a link with which the user sets a password. You never see it.</DialogDescription>
+              <DialogTitle>{t("Invite user")}</DialogTitle>
+              <DialogDescription>{t("You get a link with which the user sets a password. You never see it.")}</DialogDescription>
             </DialogHeader>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="invite-username">Username</FieldLabel>
+                <FieldLabel htmlFor="invite-username">{t("Username")}</FieldLabel>
                 <Input
                   id="invite-username"
                   required
@@ -77,12 +78,12 @@ export function InviteDialog({ groups }: { groups: Group[] }) {
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
                 />
-                <FieldDescription>3 to 32 letters, digits, &apos;_&apos;, &apos;.&apos; or &apos;-&apos;.</FieldDescription>
+                <FieldDescription>{t("3 to 32 letters, digits, '_', '.' or '-'.")}</FieldDescription>
               </Field>
               <FieldSet>
-                <FieldLegend variant="label">Groups</FieldLegend>
+                <FieldLegend variant="label">{t("Groups")}</FieldLegend>
                 <FieldDescription>
-                  The user gets the permissions of these groups. You can only choose groups within your own permissions.
+                  {t("The user gets the permissions of these groups. You can only choose groups within your own permissions.")}
                 </FieldDescription>
                 <GroupPicker groups={groups} value={form.groups} onChange={(groups) => setForm({ ...form, groups })} />
               </FieldSet>
@@ -90,10 +91,10 @@ export function InviteDialog({ groups }: { groups: Group[] }) {
             </FieldGroup>
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline">{t("Cancel")}</Button>
               </DialogClose>
               <Button type="submit" disabled={invite.isPending}>
-                {invite.isPending ? "Inviting…" : "Invite"}
+                {invite.isPending ? t("Inviting…") : t("Invite")}
               </Button>
             </DialogFooter>
           </form>

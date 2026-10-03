@@ -1,4 +1,5 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { t } from "i18next"
 import type { ServerRef } from "@/features/networks/api"
 import { serverType } from "@/features/servers/server-types"
 import { api, responseError } from "@/lib/api"
@@ -92,7 +93,7 @@ export function useChangePlugins(ref: ServerRef) {
     mutationFn: async (change: PluginChange) => {
       if (change.action === "remove") return api(`${base(ref)}/${encodeURIComponent(change.fileName)}`, { method: "DELETE" })
       const res = await fetch(`/api${base(ref)}/${encodeURIComponent(change.file.name)}`, { method: "PUT", body: change.file })
-      if (!res.ok) throw await responseError(res, `The upload failed with status ${res.status}.`)
+      if (!res.ok) throw await responseError(res, t("The upload failed with status {{status}}.", { status: res.status }))
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: pluginsQuery(ref).queryKey }),
   })

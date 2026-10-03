@@ -1,9 +1,10 @@
+import { t } from "i18next"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { Group } from "./api"
 
 /** Chooses the groups of a user. */
 export function GroupPicker({ groups, value, onChange }: { groups: Group[]; value: string[]; onChange: (groups: string[]) => void }) {
-  if (groups.length === 0) return <p className="text-sm text-muted-foreground">No groups yet.</p>
+  if (groups.length === 0) return <p className="text-sm text-muted-foreground">{t("No groups yet.")}</p>
   return (
     <ul className="grid gap-2">
       {groups.map((g) => (

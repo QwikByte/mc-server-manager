@@ -1,7 +1,9 @@
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useBlocker } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
+import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
@@ -35,33 +37,40 @@ function UpdateImage({ nodeId, server }: { nodeId: string; server: Server }) {
   const running = server.state !== "stopped"
   function run() {
     toast.promise(update.mutateAsync(), {
-      loading: "Downloading the newest image…",
+      loading: t("Downloading the newest image…"),
       success: ({ updated }) =>
-        !updated ? `${server.name} has the newest image already` : running ? `Updated and restarted ${server.name}` : `Updated ${server.name}`,
+        !updated
+          ? t("{{name}} has the newest image already", { name: server.name })
+          : running
+            ? t("Updated and restarted {{name}}", { name: server.name })
+            : t("Updated {{name}}", { name: server.name }),
       error: (e: Error) => e.message,
     })
   }
   const button = (
     <Button variant="outline" disabled={update.isPending} onClick={running ? undefined : run}>
       <ArrowsClockwiseIcon />
-      Update image
+      {t("Update image")}
     </Button>
   )
   return (
-    <section className="surface flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-5 sm:px-8" aria-label="Image">
+    <section className="surface flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-5 sm:px-8" aria-label={t("Image")}>
       <div className="max-w-xl space-y-1">
-        <h2 className="heading text-base">Image</h2>
+        <h2 className="heading text-base">{t("Image")}</h2>
         <p className="text-sm text-muted-foreground">
-          A server keeps the Docker image it was created with. A newer one brings fixes, e.g. for Java.
-          {running && " If there is one, the server restarts."}
+          {running
+            ? t(
+                "A server keeps the Docker image it was created with. A newer one brings fixes, e.g. for Java. If there is one, the server restarts.",
+              )
+            : t("A server keeps the Docker image it was created with. A newer one brings fixes, e.g. for Java.")}
         </p>
       </div>
       {running ? (
         <ConfirmDialog
           trigger={button}
-          title={`Update the image of ${server.name}?`}
-          description="If there is a newer image, the server's container is created again with the same data, so the server restarts."
-          action="Update image"
+          title={t("Update the image of {{name}}?", { name: server.name })}
+          description={t("If there is a newer image, the server's container is created again with the same data, so the server restarts.")}
+          action={t("Update image")}
           onConfirm={run}
         />
       ) : (
@@ -90,26 +99,26 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   function submit(event: FormEvent) {
     event.preventDefault()
     toast.promise(update.mutateAsync(settings), {
-      loading: server.state === "stopped" ? "Saving…" : `Saving and restarting ${server.name}…`,
-      success: `Saved the settings of ${form.name}`,
+      loading: server.state === "stopped" ? t("Saving…") : t("Saving and restarting {{name}}…", { name: server.name }),
+      success: t("Saved the settings of {{name}}", { name: form.name }),
       error: (e: Error) => e.message,
     })
   }
 
   return (
     <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
-      <FormSection title="General" description="Name, version and resources of the server.">
+      <FormSection title={t("General")} description={t("Name, version and resources of the server.")}>
         <Field>
-          <FieldLabel htmlFor="settings-name">Name</FieldLabel>
+          <FieldLabel htmlFor="settings-name">{t("Name")}</FieldLabel>
           <Input id="settings-name" required maxLength={32} value={form.name} onChange={(e) => set({ name: e.target.value })} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           {game && (
             <Field>
-              <FieldLabel htmlFor="settings-version">Minecraft version</FieldLabel>
+              <FieldLabel htmlFor="settings-version">{t("Minecraft version")}</FieldLabel>
               <Input
                 id="settings-version"
-                placeholder="Latest"
+                placeholder={t("Latest")}
                 value={form.version === "LATEST" ? "" : form.version}
                 onChange={(e) => set({ version: e.target.value.trim() || "LATEST" })}
               />
@@ -117,7 +126,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
           )}
           <MemoryField id="settings-memory" value={form.memoryMb} onChange={(memoryMb) => set({ memoryMb })} />
           <Field>
-            <FieldLabel htmlFor="settings-port">Port</FieldLabel>
+            <FieldLabel htmlFor="settings-port">{t("Port")}</FieldLabel>
             <Input
               id="settings-port"
               type="number"
@@ -131,40 +140,47 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
           </Field>
         </div>
         {game && form.version !== initial.version && (
-          <FieldDescription>Worlds can't be opened by older Minecraft versions. Make a backup before you downgrade.</FieldDescription>
+          <FieldDescription>
+            {t("Worlds can't be opened by older Minecraft versions. Make a backup before you downgrade.")}
+          </FieldDescription>
         )}
       </FormSection>
 
-      <FormSection title="Starting" description="When the server starts on its own.">
+      <FormSection title={t("Starting")} description={t("When the server starts on its own.")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
       </FormSection>
 
-      <FormSection title="Java" description="The Java runtime and the options it starts with.">
+      <FormSection title={t("Java")} description={t("The Java runtime and the options it starts with.")}>
         {game && <JavaFields java={form.java} aikarFlags={form.aikarFlags} onChange={set} />}
         <JvmOptionsField value={form.jvmOptions} onChange={(jvmOptions) => set({ jvmOptions })} />
       </FormSection>
 
-      <FormSection title="Resources" description="Limits and where the data is kept.">
+      <FormSection title={t("Resources")} description={t("Limits and where the data is kept.")}>
         <CpuLimitField value={form.cpuLimit} onChange={(cpuLimit) => set({ cpuLimit })} cpus={node?.info?.cpuCount} />
         <p className="text-sm text-muted-foreground">
-          The data is kept in the storage location <span className="font-medium text-foreground">{server.storage}</span>.
+          <Trans
+            i18nKey="The data is kept in the storage location <name/>."
+            components={{ name: <span className="font-medium text-foreground">{server.storage}</span> }}
+          />
         </p>
       </FormSection>
 
       <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">
         <p className="text-sm text-muted-foreground">
-          The server's container is created again with the same data{server.state === "stopped" ? "." : ", so the server restarts."}
+          {server.state === "stopped"
+            ? t("The server's container is created again with the same data.")
+            : t("The server's container is created again with the same data, so the server restarts.")}
         </p>
         <Button type="submit" disabled={!dirty || update.isPending}>
-          {update.isPending ? "Saving…" : "Save settings"}
+          {update.isPending ? t("Saving…") : t("Save settings")}
         </Button>
       </div>
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}
-        title="Discard your changes?"
-        description="Your changes to the settings haven't been saved."
-        action="Discard changes"
+        title={t("Discard your changes?")}
+        description={t("Your changes to the settings haven't been saved.")}
+        action={t("Discard changes")}
         destructive
         onConfirm={() => blocker.proceed?.()}
       />

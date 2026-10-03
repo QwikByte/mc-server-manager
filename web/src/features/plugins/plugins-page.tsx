@@ -1,4 +1,5 @@
 import { PuzzlePieceIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { useState } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -16,20 +17,20 @@ export function PluginsPage() {
       <PageHeader
         icon={PuzzlePieceIcon}
         tone="warning"
-        title="Plugins & mods"
-        description="Install plugins and mods from Modrinth on any number of your servers."
+        title={t("Plugins & mods")}
+        description={t("Install plugins and mods from Modrinth on any number of your servers.")}
         actions={
           <Select value={type} onValueChange={setType}>
-            <SelectTrigger aria-label="Software" className="w-44">
+            <SelectTrigger aria-label={t("Software")} className="w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={any}>All software</SelectItem>
+              <SelectItem value={any}>{t("All software")}</SelectItem>
               {serverTypes
-                .filter((t) => t.addons)
-                .map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
+                .filter((s) => s.addons)
+                .map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
                   </SelectItem>
                 ))}
             </SelectContent>

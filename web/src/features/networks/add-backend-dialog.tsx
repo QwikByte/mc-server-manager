@@ -1,5 +1,6 @@
 import { PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -34,8 +35,11 @@ export function AddBackendDialog({ network }: { network: Network }) {
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!server) return
-    const name = findServer(servers, server)?.name ?? "the server"
-    run({ action: "add", server }, { loading: `Adding ${name}…`, success: `Added ${name} to ${network.name}` })
+    const name = findServer(servers, server)?.name ?? t("the server")
+    run(
+      { action: "add", server },
+      { loading: t("Adding {{name}}…", { name }), success: t("Added {{name}} to {{network}}", { name, network: network.name }) },
+    )
     onOpenChange(false)
   }
 
@@ -44,37 +48,38 @@ export function AddBackendDialog({ network }: { network: Network }) {
       <DialogTrigger asChild>
         <Button disabled={isPending}>
           <PlusIcon />
-          Add server
+          {t("Add server")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Add server to {network.name}</DialogTitle>
-            <DialogDescription>Players switch to it with /server and its name.</DialogDescription>
+            <DialogTitle>{t("Add server to {{network}}", { network: network.name })}</DialogTitle>
+            <DialogDescription>{t("Players switch to it with /server and its name.")}</DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="backend-server">Server</FieldLabel>
+              <FieldLabel htmlFor="backend-server">{t("Server")}</FieldLabel>
               <ServerSelect
                 id="backend-server"
                 servers={availableServers(servers, networks, backendTypes)}
                 value={server}
                 onChange={setServer}
-                placeholder="Choose a Paper or Purpur server"
+                placeholder={t("Choose a Paper or Purpur server")}
               />
               <FieldDescription>
-                The server restarts and then only accepts players who join through the proxy. The proxy restarts as well, which disconnects
-                all players. A server on another node must be reachable from the proxy's node at its port.
+                {t(
+                  "The server restarts and then only accepts players who join through the proxy. The proxy restarts as well, which disconnects all players. A server on another node must be reachable from the proxy's node at its port.",
+                )}
               </FieldDescription>
             </Field>
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={!server}>
-              Add server
+              {t("Add server")}
             </Button>
           </DialogFooter>
         </form>

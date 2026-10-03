@@ -1,4 +1,5 @@
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { useState } from "react"
 
 /** A value to copy, such as a command or a link, on the console's dark surface. */
@@ -27,7 +28,7 @@ export function CopyField({ value, label, prefix }: { value: string; label: stri
       />
       <button
         type="button"
-        aria-label={copied ? "Copied" : `Copy ${label.toLowerCase()}`}
+        aria-label={copied ? t("Copied") : t("Copy {{label}}", { label })}
         onClick={copy}
         className="grid size-7 shrink-0 place-items-center rounded-md text-console-muted transition-colors hover:bg-white/10 hover:text-console-foreground"
       >

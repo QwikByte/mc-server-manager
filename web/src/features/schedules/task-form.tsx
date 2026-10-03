@@ -1,4 +1,5 @@
 import { useBlocker } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, type ReactNode, useState } from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
@@ -6,9 +7,23 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { msg } from "@/lib/i18n"
 import type { TaskInput } from "./api"
 import { ScheduleField } from "./schedule-field"
 import { TargetsField } from "@/features/servers/targets-field"
+
+const texts = {
+  job: {
+    general: msg("What the job is called, and whether it runs on its schedule."),
+    paused: msg("A paused job only runs when you start it."),
+    unsaved: msg("Your changes to the job haven't been saved."),
+  },
+  policy: {
+    general: msg("What the policy is called, and whether it runs on its schedule."),
+    paused: msg("A paused policy only runs when you start it."),
+    unsaved: msg("Your changes to the policy haven't been saved."),
+  },
+}
 
 /**
  * Edits a task: its name, schedule and servers, and the settings of its kind, which
@@ -16,7 +31,7 @@ import { TargetsField } from "@/features/servers/targets-field"
  */
 export function TaskForm<S>({
   initial,
-  noun,
+  kind,
   submitLabel,
   pending,
   error,
@@ -24,8 +39,7 @@ export function TaskForm<S>({
   children,
 }: {
   initial: TaskInput<S>
-  /** What the task is called, e.g. "job" or "policy". */
-  noun: string
+  kind: keyof typeof texts
   submitLabel: string
   pending: boolean
   error: Error | null
@@ -44,42 +58,42 @@ export function TaskForm<S>({
 
   return (
     <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
-      <FormSection title="General" description={`What the ${noun} is called, and whether it runs on its schedule.`}>
+      <FormSection title={t("General")} description={t(texts[kind].general)}>
         <Field>
-          <FieldLabel htmlFor="task-name">Name</FieldLabel>
+          <FieldLabel htmlFor="task-name">{t("Name")}</FieldLabel>
           <Input id="task-name" required maxLength={64} value={form.name} onChange={(e) => set({ name: e.target.value })} />
         </Field>
         <Field orientation="horizontal">
           <Switch id="task-enabled" checked={form.enabled} onCheckedChange={(enabled) => set({ enabled })} />
           <FieldContent>
-            <FieldLabel htmlFor="task-enabled">Active</FieldLabel>
-            <FieldDescription>A paused {noun} only runs when you start it.</FieldDescription>
+            <FieldLabel htmlFor="task-enabled">{t("Active")}</FieldLabel>
+            <FieldDescription>{t(texts[kind].paused)}</FieldDescription>
           </FieldContent>
         </Field>
       </FormSection>
 
       {children(form.settings, (change) => set({ settings: { ...form.settings, ...change } }))}
 
-      <FormSection title="Schedule" description="When it runs. Runs missed while the master was down are skipped.">
+      <FormSection title={t("Schedule")} description={t("When it runs. Runs missed while the master was down are skipped.")}>
         <ScheduleField value={form.schedule} onChange={(schedule) => set({ schedule })} />
       </FormSection>
 
-      <FormSection title="Servers" description="Where it runs. A whole node includes the servers created later.">
+      <FormSection title={t("Servers")} description={t("Where it runs. A whole node includes the servers created later.")}>
         <TargetsField value={form.targets} onChange={(targets) => set({ targets })} />
       </FormSection>
 
       <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">
         {error && <FieldError className="mr-auto">{error.message}</FieldError>}
         <Button type="submit" disabled={!dirty || pending || form.targets.length === 0}>
-          {pending ? "Saving…" : submitLabel}
+          {pending ? t("Saving…") : submitLabel}
         </Button>
       </div>
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}
-        title="Discard your changes?"
-        description={`Your changes to the ${noun} haven't been saved.`}
-        action="Discard changes"
+        title={t("Discard your changes?")}
+        description={t(texts[kind].unsaved)}
+        action={t("Discard changes")}
         destructive
         onConfirm={() => blocker.proceed?.()}
       />

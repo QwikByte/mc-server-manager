@@ -1,5 +1,6 @@
 import { ScrollIcon } from "@phosphor-icons/react"
 import { getRouteApi, Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { Section } from "@/components/section"
 import { Button } from "@/components/ui/button"
 import { LogList } from "./log-list"
@@ -12,7 +13,9 @@ export function ServerActivityPage() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Actions on this server, what its agent did and what went wrong, as it happens.</p>
+        <p className="text-sm text-muted-foreground">
+          {t("Actions on this server, what its agent did and what went wrong, as it happens.")}
+        </p>
         <OpenInLog node={nodeId} server={serverId} />
       </div>
       <LogList filter={{ node: nodeId, server: serverId }} live />
@@ -23,7 +26,7 @@ export function ServerActivityPage() {
 /** The latest entries about a node and its servers. */
 export function NodeActivity({ nodeId }: { nodeId: string }) {
   return (
-    <Section title="Activity" description="What happened on this node and its servers." actions={<OpenInLog node={nodeId} />}>
+    <Section title={t("Activity")} description={t("What happened on this node and its servers.")} actions={<OpenInLog node={nodeId} />}>
       <LogList filter={{ node: nodeId }} live />
     </Section>
   )
@@ -34,7 +37,7 @@ function OpenInLog({ node, server }: { node: string; server?: string }) {
     <Button variant="outline" size="sm" asChild>
       <Link to="/logs" search={{ node, server }}>
         <ScrollIcon />
-        Open in the log
+        {t("Open in the log")}
       </Link>
     </Button>
   )

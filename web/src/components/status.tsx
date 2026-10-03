@@ -1,9 +1,11 @@
+import { t } from "i18next"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { type Tone, toneClasses, toneDots } from "./tone"
 
 export interface Status {
   tone: Tone
+  /** In English, marked with msg; StatusBadge translates it. */
   label: string
   /** Pulses while something is in transition, e.g. a starting server. */
   pulse?: boolean
@@ -47,7 +49,7 @@ export function StatusBadge({ status, className }: { status: Status; className?:
   return (
     <Pill tone={status.tone} className={className}>
       <StatusDot status={status} />
-      {status.label}
+      {t(status.label)}
     </Pill>
   )
 }

@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { t } from "i18next"
 import { ApiError, api, responseError } from "@/lib/api"
 
 export interface FileEntry {
@@ -62,7 +63,7 @@ export class BinaryFileError extends Error {}
 /** Reads a file as UTF-8 text, or throws BinaryFileError for other content. */
 export async function readText(s: ServerFiles, path: string): Promise<string> {
   const res = await fetch(contentUrl(s, path))
-  if (!res.ok) throw await responseError(res, `The file could not be loaded (status ${res.status}).`)
+  if (!res.ok) throw await responseError(res, t("The file could not be loaded (status {{status}}).", { status: res.status }))
   const bytes = new Uint8Array(await res.arrayBuffer())
   try {
     const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
@@ -70,7 +71,7 @@ export async function readText(s: ServerFiles, path: string): Promise<string> {
   } catch {
     // not UTF-8
   }
-  throw new BinaryFileError("This file isn't text and can't be edited here.")
+  throw new BinaryFileError(t("This file isn't text and can't be edited here."))
 }
 
 /**
@@ -92,9 +93,9 @@ export function upload(
     xhr.onload = () =>
       xhr.status === 201
         ? resolve(xhr.response as FileEntry)
-        : reject(new ApiError(xhr.status, xhr.response?.error ?? `The upload failed with status ${xhr.status}.`))
-    xhr.onerror = () => reject(new Error("The connection to the panel was lost."))
-    xhr.onabort = () => reject(new DOMException("The upload was cancelled.", "AbortError"))
+        : reject(new ApiError(xhr.status, xhr.response?.error ?? t("The upload failed with status {{status}}.", { status: xhr.status })))
+    xhr.onerror = () => reject(new Error(t("The connection to the panel was lost.")))
+    xhr.onabort = () => reject(new DOMException(t("The upload was cancelled."), "AbortError"))
     signal?.addEventListener("abort", () => xhr.abort())
     xhr.send(body)
   })

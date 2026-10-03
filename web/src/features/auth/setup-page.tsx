@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useEffect, useState } from "react"
+import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -18,19 +20,24 @@ export function SetupPage() {
 
   if (!token || error) {
     return (
-      <AuthLayout title="This link doesn't work" description="Setup links work once and expire after three days.">
+      <AuthLayout title={t("This link doesn't work")} description={t("Setup links work once and expire after three days.")}>
         <p className="text-sm text-muted-foreground">
-          {error?.message ?? "The link is incomplete."} Ask an administrator for a new setup link, or{" "}
-          <Link to="/login" search={{}} className="font-medium text-foreground underline-offset-4 hover:underline">
-            sign in
-          </Link>{" "}
-          if you have a password already.
+          {error?.message ?? t("The link is incomplete.")}{" "}
+          <Trans
+            i18nKey="Ask an administrator for a new setup link, or <link>sign in</link> if you have a password already."
+            components={{
+              link: <Link to="/login" search={{}} className="font-medium text-foreground underline-offset-4 hover:underline" />,
+            }}
+          />
         </p>
       </AuthLayout>
     )
   }
   return (
-    <AuthLayout title={user ? `Welcome, ${user.username}` : "Welcome"} description="Choose the password for your account.">
+    <AuthLayout
+      title={user ? t("Welcome, {{name}}", { name: user.username }) : t("Welcome")}
+      description={t("Choose the password for your account.")}
+    >
       {isPending ? <Skeleton className="h-52 rounded-xl" /> : <PasswordForm token={token} username={user.username} />}
     </AuthLayout>
   )
@@ -50,7 +57,7 @@ function PasswordForm({ token, username }: { token: string; username: string }) 
       {
         onSuccess: (result) => {
           if (!("mfaRequired" in result)) return navigate({ to: "/" })
-          toast.success("Saved your password", { description: "Sign in with it and a code of your authenticator app." })
+          toast.success(t("Saved your password"), { description: t("Sign in with it and a code of your authenticator app.") })
           return navigate({ to: "/login", search: {} })
         },
       },
@@ -63,7 +70,7 @@ function PasswordForm({ token, username }: { token: string; username: string }) 
         {/* Lets password managers save the new password for the right account. */}
         <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
         <Field>
-          <FieldLabel htmlFor="setup-password">Password</FieldLabel>
+          <FieldLabel htmlFor="setup-password">{t("Password")}</FieldLabel>
           <Input
             id="setup-password"
             type="password"
@@ -74,10 +81,10 @@ function PasswordForm({ token, username }: { token: string; username: string }) 
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
-          <FieldDescription>At least 12 characters.</FieldDescription>
+          <FieldDescription>{t("At least 12 characters.")}</FieldDescription>
         </Field>
         <Field data-invalid={mismatch}>
-          <FieldLabel htmlFor="setup-repeat">Repeat password</FieldLabel>
+          <FieldLabel htmlFor="setup-repeat">{t("Repeat password")}</FieldLabel>
           <Input
             id="setup-repeat"
             type="password"
@@ -87,11 +94,11 @@ function PasswordForm({ token, username }: { token: string; username: string }) 
             value={form.repeat}
             onChange={(e) => setForm({ ...form, repeat: e.target.value })}
           />
-          {mismatch && <FieldError>The passwords don't match.</FieldError>}
+          {mismatch && <FieldError>{t("The passwords don't match.")}</FieldError>}
         </Field>
         {setup.error && <FieldError>{setup.error.message}</FieldError>}
         <Button type="submit" size="lg" className="w-full" disabled={setup.isPending || mismatch}>
-          {setup.isPending ? "Saving…" : "Set password and sign in"}
+          {setup.isPending ? t("Saving…") : t("Set password and sign in")}
         </Button>
       </FieldGroup>
     </form>

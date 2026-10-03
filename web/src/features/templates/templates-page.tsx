@@ -1,6 +1,7 @@
 import { MemoryIcon, PencilSimpleIcon, PlusIcon, StackIcon, TrashIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
@@ -17,14 +18,16 @@ import { displayVersion, serverLook, serverType } from "@/features/servers/serve
 import { formatMegabytes } from "@/lib/format"
 import { type Template, templatesQuery, useDeleteTemplate } from "./api"
 
-const newTemplate = (
-  <Button asChild>
-    <Link to="/templates/new">
-      <PlusIcon />
-      New template
-    </Link>
-  </Button>
-)
+function NewTemplate() {
+  return (
+    <Button asChild>
+      <Link to="/templates/new">
+        <PlusIcon />
+        {t("New template")}
+      </Link>
+    </Button>
+  )
+}
 
 export function TemplatesPage() {
   const manage = useAccess().can("templates.manage")
@@ -34,9 +37,9 @@ export function TemplatesPage() {
       <PageHeader
         icon={StackIcon}
         tone="info"
-        title="Templates"
-        description="Preconfigured settings, server.properties and plugins for new servers. Name and port are chosen per server."
-        actions={manage && newTemplate}
+        title={t("Templates")}
+        description={t("Preconfigured settings, server.properties and plugins for new servers. Name and port are chosen per server.")}
+        actions={manage && <NewTemplate />}
       />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -50,19 +53,19 @@ export function TemplatesPage() {
         <EmptyState
           icon={StackIcon}
           tone="info"
-          title="No templates yet"
+          title={t("No templates yet")}
           description={
             manage
-              ? "Create a template from scratch, or save an existing server as a template from its page."
-              : "There are no templates yet."
+              ? t("Create a template from scratch, or save an existing server as a template from its page.")
+              : t("There are no templates yet.")
           }
         >
-          {manage && newTemplate}
+          {manage && <NewTemplate />}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
-          {templates.map((t) => (
-            <TemplateCard key={t.id} template={t} />
+          {templates.map((template) => (
+            <TemplateCard key={template.id} template={template} />
           ))}
         </ul>
       )}
@@ -75,9 +78,10 @@ function TemplateCard({ template }: { template: Template }) {
   const remove = useDeleteTemplate()
   const type = serverType(template.type)
   const extras = [
-    template.java && `Java ${template.java}`,
-    template.aikarFlags && "Aikar's flags",
-    Object.keys(template.properties).length > 0 && `${Object.keys(template.properties).length} properties`,
+    template.java && t("Java {{version}}", { version: template.java }),
+    template.aikarFlags && t("Aikar's flags"),
+    Object.keys(template.properties).length > 0 &&
+      t("{{count}} properties", { count: Object.keys(template.properties).length, defaultValue_one: "{{count}} property" }),
   ].filter(Boolean)
 
   return (
@@ -116,7 +120,7 @@ function TemplateCard({ template }: { template: Template }) {
             trigger={
               <Button size="sm">
                 <PlusIcon />
-                Create server
+                {t("Create server")}
               </Button>
             }
           />
@@ -126,7 +130,7 @@ function TemplateCard({ template }: { template: Template }) {
             <Button asChild size="sm" variant="outline">
               <Link to="/templates/$templateId" params={{ templateId: template.id }}>
                 <PencilSimpleIcon />
-                Edit
+                {t("Edit")}
               </Link>
             </Button>
             <ConfirmDialog
@@ -134,20 +138,20 @@ function TemplateCard({ template }: { template: Template }) {
                 <Button
                   size="icon-sm"
                   variant="ghost"
-                  aria-label={`Delete ${template.name}`}
-                  title="Delete template"
+                  aria-label={t("Delete {{name}}", { name: template.name })}
+                  title={t("Delete template")}
                   className="ml-auto text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
                   <TrashIcon />
                 </Button>
               }
-              title={`Delete ${template.name}?`}
-              description="Servers created from the template stay as they are."
-              action="Delete template"
+              title={t("Delete {{name}}?", { name: template.name })}
+              description={t("Servers created from the template stay as they are.")}
+              action={t("Delete template")}
               destructive
               onConfirm={() =>
                 remove.mutate(template.id, {
-                  onSuccess: () => toast.success(`Deleted ${template.name}`),
+                  onSuccess: () => toast.success(t("Deleted {{name}}", { name: template.name })),
                   onError: (e) => toast.error(e.message),
                 })
               }

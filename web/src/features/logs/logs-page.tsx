@@ -1,5 +1,6 @@
 import { DownloadSimpleIcon, ScrollIcon } from "@phosphor-icons/react"
 import { getRouteApi } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useMemo, useState } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Section } from "@/components/section"
@@ -31,30 +32,32 @@ export function LogsPage() {
       <PageHeader
         icon={ScrollIcon}
         tone="violet"
-        title="Logs"
-        description="What happened on the master and its agents: who did what, and what went wrong. You see the entries about the nodes and servers your groups allow."
+        title={t("Logs")}
+        description={t(
+          "What happened on the master and its agents: who did what, and what went wrong. You see the entries about the nodes and servers your groups allow.",
+        )}
         actions={
           <>
             <Button variant="outline" aria-pressed={live} onClick={() => setLive(!live)} disabled={!!hour}>
               <span aria-hidden className={cn("size-2 rounded-full", streaming ? "animate-pulse bg-success" : "bg-muted-foreground/50")} />
-              {streaming ? "Live" : "Paused"}
+              {streaming ? t("Live") : t("Paused")}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
                   <DownloadSimpleIcon />
-                  Export
+                  {t("Export")}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem asChild>
                   <a href={exportUrl(filter, "csv")} download>
-                    CSV for spreadsheets
+                    {t("CSV for spreadsheets")}
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <a href={exportUrl(filter, "jsonl")} download>
-                    JSON lines for log tools
+                    {t("JSON lines for log tools")}
                   </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -64,7 +67,7 @@ export function LogsPage() {
       />
       <LogFilters search={search} onChange={update} />
       <LogOverview filter={filter} onSelectHour={(start) => update({ hour: start.toISOString(), range: undefined })} />
-      <Section title="Entries" description="Newest first. Select an entry for its details." className="mt-8">
+      <Section title={t("Entries")} description={t("Newest first. Select an entry for its details.")} className="mt-8">
         <LogList filter={filter} live={streaming} onFilter={update} />
       </Section>
     </>

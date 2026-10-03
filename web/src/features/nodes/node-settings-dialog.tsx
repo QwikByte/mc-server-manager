@@ -1,4 +1,5 @@
 import { GearIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { type FormEvent, type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -45,7 +46,7 @@ export function NodeSettingsDialog({ node, trigger }: { node: Node; trigger?: Re
       { name: form.name, address: form.address, defaultStorage: form.defaultStorage, ...limitsOf(form) },
       {
         onSuccess: () => {
-          toast.success(`Saved the settings of ${form.name}`)
+          toast.success(t("Saved the settings of {{name}}", { name: form.name }))
           setOpen(false)
         },
       },
@@ -58,24 +59,24 @@ export function NodeSettingsDialog({ node, trigger }: { node: Node; trigger?: Re
         {trigger ?? (
           <Button variant="outline">
             <GearIcon />
-            Settings
+            {t("Settings")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Settings of {node.name}</DialogTitle>
-            <DialogDescription>The limits apply when servers are created or changed.</DialogDescription>
+            <DialogTitle>{t("Settings of {{name}}", { name: node.name })}</DialogTitle>
+            <DialogDescription>{t("The limits apply when servers are created or changed.")}</DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor="node-settings-name">Name</FieldLabel>
+                <FieldLabel htmlFor="node-settings-name">{t("Name")}</FieldLabel>
                 <Input id="node-settings-name" required maxLength={64} value={form.name} onChange={(e) => set({ name: e.target.value })} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="node-settings-address">Agent address</FieldLabel>
+                <FieldLabel htmlFor="node-settings-address">{t("Agent address")}</FieldLabel>
                 <Input
                   id="node-settings-address"
                   required
@@ -87,7 +88,7 @@ export function NodeSettingsDialog({ node, trigger }: { node: Node; trigger?: Re
             </div>
             {locations.length > 0 && (
               <Field>
-                <FieldLabel htmlFor="node-settings-storage">Default storage</FieldLabel>
+                <FieldLabel htmlFor="node-settings-storage">{t("Default storage")}</FieldLabel>
                 <Select value={form.defaultStorage} onValueChange={(defaultStorage) => set({ defaultStorage })}>
                   <SelectTrigger id="node-settings-storage" className="w-full">
                     <SelectValue />
@@ -96,12 +97,12 @@ export function NodeSettingsDialog({ node, trigger }: { node: Node; trigger?: Re
                     {locations.map((l) => (
                       <SelectItem key={l.name} value={l.name}>
                         {l.name}
-                        <span className="text-muted-foreground">{formatBytes(l.freeBytes)} free</span>
+                        <span className="text-muted-foreground">{t("{{size}} free", { size: formatBytes(l.freeBytes) })}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <FieldDescription>Preselected when you create a server on this node.</FieldDescription>
+                <FieldDescription>{t("Preselected when you create a server on this node.")}</FieldDescription>
               </Field>
             )}
             <LimitsFields id="node-settings" form={form} onChange={set} memoryMb={memoryMb} />
@@ -109,10 +110,10 @@ export function NodeSettingsDialog({ node, trigger }: { node: Node; trigger?: Re
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={update.isPending}>
-              {update.isPending ? "Saving…" : "Save"}
+              {update.isPending ? t("Saving…") : t("Save")}
             </Button>
           </DialogFooter>
         </form>

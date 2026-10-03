@@ -1,5 +1,6 @@
 import { type Icon, KeyIcon, ShieldCheckIcon, ShieldIcon, UserCircleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
@@ -10,6 +11,7 @@ import { StatusBadge } from "@/components/status"
 import type { Tone } from "@/components/tone"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { msg } from "@/lib/i18n"
 import { meQuery, mfaQuery, useDisableMfa, useEnableMfa, useNewRecoveryCodes } from "./api"
 import { ConfirmPasswordDialog, MfaSetupDialog, RecoveryCodesDialog } from "./mfa-dialogs"
 import { PasswordDialog } from "./password-dialog"
@@ -20,16 +22,21 @@ export function AccountPage() {
   if (!user) return null
   return (
     <>
-      <PageHeader icon={UserCircleIcon} tone="violet" title="Your account" description={`Signed in as ${user.username}.`} />
+      <PageHeader
+        icon={UserCircleIcon}
+        tone="violet"
+        title={t("Your account")}
+        description={t("Signed in as {{name}}.", { name: user.username })}
+      />
       <div className="surface rounded-2xl px-5 sm:px-8 [&>section:last-child]:border-b-0">
-        <FormSection title="Password" description="Changing it signs you out on your other devices.">
-          <AccountRow icon={KeyIcon} tone="info" title="Password" actions={<PasswordDialog username={user.username} />}>
-            At least 12 characters that you don't use anywhere else.
+        <FormSection title={t("Password")} description={t("Changing it signs you out on your other devices.")}>
+          <AccountRow icon={KeyIcon} tone="info" title={t("Password")} actions={<PasswordDialog username={user.username} />}>
+            {t("At least 12 characters that you don't use anywhere else.")}
           </AccountRow>
         </FormSection>
         <FormSection
-          title="Two-factor authentication"
-          description="A code of an authenticator app on your phone keeps your account safe even if someone learns your password."
+          title={t("Two-factor authentication")}
+          description={t("A code of an authenticator app on your phone keeps your account safe even if someone learns your password.")}
         >
           <MfaSettings username={user.username} />
         </FormSection>
@@ -54,53 +61,53 @@ function MfaSettings({ username }: { username: string }) {
         <AccountRow
           icon={ShieldCheckIcon}
           tone="success"
-          title="Authenticator app"
-          status={{ tone: "success", label: "On" }}
+          title={t("Authenticator app")}
+          status={{ tone: "success", label: msg("On") }}
           actions={
             <>
               <ConfirmPasswordDialog
-                trigger={<Button variant="outline">New recovery codes</Button>}
-                title="Create new recovery codes"
-                description="The new codes replace those you have, which stop working."
-                action="Create codes"
+                trigger={<Button variant="outline">{t("New recovery codes")}</Button>}
+                title={t("Create new recovery codes")}
+                description={t("The new codes replace those you have, which stop working.")}
+                action={t("Create codes")}
                 change={renew}
                 onSuccess={({ recoveryCodes }) => setCodes(recoveryCodes)}
               />
               <ConfirmPasswordDialog
-                trigger={<Button variant="destructive">Turn off</Button>}
-                title="Turn off two-factor authentication"
-                description="Then your password alone signs you in. Your authenticator app and recovery codes stop working."
-                action="Turn off"
+                trigger={<Button variant="destructive">{t("Turn off")}</Button>}
+                title={t("Turn off two-factor authentication")}
+                description={t("Then your password alone signs you in. Your authenticator app and recovery codes stop working.")}
+                action={t("Turn off")}
                 destructive
                 change={disable}
-                onSuccess={() => toast.success("Turned off two-factor authentication")}
+                onSuccess={() => toast.success(t("Turned off two-factor authentication"))}
               />
             </>
           }
         >
-          Signing in asks for a code of the app.{" "}
+          {t("Signing in asks for a code of the app.")}{" "}
           <span className={data.recoveryCodes <= 3 ? "font-medium text-warning" : undefined}>
-            {data.recoveryCodes === 1 ? "1 recovery code" : `${data.recoveryCodes} recovery codes`} left.
+            {t("{{count}} recovery codes left.", { count: data.recoveryCodes, defaultValue_one: "{{count}} recovery code left." })}
           </span>
         </AccountRow>
       ) : (
         <AccountRow
           icon={ShieldIcon}
           tone="neutral"
-          title="Authenticator app"
-          status={{ tone: "neutral", label: "Off" }}
+          title={t("Authenticator app")}
+          status={{ tone: "neutral", label: msg("Off") }}
           actions={
             <MfaSetupDialog
               username={username}
               enable={enable}
               onEnabled={(codes) => {
                 setCodes(codes)
-                toast.success("Turned on two-factor authentication", { description: "You were signed out everywhere else." })
+                toast.success(t("Turned on two-factor authentication"), { description: t("You were signed out everywhere else.") })
               }}
             />
           }
         >
-          Your password alone signs you in.
+          {t("Your password alone signs you in.")}
         </AccountRow>
       )}
       <RecoveryCodesDialog codes={codes} onClose={() => setCodes(undefined)} />

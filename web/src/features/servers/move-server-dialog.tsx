@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -49,7 +50,9 @@ export function MoveServerDialog({
     event.preventDefault()
     move.mutate(values, {
       onSuccess: () => {
-        toast.success(`Moving ${server.name} to ${target?.name}`, { description: "It is offline while its files are copied." })
+        toast.success(t("Moving {{name}} to {{node}}", { name: server.name, node: target?.name }), {
+          description: t("It is offline while its files are copied."),
+        })
         close(false)
       },
     })
@@ -60,18 +63,19 @@ export function MoveServerDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Move {server.name}</DialogTitle>
+            <DialogTitle>{t("Move {{name}}", { name: server.name })}</DialogTitle>
             <DialogDescription>
-              The server stops while its files are copied through the master, and starts on the new node if it runs now. Players then
-              join it at the new node's address.
+              {t(
+                "The server stops while its files are copied through the master, and starts on the new node if it runs now. Players then join it at the new node's address.",
+              )}
             </DialogDescription>
           </DialogHeader>
           {targets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">There is no other online node on which you may create servers.</p>
+            <p className="text-sm text-muted-foreground">{t("There is no other online node on which you may create servers.")}</p>
           ) : (
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="move-node">Node</FieldLabel>
+                <FieldLabel htmlFor="move-node">{t("Node")}</FieldLabel>
                 <Select value={values.node} onValueChange={(id) => setForm({ ...form, node: id, storage: undefined })}>
                   <SelectTrigger id="move-node" className="w-full">
                     <SelectValue />
@@ -87,7 +91,7 @@ export function MoveServerDialog({
               </Field>
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="move-port">Port</FieldLabel>
+                  <FieldLabel htmlFor="move-port">{t("Port")}</FieldLabel>
                   <Input
                     id="move-port"
                     type="number"
@@ -100,7 +104,7 @@ export function MoveServerDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="move-storage">Storage location</FieldLabel>
+                  <FieldLabel htmlFor="move-storage">{t("Storage location")}</FieldLabel>
                   <Select value={values.storage} onValueChange={(storage) => setForm({ ...form, storage })}>
                     <SelectTrigger id="move-storage" className="w-full">
                       <SelectValue />
@@ -118,20 +122,24 @@ export function MoveServerDialog({
               <Field orientation="horizontal">
                 <Checkbox id="move-backups" checked={values.backups} onCheckedChange={(v) => setForm({ ...form, backups: v === true })} />
                 <FieldContent>
-                  <FieldLabel htmlFor="move-backups">Move the backups too</FieldLabel>
-                  <FieldDescription>Otherwise they are deleted with the server on {node?.name ?? "this node"}.</FieldDescription>
+                  <FieldLabel htmlFor="move-backups">{t("Move the backups too")}</FieldLabel>
+                  <FieldDescription>
+                    {node
+                      ? t("Otherwise they are deleted with the server on {{node}}.", { node: node.name })
+                      : t("Otherwise they are deleted with the server on this node.")}
+                  </FieldDescription>
                 </FieldContent>
               </Field>
-              <FieldDescription>If the server is part of a network, the network is updated and its proxy restarts.</FieldDescription>
+              <FieldDescription>{t("If the server is part of a network, the network is updated and its proxy restarts.")}</FieldDescription>
               {move.error && <FieldError>{move.error.message}</FieldError>}
             </FieldGroup>
           )}
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={move.isPending || !target}>
-              {move.isPending ? "Checking…" : "Move server"}
+              {move.isPending ? t("Checking…") : t("Move server")}
             </Button>
           </DialogFooter>
         </form>

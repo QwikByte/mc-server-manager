@@ -1,6 +1,7 @@
 import { FileTextIcon, MagnifyingGlassIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useBlocker } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
@@ -31,8 +32,8 @@ export function PropertiesPage() {
       <EmptyState
         icon={FileTextIcon}
         tone="neutral"
-        title="No server.properties yet"
-        description="The server creates it when it starts for the first time. Start the server once, then come back."
+        title={t("No server.properties yet")}
+        description={t("The server creates it when it starts for the first time. Start the server once, then come back.")}
       />
     )
   return <PropertiesForm nodeId={nodeId} server={server} data={data} />
@@ -61,17 +62,17 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
 
   const term = search.trim().toLowerCase()
   const keys = Object.keys(data.properties)
-    .filter((key) => !term || [key, definition(key).label, definition(key).description].some((s) => s.toLowerCase().includes(term)))
+    .filter((key) => !term || [key, t(definition(key).label), t(definition(key).description)].some((s) => s.toLowerCase().includes(term)))
     .sort((a, b) => (order.indexOf(a) + 1 || order.length + 1) - (order.indexOf(b) + 1 || order.length + 1) || a.localeCompare(b))
 
   function save(andRestart: boolean) {
     update.mutate(changes, {
       onSuccess: () => {
         setChanges({})
-        if (!andRestart) return toast.success("Saved. The changes apply when the server restarts.")
+        if (!andRestart) return toast.success(t("Saved. The changes apply when the server restarts."))
         toast.promise(restart.mutateAsync({ id: server.id, action: "restart" }), {
-          loading: `Restarting ${server.name}…`,
-          success: `Saved and restarted ${server.name}`,
+          loading: t("Restarting {{name}}…", { name: server.name }),
+          success: t("Saved and restarted {{name}}", { name: server.name }),
           error: (e: Error) => e.message,
         })
       },
@@ -87,21 +88,21 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
             <MagnifyingGlassIcon />
           </InputGroupAddon>
           <InputGroupInput
-            placeholder="Search settings"
-            aria-label="Search settings"
+            placeholder={t("Search settings")}
+            aria-label={t("Search settings")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </InputGroup>
-        <p className="text-sm text-muted-foreground">The server reads these settings when it starts.</p>
+        <p className="text-sm text-muted-foreground">{t("The server reads these settings when it starts.")}</p>
       </div>
-      {keys.length === 0 && <p className="text-sm text-muted-foreground">No setting matches your search.</p>}
+      {keys.length === 0 && <p className="text-sm text-muted-foreground">{t("No setting matches your search.")}</p>}
       {groups.map((group) => {
         const inGroup = keys.filter((key) => definition(key).group === group)
         if (inGroup.length === 0) return null
         return (
-          <section key={group} className="surface mb-6 rounded-xl p-5 sm:p-6" aria-label={group}>
-            <h2 className="heading mb-5 text-base">{group}</h2>
+          <section key={group} className="surface mb-6 rounded-xl p-5 sm:p-6" aria-label={t(group)}>
+            <h2 className="heading mb-5 text-base">{t(group)}</h2>
             <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
               {inGroup.map((key) => (
                 <PropertyField
@@ -122,22 +123,22 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
         <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-popover/90 px-4 py-3 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-xl">
           <p className="flex items-center gap-2.5 text-sm font-medium">
             <span aria-hidden className="size-2 rounded-full bg-warning" />
-            {count} unsaved {count === 1 ? "change" : "changes"}
+            {t("{{count}} unsaved changes", { count, defaultValue_one: "{{count}} unsaved change" })}
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => setChanges({})}>
-              Discard
+              {t("Discard")}
             </Button>
             <Button
               variant={server.state === "stopped" ? "default" : "outline"}
               disabled={update.isPending || Object.keys(errors).length > 0}
               onClick={() => save(false)}
             >
-              Save
+              {t("Save")}
             </Button>
             {server.state !== "stopped" && can("servers.restart", nodeId, server.id) && (
               <Button disabled={update.isPending || Object.keys(errors).length > 0} onClick={() => save(true)}>
-                Save and restart
+                {t("Save and restart")}
               </Button>
             )}
           </div>
@@ -146,9 +147,9 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}
-        title="Discard your changes?"
-        description="Your changes to the settings haven't been saved."
-        action="Discard changes"
+        title={t("Discard your changes?")}
+        description={t("Your changes to the settings haven't been saved.")}
+        action={t("Discard changes")}
         destructive
         onConfirm={() => blocker.proceed?.()}
       />

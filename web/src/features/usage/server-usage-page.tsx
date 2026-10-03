@@ -1,5 +1,6 @@
 import { ArrowsDownUpIcon, CpuIcon, GaugeIcon, HardDriveIcon, MemoryIcon, UsersIcon } from "@phosphor-icons/react"
 import { getRouteApi } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Meter } from "@/components/meter"
 import { StatCard } from "@/components/stat-card"
@@ -25,23 +26,35 @@ export function ServerUsagePage() {
 
   // Scaled to the limits of the server, where it has them.
   const charts: ChartSpec[] = [
-    { title: "CPU", series: [{ label: "CPU", tone: "series-1", value: (p) => p.cpuMillis }], format: formatCores, max: server.cpuLimit * 1000 },
     {
-      title: "Memory",
-      series: [{ label: "Memory", tone: "series-1", value: (p) => p.memoryBytes }],
+      title: t("CPU"),
+      series: [{ label: t("CPU"), tone: "series-1", value: (p) => p.cpuMillis }],
+      format: formatCores,
+      max: server.cpuLimit * 1000,
+    },
+    {
+      title: t("Memory"),
+      series: [{ label: t("Memory"), tone: "series-1", value: (p) => p.memoryBytes }],
       format: (v) => formatBytes(Math.round(v)),
       max: usage?.memoryLimitBytes,
       nice: niceBytes,
     },
-    { title: "Players", series: [{ label: "Players", tone: "series-1", value: (p) => p.players }], format: formatNumber },
+    { title: t("Players"), series: [{ label: t("Players"), tone: "series-1", value: (p) => p.players }], format: formatNumber },
     ...(hasTPS(server.type)
-      ? [{ title: "Ticks per second", series: [{ label: "TPS", tone: "series-1", value: (p) => p.tps }], format: formatNumber, max: 20 } satisfies ChartSpec]
+      ? [
+          {
+            title: t("Ticks per second"),
+            series: [{ label: t("TPS"), tone: "series-1", value: (p) => p.tps }],
+            format: formatNumber,
+            max: 20,
+          } satisfies ChartSpec,
+        ]
       : []),
     {
-      title: "Network",
+      title: t("Network"),
       series: [
-        { label: "Received", tone: "series-1", value: (p) => p.networkReceived },
-        { label: "Sent", tone: "series-2", value: (p) => p.networkSent },
+        { label: t("Received"), tone: "series-1", value: (p) => p.networkReceived },
+        { label: t("Sent"), tone: "series-2", value: (p) => p.networkSent },
       ],
       format: formatRate,
       nice: niceBytes,
@@ -49,7 +62,13 @@ export function ServerUsagePage() {
   ]
   return (
     <>
-      {error ? <ErrorCallout error={error} /> : isPending ? <Skeleton className="h-36 rounded-xl" /> : <LiveUsage server={server} usage={usage} />}
+      {error ? (
+        <ErrorCallout error={error} />
+      ) : isPending ? (
+        <Skeleton className="h-36 rounded-xl" />
+      ) : (
+        <LiveUsage server={server} usage={usage} />
+      )}
       <UsageHistory nodeId={nodeId} serverId={serverId} charts={charts} />
     </>
   )
@@ -57,44 +76,49 @@ export function ServerUsagePage() {
 
 function LiveUsage({ server, usage }: { server: Server; usage?: ServerUsage }) {
   const running = usage?.running
-  const idle = "Not running"
+  const idle = t("Not running")
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-      <StatCard icon={CpuIcon} tone="warning" label="CPU" value={running ? formatCores(usage.cpuMillis) : "–"}>
+      <StatCard icon={CpuIcon} tone="warning" label={t("CPU")} value={running ? formatCores(usage.cpuMillis) : "–"}>
         {!running ? (
           idle
         ) : server.cpuLimit ? (
           <div className="space-y-2">
-            <Meter value={usage.cpuMillis / (server.cpuLimit * 1000)} label="CPU used of the limit" />
-            <p>of {formatCores(server.cpuLimit * 1000)}</p>
+            <Meter value={usage.cpuMillis / (server.cpuLimit * 1000)} label={t("CPU used of the limit")} />
+            <p>{t("of {{limit}}", { limit: formatCores(server.cpuLimit * 1000) })}</p>
           </div>
         ) : (
-          "Not limited"
+          t("Not limited")
         )}
       </StatCard>
-      <StatCard icon={MemoryIcon} tone="violet" label="Memory" value={running ? formatBytes(usage.memoryBytes) : "–"}>
+      <StatCard icon={MemoryIcon} tone="violet" label={t("Memory")} value={running ? formatBytes(usage.memoryBytes) : "–"}>
         {running && usage.memoryLimitBytes ? (
           <div className="space-y-2">
-            <Meter value={usage.memoryBytes / usage.memoryLimitBytes} label="Memory used of the limit" />
-            <p>of {formatBytes(usage.memoryLimitBytes)}, including what Java needs besides the server</p>
+            <Meter value={usage.memoryBytes / usage.memoryLimitBytes} label={t("Memory used of the limit")} />
+            <p>{t("of {{limit}}, including what Java needs besides the server", { limit: formatBytes(usage.memoryLimitBytes) })}</p>
           </div>
         ) : (
           idle
         )}
       </StatCard>
-      <StatCard icon={UsersIcon} tone="success" label="Players" value={usage?.players ? `${usage.players.online} / ${usage.players.max}` : "–"}>
-        {!running ? idle : !usage.players ? "The server doesn't answer yet" : usage.players.names.join(", ") || "Nobody is online"}
+      <StatCard
+        icon={UsersIcon}
+        tone="success"
+        label={t("Players")}
+        value={usage?.players ? `${usage.players.online} / ${usage.players.max}` : "–"}
+      >
+        {!running ? idle : !usage.players ? t("The server doesn't answer yet") : usage.players.names.join(", ") || t("Nobody is online")}
       </StatCard>
       {hasTPS(server.type) && (
-        <StatCard icon={GaugeIcon} tone="info" label="Ticks per second" value={usage?.tps ? formatNumber(usage.tps) : "–"}>
-          {running ? "over the last minute, 20 at best" : idle}
+        <StatCard icon={GaugeIcon} tone="info" label={t("Ticks per second")} value={usage?.tps ? formatNumber(usage.tps) : "–"}>
+          {running ? t("over the last minute, 20 at best") : idle}
         </StatCard>
       )}
-      <StatCard icon={ArrowsDownUpIcon} tone="info" label="Network" value={running ? formatRate(usage.networkReceived) : "–"}>
-        {running ? `received, ${formatRate(usage.networkSent)} sent` : idle}
+      <StatCard icon={ArrowsDownUpIcon} tone="info" label={t("Network")} value={running ? formatRate(usage.networkReceived) : "–"}>
+        {running ? t("received, {{rate}} sent", { rate: formatRate(usage.networkSent) }) : idle}
       </StatCard>
-      <StatCard icon={HardDriveIcon} tone="neutral" label="Data" value={usage?.diskBytes ? formatBytes(usage.diskBytes) : "–"}>
-        {usage?.diskBytes ? "on the disk, measured every few minutes" : "Not measured yet"}
+      <StatCard icon={HardDriveIcon} tone="neutral" label={t("Data")} value={usage?.diskBytes ? formatBytes(usage.diskBytes) : "–"}>
+        {usage?.diskBytes ? t("on the disk, measured every few minutes") : t("Not measured yet")}
       </StatCard>
     </div>
   )

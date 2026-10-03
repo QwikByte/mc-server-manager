@@ -1,5 +1,7 @@
 import { CaretRightIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import type { ReactNode } from "react"
+import { Trans } from "react-i18next"
 import { CopyField } from "@/components/copy-field"
 import { formatDateTime } from "@/lib/format"
 import type { JoinToken } from "./api"
@@ -11,24 +13,34 @@ export function EnrollSteps({ token: { joinToken, joinTokenExpiresAt, installCom
       <ol className="space-y-5">
         <Step number={1}>
           <p>
-            Run this command on the node before {formatDateTime(joinTokenExpiresAt)}. It installs or updates the agent, offers to install
-            Docker if it's missing, connects the agent with a token that works only once and starts it.
+            {t(
+              "Run this command on the node before {{time}}. It installs or updates the agent, offers to install Docker if it's missing, connects the agent with a token that works only once and starts it.",
+              { time: formatDateTime(joinTokenExpiresAt) },
+            )}
           </p>
-          <CopyField label="Install command" prefix="$" value={installCommand} />
+          <CopyField label={t("Install command")} prefix="$" value={installCommand} />
         </Step>
-        <Step number={2}>The node appears as online a few seconds later.</Step>
+        <Step number={2}>{t("The node appears as online a few seconds later.")}</Step>
       </ol>
       <details className="group rounded-lg border px-3 py-2 text-sm">
         <summary className="flex cursor-pointer list-none items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
           <CaretRightIcon className="size-3.5 transition-transform group-open:rotate-90" />
-          Installed the agent another way?
+          {t("Installed the agent another way?")}
         </summary>
         <div className="mt-3 space-y-2">
           <p>
-            Connect it with this command, then start or restart it, e.g. with{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">sudo systemctl restart mcsm-agent</code>.
+            <Trans
+              i18nKey="Connect it with this command, then start or restart it, e.g. with <command/>."
+              components={{
+                command: (
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">
+                    sudo systemctl restart mcsm-agent
+                  </code>
+                ),
+              }}
+            />
           </p>
-          <CopyField label="Enroll command" prefix="$" value={`sudo mcsm-agent enroll ${joinToken}`} />
+          <CopyField label={t("Enroll command")} prefix="$" value={`sudo mcsm-agent enroll ${joinToken}`} />
         </div>
       </details>
     </div>

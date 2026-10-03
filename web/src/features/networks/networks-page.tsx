@@ -1,6 +1,7 @@
 import { ArrowRightIcon, GraphIcon, HashIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { EmptyState } from "@/components/empty-state"
@@ -24,8 +25,8 @@ export function NetworksPage() {
       <PageHeader
         icon={GraphIcon}
         tone="violet"
-        title="Networks"
-        description="Players join through a Velocity proxy and switch between the servers behind it."
+        title={t("Networks")}
+        description={t("Players join through a Velocity proxy and switch between the servers behind it.")}
         actions={manage && <CreateNetworkDialog />}
       />
       {isPending ? (
@@ -40,8 +41,8 @@ export function NetworksPage() {
         <EmptyState
           icon={GraphIcon}
           tone="violet"
-          title="No networks yet"
-          description="Create a Velocity proxy and a Paper or Purpur server on your nodes, then connect them to a network."
+          title={t("No networks yet")}
+          description={t("Create a Velocity proxy and a Paper or Purpur server on your nodes, then connect them to a network.")}
         >
           {manage && <CreateNetworkDialog />}
         </EmptyState>
@@ -71,7 +72,10 @@ function NetworkCard({ network, servers }: { network: Network; servers?: NodeSer
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{network.name}</p>
           <p className="text-xs text-muted-foreground">
-            {network.backends.length} {network.backends.length === 1 ? "server" : "servers"} behind the proxy
+            {t("{{count}} servers behind the proxy", {
+              count: network.backends.length,
+              defaultValue_one: "{{count}} server behind the proxy",
+            })}
           </p>
         </div>
         {proxy && (
@@ -81,7 +85,7 @@ function NetworkCard({ network, servers }: { network: Network; servers?: NodeSer
         )}
       </div>
       <div className="rounded-lg bg-muted/70 px-3 py-2.5 text-sm">
-        <p className="mb-1 text-xs text-muted-foreground">Proxy</p>
+        <p className="mb-1 text-xs text-muted-foreground">{t("Proxy")}</p>
         <ServerLabel server={proxy} />
       </div>
       <div className="mt-auto flex items-end justify-between gap-3">

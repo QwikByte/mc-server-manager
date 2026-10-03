@@ -1,5 +1,6 @@
 import { CubeIcon, SignInIcon, TrashIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { IconTile } from "@/components/icon-tile"
 import { Section } from "@/components/section"
@@ -8,32 +9,33 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAccess } from "@/features/access/use-access"
 import type { NodeServer } from "@/features/servers/api"
+import { msg } from "@/lib/i18n"
 import { AddBackendDialog } from "./add-backend-dialog"
 import type { Backend, Network } from "./api"
 import { useNetworkChange } from "./network-change"
 import { ServerLabel } from "./server-label"
 import { findServer } from "./servers"
 
-const disconnects = "The proxy restarts to apply this, which disconnects all players of the network."
+const disconnects = msg("The proxy restarts to apply this, which disconnects all players of the network.")
 
 /** The game servers behind the proxy; players join the first one. */
 export function BackendList({ network, servers }: { network: Network; servers?: NodeServer[] }) {
   const manage = useAccess().can("networks.manage")
   return (
     <Section
-      title="Servers"
-      description="Players switch between them with /server and the name."
+      title={t("Servers")}
+      description={t("Players switch between them with /server and the name.")}
       actions={manage && <AddBackendDialog network={network} />}
     >
       <div className="surface overflow-hidden rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Server</TableHead>
-              <TableHead className="hidden sm:table-cell">Switch with</TableHead>
-              <TableHead className="hidden md:table-cell">Port</TableHead>
+              <TableHead>{t("Server")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("Switch with")}</TableHead>
+              <TableHead className="hidden md:table-cell">{t("Port")}</TableHead>
               <TableHead>
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("Actions")}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -82,7 +84,7 @@ function BackendRow({
           >
             <ServerLabel server={server} />
           </Link>
-          {first && <Pill tone="info">Players join here</Pill>}
+          {first && <Pill tone="info">{t("Players join here")}</Pill>}
         </span>
       </TableCell>
       <TableCell className="hidden font-mono sm:table-cell">/server {backend.name}</TableCell>
@@ -94,16 +96,16 @@ function BackendRow({
               trigger={
                 <Button size="sm" variant="outline" disabled={isPending}>
                   <SignInIcon />
-                  <span className="max-sm:sr-only">Join here</span>
+                  <span className="max-sm:sr-only">{t("Join here")}</span>
                 </Button>
               }
-              title={`Let players join ${name}?`}
-              description={`Players who connect to ${network.name} start on ${name}. ${disconnects}`}
-              action="Let players join here"
+              title={t("Let players join {{name}}?", { name })}
+              description={`${t("Players who connect to {{network}} start on {{name}}.", { network: network.name, name })} ${t(disconnects)}`}
+              action={t("Let players join here")}
               onConfirm={() =>
                 run(
                   { action: "default", serverId: backend.serverId },
-                  { loading: "Updating the proxy…", success: `Players now join ${name}` },
+                  { loading: t("Updating the proxy…"), success: t("Players now join {{name}}", { name }) },
                 )
               }
             />
@@ -114,21 +116,24 @@ function BackendRow({
                 size="icon-sm"
                 variant="ghost"
                 className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                aria-label={`Remove ${name} from the network`}
-                title={last ? "A network needs at least one server" : undefined}
+                aria-label={t("Remove {{name}} from the network", { name })}
+                title={last ? t("A network needs at least one server") : undefined}
                 disabled={isPending || last}
               >
                 <TrashIcon />
               </Button>
             }
-            title={`Remove ${name} from ${network.name}?`}
-            description={`${name} restarts and accepts players directly again. ${disconnects}`}
-            action="Remove server"
+            title={t("Remove {{name}} from {{network}}?", { name, network: network.name })}
+            description={`${t("{{name}} restarts and accepts players directly again.", { name })} ${t(disconnects)}`}
+            action={t("Remove server")}
             destructive
             onConfirm={() =>
               run(
                 { action: "remove", serverId: backend.serverId },
-                { loading: `Removing ${name}…`, success: `Removed ${name} from ${network.name}` },
+                {
+                  loading: t("Removing {{name}}…", { name }),
+                  success: t("Removed {{name}} from {{network}}", { name, network: network.name }),
+                },
               )
             }
           />

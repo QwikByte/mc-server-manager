@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { useState } from "react"
 import { ErrorCallout } from "@/components/callout"
 import { Section } from "@/components/section"
@@ -30,23 +31,23 @@ export function UsageHistory({ nodeId, serverId, charts }: { nodeId: string; ser
 
   return (
     <Section
-      title="History"
-      description="Recorded every minute while it runs and kept for a week."
+      title={t("History")}
+      description={t("Recorded every minute while it runs and kept for a week.")}
       actions={
         <div className="flex flex-wrap gap-2">
           <Segmented
-            label="Time range"
+            label={t("Time range")}
             value={range}
             onChange={setRange}
-            options={Object.entries(ranges).map(([value, r]) => ({ value: value as UsageRange, label: r.label }))}
+            options={Object.entries(ranges).map(([value, r]) => ({ value: value as UsageRange, label: t(r.label) }))}
           />
           <Segmented
-            label="View"
+            label={t("View")}
             value={view}
             onChange={setView}
             options={[
-              { value: "charts", label: "Charts" },
-              { value: "table", label: "Table" },
+              { value: "charts", label: t("Charts") },
+              { value: "table", label: t("Table") },
             ]}
           />
         </div>
@@ -84,16 +85,23 @@ export function UsageHistory({ nodeId, serverId, charts }: { nodeId: string; ser
 /** The values of the charts by step, newest first. */
 function UsageTable({ points, charts, range }: { points: UsagePoint[]; charts: ChartSpec[]; range: UsageRange }) {
   const columns = charts.flatMap((c) =>
-    c.series.map((s) => ({ label: c.series.length > 1 ? `${c.title} ${s.label.toLowerCase()}` : c.title, value: s.value, format: c.format })),
+    c.series.map((s) => ({
+      label: c.series.length > 1 ? t("{{chart}} {{series}}", { chart: c.title, series: s.label.toLowerCase() }) : c.title,
+      value: s.value,
+      format: c.format,
+    })),
   )
   const time = (iso: string) =>
-    new Date(iso).toLocaleString(undefined, range === "day" ? { hour: "2-digit", minute: "2-digit" } : { dateStyle: "short", timeStyle: "short" })
+    new Date(iso).toLocaleString(
+      undefined,
+      range === "day" ? { hour: "2-digit", minute: "2-digit" } : { dateStyle: "short", timeStyle: "short" },
+    )
   return (
     <div className="surface max-h-[28rem] overflow-auto rounded-xl">
       <Table>
         <TableHeader className="sticky top-0 bg-card">
           <TableRow>
-            <TableHead>Time</TableHead>
+            <TableHead>{t("Time")}</TableHead>
             {columns.map((c) => (
               <TableHead key={c.label} className="text-right">
                 {c.label}
@@ -118,7 +126,7 @@ function UsageTable({ points, charts, range }: { points: UsagePoint[]; charts: C
           {points.length === 0 && (
             <TableRow>
               <TableCell colSpan={columns.length + 1} className="text-center text-muted-foreground">
-                Nothing recorded in this time
+                {t("Nothing recorded in this time")}
               </TableCell>
             </TableRow>
           )}

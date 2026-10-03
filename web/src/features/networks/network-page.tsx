@@ -1,7 +1,9 @@
 import { ArrowRightIcon, ArrowsSplitIcon, CubeIcon, GraphIcon, type Icon, UsersThreeIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import type { ReactNode } from "react"
+import { Trans } from "react-i18next"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { IconTile } from "@/components/icon-tile"
 import { BackLink } from "@/components/back-link"
@@ -27,7 +29,7 @@ export function NetworkPage() {
 
   return (
     <>
-      <BackLink to="/networks">Networks</BackLink>
+      <BackLink to="/networks">{t("Networks")}</BackLink>
       {isPending ? (
         <Skeleton className="h-64 rounded-xl" />
       ) : error ? (
@@ -38,7 +40,7 @@ export function NetworkPage() {
             icon={GraphIcon}
             tone="violet"
             title={network.name}
-            description={proxy ? `Players connect to ${proxy.nodeName} at port ${proxy.port}.` : undefined}
+            description={proxy ? t("Players connect to {{node}} at port {{port}}.", { node: proxy.nodeName, port: proxy.port }) : undefined}
             actions={
               manage && (
                 <>
@@ -49,11 +51,11 @@ export function NetworkPage() {
             }
           />
           <div className="grid items-center gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr]">
-            <Step icon={UsersThreeIcon} tone="info" label="Players">
-              {proxy ? `${proxy.nodeName}, port ${proxy.port}` : "–"}
+            <Step icon={UsersThreeIcon} tone="info" label={t("Players")}>
+              {proxy ? t("{{node}}, port {{port}}", { node: proxy.nodeName, port: proxy.port }) : "–"}
             </Step>
             <Arrow />
-            <Step icon={ArrowsSplitIcon} tone="violet" label="Proxy · Velocity modern forwarding">
+            <Step icon={ArrowsSplitIcon} tone="violet" label={t("Proxy · Velocity modern forwarding")}>
               <Link
                 to="/nodes/$nodeId/servers/$serverId"
                 params={{ nodeId: network.proxy.nodeId, serverId: network.proxy.serverId }}
@@ -63,18 +65,19 @@ export function NetworkPage() {
               </Link>
             </Step>
             <Arrow />
-            <Step icon={CubeIcon} tone="success" label="Players join">
+            <Step icon={CubeIcon} tone="success" label={t("Players join")}>
               {network.backends[0]?.name ?? "–"}
               <span className="font-normal text-muted-foreground">
-                {network.backends.length > 1 && ` and ${network.backends.length - 1} more`}
+                {network.backends.length > 1 && ` ${t("and {{count}} more", { count: network.backends.length - 1 })}`}
               </span>
             </Step>
           </div>
           <BackendList network={network} servers={servers} />
-          <Callout role="note" title="Only players who join through the proxy can play" className="mt-8">
-            The servers of this network check the identity the proxy forwards and turn away direct connections. New Minecraft servers start
-            with a whitelist: allow players with <code className="font-mono">whitelist add &lt;name&gt;</code> in the console of each
-            server.
+          <Callout role="note" title={t("Only players who join through the proxy can play")} className="mt-8">
+            <Trans
+              i18nKey="The servers of this network check the identity the proxy forwards and turn away direct connections. New Minecraft servers start with a whitelist: allow players with <command/> in the console of each server."
+              components={{ command: <code className="font-mono">whitelist add &lt;name&gt;</code> }}
+            />
           </Callout>
         </>
       )}

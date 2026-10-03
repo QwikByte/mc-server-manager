@@ -1,3 +1,4 @@
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -36,7 +37,7 @@ export function NameDialog({
     event.preventDefault()
     const trimmed = name.trim()
     if (!trimmed || trimmed === "." || trimmed === ".." || /[/\\]/.test(trimmed)) {
-      setError("Enter a name without slashes.")
+      setError(t("Enter a name without slashes."))
       return
     }
     setPending(true)
@@ -64,7 +65,7 @@ export function NameDialog({
           </Field>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={pending}>
               {action}
