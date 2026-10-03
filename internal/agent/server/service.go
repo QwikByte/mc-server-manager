@@ -140,7 +140,7 @@ func (s *Service) DuplicateServer(ctx context.Context, req *mcsmv1.DuplicateServ
 		return nil, err
 	}
 	spec := source.Spec
-	spec.ID, spec.Name, spec.Port, spec.BehindProxy = runtime.NewID(), req.GetName(), req.GetPort(), false
+	spec.ID, spec.Name, spec.Port, spec.BehindProxy, spec.ProxyOnNode = runtime.NewID(), req.GetName(), req.GetPort(), false, false
 	if err := s.check(ctx, spec); err != nil {
 		return nil, err
 	}
@@ -364,7 +364,7 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *mcsmv1.ConfigureNet
 
 // networkOf validates a network configuration, which ends up in configuration files.
 func networkOf(req *mcsmv1.ConfigureNetworkRequest) (runtime.Network, string) {
-	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret()}
+	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret(), ProxyOnNode: req.GetProxyOnNode() && req.GetForwardingSecret() != ""}
 	if !runtime.ValidID(req.GetId()) {
 		return network, "invalid server ID"
 	}

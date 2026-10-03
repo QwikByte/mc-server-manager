@@ -49,6 +49,9 @@ type Spec struct {
 	Port     uint32            `json:"port"`
 	// BehindProxy makes a game server accept only players forwarded by its proxy.
 	BehindProxy bool `json:"behindProxy,omitempty"`
+	// ProxyOnNode tells that the proxy of a backend runs on the same node, which reaches it
+	// without a published port.
+	ProxyOnNode bool `json:"proxyOnNode,omitempty"`
 	// Storage is the storage location of the server's data; empty means the default.
 	Storage string `json:"storage,omitempty"`
 	// Java selects the Java version of a game server, e.g. "21"; empty means the newest.
@@ -76,6 +79,8 @@ type Network struct {
 	// ForwardingSecret lets backends verify the players the proxy forwards. An empty
 	// secret makes a game server standalone again; a proxy always needs one.
 	ForwardingSecret string
+	// ProxyOnNode is set for a backend whose proxy runs on the same node.
+	ProxyOnNode bool
 	// Backends is set for the proxy, in the order players are sent to them.
 	Backends []NetworkBackend
 }

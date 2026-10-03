@@ -219,8 +219,12 @@ the network and configures each server through its agent; changes are applied to
   and switch with `/server <name>`. Other settings are kept, but comments in the file are not.
 - Backends turn on Velocity forwarding in `config/paper-global.yml` and run with `online-mode=false`, as the proxy
   authenticates the players. They turn away anyone who doesn't come through the proxy.
-- On its own node, the proxy reaches a server by container name over the Docker network `mcsm`. A server on another
-  node is reached at that node's host and the server's port, which must be open for the proxy's node.
+- On its own node, the proxy reaches a server by container name over a Docker network that only the two of them share;
+  such a server's port isn't published at all. A server on another node is reached at that node's host and the
+  server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as ufw, so allow only
+  the proxy's node in Docker's `DOCKER-USER` chain on the server's node, e.g. for port 25566 and the proxy's node
+  203.0.113.10: `iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 25566 --ctdir ORIGINAL ! -s 203.0.113.10 -j DROP`
+  (and save it, e.g. with `netfilter-persistent save`).
 - Servers only restart if their configuration changed. Changing the servers of a network restarts the proxy, which
   disconnects all players. If a node is offline, the change is saved and **Apply again** configures its servers later.
 - Proxies created by earlier versions are recreated on their first network change, because they used the wrong data
@@ -359,11 +363,17 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Networks.** Only Velocity's modern forwarding is supported: it signs the forwarded player data with a random
   secret per network. BungeeCord's forwarding can be spoofed by anyone who reaches a backend. The secret is stored in
   the master's database and on the network's servers; the API never returns it.
+- **Containers.** Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images
+  need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`, for proxies also `DAC_READ_SEARCH`.
+  Servers of a node can't reach each other: they share a Docker network without communication between containers
+  (`mcsm-servers`), and a Velocity proxy shares another one only with its backends on the node. Containers created by
+  earlier versions move into these networks when the agent starts, and leave the old shared network `mcsm` when the
+  agent starts them again, so that no player is disconnected; their capabilities change once they are created again,
+  e.g. by changing their settings or with **Apply again** for a network.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
-  (`os.Root`), containers run with `no-new-privileges` and memory and PID limits, and servers are only created
-  after the operator accepts the Minecraft EULA. JVM options may only contain characters that the image's start
-  script can't interpret as shell syntax, can't override the memory limit and can't run code: Java agents, commands
-  on errors, and debugging or JMX ports are refused.
+  (`os.Root`), and servers are only created after the operator accepts the Minecraft EULA. JVM options may only
+  contain characters that the image's start script can't interpret as shell syntax, can't override the memory limit
+  and can't run code: Java agents, commands on errors, and debugging or JMX ports are refused.
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
   uploaded HTML file can't run scripts in the panel. Secrets of the server stay on the node: files that only hold

@@ -204,7 +204,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, status.Convert(err).Message())
 		}
 	}
-	if err := ignoreMissing(s.configure(ctx, n.Proxy, n.secret, nil)); err != nil {
+	if err := ignoreMissing(s.configure(ctx, n.Proxy, n.secret, nil, false)); err != nil {
 		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because its proxy could not be updated: %s", status.Convert(err).Message())
 	}
 	_, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID)
@@ -271,7 +271,7 @@ func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
 func (s *Service) apply(ctx context.Context, n Network) error {
 	ctx = context.WithoutCancel(ctx) // finish even if the client goes away
 	for _, b := range n.Backends {
-		if err := s.configure(ctx, b.Ref, n.secret, nil); err != nil {
+		if err := s.configure(ctx, b.Ref, n.secret, nil, b.NodeID == n.Proxy.NodeID); err != nil {
 			return applyFailed(b.Name, err)
 		}
 	}
@@ -287,7 +287,7 @@ func (s *Service) configureProxy(ctx context.Context, n Network) error {
 		}
 		backends = append(backends, target)
 	}
-	if err := s.configure(ctx, n.Proxy, n.secret, backends); err != nil {
+	if err := s.configure(ctx, n.Proxy, n.secret, backends, false); err != nil {
 		return applyFailed("the proxy", err)
 	}
 	return nil
@@ -315,7 +315,9 @@ func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*mcsmv1.Net
 	return &mcsmv1.NetworkBackend{Name: b.Name, Target: &mcsmv1.NetworkBackend_Address{Address: address}}, nil
 }
 
-func (s *Service) configure(ctx context.Context, ref Ref, secret string, backends []*mcsmv1.NetworkBackend) error {
+// configure gives a server its role in a network; proxyOnNode tells a backend that its
+// proxy runs on the same node.
+func (s *Service) configure(ctx context.Context, ref Ref, secret string, backends []*mcsmv1.NetworkBackend, proxyOnNode bool) error {
 	ctx, cancel := context.WithTimeout(ctx, configureTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)
@@ -323,14 +325,14 @@ func (s *Service) configure(ctx context.Context, ref Ref, secret string, backend
 		return err
 	}
 	_, err = mcsmv1.NewServerServiceClient(conn).ConfigureNetwork(ctx, &mcsmv1.ConfigureNetworkRequest{
-		Id: ref.ServerID, ForwardingSecret: secret, Backends: backends,
+		Id: ref.ServerID, ForwardingSecret: secret, Backends: backends, ProxyOnNode: proxyOnNode,
 	})
 	return err
 }
 
 // reset makes a game server standalone again. A deleted server needs no reset.
 func (s *Service) reset(ctx context.Context, ref Ref) error {
-	return ignoreMissing(s.configure(ctx, ref, "", nil))
+	return ignoreMissing(s.configure(ctx, ref, "", nil, false))
 }
 
 // server looks up a server on its node.
