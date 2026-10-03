@@ -341,7 +341,10 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *mcsmv1.Server, req
 	}
 	h.moves.update(mv.ServerID, func(m *Move) { m.Phase, m.BackupsTotal = "backups", len(list.GetBackups()) })
 	for _, b := range list.GetBackups() {
-		imported := &mcsmv1.Backup{Id: b.GetId(), Label: b.GetLabel(), CreatedUnix: b.GetCreatedUnix(), Location: req.Storage, Paths: b.GetPaths(), JobId: b.GetJobId()}
+		imported := &mcsmv1.Backup{
+			Id: b.GetId(), Label: b.GetLabel(), CreatedUnix: b.GetCreatedUnix(), Location: req.Storage, Paths: b.GetPaths(), JobId: b.GetJobId(),
+			Size: b.GetSize(), // refused upfront if it doesn't fit
+		}
 		err := relay(ctx,
 			func(ctx context.Context) (grpc.ServerStreamingClient[mcsmv1.DownloadBackupResponse], error) {
 				return backups.DownloadBackup(ctx, &mcsmv1.DownloadBackupRequest{ServerId: mv.ServerID, BackupId: b.GetId()})

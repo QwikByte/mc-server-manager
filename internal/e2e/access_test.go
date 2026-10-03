@@ -84,6 +84,25 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	}
 	mod.do("POST", "/api/terminal", map[string]string{"target": a.node.ID, "command": "status"}, http.StatusForbidden, nil)
 
+	// Nor the details of the node, which only those who may see the node get.
+	type nodeView struct {
+		Address string
+		Info    struct {
+			AgentVersion, OS string
+			Storage          []struct{ Name, Path string }
+		}
+	}
+	var seen nodeView
+	mod.do("GET", "/api/nodes/"+a.node.ID, nil, http.StatusOK, &seen)
+	if seen.Address != "" || seen.Info.AgentVersion != "" || len(seen.Info.Storage) != 1 || seen.Info.Storage[0].Path != "" {
+		t.Fatalf("node as the moderator sees it = %+v", seen)
+	}
+	seen = nodeView{}
+	root.do("GET", "/api/nodes/"+a.node.ID, nil, http.StatusOK, &seen)
+	if seen.Address == "" || seen.Info.AgentVersion == "" || len(seen.Info.Storage) != 1 || seen.Info.Storage[0].Path == "" {
+		t.Fatalf("node as the administrator sees it = %+v", seen)
+	}
+
 	// Managers hand out at most what they have, and can't manage stronger users.
 	var managers access.Group
 	root.do("POST", "/api/groups", map[string]any{

@@ -3,20 +3,21 @@ import { api } from "@/lib/api"
 
 export type NodeStatus = "pending" | "online" | "offline"
 
+/** The agent, system and paths are only there with the permission to see the node. */
 export interface NodeInfo {
-  agentVersion: string
-  hostname: string
-  os: string
+  agentVersion?: string
+  hostname?: string
+  os?: string
   cpuCount: number
   memoryBytes: number
-  runtime: string
+  runtime?: string
   /** Directories the node allows for server data, the default location first. */
   storage: StorageLocation[]
 }
 
 export interface StorageLocation {
   name: string
-  path: string
+  path?: string
   freeBytes: number
   totalBytes: number
 }
@@ -47,7 +48,8 @@ export interface JoinToken {
 export interface Node extends NodeSettings {
   id: string
   name: string
-  address: string
+  /** Only there with the permission to see the node. */
+  address?: string
   enrolledAt?: string
   createdAt: string
   status: NodeStatus

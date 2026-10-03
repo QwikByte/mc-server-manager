@@ -135,6 +135,7 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = stream.Send(&mcsmv1.WriteFileRequest{Content: &mcsmv1.WriteFileRequest_Header{Header: &mcsmv1.WriteFileHeader{
 			ServerId: r.PathValue("id"), Path: r.URL.Query().Get("path"), Overwrite: r.URL.Query().Get("overwrite") == "true",
+			Size: max(r.ContentLength, 0),
 		}}})
 	}
 	if err == nil {

@@ -3,6 +3,7 @@ package e2e
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"io"
 	"maps"
 	"net/http"
@@ -10,6 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 )
@@ -147,4 +151,30 @@ func TestFileSecrets(t *testing.T) {
 	// A config folder without secrets, e.g. of mods, moves.
 	check(t, os.Remove(filepath.Join(data, "config", "paper-global.yml")))
 	api.do("POST", base+"/move", map[string]string{"from": "config", "to": "moved"}, http.StatusNoContent, nil)
+}
+
+// Uploads and backups that would leave less than 1 GB free on the node are refused before
+// they start.
+func TestFreeSpace(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	srv := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	conn, err := m.nodes.Conn(t.Context(), a.node.ID)
+	check(t, err)
+	upload, err := mcsmv1.NewFileServiceClient(conn).WriteFile(t.Context())
+	check(t, err)
+	check(t, upload.Send(&mcsmv1.WriteFileRequest{Content: &mcsmv1.WriteFileRequest_Header{Header: &mcsmv1.WriteFileHeader{
+		ServerId: srv.ServerID, Path: "world.zip", Size: 1 << 50,
+	}}}))
+	if _, err := upload.CloseAndRecv(); status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("upload of 1 PB: %v", err)
+	}
+
+	// A sparse file of 8 TB takes no space, but its backup would.
+	f, err := os.Create(filepath.Join(a.runtime.dir, srv.ServerID, "huge.dat"))
+	check(t, err)
+	check(t, errors.Join(f.Truncate(8<<40), f.Close()))
+	api := apiClient{t: t, url: m.panel(t).URL}
+	api.do("POST", "/api/nodes/"+srv.NodeID+"/servers/"+srv.ServerID+"/backups", map[string]any{"selection": map[string]any{"everything": true}},
+		http.StatusRequestEntityTooLarge, nil)
 }

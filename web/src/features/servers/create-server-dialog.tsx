@@ -196,7 +196,11 @@ export function CreateServerDialog({
                       <SelectItem key={n.id} value={n.id} disabled={n.status !== "online"}>
                         {n.name}
                         <span className="text-muted-foreground">
-                          {n.status === "online" ? n.address : n.status === "pending" ? t("Waiting for agent") : t("Offline")}
+                          {n.status === "online"
+                            ? (n.address ?? t("Online"))
+                            : n.status === "pending"
+                              ? t("Waiting for agent")
+                              : t("Offline")}
                         </span>
                       </SelectItem>
                     ))}

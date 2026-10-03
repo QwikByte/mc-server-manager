@@ -54,7 +54,7 @@ export function NodePage() {
             tone="info"
             title={node.name}
             badge={<NodeStatusBadge status={node.status} />}
-            description={<span className="font-mono">{node.address}</span>}
+            description={node.address && <span className="font-mono">{node.address}</span>}
             actions={
               <>
                 {can("nodes.edit", node.id) && <NodeSettingsDialog node={node} />}
@@ -111,12 +111,16 @@ export function NodePage() {
               icon={WarningCircleIcon}
               tone="destructive"
               title={t("The agent can't be reached")}
-              description={t(
-                "The master can't reach the agent at {{address}}. Check that mcsm-agent is running and that the port is open for the master.",
-                {
-                  address: node.address,
-                },
-              )}
+              description={
+                node.address
+                  ? t(
+                      "The master can't reach the agent at {{address}}. Check that mcsm-agent is running and that the port is open for the master.",
+                      {
+                        address: node.address,
+                      },
+                    )
+                  : t("The master can't reach the agent. Check that mcsm-agent is running and that the port is open for the master.")
+              }
             />
           )}
           {/* Also while the agent is offline, which its last entries may explain. */}
@@ -135,12 +139,13 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   const assignedMb = servers?.reduce((sum, s) => sum + s.memoryMb, 0)
   const capacityMb = memoryCapacityMb(node)
   const limitMb = memoryLimitMb(node)
-  const details: [string, string][] = [
+  // Only there with the permission to see the node.
+  const details = [
     [t("Hostname"), info.hostname],
     [t("System"), info.os],
     [t("Runtime"), info.runtime],
     [t("Agent"), info.agentVersion],
-  ]
+  ].filter((detail): detail is [string, string] => !!detail[1])
   return (
     <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -179,10 +184,9 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
           {t("Renewed automatically")}
         </StatCard>
       </div>
-      <dl className="mt-4 surface grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl px-5 py-4 md:grid-cols-4">
-        {details
-          .filter(([, value]) => value)
-          .map(([term, value]) => (
+      {details.length > 0 && (
+        <dl className="mt-4 surface grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl px-5 py-4 md:grid-cols-4">
+          {details.map(([term, value]) => (
             <div key={term} className="min-w-0">
               <dt className="text-xs text-muted-foreground">{term}</dt>
               <dd className="mt-0.5 truncate text-sm font-medium" title={value}>
@@ -190,7 +194,8 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
               </dd>
             </div>
           ))}
-      </dl>
+        </dl>
+      )}
     </>
   )
 }

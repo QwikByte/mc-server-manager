@@ -22,7 +22,7 @@ import { limitsForm, limitsOf } from "./limits"
 import { LimitsFields } from "./limits-fields"
 
 function formOf(node: Node) {
-  return { name: node.name, address: node.address, defaultStorage: node.defaultStorage, ...limitsForm(node) }
+  return { name: node.name, address: node.address ?? "", defaultStorage: node.defaultStorage, ...limitsForm(node) }
 }
 
 /** Settings of a node; the trigger is a button unless one is given, e.g. an icon button. */

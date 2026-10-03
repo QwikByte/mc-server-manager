@@ -19,7 +19,8 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
-// Register adds the routes. Users see the nodes on which they may see the node or servers.
+// Register adds the routes. Users see the nodes on which they may see the node or servers,
+// the details of a node only with the permission to see it.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/nodes", access.SignedIn, h.list)
 	mux.Handle("POST /api/nodes", access.Everywhere(access.NodesEnroll), h.create)
@@ -38,20 +39,41 @@ type view struct {
 }
 
 type info struct {
-	AgentVersion string            `json:"agentVersion"`
-	Hostname     string            `json:"hostname"`
-	OS           string            `json:"os"`
+	AgentVersion string            `json:"agentVersion,omitempty"`
+	Hostname     string            `json:"hostname,omitempty"`
+	OS           string            `json:"os,omitempty"`
 	CPUCount     uint32            `json:"cpuCount"`
 	MemoryBytes  uint64            `json:"memoryBytes"`
-	Runtime      string            `json:"runtime"`
+	Runtime      string            `json:"runtime,omitempty"`
 	Storage      []storageLocation `json:"storage"`
 }
 
 type storageLocation struct {
 	Name       string `json:"name"`
-	Path       string `json:"path"`
+	Path       string `json:"path,omitempty"`
 	FreeBytes  uint64 `json:"freeBytes"`
 	TotalBytes uint64 `json:"totalBytes"`
+}
+
+// conceal leaves out what only users who may see the node get: where the master reaches
+// it, its system and agent, and where it keeps data. Using its servers doesn't need them.
+func (v *view) conceal() {
+	v.Address = ""
+	if v.Info != nil {
+		v.Info.AgentVersion, v.Info.Hostname, v.Info.OS, v.Info.Runtime = "", "", "", ""
+		for i := range v.Info.Storage {
+			v.Info.Storage[i].Path = ""
+		}
+	}
+}
+
+// probeFor probes a node for the user of ctx.
+func (h *Handler) probeFor(ctx context.Context, n Node) view {
+	v := h.probe(ctx, n)
+	if !access.From(ctx).On(access.NodesView, n.ID, "") {
+		v.conceal()
+	}
+	return v
 }
 
 // probe asks the agent for its machine info, which also tells whether it is reachable.
@@ -87,7 +109,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	views := make([]view, len(nodes))
 	var wg sync.WaitGroup
 	for i, n := range nodes {
-		wg.Go(func() { views[i] = h.probe(r.Context(), n) })
+		wg.Go(func() { views[i] = h.probeFor(r.Context(), n) })
 	}
 	wg.Wait()
 	httpapi.WriteJSON(w, http.StatusOK, views)
@@ -102,7 +124,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, h.probe(r.Context(), n))
+	httpapi.WriteJSON(w, http.StatusOK, h.probeFor(r.Context(), n))
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +166,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, h.probe(r.Context(), n))
+	httpapi.WriteJSON(w, http.StatusOK, h.probeFor(r.Context(), n))
 }
 
 func (h *Handler) joinToken(w http.ResponseWriter, r *http.Request) {
