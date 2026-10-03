@@ -16,7 +16,7 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 	if err != nil {
 		return err
 	}
-	spec.Type, spec.Storage, spec.BehindProxy = source.Type, source.Storage, false
+	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode = source.Type, source.Storage, false, false
 	src, err := d.dataPath(source)
 	if err != nil {
 		return err
@@ -37,7 +37,7 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 		return err
 	}
 	// The image is present, as the container of the original uses it.
-	return d.createContainer(ctx, spec)
+	return d.createContainer(ctx, spec, home(spec))
 }
 
 // standalone resets the network role in the copy of a server's data. A backend stops
