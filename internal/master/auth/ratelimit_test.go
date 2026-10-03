@@ -10,46 +10,8 @@ import (
 	"time"
 
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/mc-server-manager/internal/master/ratelimit"
 )
-
-func TestLimiter(t *testing.T) {
-	l := newLimiter(clientBurst, clientEvery)
-	for range clientBurst {
-		if !l.allow("a") {
-			t.Fatal("attempt within the budget refused")
-		}
-	}
-	if l.allow("a") || !l.allow("b") {
-		t.Fatal("budgets aren't per key")
-	}
-	// Once full, new keys share a budget, and none is reset.
-	for i := len(l.keys); i < maxKeys; i++ {
-		l.allow(fmt.Sprint(i))
-	}
-	for i := range clientBurst {
-		if !l.allow(fmt.Sprint("new", i)) {
-			t.Fatal("new key refused")
-		}
-	}
-	if l.allow("new") || l.allow("a") {
-		t.Fatal("budgets were reset or new keys don't share one")
-	}
-}
-
-func TestClientNetwork(t *testing.T) {
-	for addr, want := range map[string]string{
-		"203.0.113.7:1234":            "203.0.113.7",
-		"[2001:db8:1:2:3:4:5:6]:1234": "2001:db8:1:2::/64",
-		"[2001:db8:1:2::9]:1234":      "2001:db8:1:2::/64",
-		"[fe80::1%eth0]:1234":         "fe80::/64",
-	} {
-		r := httptest.NewRequest(http.MethodPost, "/", nil)
-		r.RemoteAddr = addr
-		if got := clientNetwork(r); got != want {
-			t.Errorf("clientNetwork(%s) = %s, want %s", addr, got, want)
-		}
-	}
-}
 
 // Behind a trusted proxy, clients have budgets of their own, and guessing the password of
 // one account from many addresses ends with that account's budget.
@@ -67,7 +29,7 @@ func TestSignInLimits(t *testing.T) {
 	}
 	h := NewHandler(svc, func() time.Duration { return time.Hour })
 	// No attempt comes back during the test, however slow hashing passwords is.
-	h.clients, h.usernames = newLimiter(clientBurst, time.Hour), newLimiter(usernameBurst, time.Hour)
+	h.clients, h.usernames = ratelimit.New(clientBurst, time.Hour), ratelimit.New(usernameBurst, time.Hour)
 	mux := http.NewServeMux()
 	h.RegisterPublic(mux)
 	proxies, _ := ParseProxies([]string{"127.0.0.1"})

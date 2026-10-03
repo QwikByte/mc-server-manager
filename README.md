@@ -320,7 +320,8 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Enrollment.** Adding a node creates a single-use join token (valid for one hour unless the settings say
   otherwise, stored only as a hash). It contains the master address, the node ID, the secret and the CA fingerprint.
   The agent creates its key pair locally, sends a CSR and pins the CA fingerprint, so the exchange can't be
-  intercepted. Private keys never leave the node.
+  intercepted. Private keys never leave the node. The master checks the token before it signs the CSR, and a
+  client gets 5 attempts, then one every 12 seconds.
 - **Agents only obey the master.** The agent requires a client certificate with the master identity. Node
   certificates are server-only, so a compromised node can't command other nodes. Locally, the agent is controlled
   through a Unix socket (mode `0600` inside a `0700` data directory).

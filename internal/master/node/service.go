@@ -29,6 +29,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/mc-server-manager/internal/master/ratelimit"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
 
@@ -98,10 +99,18 @@ type Service struct {
 	mu      sync.Mutex
 	conns   map[string]*grpc.ClientConn
 	renewMu sync.Mutex // one certificate renewal at a time
+	// enrolls throttles enrollments per client, as anyone who reaches the endpoint may try.
+	enrolls *ratelimit.Limiter
 }
 
+// A client has 5 enrollment attempts, then one every 12 seconds.
+const enrollBurst, enrollEvery = 5, 12 * time.Second
+
 func NewService(db *sql.DB, ca *pki.CA, cert *pki.Holder, config Config) *Service {
-	return &Service{db: db, ca: ca, cert: cert, config: config, conns: make(map[string]*grpc.ClientConn)}
+	return &Service{
+		db: db, ca: ca, cert: cert, config: config, conns: make(map[string]*grpc.ClientConn),
+		enrolls: ratelimit.New(enrollBurst, enrollEvery),
+	}
 }
 
 // JoinToken lets the agent of a node enroll once until it expires.
@@ -201,29 +210,52 @@ func (s *Service) NewJoinToken(ctx context.Context, id string) (JoinToken, error
 
 // Enroll implements mcsmv1.EnrollmentServiceServer. The join token is consumed atomically.
 func (s *Service) Enroll(ctx context.Context, req *mcsmv1.EnrollRequest) (*mcsmv1.EnrollResponse, error) {
-	cert, err := s.ca.SignNodeCSR(req.GetCsrDer(), req.GetNodeId())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
-	}
-	hash := sha256.Sum256([]byte(req.GetSecret()))
-	now := time.Now().Unix()
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE nodes SET join_secret_hash = NULL, join_expires_at = NULL, enrolled_at = ?
-		WHERE id = ? AND join_secret_hash = ? AND join_expires_at > ?`, now, req.GetNodeId(), hash[:], now)
-	if err != nil {
-		return nil, err
-	}
 	// Anyone who reaches the enrollment endpoint can send IDs, so they are kept short.
 	attrs := []any{logging.Nodes, logging.KeyNode, req.GetNodeId()[:min(len(req.GetNodeId()), 64)]}
+	var client string
 	if p, ok := peer.FromContext(ctx); ok {
 		attrs = append(attrs, "ip", p.Addr.String())
+		client, _, _ = net.SplitHostPort(p.Addr.String())
 	}
-	if rowsAffected(res) != 1 {
-		slog.Warn("Enroll node failed", append(attrs, "err", "invalid, expired or used join token")...)
-		return nil, status.Error(codes.PermissionDenied, "join token is invalid, expired or already used")
+	if !s.enrolls.Allow(ratelimit.Client(client)) {
+		return nil, status.Error(codes.ResourceExhausted, "too many enrollment attempts, wait a minute and try again")
+	}
+	// The join token is used up only if the master signs the certificate, and checked first.
+	var cert []byte
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		hash := sha256.Sum256([]byte(req.GetSecret()))
+		now := time.Now().Unix()
+		res, err := tx.ExecContext(ctx, `
+			UPDATE nodes SET join_secret_hash = NULL, join_expires_at = NULL, enrolled_at = ?
+			WHERE id = ? AND join_secret_hash = ? AND join_expires_at > ?`, now, req.GetNodeId(), hash[:], now)
+		if err == nil && rowsAffected(res) != 1 {
+			return status.Error(codes.PermissionDenied, "join token is invalid, expired or already used")
+		}
+		if err == nil {
+			if cert, err = s.ca.SignNodeCSR(req.GetCsrDer(), req.GetNodeId()); err != nil {
+				return status.Error(codes.InvalidArgument, "invalid certificate signing request")
+			}
+		}
+		return err
+	})
+	if err != nil {
+		slog.Warn("Enroll node failed", append(attrs, "err", status.Convert(err).Message())...)
+		return nil, err
 	}
 	slog.Info("Enroll node", attrs...)
 	return &mcsmv1.EnrollResponse{CertificateDer: cert, CaCertificateDer: s.ca.Cert.Raw}, nil
+}
+
+// inTx runs fn in a transaction that is committed if fn succeeds.
+func (s *Service) inTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		return errors.Join(err, tx.Rollback())
+	}
+	return tx.Commit()
 }
 
 func (s *Service) List(ctx context.Context) ([]Node, error) {
