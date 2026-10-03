@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"slices"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -101,6 +102,7 @@ func serve(ctx context.Context, cfg config) error {
 // services are the gRPC services of the agent. The servers for the master and the local CLI
 // share them, so both see the same state, e.g. a backup in progress.
 type services struct {
+	rt         runtime.Runtime
 	node       *node.Service
 	server     *server.Service
 	files      *files.Service
@@ -116,6 +118,7 @@ type services struct {
 func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, buf *agentlogs.Buffer, calls *slog.Logger) *services {
 	backups := backup.NewService(rt, locations)
 	return &services{
+		rt:         rt,
 		node:       node.NewService(rt, identity, locations),
 		server:     server.NewService(rt, backups),
 		files:      files.NewService(rt),
@@ -128,9 +131,11 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 	}
 }
 
-// grpcServer serves the services to callers from origin, logging their calls.
+// grpcServer serves the services to callers from origin, logging their calls. If a call failed
+// because the runtime is down, the log keeps the original error and the caller learns that.
 func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Server {
-	srv := grpc.NewServer(append(agentlogs.Interceptors(origin, s.calls), opts...)...)
+	opts = slices.Concat(runtime.Interceptors(s.rt), agentlogs.Interceptors(origin, s.calls), opts)
+	srv := grpc.NewServer(opts...)
 	mcsmv1.RegisterNodeServiceServer(srv, s.node)
 	mcsmv1.RegisterServerServiceServer(srv, s.server)
 	mcsmv1.RegisterFileServiceServer(srv, s.files)

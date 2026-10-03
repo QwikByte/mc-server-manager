@@ -1,13 +1,6 @@
 import { indentWithTab } from "@codemirror/commands"
-import { json } from "@codemirror/lang-json"
-import { yaml } from "@codemirror/lang-yaml"
-import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language"
-import { javascript } from "@codemirror/legacy-modes/mode/javascript"
-import { properties } from "@codemirror/legacy-modes/mode/properties"
-import { shell } from "@codemirror/legacy-modes/mode/shell"
-import { toml } from "@codemirror/legacy-modes/mode/toml"
-import { xml } from "@codemirror/legacy-modes/mode/xml"
-import { EditorState, type Extension } from "@codemirror/state"
+import { HighlightStyle, StreamLanguage, type StreamParser, syntaxHighlighting } from "@codemirror/language"
+import { Compartment, EditorState, type Extension } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
 import { tags as t } from "@lezer/highlight"
 import { basicSetup } from "codemirror"
@@ -17,16 +10,20 @@ export interface EditorHandle {
   value: () => string
 }
 
-const languages: Record<string, () => Extension> = {
+// Languages are loaded with the first file that needs them.
+const json = () => import("@codemirror/lang-json").then((m) => m.json())
+const yaml = () => import("@codemirror/lang-yaml").then((m) => m.yaml())
+const legacy = (mode: Promise<StreamParser<unknown>>) => mode.then((m) => StreamLanguage.define(m))
+const languages: Record<string, () => Promise<Extension>> = {
   json,
   mcmeta: json,
   yml: yaml,
   yaml,
-  properties: () => StreamLanguage.define(properties),
-  toml: () => StreamLanguage.define(toml),
-  sh: () => StreamLanguage.define(shell),
-  js: () => StreamLanguage.define(javascript),
-  xml: () => StreamLanguage.define(xml),
+  properties: () => legacy(import("@codemirror/legacy-modes/mode/properties").then((m) => m.properties)),
+  toml: () => legacy(import("@codemirror/legacy-modes/mode/toml").then((m) => m.toml)),
+  sh: () => legacy(import("@codemirror/legacy-modes/mode/shell").then((m) => m.shell)),
+  js: () => legacy(import("@codemirror/legacy-modes/mode/javascript").then((m) => m.javascript)),
+  xml: () => legacy(import("@codemirror/legacy-modes/mode/xml").then((m) => m.xml)),
 }
 
 // Like the console, the editor is dark in both themes.
@@ -80,13 +77,14 @@ export function CodeEditor({
 
   useEffect(() => {
     const extension = filename.split(".").pop()?.toLowerCase() ?? ""
+    const language = new Compartment()
     const editor = new EditorView({
       parent: parent.current!,
       doc: value,
       extensions: [
         basicSetup,
         keymap.of([indentWithTab]),
-        languages[extension]?.() ?? [],
+        language.of([]),
         theme,
         syntaxHighlighting(highlight),
         EditorView.updateListener.of((u) => u.docChanged && changed.current()),
@@ -95,7 +93,12 @@ export function CodeEditor({
       ],
     })
     view.current = editor
-    return () => editor.destroy()
+    let open = true
+    void languages[extension]?.().then((l) => open && editor.dispatch({ effects: language.reconfigure(l) }))
+    return () => {
+      open = false
+      editor.destroy()
+    }
   }, [value, filename, readOnly])
 
   return (

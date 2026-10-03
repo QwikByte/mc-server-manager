@@ -38,7 +38,8 @@ folders and backups leave them out the same way. Plugins and mods run with the s
 The settings of a server can be changed after it was created: name, Minecraft version, memory, port, Java
 version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
 The agent creates the container again with the same data; the old container is only removed once the new one
-exists.
+exists. A server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it
+changed, creates the container again the same way. The old image is removed once no server uses it.
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
 crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.
@@ -124,8 +125,9 @@ installed; update the master first, then the nodes.
 | `journalctl -u mcsm-master`, `-u mcsm-agent`  | What the services log; `--log-format json` in the options suits log collectors                 |
 
 **Commands on the master's host** run as the master's user `mcsm`: `sudo -u mcsm mcsm-master logs` shows the log,
-`… user add <name>` creates an administrator, e.g. after losing access, and
-`… node add <name> <agent-address> --public-enroll-addr <host:port>` adds a node and prints its join token for scripts.
+`… user add <name>` creates an administrator, e.g. after losing access,
+`… node add <name> <agent-address> --public-enroll-addr <host:port>` adds a node and prints its join token for scripts,
+and `… backup <file>` saves the master's database and CA (see [Backups](#backups)).
 
 **Commands on a node:** `sudo mcsm-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the
 agent's own log. `backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is
@@ -177,6 +179,23 @@ its worlds to disk first and pauses saving while they are archived, so players s
   stopped while the files are swapped, and started again afterwards.
 - Deleting a server deletes its backups too. Locally, `mcsm-agent backup list|create|restore` works without the
   master, e.g. to restore a server while the master is unreachable.
+
+**The master** keeps users, nodes, networks, templates, backup jobs, policies, settings and the log in its database, and
+the certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling every node again.
+`sudo -u mcsm mcsm-master backup <file>` saves both in a `.tar.gz` archive, also while the master runs; with `-`
+instead of a file, it writes the archive to stdout, e.g. for `ssh master 'sudo -u mcsm mcsm-master backup -' > master.tar.gz`
+on another machine. The CA's private key lets anyone control the agents, so keep the archive as safe as the master. To
+restore it, e.g. on a new machine after `install.sh master`:
+
+```sh
+sudo systemctl stop mcsm-master
+sudo rm -f /var/lib/mcsm-master/master.db-wal /var/lib/mcsm-master/master.db-shm
+sudo tar -xzf master.tar.gz -C /var/lib/mcsm-master
+sudo chown -R mcsm:mcsm /var/lib/mcsm-master
+sudo systemctl start mcsm-master
+```
+
+The nodes keep working with the restored master. If its IP address changed, allow the new one on port 7443 of the nodes.
 
 ## Policies
 

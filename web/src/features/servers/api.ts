@@ -169,6 +169,15 @@ export function useUpdateServer(nodeId: string, serverId: string) {
   })
 }
 
+/** Pulls the server's image again; updated tells whether a newer one came and the container was replaced. */
+export function useUpdateImage(nodeId: string, serverId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<{ updated: boolean }>(`/nodes/${nodeId}/servers/${serverId}/update-image`, { method: "POST" }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
+  })
+}
+
 export function useSendCommand(nodeId: string, serverId: string) {
   return useMutation({
     mutationFn: (command: string) => api<{ output: string }>(`/nodes/${nodeId}/servers/${serverId}/command`, { body: { command } }),

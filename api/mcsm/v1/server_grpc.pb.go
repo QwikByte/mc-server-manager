@@ -26,6 +26,7 @@ const (
 	ServerService_RestartServer_FullMethodName    = "/mcsm.v1.ServerService/RestartServer"
 	ServerService_DeleteServer_FullMethodName     = "/mcsm.v1.ServerService/DeleteServer"
 	ServerService_UpdateServer_FullMethodName     = "/mcsm.v1.ServerService/UpdateServer"
+	ServerService_UpdateImage_FullMethodName      = "/mcsm.v1.ServerService/UpdateImage"
 	ServerService_StreamLogs_FullMethodName       = "/mcsm.v1.ServerService/StreamLogs"
 	ServerService_SendCommand_FullMethodName      = "/mcsm.v1.ServerService/SendCommand"
 	ServerService_ConfigureNetwork_FullMethodName = "/mcsm.v1.ServerService/ConfigureNetwork"
@@ -49,6 +50,9 @@ type ServerServiceClient interface {
 	// UpdateServer changes the settings of a server. Its container is created again with
 	// the same data, and a running server restarts.
 	UpdateServer(ctx context.Context, in *UpdateServerRequest, opts ...grpc.CallOption) (*UpdateServerResponse, error)
+	// UpdateImage pulls the image of a server again, e.g. for a newer Java. If it changed, the
+	// container is created again with it, and a running server restarts.
+	UpdateImage(ctx context.Context, in *UpdateImageRequest, opts ...grpc.CallOption) (*UpdateImageResponse, error)
 	// StreamLogs sends the last lines of the server console, then follows it until the
 	// server stops or the client disconnects. Each line has the time it was written, for
 	// clients that connect again to continue after the last line they got.
@@ -147,6 +151,16 @@ func (c *serverServiceClient) UpdateServer(ctx context.Context, in *UpdateServer
 	return out, nil
 }
 
+func (c *serverServiceClient) UpdateImage(ctx context.Context, in *UpdateImageRequest, opts ...grpc.CallOption) (*UpdateImageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateImageResponse)
+	err := c.cc.Invoke(ctx, ServerService_UpdateImage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *serverServiceClient) StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &ServerService_ServiceDesc.Streams[0], ServerService_StreamLogs_FullMethodName, cOpts...)
@@ -225,6 +239,9 @@ type ServerServiceServer interface {
 	// UpdateServer changes the settings of a server. Its container is created again with
 	// the same data, and a running server restarts.
 	UpdateServer(context.Context, *UpdateServerRequest) (*UpdateServerResponse, error)
+	// UpdateImage pulls the image of a server again, e.g. for a newer Java. If it changed, the
+	// container is created again with it, and a running server restarts.
+	UpdateImage(context.Context, *UpdateImageRequest) (*UpdateImageResponse, error)
 	// StreamLogs sends the last lines of the server console, then follows it until the
 	// server stops or the client disconnects. Each line has the time it was written, for
 	// clients that connect again to continue after the last line they got.
@@ -273,6 +290,9 @@ func (UnimplementedServerServiceServer) DeleteServer(context.Context, *DeleteSer
 }
 func (UnimplementedServerServiceServer) UpdateServer(context.Context, *UpdateServerRequest) (*UpdateServerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateServer not implemented")
+}
+func (UnimplementedServerServiceServer) UpdateImage(context.Context, *UpdateImageRequest) (*UpdateImageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateImage not implemented")
 }
 func (UnimplementedServerServiceServer) StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamLogs not implemented")
@@ -436,6 +456,24 @@ func _ServerService_UpdateServer_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ServerService_UpdateImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateImageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServerServiceServer).UpdateImage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ServerService_UpdateImage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServerServiceServer).UpdateImage(ctx, req.(*UpdateImageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ServerService_StreamLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(StreamLogsRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -542,6 +580,10 @@ var ServerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateServer",
 			Handler:    _ServerService_UpdateServer_Handler,
+		},
+		{
+			MethodName: "UpdateImage",
+			Handler:    _ServerService_UpdateImage_Handler,
 		},
 		{
 			MethodName: "SendCommand",

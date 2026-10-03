@@ -139,6 +139,9 @@ type Runtime interface {
 	// Update replaces the settings of a server, keeping its type, data and network role.
 	// A running server restarts.
 	Update(ctx context.Context, spec Spec) error
+	// UpdateImage pulls the image of a server again and, if it changed, creates the container
+	// again with it. A running server restarts. It tells whether the image changed.
+	UpdateImage(ctx context.Context, id string) (bool, error)
 	// Restart stops a server gracefully and starts it again.
 	Restart(ctx context.Context, id string) error
 	// Configure gives a server its role in a network and restarts it if it runs.

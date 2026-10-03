@@ -313,7 +313,7 @@ func (s *Service) Conn(ctx context.Context, id string) (grpc.ClientConnInterface
 		return nil, httpapi.Errorf(http.StatusConflict, "Node %q has not been enrolled yet.", n.Name)
 	}
 	creds := credentials.NewTLS(pki.NodeClientTLS(s.cert, s.ca.Cert, n.ID))
-	conn, err := grpc.NewClient(n.Address, grpc.WithTransportCredentials(creds), grpc.WithConnectParams(reconnect))
+	conn, err := grpc.NewClient(n.Address, append(s.explained(id), grpc.WithTransportCredentials(creds), grpc.WithConnectParams(reconnect))...)
 	if err != nil {
 		return nil, err
 	}

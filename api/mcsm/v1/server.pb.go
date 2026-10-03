@@ -1036,6 +1036,95 @@ func (x *UpdateServerResponse) GetServer() *Server {
 	return nil
 }
 
+type UpdateImageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateImageRequest) Reset() {
+	*x = UpdateImageRequest{}
+	mi := &file_mcsm_v1_server_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateImageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateImageRequest) ProtoMessage() {}
+
+func (x *UpdateImageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_server_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateImageRequest.ProtoReflect.Descriptor instead.
+func (*UpdateImageRequest) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *UpdateImageRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type UpdateImageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// updated tells whether the image changed. If not, the server was left alone.
+	Updated       bool `protobuf:"varint,1,opt,name=updated,proto3" json:"updated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateImageResponse) Reset() {
+	*x = UpdateImageResponse{}
+	mi := &file_mcsm_v1_server_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateImageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateImageResponse) ProtoMessage() {}
+
+func (x *UpdateImageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_server_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateImageResponse.ProtoReflect.Descriptor instead.
+func (*UpdateImageResponse) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *UpdateImageResponse) GetUpdated() bool {
+	if x != nil {
+		return x.Updated
+	}
+	return false
+}
+
 type DeleteServerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1045,7 +1134,7 @@ type DeleteServerRequest struct {
 
 func (x *DeleteServerRequest) Reset() {
 	*x = DeleteServerRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[13]
+	mi := &file_mcsm_v1_server_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1057,7 +1146,7 @@ func (x *DeleteServerRequest) String() string {
 func (*DeleteServerRequest) ProtoMessage() {}
 
 func (x *DeleteServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[13]
+	mi := &file_mcsm_v1_server_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1070,7 +1159,7 @@ func (x *DeleteServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteServerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteServerRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{13}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DeleteServerRequest) GetId() string {
@@ -1088,7 +1177,7 @@ type DeleteServerResponse struct {
 
 func (x *DeleteServerResponse) Reset() {
 	*x = DeleteServerResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[14]
+	mi := &file_mcsm_v1_server_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1100,7 +1189,7 @@ func (x *DeleteServerResponse) String() string {
 func (*DeleteServerResponse) ProtoMessage() {}
 
 func (x *DeleteServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[14]
+	mi := &file_mcsm_v1_server_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +1202,7 @@ func (x *DeleteServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteServerResponse.ProtoReflect.Descriptor instead.
 func (*DeleteServerResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{14}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{16}
 }
 
 type StreamLogsRequest struct {
@@ -1130,7 +1219,7 @@ type StreamLogsRequest struct {
 
 func (x *StreamLogsRequest) Reset() {
 	*x = StreamLogsRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[15]
+	mi := &file_mcsm_v1_server_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1142,7 +1231,7 @@ func (x *StreamLogsRequest) String() string {
 func (*StreamLogsRequest) ProtoMessage() {}
 
 func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[15]
+	mi := &file_mcsm_v1_server_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1155,7 +1244,7 @@ func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLogsRequest.ProtoReflect.Descriptor instead.
 func (*StreamLogsRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{15}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *StreamLogsRequest) GetId() string {
@@ -1190,7 +1279,7 @@ type StreamLogsResponse struct {
 
 func (x *StreamLogsResponse) Reset() {
 	*x = StreamLogsResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[16]
+	mi := &file_mcsm_v1_server_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1202,7 +1291,7 @@ func (x *StreamLogsResponse) String() string {
 func (*StreamLogsResponse) ProtoMessage() {}
 
 func (x *StreamLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[16]
+	mi := &file_mcsm_v1_server_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1215,7 +1304,7 @@ func (x *StreamLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLogsResponse.ProtoReflect.Descriptor instead.
 func (*StreamLogsResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{16}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *StreamLogsResponse) GetLine() string {
@@ -1243,7 +1332,7 @@ type SendCommandRequest struct {
 
 func (x *SendCommandRequest) Reset() {
 	*x = SendCommandRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[17]
+	mi := &file_mcsm_v1_server_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1255,7 +1344,7 @@ func (x *SendCommandRequest) String() string {
 func (*SendCommandRequest) ProtoMessage() {}
 
 func (x *SendCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[17]
+	mi := &file_mcsm_v1_server_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1268,7 +1357,7 @@ func (x *SendCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendCommandRequest.ProtoReflect.Descriptor instead.
 func (*SendCommandRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{17}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SendCommandRequest) GetId() string {
@@ -1294,7 +1383,7 @@ type SendCommandResponse struct {
 
 func (x *SendCommandResponse) Reset() {
 	*x = SendCommandResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[18]
+	mi := &file_mcsm_v1_server_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1306,7 +1395,7 @@ func (x *SendCommandResponse) String() string {
 func (*SendCommandResponse) ProtoMessage() {}
 
 func (x *SendCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[18]
+	mi := &file_mcsm_v1_server_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1319,7 +1408,7 @@ func (x *SendCommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendCommandResponse.ProtoReflect.Descriptor instead.
 func (*SendCommandResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{18}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SendCommandResponse) GetOutput() string {
@@ -1345,7 +1434,7 @@ type ConfigureNetworkRequest struct {
 
 func (x *ConfigureNetworkRequest) Reset() {
 	*x = ConfigureNetworkRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[19]
+	mi := &file_mcsm_v1_server_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1357,7 +1446,7 @@ func (x *ConfigureNetworkRequest) String() string {
 func (*ConfigureNetworkRequest) ProtoMessage() {}
 
 func (x *ConfigureNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[19]
+	mi := &file_mcsm_v1_server_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1370,7 +1459,7 @@ func (x *ConfigureNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureNetworkRequest.ProtoReflect.Descriptor instead.
 func (*ConfigureNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{19}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ConfigureNetworkRequest) GetId() string {
@@ -1416,7 +1505,7 @@ type NetworkBackend struct {
 
 func (x *NetworkBackend) Reset() {
 	*x = NetworkBackend{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[20]
+	mi := &file_mcsm_v1_server_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1428,7 +1517,7 @@ func (x *NetworkBackend) String() string {
 func (*NetworkBackend) ProtoMessage() {}
 
 func (x *NetworkBackend) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[20]
+	mi := &file_mcsm_v1_server_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1441,7 +1530,7 @@ func (x *NetworkBackend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkBackend.ProtoReflect.Descriptor instead.
 func (*NetworkBackend) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{20}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *NetworkBackend) GetName() string {
@@ -1502,7 +1591,7 @@ type ConfigureNetworkResponse struct {
 
 func (x *ConfigureNetworkResponse) Reset() {
 	*x = ConfigureNetworkResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[21]
+	mi := &file_mcsm_v1_server_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1514,7 +1603,7 @@ func (x *ConfigureNetworkResponse) String() string {
 func (*ConfigureNetworkResponse) ProtoMessage() {}
 
 func (x *ConfigureNetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[21]
+	mi := &file_mcsm_v1_server_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1527,7 +1616,7 @@ func (x *ConfigureNetworkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureNetworkResponse.ProtoReflect.Descriptor instead.
 func (*ConfigureNetworkResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{21}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{23}
 }
 
 type DuplicateServerRequest struct {
@@ -1542,7 +1631,7 @@ type DuplicateServerRequest struct {
 
 func (x *DuplicateServerRequest) Reset() {
 	*x = DuplicateServerRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[22]
+	mi := &file_mcsm_v1_server_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1554,7 +1643,7 @@ func (x *DuplicateServerRequest) String() string {
 func (*DuplicateServerRequest) ProtoMessage() {}
 
 func (x *DuplicateServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[22]
+	mi := &file_mcsm_v1_server_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1567,7 +1656,7 @@ func (x *DuplicateServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DuplicateServerRequest.ProtoReflect.Descriptor instead.
 func (*DuplicateServerRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{22}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DuplicateServerRequest) GetId() string {
@@ -1600,7 +1689,7 @@ type DuplicateServerResponse struct {
 
 func (x *DuplicateServerResponse) Reset() {
 	*x = DuplicateServerResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[23]
+	mi := &file_mcsm_v1_server_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1612,7 +1701,7 @@ func (x *DuplicateServerResponse) String() string {
 func (*DuplicateServerResponse) ProtoMessage() {}
 
 func (x *DuplicateServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[23]
+	mi := &file_mcsm_v1_server_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1625,7 +1714,7 @@ func (x *DuplicateServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DuplicateServerResponse.ProtoReflect.Descriptor instead.
 func (*DuplicateServerResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{23}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DuplicateServerResponse) GetServer() *Server {
@@ -1648,7 +1737,7 @@ type ImportServerRequest struct {
 
 func (x *ImportServerRequest) Reset() {
 	*x = ImportServerRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[24]
+	mi := &file_mcsm_v1_server_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +1749,7 @@ func (x *ImportServerRequest) String() string {
 func (*ImportServerRequest) ProtoMessage() {}
 
 func (x *ImportServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[24]
+	mi := &file_mcsm_v1_server_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +1762,7 @@ func (x *ImportServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportServerRequest.ProtoReflect.Descriptor instead.
 func (*ImportServerRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{24}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ImportServerRequest) GetContent() isImportServerRequest_Content {
@@ -1726,7 +1815,7 @@ type ImportServerResponse struct {
 
 func (x *ImportServerResponse) Reset() {
 	*x = ImportServerResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[25]
+	mi := &file_mcsm_v1_server_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1738,7 +1827,7 @@ func (x *ImportServerResponse) String() string {
 func (*ImportServerResponse) ProtoMessage() {}
 
 func (x *ImportServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[25]
+	mi := &file_mcsm_v1_server_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1751,7 +1840,7 @@ func (x *ImportServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportServerResponse.ProtoReflect.Descriptor instead.
 func (*ImportServerResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{25}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ImportServerResponse) GetServer() *Server {
@@ -1840,7 +1929,11 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"cpu_millis\x18\n" +
 	" \x01(\rR\tcpuMillis\"?\n" +
 	"\x14UpdateServerResponse\x12'\n" +
-	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server\"%\n" +
+	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server\"$\n" +
+	"\x12UpdateImageRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"/\n" +
+	"\x13UpdateImageResponse\x12\x18\n" +
+	"\aupdated\x18\x01 \x01(\bR\aupdated\"%\n" +
 	"\x13DeleteServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x16\n" +
 	"\x14DeleteServerResponse\"_\n" +
@@ -1900,7 +1993,7 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x14SERVER_STATE_STOPPED\x10\x01\x12\x19\n" +
 	"\x15SERVER_STATE_STARTING\x10\x02\x12\x18\n" +
 	"\x14SERVER_STATE_RUNNING\x10\x03\x12\x19\n" +
-	"\x15SERVER_STATE_CRASHING\x10\x042\xb2\a\n" +
+	"\x15SERVER_STATE_CRASHING\x10\x042\xfc\a\n" +
 	"\rServerService\x12H\n" +
 	"\vListServers\x12\x1b.mcsm.v1.ListServersRequest\x1a\x1c.mcsm.v1.ListServersResponse\x12K\n" +
 	"\fCreateServer\x12\x1c.mcsm.v1.CreateServerRequest\x1a\x1d.mcsm.v1.CreateServerResponse\x12H\n" +
@@ -1909,7 +2002,8 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"StopServer\x12\x1a.mcsm.v1.StopServerRequest\x1a\x1b.mcsm.v1.StopServerResponse\x12N\n" +
 	"\rRestartServer\x12\x1d.mcsm.v1.RestartServerRequest\x1a\x1e.mcsm.v1.RestartServerResponse\x12K\n" +
 	"\fDeleteServer\x12\x1c.mcsm.v1.DeleteServerRequest\x1a\x1d.mcsm.v1.DeleteServerResponse\x12K\n" +
-	"\fUpdateServer\x12\x1c.mcsm.v1.UpdateServerRequest\x1a\x1d.mcsm.v1.UpdateServerResponse\x12G\n" +
+	"\fUpdateServer\x12\x1c.mcsm.v1.UpdateServerRequest\x1a\x1d.mcsm.v1.UpdateServerResponse\x12H\n" +
+	"\vUpdateImage\x12\x1b.mcsm.v1.UpdateImageRequest\x1a\x1c.mcsm.v1.UpdateImageResponse\x12G\n" +
 	"\n" +
 	"StreamLogs\x12\x1a.mcsm.v1.StreamLogsRequest\x1a\x1b.mcsm.v1.StreamLogsResponse0\x01\x12H\n" +
 	"\vSendCommand\x12\x1b.mcsm.v1.SendCommandRequest\x1a\x1c.mcsm.v1.SendCommandResponse\x12W\n" +
@@ -1930,7 +2024,7 @@ func file_mcsm_v1_server_proto_rawDescGZIP() []byte {
 }
 
 var file_mcsm_v1_server_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_mcsm_v1_server_proto_goTypes = []any{
 	(ServerType)(0),                  // 0: mcsm.v1.ServerType
 	(RestartPolicy)(0),               // 1: mcsm.v1.RestartPolicy
@@ -1948,20 +2042,22 @@ var file_mcsm_v1_server_proto_goTypes = []any{
 	(*RestartServerResponse)(nil),    // 13: mcsm.v1.RestartServerResponse
 	(*UpdateServerRequest)(nil),      // 14: mcsm.v1.UpdateServerRequest
 	(*UpdateServerResponse)(nil),     // 15: mcsm.v1.UpdateServerResponse
-	(*DeleteServerRequest)(nil),      // 16: mcsm.v1.DeleteServerRequest
-	(*DeleteServerResponse)(nil),     // 17: mcsm.v1.DeleteServerResponse
-	(*StreamLogsRequest)(nil),        // 18: mcsm.v1.StreamLogsRequest
-	(*StreamLogsResponse)(nil),       // 19: mcsm.v1.StreamLogsResponse
-	(*SendCommandRequest)(nil),       // 20: mcsm.v1.SendCommandRequest
-	(*SendCommandResponse)(nil),      // 21: mcsm.v1.SendCommandResponse
-	(*ConfigureNetworkRequest)(nil),  // 22: mcsm.v1.ConfigureNetworkRequest
-	(*NetworkBackend)(nil),           // 23: mcsm.v1.NetworkBackend
-	(*ConfigureNetworkResponse)(nil), // 24: mcsm.v1.ConfigureNetworkResponse
-	(*DuplicateServerRequest)(nil),   // 25: mcsm.v1.DuplicateServerRequest
-	(*DuplicateServerResponse)(nil),  // 26: mcsm.v1.DuplicateServerResponse
-	(*ImportServerRequest)(nil),      // 27: mcsm.v1.ImportServerRequest
-	(*ImportServerResponse)(nil),     // 28: mcsm.v1.ImportServerResponse
-	nil,                              // 29: mcsm.v1.CreateServerRequest.PropertiesEntry
+	(*UpdateImageRequest)(nil),       // 16: mcsm.v1.UpdateImageRequest
+	(*UpdateImageResponse)(nil),      // 17: mcsm.v1.UpdateImageResponse
+	(*DeleteServerRequest)(nil),      // 18: mcsm.v1.DeleteServerRequest
+	(*DeleteServerResponse)(nil),     // 19: mcsm.v1.DeleteServerResponse
+	(*StreamLogsRequest)(nil),        // 20: mcsm.v1.StreamLogsRequest
+	(*StreamLogsResponse)(nil),       // 21: mcsm.v1.StreamLogsResponse
+	(*SendCommandRequest)(nil),       // 22: mcsm.v1.SendCommandRequest
+	(*SendCommandResponse)(nil),      // 23: mcsm.v1.SendCommandResponse
+	(*ConfigureNetworkRequest)(nil),  // 24: mcsm.v1.ConfigureNetworkRequest
+	(*NetworkBackend)(nil),           // 25: mcsm.v1.NetworkBackend
+	(*ConfigureNetworkResponse)(nil), // 26: mcsm.v1.ConfigureNetworkResponse
+	(*DuplicateServerRequest)(nil),   // 27: mcsm.v1.DuplicateServerRequest
+	(*DuplicateServerResponse)(nil),  // 28: mcsm.v1.DuplicateServerResponse
+	(*ImportServerRequest)(nil),      // 29: mcsm.v1.ImportServerRequest
+	(*ImportServerResponse)(nil),     // 30: mcsm.v1.ImportServerResponse
+	nil,                              // 31: mcsm.v1.CreateServerRequest.PropertiesEntry
 }
 var file_mcsm_v1_server_proto_depIdxs = []int32{
 	0,  // 0: mcsm.v1.Server.type:type_name -> mcsm.v1.ServerType
@@ -1970,11 +2066,11 @@ var file_mcsm_v1_server_proto_depIdxs = []int32{
 	3,  // 3: mcsm.v1.ListServersResponse.servers:type_name -> mcsm.v1.Server
 	0,  // 4: mcsm.v1.CreateServerRequest.type:type_name -> mcsm.v1.ServerType
 	1,  // 5: mcsm.v1.CreateServerRequest.restart_policy:type_name -> mcsm.v1.RestartPolicy
-	29, // 6: mcsm.v1.CreateServerRequest.properties:type_name -> mcsm.v1.CreateServerRequest.PropertiesEntry
+	31, // 6: mcsm.v1.CreateServerRequest.properties:type_name -> mcsm.v1.CreateServerRequest.PropertiesEntry
 	3,  // 7: mcsm.v1.CreateServerResponse.server:type_name -> mcsm.v1.Server
 	1,  // 8: mcsm.v1.UpdateServerRequest.restart_policy:type_name -> mcsm.v1.RestartPolicy
 	3,  // 9: mcsm.v1.UpdateServerResponse.server:type_name -> mcsm.v1.Server
-	23, // 10: mcsm.v1.ConfigureNetworkRequest.backends:type_name -> mcsm.v1.NetworkBackend
+	25, // 10: mcsm.v1.ConfigureNetworkRequest.backends:type_name -> mcsm.v1.NetworkBackend
 	3,  // 11: mcsm.v1.DuplicateServerResponse.server:type_name -> mcsm.v1.Server
 	3,  // 12: mcsm.v1.ImportServerRequest.header:type_name -> mcsm.v1.Server
 	3,  // 13: mcsm.v1.ImportServerResponse.server:type_name -> mcsm.v1.Server
@@ -1983,27 +2079,29 @@ var file_mcsm_v1_server_proto_depIdxs = []int32{
 	8,  // 16: mcsm.v1.ServerService.StartServer:input_type -> mcsm.v1.StartServerRequest
 	10, // 17: mcsm.v1.ServerService.StopServer:input_type -> mcsm.v1.StopServerRequest
 	12, // 18: mcsm.v1.ServerService.RestartServer:input_type -> mcsm.v1.RestartServerRequest
-	16, // 19: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
+	18, // 19: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
 	14, // 20: mcsm.v1.ServerService.UpdateServer:input_type -> mcsm.v1.UpdateServerRequest
-	18, // 21: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
-	20, // 22: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
-	22, // 23: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
-	25, // 24: mcsm.v1.ServerService.DuplicateServer:input_type -> mcsm.v1.DuplicateServerRequest
-	27, // 25: mcsm.v1.ServerService.ImportServer:input_type -> mcsm.v1.ImportServerRequest
-	5,  // 26: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
-	7,  // 27: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
-	9,  // 28: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
-	11, // 29: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
-	13, // 30: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
-	17, // 31: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
-	15, // 32: mcsm.v1.ServerService.UpdateServer:output_type -> mcsm.v1.UpdateServerResponse
-	19, // 33: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
-	21, // 34: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
-	24, // 35: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
-	26, // 36: mcsm.v1.ServerService.DuplicateServer:output_type -> mcsm.v1.DuplicateServerResponse
-	28, // 37: mcsm.v1.ServerService.ImportServer:output_type -> mcsm.v1.ImportServerResponse
-	26, // [26:38] is the sub-list for method output_type
-	14, // [14:26] is the sub-list for method input_type
+	16, // 21: mcsm.v1.ServerService.UpdateImage:input_type -> mcsm.v1.UpdateImageRequest
+	20, // 22: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
+	22, // 23: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
+	24, // 24: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
+	27, // 25: mcsm.v1.ServerService.DuplicateServer:input_type -> mcsm.v1.DuplicateServerRequest
+	29, // 26: mcsm.v1.ServerService.ImportServer:input_type -> mcsm.v1.ImportServerRequest
+	5,  // 27: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
+	7,  // 28: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
+	9,  // 29: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
+	11, // 30: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
+	13, // 31: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
+	19, // 32: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
+	15, // 33: mcsm.v1.ServerService.UpdateServer:output_type -> mcsm.v1.UpdateServerResponse
+	17, // 34: mcsm.v1.ServerService.UpdateImage:output_type -> mcsm.v1.UpdateImageResponse
+	21, // 35: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
+	23, // 36: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
+	26, // 37: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
+	28, // 38: mcsm.v1.ServerService.DuplicateServer:output_type -> mcsm.v1.DuplicateServerResponse
+	30, // 39: mcsm.v1.ServerService.ImportServer:output_type -> mcsm.v1.ImportServerResponse
+	27, // [27:40] is the sub-list for method output_type
+	14, // [14:27] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
 	14, // [14:14] is the sub-list for extension extendee
 	0,  // [0:14] is the sub-list for field type_name
@@ -2014,11 +2112,11 @@ func file_mcsm_v1_server_proto_init() {
 	if File_mcsm_v1_server_proto != nil {
 		return
 	}
-	file_mcsm_v1_server_proto_msgTypes[20].OneofWrappers = []any{
+	file_mcsm_v1_server_proto_msgTypes[22].OneofWrappers = []any{
 		(*NetworkBackend_ServerId)(nil),
 		(*NetworkBackend_Address)(nil),
 	}
-	file_mcsm_v1_server_proto_msgTypes[24].OneofWrappers = []any{
+	file_mcsm_v1_server_proto_msgTypes[26].OneofWrappers = []any{
 		(*ImportServerRequest_Header)(nil),
 		(*ImportServerRequest_Data)(nil),
 	}
@@ -2028,7 +2126,7 @@ func file_mcsm_v1_server_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_server_proto_rawDesc), len(file_mcsm_v1_server_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   27,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

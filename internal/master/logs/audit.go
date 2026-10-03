@@ -53,6 +53,7 @@ var actions = map[string]action{
 	"POST /api/nodes/{id}/certificate":                  {logging.Nodes, "Renew node certificate"},
 	"POST /api/nodes/{node}/servers":                    {logging.Servers, "Create server"},
 	"PUT " + routeServer:                                {logging.Servers, "Change server settings"},
+	"POST " + routeServer + "/update-image":             {logging.Servers, "Update server image"},
 	"DELETE " + routeServer:                             {logging.Servers, "Delete server"},
 	"POST " + routeServer + "/start":                    {logging.Servers, "Start server"},
 	"POST " + routeServer + "/stop":                     {logging.Servers, "Stop server"},

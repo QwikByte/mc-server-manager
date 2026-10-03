@@ -3,6 +3,7 @@ package e2e
 import (
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -13,6 +14,28 @@ import (
 	agentenroll "github.com/QwikByte/mc-server-manager/internal/agent/enroll"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
+
+// Errors that mean a node can't be used name it, instead of passing on those of Docker or gRPC.
+func TestNodeErrors(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	api := apiClient{t: t, url: m.panel(t).URL}
+	path := "/api/nodes/" + a.node.ID
+
+	a.runtime.mu.Lock()
+	a.runtime.down = true
+	a.runtime.mu.Unlock()
+	if body := api.do("GET", path+"/servers", nil, http.StatusBadGateway, nil); !strings.Contains(body, "Docker isn't running on node-1, or its agent can't connect to it.") {
+		t.Errorf("while Docker is down: %s", body)
+	}
+
+	gone := listen(t)
+	gone.Close()
+	api.do("PUT", path, map[string]any{"name": "node-1", "address": gone.Addr().String(), "defaultStorage": "default"}, http.StatusOK, nil)
+	if body := api.do("GET", path+"/servers", nil, http.StatusBadGateway, nil); !strings.Contains(body, "node-1 can't be reached.") {
+		t.Errorf("while the agent can't be reached: %s", body)
+	}
+}
 
 func TestNodeSettings(t *testing.T) {
 	m := startMaster(t)

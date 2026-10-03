@@ -54,8 +54,8 @@ func TestTerminal(t *testing.T) {
 	if want := "can't reach Docker on this node, see: systemctl status docker"; err != want || !strings.Contains(out, "Runtime  unavailable") || strings.Contains(out, "System") {
 		t.Errorf("status while Docker is down: output %q, error %q; want %q", out, err, want)
 	}
-	if _, err := run(a.node.ID, "server list"); !strings.HasPrefix(err, errDown.Error()) {
-		t.Errorf("server list while Docker is down: error %q, want it without the gRPC prefix", err)
+	if _, err := run(a.node.ID, "server list"); err != "Docker isn't running on node-1, or its agent can't connect to it." {
+		t.Errorf("server list while Docker is down: error %q", err)
 	}
 	a.runtime.mu.Lock()
 	a.runtime.down = false

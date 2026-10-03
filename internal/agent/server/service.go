@@ -250,6 +250,15 @@ func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequ
 	return &mcsmv1.UpdateServerResponse{Server: toProto(srv)}, nil
 }
 
+func (s *Service) UpdateImage(ctx context.Context, req *mcsmv1.UpdateImageRequest) (*mcsmv1.UpdateImageResponse, error) {
+	var updated bool
+	err := s.apply(ctx, req.GetId(), func(ctx context.Context, id string) (err error) {
+		updated, err = s.rt.UpdateImage(ctx, id)
+		return err
+	})
+	return &mcsmv1.UpdateImageResponse{Updated: updated}, err
+}
+
 // find returns the server with the given ID.
 func (s *Service) find(ctx context.Context, id string) (runtime.Server, error) {
 	if !runtime.ValidID(id) {
