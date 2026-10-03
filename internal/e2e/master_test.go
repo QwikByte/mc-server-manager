@@ -2,12 +2,17 @@ package e2e
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
+	"github.com/QwikByte/mc-server-manager/internal/master/access"
+	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
+	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/settings"
 )
 
@@ -35,6 +40,7 @@ func TestMasterSettings(t *testing.T) {
 	for name, change := range map[string]func(map[string]any){
 		"address without port": func(s map[string]any) { s["enrollAddr"] = "panel.example.com" },
 		"address with a path":  func(s map[string]any) { s["enrollAddr"] = "panel.example.com/x:9443" },
+		"panel at a host name": func(s map[string]any) { s["panelAddr"] = "panel.example.com:8080" },
 		"endless sessions":     func(s map[string]any) { s["sessionHours"] = 24 * 365 },
 		"short join tokens":    func(s map[string]any) { s["joinTokenMinutes"] = 1 },
 		"reversed port range":  func(s map[string]any) { s["nodeDefaults"] = map[string]any{"portMin": 30000, "portMax": 20000} },
@@ -79,4 +85,47 @@ func TestMasterSettings(t *testing.T) {
 	if addr := m.settings.EnrollAddr(); addr != m.enrollAddr {
 		t.Fatalf("enrollment address = %s, want %s", addr, m.enrollAddr)
 	}
+}
+
+// Only administrators change the panel's address, which can open the panel to other
+// networks, and restart the master.
+func TestPanelAddrAndRestart(t *testing.T) {
+	m := startMaster(t)
+	svc := m.services(t)
+	var restarts atomic.Int32
+	svc.Restart = func() error { restarts.Add(1); return nil }
+	srv := httptest.NewTLSServer(masterapp.Handler(svc))
+	t.Cleanup(srv.Close)
+	admin, err := svc.Users.CreateUser(t.Context(), "admin", "the-admins-password")
+	check(t, err)
+	check(t, svc.Access.MakeAdmin(t.Context(), admin.ID))
+	root := browser(t, srv)
+	root.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "the-admins-password"}, http.StatusOK, nil)
+	var group access.Group
+	root.do("POST", "/api/groups", map[string]any{"name": "Settings", "permissions": []string{"settings.edit"}}, http.StatusCreated, &group)
+	var invited struct {
+		SetupLink auth.SetupLink `json:"setupLink"`
+	}
+	root.do("POST", "/api/users", map[string]any{"username": "editor", "groups": []string{group.ID}}, http.StatusCreated, &invited)
+	editor := browser(t, srv)
+	editor.do("POST", "/api/auth/setup", map[string]string{"token": invited.SetupLink.Token, "password": "the-editors-password"}, http.StatusOK, nil)
+
+	addr := listen(t)
+	free := addr.Addr().String()
+	check(t, addr.Close())
+	editor.do("PUT", "/api/settings", map[string]any{"sessionHours": 24}, http.StatusOK, nil)
+	editor.do("PUT", "/api/settings", map[string]any{"panelAddr": free}, http.StatusForbidden, nil)
+	editor.do("POST", "/api/master/restart", nil, http.StatusForbidden, nil)
+	root.do("PUT", "/api/settings", map[string]any{"panelAddr": free}, http.StatusOK, nil)
+	editor.do("PUT", "/api/settings", map[string]any{"sessionHours": 12, "panelAddr": free}, http.StatusOK, nil)
+	if got := svc.Settings.Get(); got.PanelAddr != free || got.SessionHours != 12 || restarts.Load() != 0 {
+		t.Fatalf("settings = %+v, restarts = %d", got, restarts.Load())
+	}
+	root.do("POST", "/api/master/restart", nil, http.StatusAccepted, nil)
+	if restarts.Load() != 1 {
+		t.Fatalf("restarts = %d", restarts.Load())
+	}
+
+	// A master that its service manager doesn't start again can't restart itself.
+	apiClient{t: t, url: m.panel(t).URL}.do("POST", "/api/master/restart", nil, http.StatusConflict, nil)
 }

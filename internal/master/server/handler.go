@@ -352,14 +352,18 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_, err = c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
 	}
-	for _, ref := range h.refs {
-		if err == nil {
-			err = ref.Forget(ctx, nodeID, id)
-		}
-	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
+	}
+	// The server is gone: what refers to it is cleaned up as far as possible, even if the
+	// request is cancelled.
+	ctx, cancel = context.WithTimeout(context.WithoutCancel(r.Context()), queryTimeout)
+	defer cancel()
+	for _, ref := range h.refs {
+		if err := ref.Forget(ctx, nodeID, id); err != nil {
+			slog.Warn("Some references to a deleted server were not removed", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, id, "err", err)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

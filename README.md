@@ -69,11 +69,13 @@ defaults instead, because `sudo-rs`, the `sudo` of newer Ubuntu releases, doesn'
 curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/latest/download/install.sh && sudo bash install.sh master
 ```
 
-It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), and for the password
-of the first administrator, `admin` unless `--admin` names another (piped, it generates one and shows it).
-The password needs at least 12 characters and isn't shown while you type it.
+It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), for the IP address
+and port the panel listens at (`--panel-addr`, `127.0.0.1:8080` by default, `0.0.0.0:<port>` for all interfaces, ports
+from 1024 on), and for the password of the first administrator, `admin` unless `--admin` names another (piped, it
+generates one and shows it). The password needs at least 12 characters and isn't shown while you type it. These options
+only apply to a new installation; later, both addresses can be changed in the panel's settings.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
-`cdn.modrinth.com`. The panel listens on `127.0.0.1:8080`; serve it over HTTPS with a reverse proxy, e.g. with
+`cdn.modrinth.com`. Browsers only sign in over HTTPS, so serve the panel with a reverse proxy, e.g. with
 [Caddy](https://caddyserver.com) and this `Caddyfile`, which also gets the certificate:
 
 ```
@@ -81,6 +83,10 @@ panel.example.com {
 	reverse_proxy 127.0.0.1:8080
 }
 ```
+
+Then add `--trusted-proxy 127.0.0.1` to `MCSM_MASTER_OPTS` in `/etc/mcsm/master.env`, so that the master takes the
+address of each client from the proxy's `X-Forwarded-For` header. Otherwise all clients share the proxy's address, and
+with it the budget of the sign-in rate limit, and the log shows only the proxy's address.
 
 **Nodes.** Add a node in the panel under **Nodes**. It shows a command that installs the agent in the master's version,
 offers to install Docker if it's missing (`--install-docker` doesn't ask), connects the agent with a join token and
@@ -243,8 +249,14 @@ Entries are kept for 30 days unless the settings say otherwise, and at most the 
 The **Settings** page configures the master, gives an overview of the agents and manages who may do what. Each tab
 only shows to users with the permission for it.
 
-- **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings,
-  which apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
+- **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings.
+  The address the panel listens at (it replaces `--http-addr`; empty uses the flag again) applies when the master starts
+  again, e.g. with **Restart master** or the next update; the page says so until then. Only administrators change it,
+  as it can open the panel to other networks. It is checked when saved, and if the master can't listen there when it
+  starts, e.g. because another program took the port, the panel falls back to `--http-addr` and shows why, so a wrong
+  address can't lock you out. **Restart master**, for administrators, stops the master and lets systemd start it again
+  (also reading `master.env` again), unless servers are moving to another node; Minecraft servers keep running. The
+  other settings apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
   flag again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel
   last (1 hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default),
   the port range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can
@@ -306,8 +318,11 @@ Users get their permissions from groups; a user can be in several groups and has
   certificates are server-only, so a compromised node can't command other nodes. Locally, the agent is controlled
   through a Unix socket (mode `0600` inside a `0700` data directory).
 - **Panel.** Argon2id password hashes, session tokens stored as SHA-256 hashes, `__Host-` cookies
-  (`HttpOnly`, `Secure`, `SameSite=Strict`), cross-origin request protection, sign-in rate limiting (also for changes
-  that need the password), a strict Content Security Policy and self-hosted fonts.
+  (`HttpOnly`, `Secure`, `SameSite=Strict`), cross-origin request protection, a strict Content Security Policy and
+  self-hosted fonts. Sign-in attempts are rate limited per client address (IPv6 per /64 network) and per username,
+  changes that need the password per user. A username has a larger budget than a client, so that a single client
+  can't keep a user out. Client addresses come from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse
+  proxies named with `--trusted-proxy`.
 - **Two-factor authentication.** Codes of the app (RFC 6238) work only once, and from the fifth wrong code in a row on,
   codes aren't checked for a minute that doubles with every further wrong one, up to a day; parallel guesses count
   too. Recovery codes have 50 random bits and are stored as SHA-256 hashes. The secret of the app is stored in the
@@ -351,7 +366,7 @@ Users get their permissions from groups; a user can be in several groups and has
   that may hold secrets, such as the forwarding secret of a network, are never logged. Exports protect spreadsheets
   from formulas in entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the
   browser connects again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP
-  address is that of the proxy.
+  address is that of the proxy, unless `--trusted-proxy` names it.
 - **Moving servers.** Agents never connect to each other: the master relays the server's archive and backups between
   them over its mutually authenticated connections. The new node checks the settings like those of a new server and
   extracts the archive confined to the server's data directory, without symbolic links. Moving needs the permissions

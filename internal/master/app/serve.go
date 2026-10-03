@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -38,7 +40,17 @@ import (
 	"github.com/QwikByte/mc-server-manager/web"
 )
 
+// RestartExit is the error serve returns when an administrator restarts the master from the
+// panel. The program exits with it as code, for which its service manager starts it again.
+type RestartExit int
+
+func (r RestartExit) Error() string { return fmt.Sprintf("restart with exit code %d", int(r)) }
+
 func serve(ctx context.Context, cfg config) error {
+	proxies, err := auth.ParseProxies(cfg.trustedProxies)
+	if err != nil {
+		return err
+	}
 	db, err := openDB(cfg.dataDir)
 	if err != nil {
 		return err
@@ -62,12 +74,18 @@ func serve(ctx context.Context, cfg config) error {
 	}
 
 	conf, err := settings.Load(ctx, db, settings.Master{
-		Version: buildinfo.Version, StartedAt: time.Now(), PanelAddr: cfg.httpAddr, PanelTLS: cfg.tlsCert != "",
+		Version: buildinfo.Version, StartedAt: time.Now(), PanelDefaultAddr: cfg.httpAddr, PanelTLS: cfg.tlsCert != "",
 		EnrollListenAddr: cfg.enrollAddr, EnrollAddr: publicAddr, CAFingerprint: pki.Fingerprint(ca.Cert),
+		Restartable: cfg.restartCode != 0,
 	}, masterCert)
 	if err != nil {
 		return err
 	}
+	panelListener, err := conf.ListenPanel()
+	if err != nil {
+		return err
+	}
+	defer panelListener.Close()
 
 	users := auth.NewService(db)
 	nodes := node.NewService(db, ca, masterCert, conf)
@@ -86,6 +104,10 @@ func serve(ctx context.Context, cfg config) error {
 	if ok, err := users.HasUsers(ctx); err == nil && !ok {
 		slog.Warn("No administrator account exists yet, create one with: mcsm-master user add <username>", logging.Auth)
 	}
+	if m := conf.Master(); m.PanelAddrError != "" {
+		slog.Warn("The panel can't listen at the address from the settings, so it listens at the one from the command line",
+			logging.Settings, "addr", m.PanelAddr, "err", m.PanelAddrError)
+	}
 
 	enrollListener, err := net.Listen("tcp", cfg.enrollAddr)
 	if err != nil {
@@ -103,40 +125,66 @@ func serve(ctx context.Context, cfg config) error {
 	go updates.Run(ctx)
 	usageStore := usage.NewStore(db, nodes)
 	go usageStore.Run(ctx)
+	// restarted is closed when an administrator restarts the master. Moves would be cut off.
+	restarted, once := make(chan struct{}), sync.Once{}
+	var restart func() error
+	if cfg.restartCode != 0 {
+		restart = func() error {
+			err := moves.CheckIdle()
+			if err == nil {
+				once.Do(func() { close(restarted) })
+			}
+			return err
+		}
+	}
+	// Requests in flight end when the master stops, so that streams such as the warnings
+	// the panel follows don't hold it up until the timeout.
+	requests, endRequests := context.WithCancel(context.Background())
+	defer endRequests()
 	httpServer := &http.Server{
-		Addr: cfg.httpAddr,
-		Handler: Handler(Services{
+		BaseContext: func(net.Listener) context.Context { return requests },
+		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
-			Usage: usageStore, Moves: moves,
-		}),
+			Usage: usageStore, Moves: moves, Restart: restart,
+		})),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	httpServer.RegisterOnShutdown(endRequests)
 
 	errc := make(chan error, 2)
 	go func() { errc <- grpcServer.Serve(enrollListener) }()
 	go func() {
 		if cfg.tlsCert != "" {
-			errc <- httpServer.ListenAndServeTLS(cfg.tlsCert, cfg.tlsKey)
+			errc <- httpServer.ServeTLS(panelListener, cfg.tlsCert, cfg.tlsKey)
 		} else {
-			errc <- httpServer.ListenAndServe()
+			errc <- httpServer.Serve(panelListener)
 		}
 	}()
-	slog.Info("Master started", "version", buildinfo.Version, "panel", cfg.httpAddr,
+	slog.Info("Master started", "version", buildinfo.Version, "panel", conf.Master().PanelAddr,
 		"enrollment", cfg.enrollAddr, "public_enrollment", conf.EnrollAddr(), "ca_fingerprint", pki.Fingerprint(ca.Cert))
 
+	restarting := false
 	select {
 	case err = <-errc:
 	case <-ctx.Done():
+	case <-restarted:
+		restarting = true
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	grpcServer.GracefulStop()
 	err = errors.Join(err, httpServer.Shutdown(shutdownCtx))
-	if err != nil {
+	switch {
+	case err != nil:
 		slog.Error("Master stopped", "err", err)
-	} else {
+	case restarting:
+		slog.Info("Master stopped to restart")
+	default:
 		slog.Info("Master stopped")
+	}
+	if restarting {
+		return RestartExit(cfg.restartCode)
 	}
 	return err
 }
@@ -155,6 +203,8 @@ type Services struct {
 	Updates   *update.Service
 	Usage     *usage.Store
 	Moves     *server.Moves
+	// Restart restarts the master, if its service manager starts it again; otherwise nil.
+	Restart func() error
 }
 
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
@@ -177,9 +227,9 @@ func API(s Services) *http.ServeMux {
 	api := http.NewServeMux()
 	m := access.NewMux(api, s.Moves.Guard, s.Logs.Audit())
 	access.NewHandler(s.Access, s.Users).Register(m)
-	settings.NewHandler(s.Settings).Register(m)
+	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
-	terminal.NewHandler(s.Nodes, s.Settings, s.Logs).Register(m)
+	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
 	server.NewHandler(s.Nodes, s.Networks, s.Moves, s.Tasks, s.Access, s.Usage).Register(m)
 	network.NewHandler(s.Networks).Register(m)

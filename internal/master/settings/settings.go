@@ -1,6 +1,7 @@
 // Package settings stores the settings of the master that administrators change in the
-// panel, and describes the running master. Settings apply right away; what only changes
-// with a restart, such as listen addresses and TLS, stays on the command line.
+// panel, and describes the running master. Settings apply right away, except the panel's
+// address, which applies when the master starts again. TLS and the enrollment endpoint's
+// listen address stay on the command line.
 package settings
 
 import (
@@ -35,6 +36,9 @@ var hostname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
 
 // Settings are the settings of the master.
 type Settings struct {
+	// PanelAddr is the IP:port the panel listens at from the next start of the master;
+	// empty means the address given on the command line.
+	PanelAddr string `json:"panelAddr"`
 	// EnrollAddr is the host:port join tokens tell agents to enroll at; empty means the
 	// address given on the command line.
 	EnrollAddr string `json:"enrollAddr"`
@@ -62,12 +66,19 @@ type Master struct {
 	// PanelAddr is where the panel listens; PanelTLS tells whether it serves HTTPS itself.
 	PanelAddr string `json:"panelAddr"`
 	PanelTLS  bool   `json:"panelTls"`
+	// PanelDefaultAddr is the panel's address given on the command line, where it listens
+	// while the settings name none. PanelAddrError tells why it listens there although
+	// they name one.
+	PanelDefaultAddr string `json:"panelDefaultAddr"`
+	PanelAddrError   string `json:"panelAddrError,omitempty"`
 	// EnrollListenAddr is where the enrollment endpoint listens. EnrollAddr is the address
 	// for join tokens given on the command line, which the settings can replace.
 	EnrollListenAddr     string    `json:"enrollListenAddr"`
 	EnrollAddr           string    `json:"enrollAddr"`
 	CAFingerprint        string    `json:"caFingerprint"`
 	CertificateExpiresAt time.Time `json:"certificateExpiresAt"`
+	// Restartable tells whether administrators can restart the master from the panel.
+	Restartable bool `json:"restartable"`
 }
 
 type Service struct {
@@ -98,10 +109,15 @@ func Load(ctx context.Context, db *sql.DB, master Master, cert *pki.Holder) (*Se
 // Get returns the current settings.
 func (s *Service) Get() Settings { return *s.current.Load() }
 
-// Update validates and stores the settings. They apply right away.
+// Update validates and stores the settings. They apply right away, the panel's address
+// when the master starts again.
 func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
-	next.EnrollAddr = strings.TrimSpace(next.EnrollAddr)
-	if err := validate(next); err != nil {
+	next.EnrollAddr, next.PanelAddr = strings.TrimSpace(next.EnrollAddr), strings.TrimSpace(next.PanelAddr)
+	err := validate(next)
+	if err == nil && next.PanelAddr != "" && next.PanelAddr != s.Get().PanelAddr {
+		err = s.checkPanelAddr(next.PanelAddr)
+	}
+	if err != nil {
 		return next, err
 	}
 	value, err := json.Marshal(next)
@@ -116,6 +132,40 @@ func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
 	}
 	s.current.Store(&next)
 	return next, nil
+}
+
+// ListenPanel listens at the panel's address from the settings, or else at the one from
+// the command line: while the settings name none, or if the master can't listen there,
+// e.g. as another program took the port, so that a wrong address can't lock administrators
+// out. Call it before anything reads the description of the master.
+func (s *Service) ListenPanel() (net.Listener, error) {
+	addr := cmp.Or(s.Get().PanelAddr, s.master.PanelDefaultAddr)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil && addr != s.master.PanelDefaultAddr {
+		s.master.PanelAddrError = err.Error()
+		addr = s.master.PanelDefaultAddr
+		ln, err = net.Listen("tcp", addr)
+	}
+	s.master.PanelAddr = addr
+	return ln, err
+}
+
+// checkPanelAddr tells whether the master can listen at addr when it starts again. The port
+// the panel listens at now is only free then, so for it only the IP address is checked.
+func (s *Service) checkPanelAddr(addr string) error {
+	host, port, _ := net.SplitHostPort(addr)
+	if _, current, _ := net.SplitHostPort(s.master.PanelAddr); port == current {
+		port = "0"
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
+	if err != nil {
+		var op *net.OpError
+		if errors.As(err, &op) {
+			err = op.Err
+		}
+		return httpapi.Errorf(http.StatusBadRequest, "The panel can't listen at %s: %v.", addr, err)
+	}
+	return ln.Close()
 }
 
 // Master describes the running master.
@@ -149,7 +199,9 @@ func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().Sess
 
 func validate(s Settings) error {
 	switch {
-	case s.EnrollAddr != "" && !validEnrollAddr(s.EnrollAddr):
+	case s.PanelAddr != "" && !validAddr(s.PanelAddr, func(host string) bool { return net.ParseIP(host) != nil }):
+		return httpapi.Errorf(http.StatusBadRequest, "Enter the panel's address as IP address and port, for example 0.0.0.0:8080, or leave it empty.")
+	case s.EnrollAddr != "" && !validAddr(s.EnrollAddr, func(host string) bool { return hostname.MatchString(host) || net.ParseIP(host) != nil }):
 		return httpapi.Errorf(http.StatusBadRequest, "Enter the enrollment address as host:port, for example panel.example.com:9443, or leave it empty.")
 	case s.SessionHours < 1 || s.SessionHours > maxSessionHours:
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a session duration from 1 to %d hours.", maxSessionHours)
@@ -161,12 +213,12 @@ func validate(s Settings) error {
 	return s.NodeDefaults.Validate()
 }
 
-// validEnrollAddr accepts a host name or IP address with a port, which agents dial as is.
-func validEnrollAddr(addr string) bool {
+// validAddr accepts host:port with a port from 1 to 65535 and a host that validHost accepts.
+func validAddr(addr string, validHost func(string) bool) bool {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return false
 	}
 	n, err := strconv.ParseUint(port, 10, 16)
-	return err == nil && n > 0 && (hostname.MatchString(host) || net.ParseIP(host) != nil)
+	return err == nil && n > 0 && validHost(host)
 }

@@ -40,6 +40,7 @@ var actions = map[string]action{
 	"POST /api/users/{id}/setup-link":                   {logging.Users, "Create setup link"},
 	"DELETE /api/users/{id}/mfa":                        {logging.Users, "Turn off two-factor authentication"},
 	"PUT /api/settings":                                 {logging.Settings, "Change settings"},
+	"POST /api/master/restart":                          {logging.System, "Restart master"},
 	"POST /api/update/check":                            {logging.System, "Check for updates"},
 	"POST /api/update/master":                           {logging.System, "Update master"},
 	"POST /api/update/agents":                           {logging.Nodes, "Update agents"},

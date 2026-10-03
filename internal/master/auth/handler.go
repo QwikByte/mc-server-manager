@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QwikByte/mc-server-manager/internal/logging"
@@ -16,15 +18,23 @@ const cookieName = "__Host-mcsm_session"
 
 type userKey struct{}
 
+// Handler limits the attempts to guess a password or code per client, per username and,
+// for signed-in users, per user, each on its own: anonymous requests can't use up the
+// budget of signed-in users.
 type Handler struct {
 	svc        *Service
 	sessionTTL func() time.Duration
-	limiter    *limiter
+	clients    *limiter
+	usernames  *limiter
+	users      *limiter
 }
 
 // NewHandler returns the handler of the sign-in. sessionTTL tells how long new sessions last.
 func NewHandler(svc *Service, sessionTTL func() time.Duration) *Handler {
-	return &Handler{svc: svc, sessionTTL: sessionTTL, limiter: newLimiter()}
+	return &Handler{
+		svc: svc, sessionTTL: sessionTTL, clients: newLimiter(clientBurst, clientEvery),
+		usernames: newLimiter(usernameBurst, usernameEvery), users: newLimiter(clientBurst, clientEvery),
+	}
 }
 
 // UserFrom returns the signed in user of a request that passed Require.
@@ -34,35 +44,48 @@ func UserFrom(ctx context.Context) (User, bool) {
 }
 
 // Register adds the routes for the signed-in user's own account. They need a session but
-// no permission. Those that check the password are rate limited like signing in.
+// no permission. Those that check the password are rate limited per user.
 func (h *Handler) Register(mux *http.ServeMux) {
+	perUser := limitedBy(h.users, func(r *http.Request) string {
+		user, _ := UserFrom(r.Context())
+		return strconv.FormatInt(user.ID, 10)
+	})
 	mux.HandleFunc("GET /api/auth/me", h.me)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
-	mux.HandleFunc("PUT /api/auth/password", h.limited(h.changePassword))
+	mux.HandleFunc("PUT /api/auth/password", perUser(h.changePassword))
 	mux.HandleFunc("GET /api/auth/mfa", h.mfa)
 	mux.HandleFunc("POST /api/auth/mfa/setup", h.setUpMFA)
-	mux.HandleFunc("POST /api/auth/mfa", h.limited(h.enableMFA))
-	mux.HandleFunc("DELETE /api/auth/mfa", h.limited(h.disableMFA))
-	mux.HandleFunc("POST /api/auth/mfa/recovery-codes", h.limited(h.newRecoveryCodes))
+	mux.HandleFunc("POST /api/auth/mfa", perUser(h.enableMFA))
+	mux.HandleFunc("DELETE /api/auth/mfa", perUser(h.disableMFA))
+	mux.HandleFunc("POST /api/auth/mfa/recovery-codes", perUser(h.newRecoveryCodes))
 }
 
 // RegisterPublic adds the routes that work without a session: signing in and setting a
-// password with a setup link. They are rate limited per client together.
+// password with a setup link. They are rate limited per client together, signing in also
+// per username.
 func (h *Handler) RegisterPublic(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/auth/login", h.limited(h.login))
-	mux.HandleFunc("POST /api/auth/setup/check", h.limited(h.checkSetup))
-	mux.HandleFunc("POST /api/auth/setup", h.limited(h.setup))
+	perClient := limitedBy(h.clients, clientNetwork)
+	mux.HandleFunc("POST /api/auth/login", perClient(h.login))
+	mux.HandleFunc("POST /api/auth/setup/check", perClient(h.checkSetup))
+	mux.HandleFunc("POST /api/auth/setup", perClient(h.setup))
 }
 
-func (h *Handler) limited(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !h.limiter.allow(r) {
-			slog.Warn("Too many sign-in attempts", logging.Auth, "ip", ClientIP(r), "route", r.Pattern)
-			httpapi.WriteError(w, r, httpapi.Errorf(http.StatusTooManyRequests, "Too many attempts. Wait a minute and try again."))
-			return
+// limitedBy returns a wrapper that rate limits requests by the key of each.
+func limitedBy(l *limiter, key func(*http.Request) string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if !l.allow(key(r)) {
+				tooManyAttempts(w, r)
+				return
+			}
+			next(w, r)
 		}
-		next(w, r)
 	}
+}
+
+func tooManyAttempts(w http.ResponseWriter, r *http.Request, attrs ...any) {
+	slog.Warn("Too many sign-in attempts", append([]any{logging.Auth, "ip", ClientIP(r), "route", r.Pattern}, attrs...)...)
+	httpapi.WriteError(w, r, errTooManyAttempts)
 }
 
 // login signs a user in. With two-factor authentication, a request without a code only
@@ -75,6 +98,11 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
+		return
+	}
+	// Names that don't fit the pattern belong to no account. Usernames are case-insensitive.
+	if usernamePattern.MatchString(req.Username) && !h.usernames.allow(strings.ToLower(req.Username)) {
+		tooManyAttempts(w, r, logging.KeyUser, req.Username)
 		return
 	}
 	ttl := h.sessionTTL()

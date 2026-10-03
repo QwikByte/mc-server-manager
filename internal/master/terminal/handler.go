@@ -53,10 +53,13 @@ type Handler struct {
 	nodes  Nodes
 	master Master
 	logs   *logs.Store
+	moving func(serverID string) error
 }
 
-func NewHandler(nodes Nodes, master Master, logs *logs.Store) *Handler {
-	return &Handler{nodes: nodes, master: master, logs: logs}
+// NewHandler returns the handler of the terminal. moving refuses changes to a server while
+// it moves to another node.
+func NewHandler(nodes Nodes, master Master, logs *logs.Store, moving func(serverID string) error) *Handler {
+	return &Handler{nodes: nodes, master: master, logs: logs, moving: moving}
 }
 
 // Register adds the route; besides the terminal permission, every command needs its own.
@@ -140,7 +143,7 @@ func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, erro
 	if err != nil {
 		return nil, err
 	}
-	root := guarded("mcsm-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations can only be changed on the node itself.", n.Name), agentChecks(n.ID))
+	root := guarded("mcsm-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations can only be changed on the node itself.", n.Name), agentChecks(n.ID, h.moving))
 	root.AddCommand(agentcli.Commands(func(ctx context.Context, fn func(grpc.ClientConnInterface) error) error {
 		conn, err := h.nodes.Conn(ctx, n.ID)
 		if err != nil {

@@ -1,42 +1,83 @@
 package auth
 
 import (
-	"net"
+	"maps"
 	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
-// limiter throttles sign-in attempts per client IP to slow down password guessing.
-// Behind a reverse proxy all clients share the proxy's IP and therefore one budget.
+const (
+	// A client, or a signed-in user, has 5 attempts, then one every 12 seconds.
+	clientBurst, clientEvery = 5, 12 * time.Second
+	// A username has twice as many, which come back four times as fast, so that a single
+	// client can't use up the budget of an account and keep its user out.
+	usernameBurst, usernameEvery = 10, 3 * time.Second
+	// maxKeys bounds the memory of a limiter. Keys whose budget is full again are dropped,
+	// which changes nothing; if that isn't enough, new keys share one budget, so that no
+	// budget is ever reset.
+	maxKeys = 10_000
+)
+
+var errTooManyAttempts = httpapi.Errorf(http.StatusTooManyRequests, "Too many attempts. Wait a minute and try again.")
+
+// limiter throttles attempts per key to slow down password guessing: every key has burst
+// attempts, then one per interval.
 type limiter struct {
-	mu      sync.Mutex
-	clients map[string]*rate.Limiter
+	burst int
+	every time.Duration
+	mu    sync.Mutex
+	keys  map[string]*rate.Limiter
+	swept time.Time
 }
 
-func newLimiter() *limiter { return &limiter{clients: make(map[string]*rate.Limiter)} }
+func newLimiter(burst int, every time.Duration) *limiter {
+	return &limiter{burst: burst, every: every, keys: make(map[string]*rate.Limiter)}
+}
 
-func (l *limiter) allow(r *http.Request) bool {
-	ip := ClientIP(r)
+// allow takes an attempt from the budget of key and reports whether one was left.
+func (l *limiter) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.clients) > 10_000 {
-		clear(l.clients) // bound memory; a reset only grants a fresh small budget
+	lim, ok := l.keys[key]
+	if !ok && len(l.keys) >= maxKeys {
+		l.sweep()
+		if len(l.keys) >= maxKeys {
+			key = "" // the shared budget
+		}
+		lim, ok = l.keys[key]
 	}
-	lim, ok := l.clients[ip]
 	if !ok {
-		lim = rate.NewLimiter(rate.Every(12*time.Second), 5)
-		l.clients[ip] = lim
+		lim = rate.NewLimiter(rate.Every(l.every), l.burst)
+		l.keys[key] = lim
 	}
 	return lim.Allow()
 }
 
-// ClientIP is the address a request came from; behind a reverse proxy, that of the proxy.
-func ClientIP(r *http.Request) string {
-	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return ip
+// sweep drops the keys whose budget is full again, at most once per attempt interval, so
+// that clients that don't fit anymore can't make every request scan all keys.
+func (l *limiter) sweep() {
+	now := time.Now()
+	if now.Sub(l.swept) < l.every {
+		return
 	}
-	return r.RemoteAddr
+	l.swept = now
+	maps.DeleteFunc(l.keys, func(_ string, lim *rate.Limiter) bool { return lim.TokensAt(now) >= float64(l.burst) })
+}
+
+// clientNetwork is the key of the client of a request: its IPv4 address, or the /64
+// network of its IPv6 address, as providers assign them as a whole.
+func clientNetwork(r *http.Request) string {
+	ip := ClientIP(r)
+	if addr, err := netip.ParseAddr(ip); err == nil && !addr.Unmap().Is4() {
+		if network, err := addr.WithZone("").Prefix(64); err == nil {
+			return network.String()
+		}
+	}
+	return ip
 }
