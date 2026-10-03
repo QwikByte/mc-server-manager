@@ -53,7 +53,7 @@ export function ServerBackupsPage() {
   return (
     <Section
       title={t("{{count}} backups", { count: backups.length, defaultValue_one: "{{count}} backup" })}
-      description={t("{{size}} on the node. Restoring replaces what a backup contains.", { size: formatBytes(total) })}
+      description={formatBytes(total)}
       className="mt-0"
       actions={create && <CreateBackupDialog nodeId={nodeId} server={server} />}
     >
@@ -95,12 +95,7 @@ export function ServerBackupsPage() {
         </Callout>
       )}
       {backups.length === 0 ? (
-        <EmptyState
-          icon={ArchiveIcon}
-          tone="info"
-          title={t("No backups yet")}
-          description={create ? t("Back up the server now, e.g. before an update.") : t("The server has no backups.")}
-        >
+        <EmptyState icon={ArchiveIcon} tone="info" title={t("No backups yet")}>
           {create && <CreateBackupDialog nodeId={nodeId} server={server} />}
         </EmptyState>
       ) : (

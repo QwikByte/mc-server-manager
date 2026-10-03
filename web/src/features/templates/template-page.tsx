@@ -53,7 +53,7 @@ export function NewTemplatePage() {
   return (
     <>
       <BackLink to="/templates">{t("Templates")}</BackLink>
-      <PageHeader {...serverLook("paper")} title={t("New template")} description={t("Set up what new servers start with.")} />
+      <PageHeader {...serverLook("paper")} title={t("New template")} />
       <TemplateForm
         initial={emptyTemplate}
         submitLabel={t("Create template")}

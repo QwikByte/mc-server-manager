@@ -33,9 +33,6 @@ export function LogsPage() {
         icon={ScrollIcon}
         tone="violet"
         title={t("Logs")}
-        description={t(
-          "What happened on the master and its agents: who did what, and what went wrong. You see the entries about the nodes and servers your groups allow.",
-        )}
         actions={
           <>
             <Button variant="outline" aria-pressed={live} onClick={() => setLive(!live)} disabled={!!hour}>
@@ -67,7 +64,7 @@ export function LogsPage() {
       />
       <LogFilters search={search} onChange={update} />
       <LogOverview filter={filter} onSelectHour={(start) => update({ hour: start.toISOString(), range: undefined })} />
-      <Section title={t("Entries")} description={t("Newest first. Select an entry for its details.")} className="mt-8">
+      <Section title={t("Entries")} className="mt-8">
         <LogList filter={filter} live={streaming} onFilter={update} />
       </Section>
     </>

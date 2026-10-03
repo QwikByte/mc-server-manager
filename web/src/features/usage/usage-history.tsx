@@ -33,7 +33,6 @@ export function UsageHistory({ nodeId, serverId, charts }: { nodeId: string; ser
   return (
     <Section
       title={t("History")}
-      description={t("Recorded every minute while it runs and kept for a week.")}
       actions={
         <div className="flex flex-wrap gap-2">
           <Segmented

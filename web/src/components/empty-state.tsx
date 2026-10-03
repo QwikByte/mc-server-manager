@@ -15,7 +15,7 @@ export function EmptyState({
   icon: Icon
   tone?: Tone
   title: string
-  description: ReactNode
+  description?: ReactNode
   children?: ReactNode
 }) {
   return (
@@ -25,7 +25,7 @@ export function EmptyState({
           <IconTile icon={icon} tone={tone} size="lg" />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
+        {description && <EmptyDescription>{description}</EmptyDescription>}
       </EmptyHeader>
       {children && <EmptyContent>{children}</EmptyContent>}
     </Empty>

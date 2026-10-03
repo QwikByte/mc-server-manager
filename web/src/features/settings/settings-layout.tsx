@@ -20,12 +20,7 @@ export function SettingsLayout() {
 
   return (
     <>
-      <PageHeader
-        icon={GearSixIcon}
-        tone="neutral"
-        title={t("Settings")}
-        description={t("Configure the master and its agents, run their commands and manage who may do what.")}
-      />
+      <PageHeader icon={GearSixIcon} tone="neutral" title={t("Settings")} />
       {visible.length === 0 ? (
         <EmptyState
           icon={GearSixIcon}

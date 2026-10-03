@@ -34,7 +34,7 @@ export function LoginPage() {
   return (
     <AuthLayout
       title={needsCode ? t("Two-factor authentication") : t("Welcome back")}
-      description={needsCode ? t("Enter the code of your authenticator app.") : t("Sign in to manage your nodes, servers and networks.")}
+      description={needsCode && t("Enter the code of your authenticator app.")}
     >
       <form onSubmit={submit} noValidate>
         <FieldGroup>

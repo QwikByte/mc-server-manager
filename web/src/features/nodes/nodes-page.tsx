@@ -24,13 +24,7 @@ export function NodesPage() {
 
   return (
     <>
-      <PageHeader
-        icon={HardDrivesIcon}
-        tone="info"
-        title={t("Nodes")}
-        description={t("Machines that run the agent and host your servers.")}
-        actions={add}
-      />
+      <PageHeader icon={HardDrivesIcon} tone="info" title={t("Nodes")} actions={add} />
       {isPending ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((i) => (
@@ -40,12 +34,7 @@ export function NodesPage() {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : nodes.length === 0 ? (
-        <EmptyState
-          icon={HardDrivesIcon}
-          tone="info"
-          title={t("No nodes yet")}
-          description={add ? t("Add the first machine that should run Minecraft servers.") : t("You can't see any nodes yet.")}
-        >
+        <EmptyState icon={HardDrivesIcon} tone="info" title={t("No nodes yet")}>
           {add}
         </EmptyState>
       ) : (

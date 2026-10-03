@@ -19,17 +19,16 @@ export function GroupsPage() {
   if (error) return <ErrorCallout error={error} />
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{t("Groups give their members permissions, on all servers or only on some.")}</p>
-        {can("groups.manage") && (
+      {can("groups.manage") && (
+        <div className="mb-4 flex justify-end">
           <Button asChild>
             <Link to="/settings/groups/new">
               <PlusIcon />
               {t("New group")}
             </Link>
           </Button>
-        )}
-      </div>
+        </div>
+      )}
       <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => (
           <li key={group.id}>

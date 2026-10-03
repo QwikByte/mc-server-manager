@@ -33,7 +33,7 @@ export function BackupJobPage() {
         <ErrorCallout error={error} />
       ) : (
         <>
-          <PageHeader icon={ArchiveIcon} tone="info" title={job.name} description={t("A job that backs up servers on a schedule.")} />
+          <PageHeader icon={ArchiveIcon} tone="info" title={job.name} />
           {/* Without the permission to manage jobs, the job is only shown. */}
           <fieldset disabled={!manage} className="contents">
             <JobForm
@@ -57,12 +57,7 @@ export function NewBackupJobPage() {
   return (
     <>
       <BackLink to="/backups">{t("Backups")}</BackLink>
-      <PageHeader
-        icon={ArchiveIcon}
-        tone="info"
-        title={t("New backup job")}
-        description={t("Back up servers or whole nodes on a schedule.")}
-      />
+      <PageHeader icon={ArchiveIcon} tone="info" title={t("New backup job")} />
       <JobForm
         initial={emptyJob}
         submitLabel={t("Create job")}
@@ -99,7 +94,7 @@ function JobForm({
       onSubmit={(input) => save.mutate(input, { onSuccess: onSaved })}
     >
       {(settings, set) => (
-        <FormSection title={t("Backups")} description={t("What is backed up of each server, where it is kept and for how long.")}>
+        <FormSection title={t("Backups")}>
           <SelectionField value={settings.selection} onChange={(selection) => set({ selection })} />
           <LocationField locations={locations} value={settings.location} onChange={(location) => set({ location })} />
           <Field>

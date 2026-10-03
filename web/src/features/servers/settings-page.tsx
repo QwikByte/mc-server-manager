@@ -55,16 +55,7 @@ function UpdateImage({ nodeId, server }: { nodeId: string; server: Server }) {
   )
   return (
     <section className="surface flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-5 sm:px-8" aria-label={t("Image")}>
-      <div className="max-w-xl space-y-1">
-        <h2 className="heading text-base">{t("Image")}</h2>
-        <p className="text-sm text-muted-foreground">
-          {running
-            ? t(
-                "A server keeps the Docker image it was created with. A newer one brings fixes, e.g. for Java. If there is one, the server restarts.",
-              )
-            : t("A server keeps the Docker image it was created with. A newer one brings fixes, e.g. for Java.")}
-        </p>
-      </div>
+      <h2 className="heading text-base">{t("Image")}</h2>
       {running ? (
         <ConfirmDialog
           trigger={button}
@@ -107,7 +98,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
 
   return (
     <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
-      <FormSection title={t("General")} description={t("Name, version and resources of the server.")}>
+      <FormSection title={t("General")}>
         <Field>
           <FieldLabel htmlFor="settings-name">{t("Name")}</FieldLabel>
           <Input id="settings-name" required maxLength={32} value={form.name} onChange={(e) => set({ name: e.target.value })} />
@@ -146,16 +137,16 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
         )}
       </FormSection>
 
-      <FormSection title={t("Starting")} description={t("When the server starts on its own.")}>
+      <FormSection title={t("Starting")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
       </FormSection>
 
-      <FormSection title={t("Java")} description={t("The Java runtime and the options it starts with.")}>
+      <FormSection title={t("Java")}>
         {game && <JavaFields java={form.java} aikarFlags={form.aikarFlags} onChange={set} />}
         <JvmOptionsField value={form.jvmOptions} onChange={(jvmOptions) => set({ jvmOptions })} />
       </FormSection>
 
-      <FormSection title={t("Resources")} description={t("Limits and where the data is kept.")}>
+      <FormSection title={t("Resources")}>
         <CpuLimitField value={form.cpuLimit} onChange={(cpuLimit) => set({ cpuLimit })} cpus={node?.info?.cpuCount} />
         <p className="text-sm text-muted-foreground">
           <Trans

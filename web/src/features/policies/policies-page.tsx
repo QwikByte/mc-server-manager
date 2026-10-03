@@ -40,15 +40,7 @@ export function PoliciesPage() {
   const { data: list, isPending, error } = useQuery(policies.tasksQuery)
   return (
     <>
-      <PageHeader
-        icon={CalendarCheckIcon}
-        tone="warning"
-        title={t("Policies")}
-        description={t(
-          "Rules for servers or whole nodes: restart them every night, keep opening hours or run console commands at set times.",
-        )}
-        actions={manage && <NewPolicy />}
-      />
+      <PageHeader icon={CalendarCheckIcon} tone="warning" title={t("Policies")} actions={manage && <NewPolicy />} />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (
@@ -58,12 +50,7 @@ export function PoliciesPage() {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : list.length === 0 ? (
-        <EmptyState
-          icon={CalendarCheckIcon}
-          tone="warning"
-          title={t("No policies yet")}
-          description={t("Create a policy to restart servers every night at 4:00, for example, with a countdown for the players.")}
-        >
+        <EmptyState icon={CalendarCheckIcon} tone="warning" title={t("No policies yet")}>
           {manage && <NewPolicy />}
         </EmptyState>
       ) : (

@@ -27,13 +27,7 @@ export function BackupJobsPage() {
   const { data: list, isPending, error } = useQuery(jobs.tasksQuery)
   return (
     <>
-      <PageHeader
-        icon={ArchiveIcon}
-        tone="info"
-        title={t("Backups")}
-        description={t("Jobs back up servers on a schedule and keep their newest backups. The backups of a server are in its Backups tab.")}
-        actions={manage && <NewJob />}
-      />
+      <PageHeader icon={ArchiveIcon} tone="info" title={t("Backups")} actions={manage && <NewJob />} />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (
@@ -43,12 +37,7 @@ export function BackupJobsPage() {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : list.length === 0 ? (
-        <EmptyState
-          icon={ArchiveIcon}
-          tone="info"
-          title={t("No backup jobs yet")}
-          description={t("Create a job to back up servers or whole nodes every night, for example.")}
-        >
+        <EmptyState icon={ArchiveIcon} tone="info" title={t("No backup jobs yet")}>
           {manage && <NewJob />}
         </EmptyState>
       ) : (

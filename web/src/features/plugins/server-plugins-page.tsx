@@ -38,16 +38,12 @@ function texts(kind: Kind, type: string) {
   return kind === "plugins"
     ? {
         none: t("No plugins yet"),
-        addHint: t("Add plugins from Modrinth, or upload your own .jar files."),
-        empty: t("The server has no plugins."),
         add: t("Add plugins"),
         addTitle: t("Add plugins from Modrinth"),
         addDescription: t("Only plugins for {{type}} are shown. What they require is installed too.", { type }),
       }
     : {
         none: t("No mods yet"),
-        addHint: t("Add mods from Modrinth, or upload your own .jar files."),
-        empty: t("The server has no mods."),
         add: t("Add mods"),
         addTitle: t("Add mods from Modrinth"),
         addDescription: t("Only mods for {{type}} are shown. What they require is installed too.", { type }),
@@ -76,7 +72,6 @@ export function ServerPluginsPage() {
           ? t("{{count}} plugins", { count, defaultValue_one: "{{count}} plugin" })
           : t("{{count}} mods", { count, defaultValue_one: "{{count}} mod" })
       }
-      description={t("Files in the {{folder}} folder. Restart the server to load changes.", { folder: data.folder })}
       className="mt-0"
       actions={
         manage && (
@@ -93,7 +88,7 @@ export function ServerPluginsPage() {
         </Callout>
       )}
       {data.plugins.length === 0 ? (
-        <EmptyState icon={PuzzlePieceIcon} tone="warning" title={words.none} description={manage ? words.addHint : words.empty}>
+        <EmptyState icon={PuzzlePieceIcon} tone="warning" title={words.none}>
           {manage && <AddDialog server={server} serverRef={ref} words={words} installed={installed} />}
         </EmptyState>
       ) : (

@@ -31,13 +31,7 @@ export function ServerList({ nodeId }: { nodeId: string }) {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : servers.length === 0 ? (
-        <EmptyState
-          icon={CubeIcon}
-          title={t("No servers on this node")}
-          description={
-            create ? t("Create a game server or a proxy that connects servers to a network.") : t("There are no servers you can see.")
-          }
-        >
+        <EmptyState icon={CubeIcon} title={t("No servers on this node")}>
           {create}
         </EmptyState>
       ) : (

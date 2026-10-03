@@ -12,10 +12,7 @@ export function ServerActivityPage() {
   const { nodeId, serverId } = serverRoute.useParams()
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {t("Actions on this server, what its agent did and what went wrong, as it happens.")}
-        </p>
+      <div className="mb-4 flex justify-end">
         <OpenInLog node={nodeId} server={serverId} />
       </div>
       <LogList filter={{ node: nodeId, server: serverId }} live />
@@ -26,7 +23,7 @@ export function ServerActivityPage() {
 /** The latest entries about a node and its servers. */
 export function NodeActivity({ nodeId }: { nodeId: string }) {
   return (
-    <Section title={t("Activity")} description={t("What happened on this node and its servers.")} actions={<OpenInLog node={nodeId} />}>
+    <Section title={t("Activity")} actions={<OpenInLog node={nodeId} />}>
       <LogList filter={{ node: nodeId }} live />
     </Section>
   )

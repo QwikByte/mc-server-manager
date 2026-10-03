@@ -29,15 +29,12 @@ export function AccountPage() {
         description={t("Signed in as {{name}}.", { name: user.username })}
       />
       <div className="surface rounded-2xl px-5 sm:px-8 [&>section:last-child]:border-b-0">
-        <FormSection title={t("Password")} description={t("Changing it signs you out on your other devices.")}>
+        <FormSection title={t("Password")}>
           <AccountRow icon={KeyIcon} tone="info" title={t("Password")} actions={<PasswordDialog username={user.username} />}>
             {t("At least 12 characters that you don't use anywhere else.")}
           </AccountRow>
         </FormSection>
-        <FormSection
-          title={t("Two-factor authentication")}
-          description={t("A code of an authenticator app on your phone keeps your account safe even if someone learns your password.")}
-        >
+        <FormSection title={t("Two-factor authentication")}>
           <MfaSettings username={user.username} />
         </FormSection>
       </div>

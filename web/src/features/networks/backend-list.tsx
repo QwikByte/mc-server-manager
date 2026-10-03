@@ -22,11 +22,7 @@ const disconnects = msg("The proxy restarts to apply this, which disconnects all
 export function BackendList({ network, servers }: { network: Network; servers?: NodeServer[] }) {
   const manage = useAccess().can("networks.manage")
   return (
-    <Section
-      title={t("Servers")}
-      description={t("Players switch between them with /server and the name.")}
-      actions={manage && <AddBackendDialog network={network} />}
-    >
+    <Section title={t("Servers")} actions={manage && <AddBackendDialog network={network} />}>
       <div className="surface overflow-hidden rounded-xl">
         <Table>
           <TableHeader>

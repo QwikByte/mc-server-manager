@@ -76,7 +76,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
       <BackLink to="/settings/groups">{t("Groups")}</BackLink>
       <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
         <fieldset disabled={!editable} className="contents">
-          <FormSection title={t("Group")} description={t("What the group is for, e.g. the moderators of a server.")}>
+          <FormSection title={t("Group")}>
             {group?.builtin && (
               <Callout tone="warning" icon={CrownIcon}>
                 {t(
@@ -102,7 +102,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
 
           {!group?.builtin && (
             <>
-              <FormSection title={t("Scope")} description={t("Where the node and server permissions apply. The others apply everywhere.")}>
+              <FormSection title={t("Scope")}>
                 <RadioGroup
                   value={form.allServers ? "all" : "some"}
                   onValueChange={(v) => set({ allServers: v === "all" })}
@@ -124,10 +124,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
                 </RadioGroup>
                 {!form.allServers && <TargetsField value={form.targets} onChange={(targets) => set({ targets })} />}
               </FormSection>
-              <FormSection
-                title={t("Permissions")}
-                description={t("Choosing a permission also chooses what it needs, e.g. seeing the servers one may restart.")}
-              >
+              <FormSection title={t("Permissions")}>
                 {catalog ? (
                   <PermissionsField
                     catalog={catalog}
@@ -144,7 +141,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
         </fieldset>
 
         {group && (
-          <FormSection title={t("Members")} description={t("Choose the groups of a user on the Users tab.")}>
+          <FormSection title={t("Members")}>
             <div className="flex flex-wrap gap-2">
               {members.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("No members yet.")}</p>

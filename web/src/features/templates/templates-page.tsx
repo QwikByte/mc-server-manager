@@ -34,13 +34,7 @@ export function TemplatesPage() {
   const { data: templates, isPending, error } = useQuery(templatesQuery)
   return (
     <>
-      <PageHeader
-        icon={StackIcon}
-        tone="info"
-        title={t("Templates")}
-        description={t("Preconfigured settings, server.properties and plugins for new servers. Name and port are chosen per server.")}
-        actions={manage && <NewTemplate />}
-      />
+      <PageHeader icon={StackIcon} tone="info" title={t("Templates")} actions={manage && <NewTemplate />} />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (
@@ -54,11 +48,7 @@ export function TemplatesPage() {
           icon={StackIcon}
           tone="info"
           title={t("No templates yet")}
-          description={
-            manage
-              ? t("Create a template from scratch, or save an existing server as a template from its page.")
-              : t("There are no templates yet.")
-          }
+          description={manage && t("Create a template from scratch, or save an existing server as a template from its page.")}
         >
           {manage && <NewTemplate />}
         </EmptyState>
