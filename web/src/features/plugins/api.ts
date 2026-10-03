@@ -29,9 +29,13 @@ export interface SearchHit extends Project {
 
 export type Sort = "relevance" | "downloads" | "follows" | "newest" | "updated"
 
-/** A search on Modrinth; without a type or version, projects for any of them are found. */
+/** What servers load from Modrinth. */
+export type Kind = "plugins" | "mods"
+
+/** A search on Modrinth; without a kind, type or version, projects for any of them are found. */
 export interface Search {
   query: string
+  kind?: Kind
   type?: string
   version?: string
   /** Categories the projects must all be in. */
@@ -82,8 +86,8 @@ export const searchQuery = (search: Search) =>
   infiniteQueryOptions({
     queryKey: ["plugins", "search", search],
     queryFn: ({ pageParam }) => {
-      const { query, type = "", version = "", categories, sort, serverOnly } = search
-      const params = new URLSearchParams({ query, type, version, sort, offset: String(pageParam) })
+      const { query, kind = "", type = "", version = "", categories, sort, serverOnly } = search
+      const params = new URLSearchParams({ query, kind, type, version, sort, offset: String(pageParam) })
       for (const category of categories) params.append("category", category)
       if (serverOnly) params.set("serverOnly", "true")
       return api<{ hits: SearchHit[]; total: number }>(`/plugins/search?${params}`)

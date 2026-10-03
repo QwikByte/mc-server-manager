@@ -9,6 +9,7 @@ import { accessOf } from "@/features/access/use-access"
 import { meQuery } from "@/features/auth/api"
 import { LoginPage } from "@/features/auth/login-page"
 import { validateLogSearch } from "@/features/logs/search"
+import type { Kind } from "@/features/plugins/api"
 import { ApiError } from "@/lib/api"
 
 export const queryClient = new QueryClient({
@@ -214,6 +215,8 @@ const policyRoute = createRoute({
 const pluginsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/plugins",
+  // kind tells whether mods are searched; without it, plugins are.
+  validateSearch: (search: Record<string, unknown>): { kind?: Kind } => ({ kind: search.kind === "mods" ? "mods" : undefined }),
   component: lazyRouteComponent(() => import("@/features/plugins/plugins-page"), "PluginsPage"),
 })
 

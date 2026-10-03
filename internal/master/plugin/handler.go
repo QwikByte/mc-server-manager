@@ -57,13 +57,15 @@ type hit struct {
 	Categories []string `json:"categories"` // the main ones, e.g. economy
 }
 
-// search finds plugins and mods for a server type and Minecraft version, both optional,
-// in categories, sorted and limited to those players don't need.
+// search finds plugins or mods, or both, for a server type and Minecraft version, both
+// optional, in categories, sorted and limited to those players don't need.
 func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	q := r.URL.Query()
-	s := modrinth.Search{Query: q.Get("query"), Categories: q["category"], Sort: q.Get("sort"), ServerOnly: q.Get("serverOnly") == "true"}
+	s := modrinth.Search{
+		Query: q.Get("query"), Kind: q.Get("kind"), Categories: q["category"], Sort: q.Get("sort"), ServerOnly: q.Get("serverOnly") == "true",
+	}
 	s.Offset, _ = strconv.Atoi(q.Get("offset"))
 	t := target{gameVersion: q.Get("version")}
 	var err error
@@ -78,17 +80,21 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	var res modrinth.SearchResult
 	if err == nil {
 		s.Loaders, s.GameVersion = t.loaders, t.gameVersion
+		if len(s.Loaders) == 0 {
+			s.Loaders = modrinth.AllLoaders(s.Kind)
+		}
 		res, err = h.svc.modrinth.Search(ctx, s)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	hits, all := make([]hit, 0, len(res.Hits)), modrinth.AllLoaders()
-	loader := func(c string) bool { return slices.Contains(all, c) }
+	hits := make([]hit, 0, len(res.Hits))
+	loader := func(c string) bool { return slices.Contains(s.Loaders, c) }
 	for _, m := range res.Hits {
 		project := h.svc.Describe(modrinth.Project{ID: m.ProjectID, Slug: m.Slug, Title: m.Title, IconURL: m.IconURL})
-		// The categories include the loaders; only those of manageable servers are of interest.
+		// The categories include the loaders; only those searched for are of interest, so
+		// that a project for plugins and mods only shows as either.
 		loaders := slices.DeleteFunc(slices.Clone(m.Categories), func(c string) bool { return !loader(c) })
 		categories := slices.DeleteFunc(slices.Clone(m.DisplayCategories), loader)
 		hits = append(hits, hit{project, m.Description, m.Author, m.Downloads, m.Follows, m.Updated, m.ClientSide, loaders, categories})

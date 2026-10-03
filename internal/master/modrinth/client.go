@@ -48,6 +48,8 @@ var (
 		mcsmv1.ServerType_SERVER_TYPE_FORGE:      {"forge"},
 		mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {"neoforge"},
 	}
+	// modded are the server types that load mods; the others load plugins.
+	modded    = []mcsmv1.ServerType{mcsmv1.ServerType_SERVER_TYPE_FABRIC, mcsmv1.ServerType_SERVER_TYPE_FORGE, mcsmv1.ServerType_SERVER_TYPE_NEOFORGE}
 	projectID = regexp.MustCompile(`^[A-Za-z0-9]{1,32}$`)
 	category  = regexp.MustCompile(`^[a-z-]{1,32}$`)
 	// Sorts are the orders of search results; without a query, relevance means downloads.
@@ -62,11 +64,14 @@ var (
 // vanilla servers.
 func Loaders(t mcsmv1.ServerType) []string { return loaders[t] }
 
-// AllLoaders returns the loaders of all server types.
-func AllLoaders() []string {
+// AllLoaders returns the loaders of the server types that load a kind, plugins or mods,
+// or of all server types if kind is empty.
+func AllLoaders(kind string) []string {
 	var all []string
-	for _, names := range loaders {
-		all = append(all, names...)
+	for t, names := range loaders {
+		if kind == "" || slices.Contains(modded, t) == (kind == "mods") {
+			all = append(all, names...)
+		}
 	}
 	slices.Sort(all)
 	return slices.Compact(all)
@@ -109,7 +114,8 @@ type SearchHit struct {
 // Search is a search for server-side plugins and mods.
 type Search struct {
 	Query string
-	// Loaders are those the projects must support, one of them; all loaders if empty.
+	Kind  string // plugins or mods, both if empty
+	// Loaders are those the projects must support, one of them.
 	Loaders     []string
 	GameVersion string // empty for any version
 	// Categories are those the projects must all be in, e.g. economy.
@@ -120,10 +126,10 @@ type Search struct {
 	Offset     int
 }
 
-// Valid reports whether the categories and the sort are well-formed.
+// Valid reports whether the kind, the categories and the sort are well-formed.
 func (s Search) Valid() bool {
-	return len(s.Categories) <= 10 && !slices.ContainsFunc(s.Categories, func(c string) bool { return !category.MatchString(c) }) &&
-		(s.Sort == "" || slices.Contains(Sorts, s.Sort))
+	return (s.Kind == "" || s.Kind == "plugins" || s.Kind == "mods") && (s.Sort == "" || slices.Contains(Sorts, s.Sort)) &&
+		len(s.Categories) <= 10 && !slices.ContainsFunc(s.Categories, func(c string) bool { return !category.MatchString(c) })
 }
 
 type Version struct {
@@ -176,14 +182,12 @@ func New(api, cdn string) *Client {
 // Search finds server-side plugins and mods. Without a query, the most downloaded
 // projects are the most relevant.
 func (c *Client) Search(ctx context.Context, s Search) (SearchResult, error) {
-	if len(s.Loaders) == 0 {
-		s.Loaders = AllLoaders()
+	// Modrinth names the project types in the singular.
+	types := []string{"project_type:plugin", "project_type:mod"}
+	if s.Kind != "" {
+		types = []string{"project_type:" + strings.TrimSuffix(s.Kind, "s")}
 	}
-	facets := [][]string{
-		prefixed("categories:", s.Loaders),
-		{"server_side:required", "server_side:optional"},
-		{"project_type:plugin", "project_type:mod"},
-	}
+	facets := [][]string{prefixed("categories:", s.Loaders), {"server_side:required", "server_side:optional"}, types}
 	for _, c := range s.Categories {
 		facets = append(facets, []string{"categories:" + c})
 	}
