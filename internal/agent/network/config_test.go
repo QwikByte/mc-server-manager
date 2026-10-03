@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"reflect"
 	"slices"
 	"testing"
@@ -133,5 +134,22 @@ func TestVelocityBackends(t *testing.T) {
 	}
 	if got := VelocityBackends([]byte("not toml [")); got != nil {
 		t.Fatalf("backends of a broken file = %q", got)
+	}
+}
+
+func TestVelocityBind(t *testing.T) {
+	config, changed, err := VelocityBind([]byte(defaultVelocity), 25577)
+	if err != nil || !changed {
+		t.Fatalf("changed = %v, err = %v", changed, err)
+	}
+	var settings map[string]any
+	if err := toml.Unmarshal(config, &settings); err != nil || settings["bind"] != "0.0.0.0:25577" || settings["motd"] != "<#09add3>My Network" {
+		t.Fatalf("settings = %v, %v", settings, err)
+	}
+	if _, changed, _ := VelocityBind(config, 25577); changed {
+		t.Fatal("the same bind changed the configuration")
+	}
+	if config, _, _ := VelocityBind(nil, 25565); !bytes.Contains(config, []byte(`config-version = '2.9'`)) {
+		t.Fatalf("new configuration = %s", config)
 	}
 }

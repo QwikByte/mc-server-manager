@@ -62,6 +62,22 @@ func VelocityConfig(current []byte, backends []Backend) (config []byte, changed 
 	return config, !bytes.Equal(before, after), err
 }
 
+// VelocityBind returns velocity.toml listening on all addresses at port, keeping every
+// other setting of current, which may be empty, and whether that changed anything.
+func VelocityBind(current []byte, port int) (config []byte, changed bool, err error) {
+	settings := map[string]any{"config-version": velocityConfigVersion}
+	if err := toml.Unmarshal(current, &settings); err != nil {
+		return nil, false, fmt.Errorf("read velocity.toml: %w", err)
+	}
+	bind := fmt.Sprintf("0.0.0.0:%d", port)
+	if settings["bind"] == bind {
+		return current, false, nil
+	}
+	settings["bind"] = bind
+	config, err = toml.Marshal(settings)
+	return config, true, err
+}
+
 // VelocityBackends returns the addresses of the backends in velocity.toml.
 func VelocityBackends(config []byte) []string {
 	var settings struct{ Servers map[string]any }

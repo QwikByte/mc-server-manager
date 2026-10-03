@@ -232,11 +232,40 @@ func (d *Docker) release(ctx context.Context, proxyID string, backends []runtime
 
 // prepare readies a server that is about to start, which disconnects its players anyway.
 func (d *Docker) prepare(ctx context.Context, id string) error {
-	c, _, err := d.inspect(ctx, id)
+	c, spec, err := d.inspect(ctx, id)
 	if err != nil {
 		return err
 	}
+	if err := d.listen(spec); err != nil {
+		return err
+	}
 	return d.leaveLegacy(ctx, c)
+}
+
+// listen makes a Velocity proxy listen on the port its container publishes, as the default
+// configuration of the image listens on another one.
+func (d *Docker) listen(spec runtime.Spec) error {
+	if spec.Type != mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
+		return nil
+	}
+	path, err := d.dataPath(spec)
+	if err != nil {
+		return err
+	}
+	data, err := datadir.Open(path)
+	if err != nil {
+		return err
+	}
+	defer data.Close()
+	current, err := data.ReadOptional("velocity.toml")
+	if err != nil {
+		return err
+	}
+	config, changed, err := mcnet.VelocityBind(current, images[spec.Type].port)
+	if err != nil || !changed {
+		return err
+	}
+	return data.WriteFile("velocity.toml", config)
 }
 
 // leaveLegacy takes a container out of the network of older agents, once it is in one
