@@ -30,7 +30,7 @@ func TestCheckSettings(t *testing.T) {
 		{"all settings", func(s *runtime.Spec) {
 			s.Java, s.AikarFlags, s.CPUMillis = "17", true, 2500
 			s.RestartPolicy = mcsmv1.RestartPolicy_RESTART_POLICY_ON_CRASH
-			s.JVMOptions = []string{"-Dfile.encoding=UTF-8", "-XX:+UseZGC", "-javaagent:/data/agent.jar"}
+			s.JVMOptions = []string{"-Dfile.encoding=UTF-8", "-XX:+UseZGC", "-XX:+HeapDumpOnOutOfMemoryError", "-Dcom.example.agent=x"}
 		}, true},
 		{"unknown Java", func(s *runtime.Spec) { s.Java = "22" }, false},
 		{"Java for a proxy", func(s *runtime.Spec) { s.Type, s.Java = mcsmv1.ServerType_SERVER_TYPE_VELOCITY, "21" }, false},
@@ -48,6 +48,18 @@ func TestCheckSettings(t *testing.T) {
 		tt.change(&spec)
 		if msg := checkSettings(spec, 8); (msg == "") != tt.ok {
 			t.Errorf("%s: checkSettings() = %q, want ok = %v", tt.name, msg, tt.ok)
+		}
+	}
+	// Changing settings can't run code: no commands, agents or debugging and management ports.
+	for _, option := range []string{
+		"-javaagent:/data/agent.jar", "-agentpath:/data/libx.so", "-agentlib:jdwp=transport=dt_socket,server=y,address=5005",
+		"-Xrunjdwp:server=y", "-Xbootclasspath/a:/data/x.jar", "-XX:OnOutOfMemoryError=/data/x.sh", "-XX:OnError=/data/x.sh",
+		"-Dcom.sun.management.jmxremote.port=9010",
+	} {
+		spec := valid
+		spec.JVMOptions = []string{option}
+		if checkSettings(spec, 8) == "" {
+			t.Errorf("%s accepted", option)
 		}
 	}
 }

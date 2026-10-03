@@ -52,6 +52,9 @@ var (
 	jvmOptionPattern = regexp.MustCompile(`^-[A-Za-z0-9:._+=,/@%-]{1,200}$`)
 	// memoryOption matches options that would override the memory the agent manages.
 	memoryOption = regexp.MustCompile(`^-(Xm[sx]|XX:(Max|Min|Initial)RAM)`)
+	// codeOption matches options that run commands, load agents or other code, or open a
+	// debugging or management port, so that changing settings can't run code in the container.
+	codeOption   = regexp.MustCompile(`^-(javaagent:|agentpath:|agentlib:|Xrun|Xbootclasspath|XX:On(OutOfMemory)?Error=|Dcom\.sun\.management\.jmxremote)`)
 	javaVersions = []string{"", "8", "11", "17", "21", "25"}
 	// Terminal escape sequences and Minecraft formatting codes (§a, §l, ...).
 	formatting = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|§[0-9a-fk-orxA-FK-ORX]|\r`)
@@ -424,6 +427,8 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 			return fmt.Sprintf("The JVM option %q is invalid. Options start with '-' and contain no spaces or quotes.", option)
 		case memoryOption.MatchString(option):
 			return fmt.Sprintf("Set the memory in the settings instead of with %s.", option)
+		case codeOption.MatchString(option):
+			return fmt.Sprintf("The JVM option %s can run code, so it can't be set here. Install agents as plugins or mods instead.", option)
 		}
 	}
 	return ""
