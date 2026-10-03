@@ -65,11 +65,13 @@ the node has minus a reserve for the system (1 GB unless changed). Name and agen
 ## Installation
 
 Releases contain packages for Debian, Ubuntu and their derivatives (`.deb`), Fedora, RHEL, Rocky Linux, AlmaLinux and
-openSUSE (`.rpm`) and Arch Linux, each for x86_64 and arm64. Only Linux with systemd is supported. The installer picks
-the package, checks its checksum and sets everything up. Running it again updates, and `--version vX.Y.Z` installs a
-certain release. While another installation of packages runs, e.g. the automatic updates of a new server, it waits up
-to 10 minutes and says so. It asks questions only when started from a file as below; piped to `sudo bash`, it uses the
-defaults instead, because `sudo-rs`, the `sudo` of newer Ubuntu releases, doesn't pass on what is typed then.
+openSUSE (`.rpm`) and Arch Linux, each for x86_64 and arm64. Only current Linux systems with systemd and OpenSSL 3 are
+supported, e.g. Debian 12, Ubuntu 22.04, RHEL, Rocky Linux and AlmaLinux 9, openSUSE Leap 16 and newer. The installer
+picks the package, checks the signature of the release and the package's checksum and sets everything up. Running it
+again updates, and `--version vX.Y.Z` installs a certain release. While another installation of packages runs, e.g. the
+automatic updates of a new server, it waits up to 10 minutes and says so. It asks questions only when started from a
+file as below; piped to `sudo bash`, it uses the defaults instead, because `sudo-rs`, the `sudo` of newer Ubuntu
+releases, doesn't pass on what is typed then.
 
 **Master**, the panel:
 
@@ -142,6 +144,14 @@ Minecraft servers of a node keep running in Docker; delete them in the panel bef
 other distributions: the unit expects the binary in `/usr/bin`, the options in `/etc/mcsm` and, for the master, a system
 user `mcsm`. `checksums.txt` lists the SHA-256 checksums of all files, and
 `gh attestation verify <file> --repo QwikByte/mc-server-manager` proves that a file was built by the release workflow.
+`checksums.txt.sig` is the signature of the checksums, which the installer checks with the release key. To check files
+by hand, e.g. `install.sh` before the first installation, download `checksums.txt` and `checksums.txt.sig` too:
+
+```sh
+printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA18ilyBW0qkWpfEqFR+rW5eQeGC3Sif4OiD8RKpEry5s=\n-----END PUBLIC KEY-----\n' > mcsm-release.pem
+openssl pkeyutl -verify -pubin -inkey mcsm-release.pem -rawin -in checksums.txt -sigfile checksums.txt.sig
+sha256sum -c --ignore-missing checksums.txt
+```
 
 ## Templates
 
@@ -421,15 +431,18 @@ Users get their permissions from groups; a user can be in several groups and has
   (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
 - **Installation.** The installer only runs once it is downloaded completely, downloads only over HTTPS from the
-  releases and installs a package only if its SHA-256 checksum matches the release's `checksums.txt`. Release files
-  carry build provenance attestations, signed through GitHub, that tie them to the release workflow and the tagged
-  commit. The master runs as its own system user with a hardened systemd unit, and refuses a data directory of another
-  user, so a command run as root can't leave files there that lock the master out.
+  releases and installs a package only if its SHA-256 checksum matches the release's `checksums.txt`, and only if the
+  release key that is part of the installer verifies its signature. The private key is a secret of the repository that
+  only the job signing the release gets, so someone who can merely change releases, e.g. with a stolen token, can't make
+  installations accept other files. Release files also carry build provenance attestations, signed through GitHub, that
+  tie them to the release workflow and the tagged commit. The master runs as its own system user with a hardened systemd
+  unit, and refuses a data directory of another user, so a command run as root can't leave files there that lock the
+  master out.
 - **Updates.** The master can't install anything itself. To update, it only creates a file that makes systemd start
   `mcsm-master-update`, which runs as root but takes no input from the master: it installs the latest release with the
-  installer of the installed package, checking the checksums. Agents only install releases newer than themselves, so even
-  a compromised master can't downgrade a node to a vulnerable version, and the version must have the form of a release.
-  `systemctl mask mcsm-master-update.path` forbids updates from the panel.
+  installer of the installed package, checking the signature and the checksums. Agents only install releases newer than
+  themselves, so even a compromised master can't downgrade a node to a vulnerable version, and the version must have the
+  form of a release. `systemctl mask mcsm-master-update.path` forbids updates from the panel.
 
 ## Repository layout
 
@@ -525,13 +538,20 @@ with the texts translated, e.g. `de.json`. Browsers that prefer it get it, and t
 master and the agents send, such as errors, the log and the descriptions of permissions, stays English.
 
 **Releasing.** The release workflow tests, builds the panel and both programs with [GoReleaser](https://goreleaser.com)
-and publishes a GitHub release with the packages, archives, checksums, attestations and the installer, which installs
-the version it belongs to. Start it under **Actions → Release → Run workflow** with a version `vX.Y.Z`, or `vX.Y.Z-rc.N`
-for a pre-release: it tags the newest commit of `main`. Pushing such a tag runs it too:
+and creates a draft of a GitHub release with the packages, archives, checksums, attestations and the installer, which
+installs the version it belongs to. A second job signs `checksums.txt` with the secret `RELEASE_SIGNING_KEY` and
+publishes the release. Start the workflow under **Actions → Release → Run workflow** with a version `vX.Y.Z`, or
+`vX.Y.Z-rc.N` for a pre-release: it tags the newest commit of `main`. Pushing such a tag runs it too:
 
 ```sh
 git tag v1.2.0 && git push origin v1.2.0
 ```
+
+**Release key.** Installers only accept releases signed with the Ed25519 key in `RELEASE_KEY` of `packaging/install.sh`,
+and the second job fails if the secret doesn't belong to it. A new key, e.g. for a fork, is created with
+`openssl genpkey -algorithm ed25519 -out release.pem`, and `openssl pkey -in release.pem -pubout -outform DER | base64`
+prints its value for `RELEASE_KEY`. Installations only learn of a new key through an update, so the first release that
+has it in `RELEASE_KEY` is still signed with the old one.
 
 ## Roadmap
 

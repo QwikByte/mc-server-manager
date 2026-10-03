@@ -60,5 +60,5 @@ jobs:
       - run: shellcheck packaging/*.sh packaging/*/*.sh scripts/*.sh
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: "~> v2"
+          version: v2.18.2 # as in release.yml and the Makefile
           args: release --snapshot --clean

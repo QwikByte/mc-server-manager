@@ -119,6 +119,9 @@ checksum:
 
 release:
   prerelease: auto
+  # The release workflow publishes the draft once it has signed checksums.txt.
+  draft: true
+  replace_existing_draft: true
   extra_files:
     - glob: bin/install.sh
 
