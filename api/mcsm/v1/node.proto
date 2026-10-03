@@ -26,7 +26,8 @@ message GetInfoResponse {
   string os = 3;
   uint32 cpu_count = 4;
   uint64 memory_bytes = 5;
-  // Container runtime driving the servers, e.g. "docker 29.0.0".
+  // Container runtime driving the servers, e.g. "docker 29.0.0", or "unavailable"
+  // while the agent can't reach it; os, cpu_count and memory_bytes are empty then.
   string runtime = 6;
   // Where servers can keep their data; the default location comes first.
   repeated StorageLocation storage = 7;

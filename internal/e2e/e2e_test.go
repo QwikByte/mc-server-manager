@@ -347,15 +347,27 @@ type fakeRuntime struct {
 	// hold, if set, holds up creating servers until it is closed, e.g. to act while a server
 	// moves to this node.
 	hold chan struct{}
+	// down makes the runtime unreachable, like Docker while it isn't running.
+	down bool
 }
 
+var errDown = errors.New("failed to connect to the docker API")
+
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.down {
+		return runtime.Info{}, errDown
+	}
 	return runtime.Info{Name: "fake", CPUs: 4, MemoryBytes: 8 << 30}, nil
 }
 
 func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.down {
+		return nil, errDown
+	}
 	return append([]runtime.Server(nil), f.servers...), nil
 }
 

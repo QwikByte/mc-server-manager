@@ -64,7 +64,8 @@ type GetInfoResponse struct {
 	Os           string                 `protobuf:"bytes,3,opt,name=os,proto3" json:"os,omitempty"`
 	CpuCount     uint32                 `protobuf:"varint,4,opt,name=cpu_count,json=cpuCount,proto3" json:"cpu_count,omitempty"`
 	MemoryBytes  uint64                 `protobuf:"varint,5,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
-	// Container runtime driving the servers, e.g. "docker 29.0.0".
+	// Container runtime driving the servers, e.g. "docker 29.0.0", or "unavailable"
+	// while the agent can't reach it; os, cpu_count and memory_bytes are empty then.
 	Runtime string `protobuf:"bytes,6,opt,name=runtime,proto3" json:"runtime,omitempty"`
 	// Where servers can keep their data; the default location comes first.
 	Storage []*StorageLocation `protobuf:"bytes,7,rep,name=storage,proto3" json:"storage,omitempty"`

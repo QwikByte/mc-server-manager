@@ -110,7 +110,7 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		done.Error = err.Error()
 		if st, ok := status.FromError(err); ok {
-			done.Error = st.Message() // errors of agents, without the gRPC prefix
+			done.Error = st.Message() // errors of agents, e.g. of node renew, without the gRPC prefix
 		}
 		logging.Note(r.Context(), slog.String("err", done.Error))
 	}
