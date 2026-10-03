@@ -1,4 +1,8 @@
+import { LockOpenIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import type { ReactNode } from "react"
+import { Trans } from "react-i18next"
+import { Callout } from "@/components/callout"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -16,10 +20,26 @@ export function AuthLayout({ title, description, children }: { title: string; de
             <p className="text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
+        {!window.isSecureContext && <InsecureNotice />}
         <div className="rounded-2xl bg-card/80 p-6 shadow-xl ring-1 ring-foreground/8 backdrop-blur-xl dark:shadow-black/40">
           {children}
         </div>
       </div>
     </main>
+  )
+}
+
+/** Browsers drop the secure session cookie over plain HTTP, except at localhost, so signing in can't work here. */
+function InsecureNotice() {
+  return (
+    <Callout tone="warning" icon={LockOpenIcon} role="note" className="mb-4 bg-card/80" title={t("Signing in needs HTTPS")}>
+      <Trans
+        i18nKey="Browsers only keep the sign-in over HTTPS or at localhost. Sign in through an SSH tunnel instead: run <tunnel/> and open <local/>. Then turn on HTTPS under Settings → General."
+        components={{
+          tunnel: <span className="font-mono break-all">{`ssh -L 8080:${location.host} <user>@${location.hostname}`}</span>,
+          local: <span className="font-mono">http://localhost:8080</span>,
+        }}
+      />
+    </Callout>
   )
 }

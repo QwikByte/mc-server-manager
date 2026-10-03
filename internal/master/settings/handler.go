@@ -19,8 +19,8 @@ func NewHandler(svc *Service, restart func() error) *Handler {
 	return &Handler{svc: svc, restart: restart}
 }
 
-// Register adds the routes. Only administrators may change the panel's address, which can
-// expose the panel to other networks, and restart the master.
+// Register adds the routes. Only administrators may change the panel's address and HTTPS,
+// which can expose the panel to other networks, and restart the master.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/settings", access.Everywhere(access.SettingsView), h.get)
 	mux.Handle("PUT /api/settings", access.Everywhere(access.SettingsEdit), h.update)
@@ -42,7 +42,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	if p, ok := access.AdminsOnly(r, access.From(r.Context())); !ok && strings.TrimSpace(req.PanelAddr) != h.svc.Get().PanelAddr {
+	cur := h.svc.Get()
+	if p, ok := access.AdminsOnly(r, access.From(r.Context())); !ok &&
+		(strings.TrimSpace(req.PanelAddr) != cur.PanelAddr || req.PanelHTTPS != cur.PanelHTTPS || strings.TrimSpace(req.PanelDomain) != cur.PanelDomain) {
 		httpapi.WriteError(w, r, access.Denied(p))
 		return
 	}

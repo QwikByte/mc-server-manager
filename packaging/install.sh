@@ -260,12 +260,14 @@ summary_master() {
   local_addr=$local_addr:${panel_addr##*:}
   cat <<EOF
   Panel       listens at $panel_addr, unless its settings name another address.
-              Serve it over HTTPS with a reverse proxy, e.g. with Caddy and this Caddyfile:
+              Browsers only sign in over HTTPS or at localhost, so reach it through an SSH tunnel first:
+                ssh -L 8080:$local_addr root@<this machine>, then open http://localhost:8080
+              Then turn on HTTPS under Settings → General, with Let's Encrypt for a domain or a
+              self-signed certificate. Or serve it with a reverse proxy, e.g. Caddy with this Caddyfile:
                 panel.example.com {
                     reverse_proxy $local_addr
                 }
               and add --trusted-proxy $(panel_host) to MCSM_MASTER_OPTS in /etc/mcsm/master.env.
-              Until then, reach it through an SSH tunnel: ssh -L 8080:$local_addr root@<this machine>
   Nodes       enroll on port $ENROLL_PORT, open it for them. Add them in the panel under Nodes.
               The address they use is set in /etc/mcsm/master.env or the panel's settings.
   Settings    /etc/mcsm/master.env, then: systemctl restart mcsm-master

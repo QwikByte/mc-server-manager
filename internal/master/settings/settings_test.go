@@ -3,10 +3,12 @@ package settings
 import (
 	"net"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/mc-server-manager/internal/master/https"
 )
 
 func TestPanelAddr(t *testing.T) {
@@ -100,4 +102,69 @@ func freeAddr(t *testing.T) string {
 	}
 	defer ln.Close()
 	return ln.Addr().String()
+}
+
+// HTTPS of the settings applies with the next start, unless the command line gives a certificate.
+func TestPanelHTTPS(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s, err := Load(t.Context(), db, Master{PanelDefaultAddr: "0.0.0.0:443", EnrollAddr: "203.0.113.7:9443"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	update := func(change func(*Settings)) error {
+		next := s.Get()
+		change(&next)
+		_, err := s.Update(t.Context(), next)
+		return err
+	}
+	for name, change := range map[string]func(*Settings){
+		"unknown certificate":            func(s *Settings) { s.PanelHTTPS = "acme" },
+		"Let's Encrypt without a domain": func(s *Settings) { s.PanelHTTPS = https.LetsEncrypt },
+		"an IP address as domain":        func(s *Settings) { s.PanelHTTPS, s.PanelDomain = https.LetsEncrypt, "203.0.113.7" },
+		"a domain without dot":           func(s *Settings) { s.PanelDomain = "panel" },
+		"Let's Encrypt on localhost": func(s *Settings) {
+			s.PanelHTTPS, s.PanelDomain, s.PanelAddr = https.LetsEncrypt, "panel.example.com", "127.0.0.1:"+freePort(t)
+		},
+		"Let's Encrypt on port 80": func(s *Settings) {
+			s.PanelHTTPS, s.PanelDomain, s.PanelAddr = https.LetsEncrypt, "panel.example.com", "0.0.0.0:80"
+		},
+	} {
+		if err := update(change); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if err := update(func(s *Settings) { s.PanelHTTPS, s.PanelDomain = https.LetsEncrypt, " Panel.Example.com. " }); err != nil || s.Get().PanelDomain != "panel.example.com" {
+		t.Fatalf("Let's Encrypt for panel.example.com: %v, settings = %+v", err, s.Get())
+	}
+	if err := update(func(s *Settings) { s.PanelHTTPS = https.SelfSigned }); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	srv, err := s.PanelHTTPS(dir)
+	if err != nil || srv == nil {
+		t.Fatalf("certificates: %v", err)
+	}
+	m, cert := s.master, s.panelCert.Certificate()
+	if m.PanelHTTPS != https.SelfSigned || m.PanelDomain != "panel.example.com" ||
+		!slices.Contains(cert.Names, "panel.example.com") || !slices.Contains(cert.Names, "203.0.113.7") {
+		t.Fatalf("master = %+v, certificate = %+v", m, cert)
+	}
+
+	files, err := Load(t.Context(), db, Master{PanelHTTPS: https.Files}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srv, err := files.PanelHTTPS(dir); srv != nil || err != nil || files.master.PanelHTTPS != https.Files {
+		t.Errorf("with a certificate of the command line: %v, %v", srv, err)
+	}
+}
+
+func freePort(t *testing.T) string {
+	_, port, _ := net.SplitHostPort(freeAddr(t))
+	return port
 }

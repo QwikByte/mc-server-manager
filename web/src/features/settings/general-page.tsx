@@ -1,4 +1,4 @@
-import { ArrowClockwiseIcon, ClockIcon, CubeIcon, LockIcon, ShieldCheckIcon } from "@phosphor-icons/react"
+import { ArrowClockwiseIcon, CertificateIcon, ClockIcon, CubeIcon, LockIcon, LockOpenIcon, ShieldCheckIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -10,8 +10,9 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
 import { StatCard } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
-import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { useAccess } from "@/features/access/use-access"
@@ -19,7 +20,19 @@ import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
 import { UpdateCheck } from "@/features/updates/update-check"
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format"
-import { type Master, type MasterSettings, type SettingsView, settingsQuery, useUpdateSettings } from "./api"
+import { msg } from "@/lib/i18n"
+import {
+  currentPanel,
+  type Master,
+  type MasterSettings,
+  nextPanel,
+  type PanelHTTPS,
+  panelURL,
+  type SettingsView,
+  samePanel,
+  settingsQuery,
+  useUpdateSettings,
+} from "./api"
 import { RestartButton } from "./restart-button"
 
 /** The General tab: the running master and its settings. */
@@ -37,8 +50,30 @@ export function GeneralSettingsPage() {
   )
 }
 
-/** Where the panel listens after the next start of the master. */
-const nextPanelAddr = (settings: MasterSettings, master: Master) => settings.panelAddr || master.panelDefaultAddr
+/** The certificates the panel can serve. */
+const certificates: Record<PanelHTTPS, { label: string; description: string; icon: typeof LockIcon }> = {
+  "": {
+    label: msg("None"),
+    description: msg(
+      "Plain HTTP, for a reverse proxy that serves HTTPS or an SSH tunnel. Browsers only sign in over HTTPS or at localhost.",
+    ),
+    icon: LockOpenIcon,
+  },
+  "self-signed": {
+    label: msg("Self-signed"),
+    description: msg(
+      "For IP addresses and domains. Browsers warn until you accept the certificate; compare its fingerprint with the one above.",
+    ),
+    icon: LockIcon,
+  },
+  letsencrypt: {
+    label: msg("Let's Encrypt"),
+    description: msg(
+      "A trusted certificate for a domain that points to this machine, renewed automatically. Let's Encrypt checks the domain at port 443 or 80, which have to be reachable from the internet.",
+    ),
+    icon: ShieldCheckIcon,
+  },
+}
 
 /** Whether the signed-in user can restart the master from the panel. */
 function useCanRestart(master: Master) {
@@ -63,7 +98,7 @@ function MasterFacts({ master, settings }: { master: Master; settings: MasterSet
         <StatCard icon={ClockIcon} tone="success" label={t("Running for")} value={formatDuration(openedAt - Date.parse(master.startedAt))}>
           {t("since {{time}}", { time: formatDateTime(master.startedAt) })}
         </StatCard>
-        <StatCard icon={LockIcon} tone="violet" label={t("Panel")} value={master.panelTls ? "HTTPS" : t("Reverse proxy")}>
+        <StatCard icon={LockIcon} tone="violet" label={t("Panel")} value={master.panelHttps ? "HTTPS" : "HTTP"}>
           <span className="font-mono">{master.panelAddr}</span>
         </StatCard>
         <StatCard
@@ -84,15 +119,73 @@ function MasterFacts({ master, settings }: { master: Master; settings: MasterSet
             </div>
           ))}
         </dl>
-        {canRestart && <RestartButton master={master} next={nextPanelAddr(settings, master)} />}
+        {canRestart && <RestartButton master={master} next={nextPanel(settings, master)} />}
       </div>
+      {master.panelCertificate && <PanelCertificateFacts master={master} />}
+    </>
+  )
+}
+
+/** The certificate the panel serves, and why it isn't one of Let's Encrypt yet. */
+function PanelCertificateFacts({ master }: { master: Master }) {
+  const cert = master.panelCertificate!
+  const details: [string, string][] = [
+    [t("Panel certificate"), cert.selfSigned ? t("Self-signed") : t("Let's Encrypt")],
+    [t("Valid until"), formatDate(cert.expiresAt)],
+    [t("Fingerprint (SHA-256)"), cert.fingerprint],
+  ]
+  return (
+    <>
+      <dl className="mt-4 surface grid gap-x-6 gap-y-4 rounded-xl px-5 py-4 md:grid-cols-[auto_auto_1fr]">
+        {details.map(([term, value]) => (
+          <div key={term} className="min-w-0">
+            <dt className="text-xs text-muted-foreground">{term}</dt>
+            <dd className="mt-0.5 font-mono text-sm font-medium break-all">{value}</dd>
+          </div>
+        ))}
+        <div className="min-w-0 md:col-span-3">
+          <dt className="text-xs text-muted-foreground">{t("Valid for")}</dt>
+          <dd className="mt-0.5 font-mono text-sm break-all">{cert.names.join(", ")}</dd>
+        </div>
+      </dl>
+      {master.panelHttps === "letsencrypt" && cert.selfSigned && (
+        <Callout
+          tone={cert.error ? "warning" : "info"}
+          icon={CertificateIcon}
+          role="status"
+          className="mt-4"
+          title={cert.error ? t("Let's Encrypt issued no certificate") : t("Waiting for Let's Encrypt")}
+        >
+          {cert.error ? (
+            <Trans
+              i18nKey="Meanwhile, the panel serves its self-signed certificate and asks again every 30 minutes. Check that <domain/> points to this machine and that port 443 or 80 is reachable from the internet: <error/>"
+              components={{
+                domain: <span className="font-mono">{master.panelDomain}</span>,
+                error: <span className="font-mono">{cert.error}</span>,
+              }}
+            />
+          ) : (
+            t("Meanwhile, the panel serves its self-signed certificate.")
+          )}
+        </Callout>
+      )}
     </>
   )
 }
 
 function formOf(s: MasterSettings) {
-  const { panelAddr, enrollAddr, sessionHours, joinTokenMinutes, logDays, checkUpdates } = s
-  return { panelAddr, enrollAddr, sessionHours, joinTokenMinutes, logDays, checkUpdates, nodeDefaults: limitsForm(s.nodeDefaults) }
+  const { panelAddr, panelHttps, panelDomain, enrollAddr, sessionHours, joinTokenMinutes, logDays, checkUpdates } = s
+  return {
+    panelAddr,
+    panelHttps,
+    panelDomain,
+    enrollAddr,
+    sessionHours,
+    joinTokenMinutes,
+    logDays,
+    checkUpdates,
+    nodeDefaults: limitsForm(s.nodeDefaults),
+  }
 }
 
 function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
@@ -120,7 +213,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
       <fieldset disabled={!editable} className="contents">
         <FormSection
           title={t("Panel")}
-          description={t("Where this panel can be reached. A new address applies when the master starts again.")}
+          description={t("Where this panel can be reached, and how it serves HTTPS. Changes apply when the master starts again.")}
         >
           <Field>
             <FieldLabel htmlFor="settings-panel-addr">{t("Listen address")}</FieldLabel>
@@ -135,14 +228,16 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
             />
             <FieldDescription>
               <Trans
-                i18nKey="IP address and port, e.g. <example/> for all interfaces, with a port from 1024 on. Leave it empty to use <default/> from the command line, which the panel also falls back to if it can't listen at this address. Browsers only sign in over HTTPS, e.g. through a reverse proxy. Only administrators can change it, as it can open the panel to other networks."
+                i18nKey="IP address and port, e.g. <example/> for all interfaces, or <https/> for HTTPS without a port in the browser. Leave it empty to use <default/> from the command line, which the panel also falls back to if it can't listen at this address. Only administrators can change it and HTTPS, as they can open the panel to other networks."
                 components={{
                   example: <span className="font-mono">0.0.0.0:8080</span>,
+                  https: <span className="font-mono">0.0.0.0:443</span>,
                   default: <span className="font-mono">{master.panelDefaultAddr}</span>,
                 }}
               />
             </FieldDescription>
           </Field>
+          <PanelHTTPSFields form={form} master={master} disabled={!access.admin} onChange={set} />
           <PanelRestartNotice settings={settings} master={master} />
         </FormSection>
 
@@ -245,7 +340,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
         className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8"
         hidden={!editable}
       >
-        <p className="text-sm text-muted-foreground">{t("Changes apply right away, the panel's address when the master starts again.")}</p>
+        <p className="text-sm text-muted-foreground">{t("Changes apply right away, those of the panel when the master starts again.")}</p>
         <Button type="submit" disabled={!dirty || update.isPending}>
           {update.isPending ? t("Saving…") : t("Save settings")}
         </Button>
@@ -263,22 +358,109 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
   )
 }
 
-/** Tells where the panel listens until the master starts again, if the settings name another address. */
+/** Chooses the certificate of the panel and its domain. */
+function PanelHTTPSFields({
+  form,
+  master,
+  disabled,
+  onChange,
+}: {
+  form: { panelHttps: PanelHTTPS; panelDomain: string }
+  master: Master
+  disabled: boolean
+  onChange: (change: { panelHttps?: PanelHTTPS; panelDomain?: string }) => void
+}) {
+  if (master.panelHttps === "files")
+    return (
+      <Callout icon={LockIcon} role="note" title={t("HTTPS")}>
+        <Trans
+          i18nKey="The panel serves the certificate of <flag/> on the command line, so it doesn't use these settings."
+          components={{ flag: <span className="font-mono">--tls-cert</span> }}
+        />
+      </Callout>
+    )
+  return (
+    <>
+      <Field>
+        <FieldLabel id="settings-panel-https">{t("HTTPS")}</FieldLabel>
+        <RadioGroup
+          value={form.panelHttps}
+          onValueChange={(panelHttps) => onChange({ panelHttps: panelHttps as PanelHTTPS })}
+          aria-labelledby="settings-panel-https"
+          disabled={disabled}
+          className="gap-3"
+        >
+          {Object.entries(certificates).map(([value, { label, description, icon: Icon }]) => (
+            <FieldLabel key={value} htmlFor={`settings-panel-https-${value || "none"}`}>
+              <Field orientation="horizontal" className="items-start">
+                <Icon className="mt-0.5 size-5 shrink-0 text-primary" weight="duotone" />
+                <FieldContent>
+                  <FieldTitle>{t(label)}</FieldTitle>
+                  <FieldDescription>{t(description)}</FieldDescription>
+                </FieldContent>
+                <RadioGroupItem id={`settings-panel-https-${value || "none"}`} value={value} />
+              </Field>
+            </FieldLabel>
+          ))}
+        </RadioGroup>
+      </Field>
+      {form.panelHttps && (
+        <Field>
+          <FieldLabel htmlFor="settings-panel-domain">{t("Domain")}</FieldLabel>
+          <Input
+            id="settings-panel-domain"
+            className="font-mono"
+            // i18next-instrument-ignore-next-line: an example of what to enter
+            placeholder="panel.example.com"
+            maxLength={253}
+            required={form.panelHttps === "letsencrypt"}
+            disabled={disabled}
+            value={form.panelDomain}
+            onChange={(e) => onChange({ panelDomain: e.target.value })}
+          />
+          <FieldDescription>
+            {form.panelHttps === "letsencrypt" ? (
+              <Trans
+                i18nKey="The domain name that points to this machine. With Let's Encrypt, you accept its <terms>Subscriber Agreement</terms>. Other names and IP addresses get the self-signed certificate."
+                components={{
+                  terms: (
+                    <a
+                      href="https://letsencrypt.org/repository/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-4"
+                    />
+                  ),
+                }}
+              />
+            ) : (
+              t("Optional. The certificate includes it besides the IP addresses and names of this machine.")
+            )}
+          </FieldDescription>
+        </Field>
+      )}
+    </>
+  )
+}
+
+/** Tells where the panel is until the master starts again, if its settings changed. */
 function PanelRestartNotice({ settings, master }: { settings: MasterSettings; master: Master }) {
   const canRestart = useCanRestart(master)
-  const next = nextPanelAddr(settings, master)
-  if (next === master.panelAddr) return null
+  const current = currentPanel(master)
+  const next = nextPanel(settings, master)
+  if (samePanel(next, current)) return null
   return (
     <Callout tone={master.panelAddrError ? "warning" : "info"} icon={ArrowClockwiseIcon} role="status" title={t("Applies after a restart")}>
       <p>
         <Trans
-          i18nKey="The panel listens at <current/> until the master starts again, e.g. with <command/> or the next update, then at <next/>. Point a reverse proxy in front of it to the new address as well."
+          i18nKey="The panel stays at <current/> until the master starts again, e.g. with <command/> or the next update, then it is at <next/>."
           components={{
-            current: <span className="font-mono">{master.panelAddr}</span>,
+            current: <span className="font-mono">{panelURL(current)}</span>,
             command: <span className="font-mono">systemctl restart mcsm-master</span>,
-            next: <span className="font-mono">{next}</span>,
+            next: <span className="font-mono">{panelURL(next)}</span>,
           }}
-        />
+        />{" "}
+        {!next.https && t("Point a reverse proxy in front of it to the new address as well.")}
       </p>
       {master.panelAddrError && (
         <p className="mt-1">

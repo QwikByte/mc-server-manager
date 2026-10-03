@@ -22,6 +22,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
 	"github.com/QwikByte/mc-server-manager/internal/master/backup"
 	"github.com/QwikByte/mc-server-manager/internal/master/files"
+	"github.com/QwikByte/mc-server-manager/internal/master/https"
 	"github.com/QwikByte/mc-server-manager/internal/master/logs"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
@@ -73,11 +74,15 @@ func serve(ctx context.Context, cfg config) error {
 		return err
 	}
 
-	conf, err := settings.Load(ctx, db, settings.Master{
-		Version: buildinfo.Version, StartedAt: time.Now(), PanelDefaultAddr: cfg.httpAddr, PanelTLS: cfg.tlsCert != "",
+	master := settings.Master{
+		Version: buildinfo.Version, StartedAt: time.Now(), PanelDefaultAddr: cfg.httpAddr,
 		EnrollListenAddr: cfg.enrollAddr, EnrollAddr: publicAddr, CAFingerprint: pki.Fingerprint(ca.Cert),
 		Restartable: cfg.restartCode != 0,
-	}, masterCert)
+	}
+	if cfg.tlsCert != "" {
+		master.PanelHTTPS = https.Files
+	}
+	conf, err := settings.Load(ctx, db, master, masterCert)
 	if err != nil {
 		return err
 	}
@@ -86,6 +91,10 @@ func serve(ctx context.Context, cfg config) error {
 		return err
 	}
 	defer panelListener.Close()
+	panelCert, err := conf.PanelHTTPS(filepath.Join(cfg.dataDir, "https"))
+	if err != nil {
+		return err
+	}
 
 	users := auth.NewService(db)
 	nodes := node.NewService(db, ca, masterCert, conf)
@@ -146,20 +155,27 @@ func serve(ctx context.Context, cfg config) error {
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
-			Usage: usageStore, Moves: moves, Restart: restart,
+			Usage: usageStore, Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests themselves have no time limit, as uploads and streams last long.
 		IdleTimeout: 2 * time.Minute,
 	}
 	httpServer.RegisterOnShutdown(endRequests)
+	if panelCert != nil {
+		httpServer.TLSConfig = panelCert.TLSConfig()
+		go panelCert.Run(ctx, conf.Master().PanelAddr)
+	}
 
 	errc := make(chan error, 2)
 	go func() { errc <- grpcServer.Serve(enrollListener) }()
 	go func() {
-		if cfg.tlsCert != "" {
+		switch {
+		case cfg.tlsCert != "":
 			errc <- httpServer.ServeTLS(panelListener, cfg.tlsCert, cfg.tlsKey)
-		} else {
+		case panelCert != nil:
+			errc <- httpServer.ServeTLS(panelListener, "", "")
+		default:
 			errc <- httpServer.Serve(panelListener)
 		}
 	}()
@@ -207,6 +223,8 @@ type Services struct {
 	Moves     *server.Moves
 	// Restart restarts the master, if its service manager starts it again; otherwise nil.
 	Restart func() error
+	// HSTS makes browsers use HTTPS only, if the master serves a certificate they trust.
+	HSTS bool
 }
 
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
@@ -220,7 +238,7 @@ func Handler(s Services) http.Handler {
 	authHandler.RegisterPublic(mux)
 	mux.Handle("/api/", authHandler.Require(s.Access.Middleware(api)))
 	mux.Handle("/", web.Handler())
-	return securityHeaders(http.NewCrossOriginProtection().Handler(mux))
+	return securityHeaders(http.NewCrossOriginProtection().Handler(mux), s.HSTS)
 }
 
 // API returns the routes of the API that act for a user, each with the permission it needs.
@@ -247,15 +265,15 @@ func API(s Services) *http.ServeMux {
 	return api
 }
 
-func securityHeaders(next http.Handler) http.Handler {
+func securityHeaders(next http.Handler, hsts bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		// Scripts are restricted to the bundle; the UI libraries inject <style> elements at runtime.
 		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
-		// Only if the master serves TLS itself (--tls-cert); behind a proxy, the proxy decides.
-		if r.TLS != nil {
+		// Behind a proxy, the proxy decides.
+		if hsts && r.TLS != nil {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}
 		next.ServeHTTP(w, r)

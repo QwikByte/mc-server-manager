@@ -85,8 +85,11 @@ from 1024 on), and for the password of the first administrator, `admin` unless `
 generates one and writes it to `/etc/mcsm/admin-password`, which only root can read). The password needs at least 12 characters and isn't shown while you type it. These options
 only apply to a new installation; later, both addresses can be changed in the panel's settings.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
-`cdn.modrinth.com`. Browsers only sign in over HTTPS, so serve the panel with a reverse proxy, e.g. with
-[Caddy](https://caddyserver.com) and this `Caddyfile`, which also gets the certificate:
+`cdn.modrinth.com`. Browsers only sign in over HTTPS or at `localhost`. Until the panel serves HTTPS, open it through an
+SSH tunnel, e.g. `ssh -L 8080:127.0.0.1:8080 <user>@<master>` and `http://localhost:8080`. Then either turn on HTTPS
+under **Settings → General**: a certificate of Let's Encrypt for a domain, or a self-signed one, which also works for IP
+addresses but makes browsers warn. Or serve the panel with a reverse proxy, e.g. with [Caddy](https://caddyserver.com)
+and this `Caddyfile`, which also gets the certificate:
 
 ```
 panel.example.com {
@@ -289,18 +292,24 @@ Entries are kept for 30 days unless the settings say otherwise, and at most the 
 The **Settings** page configures the master, gives an overview of the agents and manages who may do what. Each tab
 only shows to users with the permission for it.
 
-- **General** shows the running master (version, uptime, addresses, CA fingerprint, certificate) and its settings.
-  The address the panel listens at (it replaces `--http-addr`; empty uses the flag again) applies when the master starts
-  again, e.g. with **Restart master** or the next update; the page says so until then. Only administrators change it,
-  as it can open the panel to other networks. It is checked when saved, and if the master can't listen there when it
-  starts, e.g. because another program took the port, the panel falls back to `--http-addr` and shows why, so a wrong
-  address can't lock you out. **Restart master**, for administrators, stops the master and lets systemd start it again
-  (also reading `master.env` again), unless servers are moving to another node; Minecraft servers keep running. The
-  other settings apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the
-  flag again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel
-  last (1 hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default),
-  the port range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can
-  also look for an update right away.
+- **General** shows the running master (version, uptime, addresses, CA fingerprint, certificates) and its settings. The
+  address the panel listens at (it replaces `--http-addr`; empty uses the flag again) and its HTTPS apply when the
+  master starts again, e.g. with **Restart master** or the next update; the page says so until then. Only administrators
+  change them, as they can open the panel to other networks. The address is checked when saved, and if the master can't
+  listen there when it starts, e.g. because another program took the port, the panel falls back to `--http-addr` and
+  shows why, so a wrong address can't lock you out. For HTTPS, the panel serves a self-signed certificate for the IP
+  addresses and names of the machine, the domain if one is set, and the host of the enrollment address; it shows its
+  fingerprint to compare with the browser's warning. Or it gets one from Let's Encrypt for its domain, which has to
+  point to the machine: Let's Encrypt checks it at port 443 of the panel or at port 80, where the master then sends
+  browsers to HTTPS. Until Let's Encrypt issued one, and for other names such as an IP address, the panel serves the
+  self-signed certificate, and the page shows why. With a certificate of the command line (`--tls-cert`), these settings
+  don't apply. **Restart master**, for administrators, stops the master and lets systemd start it again (also reading
+  `master.env` again), unless servers are moving to another node; Minecraft servers keep running. The other settings
+  apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses the flag
+  again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel last (1
+  hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default), the port
+  range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can also look
+  for an update right away.
 - **Agents** lists all nodes with their agent version, certificate and settings, which can be changed there too.
 - **Terminal** runs the commands of `mcsm-agent` (`status`, `server …`, `backup …`) on any node, and the master's own
   commands: `status`, `node list`, `node renew <node>` and `logs`. `help` lists them; output streams in as it happens, e.g.
@@ -367,9 +376,12 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Two-factor authentication.** Codes of the app (RFC 6238) work only once, and from the fifth wrong code in a row on,
   codes aren't checked for a minute that doubles with every further wrong one, up to a day; parallel guesses count
   too. Recovery codes have 50 random bits and are stored as SHA-256 hashes. The secret of the app is stored in the
-  master's database, which needs the same protection as the CA key next to it. The panel must be served over HTTPS (reverse proxy or
-  `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt). With
-  `--tls-cert`, the master tells browsers to use HTTPS only (HSTS, one year); behind a reverse proxy, set it there.
+  master's database, which needs the same protection as the CA key next to it. The panel must be served over HTTPS (its
+  settings, a reverse proxy or `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie
+  (`localhost` is exempt). With a certificate of Let's Encrypt or `--tls-cert`, the master tells browsers to use HTTPS
+  only (HSTS, one year), but not with a self-signed one, which would lock browsers out once it changes; behind a
+  reverse proxy, set it there. The master may listen at ports below 1024 (`CAP_NET_BIND_SERVICE`), e.g. 443 and 80,
+  and has no other privileges.
 - **Networks.** Only Velocity's modern forwarding is supported: it signs the forwarded player data with a random
   secret per network. BungeeCord's forwarding can be spoofed by anyone who reaches a backend. The secret is stored in
   the master's database and on the network's servers; the API never returns it.
