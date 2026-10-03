@@ -1,4 +1,5 @@
 import { LockSimpleIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -26,13 +27,13 @@ export function PropertyField({
   const id = `property-${name}`
   const title = (
     <FieldLabel htmlFor={id} className="flex-wrap gap-x-2">
-      {label}
+      {t(label)}
       {label !== name && <span className="font-mono text-xs font-normal text-muted-foreground">{name}</span>}
-      {changed && <span className="size-2 rounded-full bg-warning" title="Changed" aria-label="Changed" />}
-      {locked && <LockSimpleIcon className="size-3.5 text-muted-foreground" aria-label="Managed by the panel" />}
+      {changed && <span className="size-2 rounded-full bg-warning" title={t("Changed")} aria-label={t("Changed")} />}
+      {locked && <LockSimpleIcon className="size-3.5 text-muted-foreground" aria-label={t("Managed by the panel")} />}
     </FieldLabel>
   )
-  const hint = (locked || description) && <FieldDescription>{locked ?? description}</FieldDescription>
+  const hint = (locked || description) && <FieldDescription>{locked ?? t(description)}</FieldDescription>
 
   if (kind.type === "boolean")
     return (
@@ -58,7 +59,7 @@ export function PropertyField({
             {unknownOption && <SelectItem value={value}>{value}</SelectItem>}
             {kind.options.map(([v, l]) => (
               <SelectItem key={v} value={v}>
-                {l}
+                {t(l)}
               </SelectItem>
             ))}
           </SelectContent>

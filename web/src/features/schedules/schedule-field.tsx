@@ -1,11 +1,12 @@
 import { PlusIcon, XIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Schedule } from "./api"
-import { dayNames, describeSchedule, everyHours, weekdays } from "./describe"
+import { dayName, describeSchedule, everyHours, weekdays } from "./describe"
 
 const timeZones = [...new Set(["UTC", ...Intl.supportedValuesOf("timeZone")])]
 const repeats = [1, 3, 6, 12]
@@ -24,7 +25,7 @@ export function ScheduleField({ value, onChange }: { value: Schedule; onChange: 
   return (
     <>
       <FieldSet>
-        <FieldLegend variant="label">Days</FieldLegend>
+        <FieldLegend variant="label">{t("Days")}</FieldLegend>
         <div className="flex flex-wrap gap-1.5">
           {weekdays.map((day) => (
             <Button
@@ -38,24 +39,24 @@ export function ScheduleField({ value, onChange }: { value: Schedule; onChange: 
               className="w-12"
               onClick={() => toggle(day)}
             >
-              {dayNames[day]}
+              {dayName(day)}
             </Button>
           ))}
         </div>
       </FieldSet>
       <FieldSet>
-        <FieldLegend variant="label">Times</FieldLegend>
+        <FieldLegend variant="label">{t("Times")}</FieldLegend>
         <ul className="flex flex-wrap gap-2">
-          {value.times.map((t) => (
-            <li key={t} className="flex items-center gap-1 rounded-lg bg-muted/70 py-1 pr-1 pl-2.5 font-mono text-sm font-medium">
-              {t}
+          {value.times.map((at) => (
+            <li key={at} className="flex items-center gap-1 rounded-lg bg-muted/70 py-1 pr-1 pl-2.5 font-mono text-sm font-medium">
+              {at}
               <Button
                 type="button"
                 size="icon-xs"
                 variant="ghost"
-                aria-label={`Remove ${t}`}
+                aria-label={t("Remove {{time}}", { time: at })}
                 disabled={value.times.length === 1}
-                onClick={() => set({ times: value.times.filter((x) => x !== t) })}
+                onClick={() => set({ times: value.times.filter((x) => x !== at) })}
               >
                 <XIcon />
               </Button>
@@ -65,7 +66,7 @@ export function ScheduleField({ value, onChange }: { value: Schedule; onChange: 
         <div className="flex flex-wrap items-center gap-2">
           <Input
             type="time"
-            aria-label="Time of day"
+            aria-label={t("Time of day")}
             className="w-32 font-mono"
             value={time}
             onChange={(e) => setTime(e.target.value)}
@@ -77,18 +78,18 @@ export function ScheduleField({ value, onChange }: { value: Schedule; onChange: 
             onClick={() => set({ times: [...value.times, time].sort() })}
           >
             <PlusIcon />
-            Add time
+            {t("Add time")}
           </Button>
-          <span className="ml-1 text-xs text-muted-foreground">or every</span>
+          <span className="ml-1 text-xs text-muted-foreground">{t("or every")}</span>
           {repeats.map((hours) => (
             <Button key={hours} type="button" size="xs" variant="ghost" onClick={() => set({ times: everyHours(hours) })}>
-              {hours === 1 ? "hour" : `${hours} h`}
+              {hours === 1 ? t("hour") : t("{{hours}} h", { hours })}
             </Button>
           ))}
         </div>
       </FieldSet>
       <Field>
-        <FieldLabel htmlFor="schedule-zone">Time zone</FieldLabel>
+        <FieldLabel htmlFor="schedule-zone">{t("Time zone")}</FieldLabel>
         <Select value={value.timeZone} onValueChange={(timeZone) => set({ timeZone })}>
           <SelectTrigger id="schedule-zone" className="w-full sm:w-72">
             <SelectValue />
@@ -102,7 +103,7 @@ export function ScheduleField({ value, onChange }: { value: Schedule; onChange: 
           </SelectContent>
         </Select>
         <FieldDescription>
-          {describeSchedule(value)}, {value.timeZone.replaceAll("_", " ")} time.
+          {t("{{schedule}}, {{zone}} time.", { schedule: describeSchedule(value), zone: value.timeZone.replaceAll("_", " ") })}
         </FieldDescription>
       </Field>
     </>

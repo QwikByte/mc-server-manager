@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useRef } from "react"
 import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
@@ -30,6 +31,29 @@ import { PluginSearch } from "./plugin-search"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/plugins")
 
+type Kind = "plugins" | "mods"
+
+/** The texts that name what a server loads, plugins or mods. */
+function texts(kind: Kind, type: string) {
+  return kind === "plugins"
+    ? {
+        none: t("No plugins yet"),
+        addHint: t("Add plugins from Modrinth, or upload your own .jar files."),
+        empty: t("The server has no plugins."),
+        add: t("Add plugins"),
+        addTitle: t("Add plugins from Modrinth"),
+        addDescription: t("Only plugins for {{type}} are shown. What they require is installed too.", { type }),
+      }
+    : {
+        none: t("No mods yet"),
+        addHint: t("Add mods from Modrinth, or upload your own .jar files."),
+        empty: t("The server has no mods."),
+        add: t("Add mods"),
+        addTitle: t("Add mods from Modrinth"),
+        addDescription: t("Only mods for {{type}} are shown. What they require is installed too.", { type }),
+      }
+}
+
 /** The Plugins tab of a server, Mods for modded servers. */
 export function ServerPluginsPage() {
   const { nodeId, serverId } = route.useParams()
@@ -41,35 +65,36 @@ export function ServerPluginsPage() {
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
   const kind = serverType(server.type).addons?.kind ?? "plugins"
+  const words = texts(kind, serverType(server.type).label)
+  const count = data.plugins.length
   const installed = data.plugins.flatMap((p) => (p.project ? [p.project.id] : []))
 
   return (
     <Section
-      title={`${data.plugins.length} ${data.plugins.length === 1 ? kind.slice(0, -1) : kind}`}
-      description={`Files in the ${data.folder} folder. Restart the server to load changes.`}
+      title={
+        kind === "plugins"
+          ? t("{{count}} plugins", { count, defaultValue_one: "{{count}} plugin" })
+          : t("{{count}} mods", { count, defaultValue_one: "{{count}} mod" })
+      }
+      description={t("Files in the {{folder}} folder. Restart the server to load changes.", { folder: data.folder })}
       className="mt-0"
       actions={
         manage && (
           <div className="flex flex-wrap gap-2">
             <UploadButton serverRef={ref} />
-            <AddDialog server={server} serverRef={ref} kind={kind} installed={installed} />
+            <AddDialog server={server} serverRef={ref} words={words} installed={installed} />
           </div>
         )
       }
     >
       {data.catalogueError && (
         <Callout tone="warning" className="mb-4">
-          Modrinth couldn't identify the files: {data.catalogueError}
+          {t("Modrinth couldn't identify the files: {{error}}", { error: data.catalogueError })}
         </Callout>
       )}
       {data.plugins.length === 0 ? (
-        <EmptyState
-          icon={PuzzlePieceIcon}
-          tone="warning"
-          title={`No ${kind} yet`}
-          description={manage ? `Add ${kind} from Modrinth, or upload your own .jar files.` : `The server has no ${kind}.`}
-        >
-          {manage && <AddDialog server={server} serverRef={ref} kind={kind} installed={installed} />}
+        <EmptyState icon={PuzzlePieceIcon} tone="warning" title={words.none} description={manage ? words.addHint : words.empty}>
+          {manage && <AddDialog server={server} serverRef={ref} words={words} installed={installed} />}
         </EmptyState>
       ) : (
         <ul className="surface divide-y rounded-xl">
@@ -90,8 +115,8 @@ function PluginRow({ plugin, serverRef, manage }: { plugin: InstalledPlugin; ser
   function updateIt() {
     if (!project) return
     toast.promise(install.mutateAsync({ projects: [project.id], servers: [serverRef] }).then(failIfAny), {
-      loading: `Updating ${project.title}…`,
-      success: `Updated ${project.title} to ${update}. Restart the server to load it.`,
+      loading: t("Updating {{name}}…", { name: project.title }),
+      success: t("Updated {{name}} to {{version}}. Restart the server to load it.", { name: project.title, version: update }),
       error: (e: Error) => e.message,
     })
   }
@@ -111,14 +136,14 @@ function PluginRow({ plugin, serverRef, manage }: { plugin: InstalledPlugin; ser
           {plugin.version && <span className="truncate font-mono text-xs font-normal text-muted-foreground">{plugin.version}</span>}
         </p>
         <p className="truncate text-xs text-muted-foreground">
-          {project ? plugin.fileName : "Not from Modrinth"} · {formatBytes(plugin.size)}
+          {project ? plugin.fileName : t("Not from Modrinth")} · {formatBytes(plugin.size)}
         </p>
       </div>
-      {update && !manage && <Pill tone="info">Update to {update}</Pill>}
+      {update && !manage && <Pill tone="info">{t("Update to {{version}}", { version: update })}</Pill>}
       {update && manage && (
         <Button size="sm" variant="outline" disabled={install.isPending} onClick={updateIt}>
           <ArrowCircleUpIcon />
-          <span className="max-sm:sr-only">Update to {update}</span>
+          <span className="max-sm:sr-only">{t("Update to {{version}}", { version: update })}</span>
         </Button>
       )}
       {manage && (
@@ -127,22 +152,22 @@ function PluginRow({ plugin, serverRef, manage }: { plugin: InstalledPlugin; ser
             <Button
               size="icon-sm"
               variant="ghost"
-              aria-label={`Remove ${plugin.fileName}`}
-              title="Remove"
+              aria-label={t("Remove {{name}}", { name: plugin.fileName })}
+              title={t("Remove")}
               disabled={change.isPending}
               className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             >
               <TrashIcon />
             </Button>
           }
-          title={`Remove ${project?.title ?? plugin.fileName}?`}
-          description={`This deletes ${plugin.fileName}. Its configuration in the server's folder is kept.`}
-          action="Remove"
+          title={t("Remove {{name}}?", { name: project?.title ?? plugin.fileName })}
+          description={t("This deletes {{file}}. Its configuration in the server's folder is kept.", { file: plugin.fileName })}
+          action={t("Remove")}
           destructive
           onConfirm={() =>
             change.mutate(
               { action: "remove", fileName: plugin.fileName },
-              { onSuccess: () => toast.success(`Removed ${plugin.fileName}`), onError: (e) => toast.error(e.message) },
+              { onSuccess: () => toast.success(t("Removed {{name}}", { name: plugin.fileName })), onError: (e) => toast.error(e.message) },
             )
           }
         />
@@ -165,8 +190,8 @@ function UploadButton({ serverRef }: { serverRef: ServerRef }) {
         onChange={(e) => {
           for (const file of e.target.files ?? []) {
             toast.promise(change.mutateAsync({ action: "upload", file }), {
-              loading: `Uploading ${file.name}…`,
-              success: `Uploaded ${file.name}`,
+              loading: t("Uploading {{name}}…", { name: file.name }),
+              success: t("Uploaded {{name}}", { name: file.name }),
               error: (err: Error) => err.message,
             })
           }
@@ -175,27 +200,35 @@ function UploadButton({ serverRef }: { serverRef: ServerRef }) {
       />
       <Button variant="outline" disabled={change.isPending} onClick={() => input.current?.click()}>
         <UploadSimpleIcon />
-        Upload .jar
+        {t("Upload .jar")}
       </Button>
     </>
   )
 }
 
-function AddDialog({ server, serverRef, kind, installed }: { server: Server; serverRef: ServerRef; kind: string; installed: string[] }) {
+function AddDialog({
+  server,
+  serverRef,
+  words,
+  installed,
+}: {
+  server: Server
+  serverRef: ServerRef
+  words: ReturnType<typeof texts>
+  installed: string[]
+}) {
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button>
           <PlusIcon />
-          Add {kind}
+          {words.add}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add {kind} from Modrinth</DialogTitle>
-          <DialogDescription>
-            Only {kind} for {serverType(server.type).label} are shown. What they require is installed too.
-          </DialogDescription>
+          <DialogTitle>{words.addTitle}</DialogTitle>
+          <DialogDescription>{words.addDescription}</DialogDescription>
         </DialogHeader>
         <PluginSearch
           type={server.type}
@@ -214,7 +247,7 @@ function InstallButton({ hit, serverRef, installed }: { hit: SearchHit; serverRe
     return (
       <Pill tone="success">
         <CheckIcon weight="bold" />
-        Installed
+        {t("Installed")}
       </Pill>
     )
   return (
@@ -224,14 +257,14 @@ function InstallButton({ hit, serverRef, installed }: { hit: SearchHit; serverRe
       disabled={install.isPending}
       onClick={() =>
         toast.promise(install.mutateAsync({ projects: [hit.id], servers: [serverRef] }).then(failIfAny), {
-          loading: `Installing ${hit.title}…`,
-          success: (files) => `Installed ${files}. Restart the server to load it.`,
+          loading: t("Installing {{name}}…", { name: hit.title }),
+          success: (files) => t("Installed {{files}}. Restart the server to load it.", { files }),
           error: (e: Error) => e.message,
         })
       }
     >
       <DownloadSimpleIcon />
-      {install.isPending ? "Installing…" : "Install"}
+      {install.isPending ? t("Installing…") : t("Install")}
     </Button>
   )
 }

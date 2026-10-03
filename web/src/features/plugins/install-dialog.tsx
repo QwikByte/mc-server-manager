@@ -1,5 +1,6 @@
 import { CheckCircleIcon, DownloadSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -44,21 +45,21 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
           <DownloadSimpleIcon />
-          Install
+          {t("Install")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader className="flex-row items-center gap-3">
           <PluginIcon src={hit.icon} />
           <div className="min-w-0 space-y-1 text-left">
-            <DialogTitle>Install {hit.title}</DialogTitle>
-            <DialogDescription>The newest release that suits each server is installed, with what it requires.</DialogDescription>
+            <DialogTitle>{t("Install {{name}}", { name: hit.title })}</DialogTitle>
+            <DialogDescription>{t("The newest release that suits each server is installed, with what it requires.")}</DialogDescription>
           </div>
         </DialogHeader>
         {install.data ? (
           <Results results={install.data} servers={servers} />
         ) : suitable.length === 0 ? (
-          <p className="py-4 text-sm text-muted-foreground">None of your servers can run {hit.title}.</p>
+          <p className="py-4 text-sm text-muted-foreground">{t("None of your servers can run {{name}}.", { name: hit.title })}</p>
         ) : (
           <ul className="-mx-1 grid max-h-80 gap-1 overflow-y-auto px-1">
             {suitable.map((s) => (
@@ -79,7 +80,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
         {install.error && <FieldError>{install.error.message}</FieldError>}
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">{install.data ? "Done" : "Cancel"}</Button>
+            <Button variant="outline">{install.data ? t("Done") : t("Cancel")}</Button>
           </DialogClose>
           {!install.data && (
             <Button
@@ -88,7 +89,9 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
                 install.mutate({ projects: [hit.id], servers: suitable.filter((s) => selected.includes(key(refOf(s)))).map(refOf) })
               }
             >
-              {install.isPending ? "Installing…" : `Install on ${selected.length || ""} ${selected.length === 1 ? "server" : "servers"}`}
+              {install.isPending
+                ? t("Installing…")
+                : t("Install on {{count}} servers", { count: selected.length, defaultValue_one: "Install on {{count}} server" })}
             </Button>
           )}
         </DialogFooter>
@@ -116,7 +119,7 @@ export function Results({ results, servers }: { results: InstallResult[]; server
           </li>
         ))}
       </ul>
-      <p className="text-xs text-muted-foreground">Restart the servers to load what was installed.</p>
+      <p className="text-xs text-muted-foreground">{t("Restart the servers to load what was installed.")}</p>
     </div>
   )
 }

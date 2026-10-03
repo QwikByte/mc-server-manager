@@ -1,5 +1,6 @@
 import { DownloadSimpleIcon, MagnifyingGlassIcon } from "@phosphor-icons/react"
 import { useInfiniteQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { type ReactNode, useState } from "react"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
@@ -40,8 +41,8 @@ export function PluginSearch({
         </InputGroupAddon>
         <InputGroupInput
           type="search"
-          placeholder="Search Modrinth, e.g. LuckPerms"
-          aria-label="Search plugins and mods"
+          placeholder={t("Search Modrinth, e.g. LuckPerms")}
+          aria-label={t("Search plugins and mods")}
           autoFocus={autoFocus}
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -56,7 +57,7 @@ export function PluginSearch({
       ) : error ? (
         <ErrorCallout error={error} />
       ) : hits.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Nothing found. Try another search.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">{t("Nothing found. Try another search.")}</p>
       ) : (
         <ul className="grid grid-cols-1 gap-2">
           {hits.map((hit) => (
@@ -67,7 +68,7 @@ export function PluginSearch({
                   <a href={`https://modrinth.com/project/${hit.slug}`} target="_blank" rel="noreferrer" className="hover:underline">
                     {hit.title}
                   </a>
-                  <span className="font-normal text-muted-foreground"> by {hit.author}</span>
+                  <span className="font-normal text-muted-foreground"> {t("by {{author}}", { author: hit.author })}</span>
                 </p>
                 <p className="line-clamp-2 text-xs text-muted-foreground">{hit.description}</p>
                 <div className="flex flex-wrap gap-1.5 pt-1">
@@ -88,7 +89,7 @@ export function PluginSearch({
       )}
       {hasNextPage && (
         <Button variant="outline" className="justify-self-center" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
-          {isFetchingNextPage ? "Loading…" : "Show more"}
+          {isFetchingNextPage ? t("Loading…") : t("Show more")}
         </Button>
       )}
     </div>

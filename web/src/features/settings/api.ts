@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { t } from "i18next"
 import type { NodeLimits } from "@/features/nodes/api"
 import { api } from "@/lib/api"
 
@@ -77,8 +78,13 @@ export function useRestartMaster() {
       }
       throw new Error(
         next === master.panelAddr
-          ? "The master hasn't answered for a minute. See: journalctl -u mcsm-master"
-          : `The master hasn't answered here for a minute. It listens at ${next} now: open the panel there, or point your reverse proxy to it.`,
+          ? t("The master hasn't answered for a minute. See: journalctl -u mcsm-master")
+          : t(
+              "The master hasn't answered here for a minute. It listens at {{address}} now: open the panel there, or point your reverse proxy to it.",
+              {
+                address: next,
+              },
+            ),
       )
     },
     onSuccess: async (view) => {

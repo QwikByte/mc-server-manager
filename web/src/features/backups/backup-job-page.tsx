@@ -1,6 +1,7 @@
 import { ArchiveIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { toast } from "sonner"
 import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
@@ -25,23 +26,23 @@ export function BackupJobPage() {
   const save = jobs.useSaveTask(jobId)
   return (
     <>
-      <BackLink to="/backups">Backups</BackLink>
+      <BackLink to="/backups">{t("Backups")}</BackLink>
       {isPending ? (
         <Skeleton className="h-96 rounded-xl" />
       ) : error ? (
         <ErrorCallout error={error} />
       ) : (
         <>
-          <PageHeader icon={ArchiveIcon} tone="info" title={job.name} description="A job that backs up servers on a schedule." />
+          <PageHeader icon={ArchiveIcon} tone="info" title={job.name} description={t("A job that backs up servers on a schedule.")} />
           {/* Without the permission to manage jobs, the job is only shown. */}
           <fieldset disabled={!manage} className="contents">
             <JobForm
               // Remounting on save resets the form to what was stored.
               key={JSON.stringify(job)}
               initial={{ name: job.name, enabled: job.enabled, schedule: job.schedule, targets: job.targets, settings: job.settings }}
-              submitLabel="Save job"
+              submitLabel={t("Save job")}
               save={save}
-              onSaved={(j) => toast.success(`Saved ${j.name}`)}
+              onSaved={(j) => toast.success(t("Saved {{name}}", { name: j.name }))}
             />
           </fieldset>
         </>
@@ -55,14 +56,19 @@ export function NewBackupJobPage() {
   const navigate = useNavigate()
   return (
     <>
-      <BackLink to="/backups">Backups</BackLink>
-      <PageHeader icon={ArchiveIcon} tone="info" title="New backup job" description="Back up servers or whole nodes on a schedule." />
+      <BackLink to="/backups">{t("Backups")}</BackLink>
+      <PageHeader
+        icon={ArchiveIcon}
+        tone="info"
+        title={t("New backup job")}
+        description={t("Back up servers or whole nodes on a schedule.")}
+      />
       <JobForm
         initial={emptyJob}
-        submitLabel="Create job"
+        submitLabel={t("Create job")}
         save={save}
         onSaved={(j) => {
-          toast.success(`Created ${j.name}`)
+          toast.success(t("Created {{name}}", { name: j.name }))
           void navigate({ to: "/backups", ignoreBlocker: true })
         }}
       />
@@ -86,18 +92,18 @@ function JobForm({
   return (
     <TaskForm
       initial={initial}
-      noun="job"
+      kind="job"
       submitLabel={submitLabel}
       pending={save.isPending}
       error={save.error}
       onSubmit={(input) => save.mutate(input, { onSuccess: onSaved })}
     >
       {(settings, set) => (
-        <FormSection title="Backups" description="What is backed up of each server, where it is kept and for how long.">
+        <FormSection title={t("Backups")} description={t("What is backed up of each server, where it is kept and for how long.")}>
           <SelectionField value={settings.selection} onChange={(selection) => set({ selection })} />
           <LocationField locations={locations} value={settings.location} onChange={(location) => set({ location })} />
           <Field>
-            <FieldLabel htmlFor="job-keep">Backups to keep</FieldLabel>
+            <FieldLabel htmlFor="job-keep">{t("Backups to keep")}</FieldLabel>
             <Input
               id="job-keep"
               type="number"
@@ -108,7 +114,7 @@ function JobForm({
               onChange={(e) => set({ keep: e.target.valueAsNumber || 0 })}
             />
             <FieldDescription>
-              Per server; older backups of this job are deleted. 0 keeps all of them. Backups made by hand are never deleted.
+              {t("Per server; older backups of this job are deleted. 0 keeps all of them. Backups made by hand are never deleted.")}
             </FieldDescription>
           </Field>
         </FormSection>

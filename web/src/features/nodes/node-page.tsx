@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { Meter } from "@/components/meter"
@@ -41,7 +42,7 @@ export function NodePage() {
 
   return (
     <>
-      <BackLink to="/nodes">Nodes</BackLink>
+      <BackLink to="/nodes">{t("Nodes")}</BackLink>
       {isPending ? (
         <Skeleton className="h-64 rounded-xl" />
       ) : error ? (
@@ -61,7 +62,7 @@ export function NodePage() {
                   <Button variant="outline" asChild>
                     <Link to="/settings/terminal" search={{ target: node.id }}>
                       <TerminalWindowIcon />
-                      Terminal
+                      {t("Terminal")}
                     </Link>
                   </Button>
                 )}
@@ -80,14 +81,14 @@ export function NodePage() {
                   nodeId={node.id}
                   charts={[
                     {
-                      title: "CPU",
-                      series: [{ label: "CPU", tone: "series-1", value: (p) => p.cpuMillis }],
+                      title: t("CPU"),
+                      series: [{ label: t("CPU"), tone: "series-1", value: (p) => p.cpuMillis }],
                       format: formatCores,
                       max: node.info.cpuCount * 1000,
                     },
                     {
-                      title: "Memory",
-                      series: [{ label: "Memory", tone: "series-1", value: (p) => p.memoryBytes }],
+                      title: t("Memory"),
+                      series: [{ label: t("Memory"), tone: "series-1", value: (p) => p.memoryBytes }],
                       format: (v) => formatBytes(Math.round(v)),
                       max: node.info.memoryBytes,
                     },
@@ -100,8 +101,8 @@ export function NodePage() {
             <EmptyState
               icon={PlugsIcon}
               tone="warning"
-              title="Connect the agent"
-              description="This node has no connected agent yet. Create a join token and run the enrollment command on the node."
+              title={t("Connect the agent")}
+              description={t("This node has no connected agent yet. Create a join token and run the enrollment command on the node.")}
             >
               {can("nodes.enroll") && <NewJoinTokenButton node={node} variant="default" />}
             </EmptyState>
@@ -109,8 +110,13 @@ export function NodePage() {
             <EmptyState
               icon={WarningCircleIcon}
               tone="destructive"
-              title="The agent can't be reached"
-              description={`The master can't reach the agent at ${node.address}. Check that mcsm-agent is running and that the port is open for the master.`}
+              title={t("The agent can't be reached")}
+              description={t(
+                "The master can't reach the agent at {{address}}. Check that mcsm-agent is running and that the port is open for the master.",
+                {
+                  address: node.address,
+                },
+              )}
             />
           )}
           {/* Also while the agent is offline, which its last entries may explain. */}
@@ -130,42 +136,47 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   const capacityMb = memoryCapacityMb(node)
   const limitMb = memoryLimitMb(node)
   const details: [string, string][] = [
-    ["Hostname", info.hostname],
-    ["System", info.os],
-    ["Runtime", info.runtime],
-    ["Agent", info.agentVersion],
+    [t("Hostname"), info.hostname],
+    [t("System"), info.os],
+    [t("Runtime"), info.runtime],
+    [t("Agent"), info.agentVersion],
   ]
   return (
     <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon={CpuIcon} tone="warning" label="CPU" value={live ? formatCores(live.cpuMillis) : `${info.cpuCount} cores`}>
+        <StatCard
+          icon={CpuIcon}
+          tone="warning"
+          label={t("CPU")}
+          value={live ? formatCores(live.cpuMillis) : t("{{count}} cores", { count: info.cpuCount, defaultValue_one: "{{count}} core" })}
+        >
           {live && (
             <div className="space-y-2">
-              <Meter value={live.cpuMillis / (live.cpuCount * 1000)} label="CPU used" />
-              <p>of {info.cpuCount} cores in use</p>
+              <Meter value={live.cpuMillis / (live.cpuCount * 1000)} label={t("CPU used")} />
+              <p>{t("of {{count}} cores in use", { count: info.cpuCount, defaultValue_one: "of {{count}} core in use" })}</p>
             </div>
           )}
         </StatCard>
-        <StatCard icon={MemoryIcon} tone="violet" label="Memory" value={formatBytes(live ? live.memoryUsedBytes : info.memoryBytes)}>
-          {live && <Meter value={live.memoryUsedBytes / live.memoryTotalBytes} label="Memory used" className="mb-2" />}
-          {live && `of ${formatBytes(info.memoryBytes)} in use · `}
-          {limitMb === undefined ? "Not limited for servers" : `${formatMegabytes(limitMb)} usable by servers`}
+        <StatCard icon={MemoryIcon} tone="violet" label={t("Memory")} value={formatBytes(live ? live.memoryUsedBytes : info.memoryBytes)}>
+          {live && <Meter value={live.memoryUsedBytes / live.memoryTotalBytes} label={t("Memory used")} className="mb-2" />}
+          {live && `${t("of {{memory}} in use", { memory: formatBytes(info.memoryBytes) })} · `}
+          {limitMb === undefined ? t("Not limited for servers") : t("{{memory}} usable by servers", { memory: formatMegabytes(limitMb) })}
         </StatCard>
-        <StatCard icon={CubeIcon} tone="success" label="Assigned" value={assignedMb === undefined ? "–" : formatMegabytes(assignedMb)}>
+        <StatCard icon={CubeIcon} tone="success" label={t("Assigned")} value={assignedMb === undefined ? "–" : formatMegabytes(assignedMb)}>
           {assignedMb !== undefined && capacityMb ? (
             <div className="space-y-2">
-              <Meter value={assignedMb / capacityMb} label="Memory assigned to servers" />
-              <p>of {formatMegabytes(capacityMb)}</p>
+              <Meter value={assignedMb / capacityMb} label={t("Memory assigned to servers")} />
+              <p>{t("of {{limit}}", { limit: formatMegabytes(capacityMb) })}</p>
             </div>
           ) : null}
         </StatCard>
         <StatCard
           icon={ShieldCheckIcon}
           tone="info"
-          label="Certificate valid until"
+          label={t("Certificate valid until")}
           value={node.certificateExpiresAt ? formatDate(node.certificateExpiresAt) : "–"}
         >
-          Renewed automatically
+          {t("Renewed automatically")}
         </StatCard>
       </div>
       <dl className="mt-4 surface grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl px-5 py-4 md:grid-cols-4">

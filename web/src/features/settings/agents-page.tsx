@@ -1,6 +1,8 @@
 import { GearIcon, HardDrivesIcon, TerminalWindowIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
+import { Trans } from "react-i18next"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
@@ -20,9 +22,14 @@ export function AgentsSettingsPage() {
   if (error) return <ErrorCallout error={error} />
   if (nodes.length === 0) {
     return (
-      <EmptyState icon={HardDrivesIcon} tone="info" title="No agents yet" description="Add a node to connect its agent to this master.">
+      <EmptyState
+        icon={HardDrivesIcon}
+        tone="info"
+        title={t("No agents yet")}
+        description={t("Add a node to connect its agent to this master.")}
+      >
         <Button asChild>
-          <Link to="/nodes">Go to nodes</Link>
+          <Link to="/nodes">{t("Go to nodes")}</Link>
         </Button>
       </EmptyState>
     )
@@ -33,14 +40,14 @@ export function AgentsSettingsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Node</TableHead>
-              <TableHead className="hidden md:table-cell">Agent</TableHead>
-              <TableHead className="hidden lg:table-cell">Certificate</TableHead>
-              <TableHead className="hidden sm:table-cell">Ports</TableHead>
-              <TableHead className="hidden sm:table-cell">Memory</TableHead>
-              <TableHead className="hidden xl:table-cell">Storage</TableHead>
+              <TableHead>{t("Node")}</TableHead>
+              <TableHead className="hidden md:table-cell">{t("Agent")}</TableHead>
+              <TableHead className="hidden lg:table-cell">{t("Certificate")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("Ports")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("Memory")}</TableHead>
+              <TableHead className="hidden xl:table-cell">{t("Storage")}</TableHead>
               <TableHead>
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("Actions")}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -51,9 +58,11 @@ export function AgentsSettingsPage() {
           </TableBody>
         </Table>
       </div>
-      <Callout className="mt-6" title="Only the node decides where data is stored">
-        Agents accept commands from this master and from their local CLI only. Storage locations can't be added from the panel: run{" "}
-        <span className="font-mono">sudo mcsm-agent storage add &lt;name&gt; &lt;path&gt;</span> on the node.
+      <Callout className="mt-6" title={t("Only the node decides where data is stored")}>
+        <Trans
+          i18nKey="Agents accept commands from this master and from their local CLI only. Storage locations can't be added from the panel: run <command/> on the node."
+          components={{ command: <span className="font-mono">sudo mcsm-agent storage add &lt;name&gt; &lt;path&gt;</span> }}
+        />
       </Callout>
     </>
   )
@@ -88,16 +97,23 @@ function AgentRow({ node }: { node: Node }) {
       <TableCell className="hidden lg:table-cell">
         {node.certificateExpiresAt ? formatDate(node.certificateExpiresAt) : <span className="text-muted-foreground">–</span>}
       </TableCell>
-      <TableCell className="hidden font-mono sm:table-cell">{node.portMin === null ? "any" : `${node.portMin}–${node.portMax}`}</TableCell>
+      <TableCell className="hidden font-mono sm:table-cell">
+        {node.portMin === null ? t("any") : `${node.portMin}–${node.portMax}`}
+      </TableCell>
       <TableCell className="hidden sm:table-cell">
-        {node.memoryReserveMb === null ? "Not limited" : `${formatMegabytes(node.memoryReserveMb)} reserved`}
+        {node.memoryReserveMb === null ? t("Not limited") : t("{{memory}} reserved", { memory: formatMegabytes(node.memoryReserveMb) })}
       </TableCell>
       <TableCell className="hidden xl:table-cell">{node.defaultStorage}</TableCell>
       <TableCell>
         <span className="flex justify-end gap-1">
           {node.enrolledAt && can("terminal.use") && (
             <Button variant="ghost" size="icon-sm" asChild>
-              <Link to="/settings/terminal" search={{ target: node.id }} aria-label={`Terminal of ${node.name}`} title="Terminal">
+              <Link
+                to="/settings/terminal"
+                search={{ target: node.id }}
+                aria-label={t("Terminal of {{name}}", { name: node.name })}
+                title={t("Terminal")}
+              >
                 <TerminalWindowIcon />
               </Link>
             </Button>
@@ -106,7 +122,7 @@ function AgentRow({ node }: { node: Node }) {
             <NodeSettingsDialog
               node={node}
               trigger={
-                <Button variant="ghost" size="icon-sm" aria-label={`Settings of ${node.name}`} title="Settings">
+                <Button variant="ghost" size="icon-sm" aria-label={t("Settings of {{name}}", { name: node.name })} title={t("Settings")}>
                   <GearIcon />
                 </Button>
               }

@@ -1,3 +1,4 @@
+import { t } from "i18next"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CheckCircleIcon, InfoIcon, WarningIcon, XCircleIcon, SpinnerIcon } from "@phosphor-icons/react"
 import { useTheme } from "@/lib/theme"
@@ -8,6 +9,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme}
+      containerAriaLabel={t("Notifications")}
       className="toaster group"
       icons={{
         success: (

@@ -1,7 +1,9 @@
 import { PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, type ReactElement, useState } from "react"
+import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -47,9 +49,14 @@ function blank(template?: Template): Form {
 }
 
 /** What a template adds to a new server, e.g. "Java 21 · 3 properties · LuckPerms". */
-function templateSummary(t: Template) {
-  const count = Object.keys(t.properties).length
-  return [t.java && `Java ${t.java}`, t.aikarFlags && "Aikar's flags", count && `${count} properties`, ...t.plugins.map((p) => p.title)]
+function templateSummary(template: Template) {
+  const count = Object.keys(template.properties).length
+  return [
+    template.java && t("Java {{version}}", { version: template.java }),
+    template.aikarFlags && t("Aikar's flags"),
+    count && t("{{count}} properties", { count, defaultValue_one: "{{count}} property" }),
+    ...template.plugins.map((p) => p.title),
+  ]
     .filter(Boolean)
     .join(" · ")
 }
@@ -76,7 +83,7 @@ export function CreateServerDialog({
   const { data: allNodes = [], isPending: nodesPending } = useQuery({ ...nodesQuery, enabled: open && !fixedNode })
   const nodes = allNodes.filter((n) => can("servers.create", n.id))
   const nodeId = fixedNode ?? form.nodeId ?? nodes.find((n) => n.status === "online")?.id
-  const template = fixedTemplate ?? templates.find((t) => t.id === form.templateId)
+  const template = fixedTemplate ?? templates.find((candidate) => candidate.id === form.templateId)
   const { data: node } = useQuery({ ...nodeQuery(nodeId ?? ""), enabled: open && !!nodeId })
   const { data: servers } = useQuery({ ...serversQuery(nodeId ?? ""), enabled: open && !!nodeId })
   const locations = node?.info?.storage ?? []
@@ -101,7 +108,7 @@ export function CreateServerDialog({
   }
 
   function chooseTemplate(id: string) {
-    const chosen = templates.find((t) => t.id === id)
+    const chosen = templates.find((candidate) => candidate.id === id)
     setForm({ ...blank(chosen), name: form.name, acceptEula: form.acceptEula, nodeId: form.nodeId, port: form.port, storage: form.storage })
   }
 
@@ -118,8 +125,11 @@ export function CreateServerDialog({
       { nodeId, server, plugins: template?.plugins.map((p) => p.id) },
       {
         onSuccess: ({ server: created, pluginError }) => {
-          if (pluginError) toast.warning(`Created ${created.name}, but its plugins couldn't be installed: ${pluginError}`)
-          else toast.success(`Created ${created.name}`)
+          if (pluginError)
+            toast.warning(
+              t("Created {{name}}, but its plugins couldn't be installed: {{error}}", { name: created.name, error: pluginError }),
+            )
+          else toast.success(t("Created {{name}}", { name: created.name }))
           onOpenChange(false)
           if (!fixedNode) void navigate({ to: "/nodes/$nodeId/servers/$serverId", params: { nodeId, serverId: created.id } })
         },
@@ -133,53 +143,61 @@ export function CreateServerDialog({
         {trigger ?? (
           <Button>
             <PlusIcon />
-            Create server
+            {t("Create server")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>{fixedTemplate ? `Create server from ${fixedTemplate.name}` : "Create server"}</DialogTitle>
-            <DialogDescription>The first server on a node downloads the server image, which can take a few minutes.</DialogDescription>
+            <DialogTitle>
+              {fixedTemplate ? t("Create server from {{template}}", { template: fixedTemplate.name }) : t("Create server")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("The first server on a node downloads the server image, which can take a few minutes.")}
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             {!fixedTemplate && templates.length > 0 && (
               <Field>
-                <FieldLabel htmlFor="server-template">Template</FieldLabel>
+                <FieldLabel htmlFor="server-template">{t("Template")}</FieldLabel>
                 <Select value={form.templateId ?? none} onValueChange={(id) => id && chooseTemplate(id)}>
                   <SelectTrigger id="server-template" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={none}>No template</SelectItem>
-                    {templates.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                        <span className="text-muted-foreground">{serverType(t.type).label}</span>
+                    <SelectItem value={none}>{t("No template")}</SelectItem>
+                    {templates.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.name}
+                        <span className="text-muted-foreground">{serverType(option.type).label}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
             )}
-            {template && templateSummary(template) && <FieldDescription>From the template: {templateSummary(template)}</FieldDescription>}
+            {template && templateSummary(template) && (
+              <FieldDescription>{t("From the template: {{summary}}", { summary: templateSummary(template) })}</FieldDescription>
+            )}
             {!fixedNode && (
               <Field>
-                <FieldLabel htmlFor="server-node">Node</FieldLabel>
+                <FieldLabel htmlFor="server-node">{t("Node")}</FieldLabel>
                 {/* Radix reports "" while the options of a new value load; that is no choice. */}
                 <Select
                   value={nodeId ?? ""}
                   onValueChange={(id) => id && setForm({ ...form, nodeId: id, port: undefined, storage: undefined })}
                 >
                   <SelectTrigger id="server-node" className="w-full">
-                    <SelectValue placeholder={nodesPending ? "Loading nodes…" : "No node is online"} />
+                    <SelectValue placeholder={nodesPending ? t("Loading nodes…") : t("No node is online")} />
                   </SelectTrigger>
                   <SelectContent>
                     {nodes.map((n) => (
                       <SelectItem key={n.id} value={n.id} disabled={n.status !== "online"}>
                         {n.name}
-                        <span className="text-muted-foreground">{n.status === "online" ? n.address : n.status}</span>
+                        <span className="text-muted-foreground">
+                          {n.status === "online" ? n.address : n.status === "pending" ? t("Waiting for agent") : t("Offline")}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -187,10 +205,10 @@ export function CreateServerDialog({
               </Field>
             )}
             <Field>
-              <FieldLabel htmlFor="server-name">Name</FieldLabel>
+              <FieldLabel htmlFor="server-name">{t("Name")}</FieldLabel>
               <Input
                 id="server-name"
-                placeholder="Lobby"
+                placeholder={t("Lobby")}
                 required
                 maxLength={32}
                 value={form.name}
@@ -199,7 +217,7 @@ export function CreateServerDialog({
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor="server-type">Software</FieldLabel>
+                <FieldLabel htmlFor="server-type">{t("Software")}</FieldLabel>
                 <Select value={form.type} onValueChange={changeType} disabled={!!template}>
                   <SelectTrigger id="server-type" className="w-full">
                     <SelectValue />
@@ -208,12 +226,12 @@ export function CreateServerDialog({
                     {[false, true].map((isProxy) => (
                       <SelectGroup key={String(isProxy)}>
                         {isProxy && <SelectSeparator />}
-                        <SelectLabel>{isProxy ? "Proxies for networks" : "Game servers"}</SelectLabel>
+                        <SelectLabel>{isProxy ? t("Proxies for networks") : t("Game servers")}</SelectLabel>
                         {serverTypes
-                          .filter((t) => t.proxy === isProxy)
-                          .map((t) => (
-                            <SelectItem key={t.value} value={t.value}>
-                              {t.label}
+                          .filter((s) => s.proxy === isProxy)
+                          .map((s) => (
+                            <SelectItem key={s.value} value={s.value}>
+                              {s.label}
                             </SelectItem>
                           ))}
                       </SelectGroup>
@@ -223,10 +241,10 @@ export function CreateServerDialog({
               </Field>
               {!proxy && (
                 <Field>
-                  <FieldLabel htmlFor="server-version">Minecraft version</FieldLabel>
+                  <FieldLabel htmlFor="server-version">{t("Minecraft version")}</FieldLabel>
                   <Input
                     id="server-version"
-                    placeholder="Latest"
+                    placeholder={t("Latest")}
                     value={form.version}
                     onChange={(e) => setForm({ ...form, version: e.target.value })}
                   />
@@ -235,7 +253,7 @@ export function CreateServerDialog({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor="server-memory">Memory</FieldLabel>
+                <FieldLabel htmlFor="server-memory">{t("Memory")}</FieldLabel>
                 <Select value={String(form.memoryMb)} onValueChange={(v) => setForm({ ...form, memoryMb: Number(v) })}>
                   <SelectTrigger id="server-memory" className="w-full">
                     <SelectValue />
@@ -252,7 +270,7 @@ export function CreateServerDialog({
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor="server-port">Port</FieldLabel>
+                <FieldLabel htmlFor="server-port">{t("Port")}</FieldLabel>
                 <Input
                   id="server-port"
                   type="number"
@@ -267,7 +285,7 @@ export function CreateServerDialog({
             </div>
             {locations.length > 1 && (
               <Field>
-                <FieldLabel htmlFor="server-storage">Storage</FieldLabel>
+                <FieldLabel htmlFor="server-storage">{t("Storage")}</FieldLabel>
                 <Select value={storage} onValueChange={(storage) => setForm({ ...form, storage })}>
                   <SelectTrigger id="server-storage" className="w-full">
                     <SelectValue />
@@ -276,7 +294,7 @@ export function CreateServerDialog({
                     {locations.map((l) => (
                       <SelectItem key={l.name} value={l.name}>
                         {l.name}
-                        <span className="text-muted-foreground">{formatBytes(l.freeBytes)} free</span>
+                        <span className="text-muted-foreground">{t("{{size}} free", { size: formatBytes(l.freeBytes) })}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -287,22 +305,26 @@ export function CreateServerDialog({
               <Checkbox id="server-eula" checked={form.acceptEula} onCheckedChange={(v) => setForm({ ...form, acceptEula: v === true })} />
               <FieldLabel htmlFor="server-eula" className="font-normal">
                 <span>
-                  I accept the{" "}
-                  <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer" className="underline underline-offset-4">
-                    Minecraft EULA
-                  </a>
+                  <Trans
+                    i18nKey="I accept the <link>Minecraft EULA</link>"
+                    components={{
+                      link: (
+                        <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer" className="underline underline-offset-4" />
+                      ),
+                    }}
+                  />
                 </span>
               </FieldLabel>
             </Field>
-            {proxy && <FieldDescription>Proxies always run the latest release of their software.</FieldDescription>}
+            {proxy && <FieldDescription>{t("Proxies always run the latest release of their software.")}</FieldDescription>}
             {create.error && <FieldError>{create.error.message}</FieldError>}
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={create.isPending || !nodeId}>
-              {create.isPending ? (template?.plugins.length ? "Creating and installing…" : "Creating…") : "Create server"}
+              {create.isPending ? (template?.plugins.length ? t("Creating and installing…") : t("Creating…")) : t("Create server")}
             </Button>
           </DialogFooter>
         </form>

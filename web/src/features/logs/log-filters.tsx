@@ -1,12 +1,13 @@
 import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { nodesQuery } from "@/features/nodes/api"
 import { serversQuery } from "@/features/servers/api"
-import { categories, levels } from "./meta"
+import { categories } from "./meta"
 import { type LogSearch, ranges } from "./search"
 
 const all = "all"
@@ -30,12 +31,15 @@ export function LogFilters({ search, onChange }: { search: LogSearch; onChange: 
   const chips: [string, Partial<LogSearch>][] = []
   if (search.hour)
     chips.push([
-      `From ${new Date(search.hour).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}, one hour`,
+      t("From {{time}}, one hour", { time: new Date(search.hour).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) }),
       { hour: undefined },
     ])
-  if (search.user) chips.push([`User ${search.user}`, { user: undefined }])
+  if (search.user) chips.push([t("User {{user}}", { user: search.user }), { user: undefined }])
   if (search.server)
-    chips.push([`Server ${servers?.find((srv) => srv.id === search.server)?.name ?? search.server}`, { server: undefined }])
+    chips.push([
+      t("Server {{server}}", { server: servers?.find((srv) => srv.id === search.server)?.name ?? search.server }),
+      { server: undefined },
+    ])
   const filtered = Object.values(search).some(Boolean)
 
   return (
@@ -47,54 +51,64 @@ export function LogFilters({ search, onChange }: { search: LogSearch; onChange: 
           </InputGroupAddon>
           <InputGroupInput
             type="search"
-            placeholder="Search messages, users, servers, IPs…"
-            aria-label="Search the log"
+            placeholder={t("Search messages, users, servers, IPs…")}
+            aria-label={t("Search the log")}
             value={text}
             onChange={(e) => type(e.target.value)}
           />
         </InputGroup>
         <Choice
-          label="Time"
+          label={t("Time")}
           value={search.hour ? "hour" : search.range}
           onChange={(range) => onChange({ range: range as LogSearch["range"], hour: undefined })}
-          everything="All time"
+          everything={t("All time")}
         >
-          {search.hour && <SelectItem value="hour">Chosen hour</SelectItem>}
+          {search.hour && <SelectItem value="hour">{t("Chosen hour")}</SelectItem>}
           {Object.entries(ranges).map(([value, { label }]) => (
             <SelectItem key={value} value={value}>
-              {label}
+              {t(label)}
             </SelectItem>
           ))}
         </Choice>
         <Choice
-          label="Level"
+          label={t("Level")}
           value={search.level}
           onChange={(level) => onChange({ level: level as LogSearch["level"] })}
-          everything="All levels"
+          everything={t("All levels")}
         >
-          <SelectItem value="info">Info and above</SelectItem>
-          <SelectItem value="warn">Warnings and errors</SelectItem>
-          <SelectItem value="error">{levels.error.plural} only</SelectItem>
+          <SelectItem value="info">{t("Info and above")}</SelectItem>
+          <SelectItem value="warn">{t("Warnings and errors")}</SelectItem>
+          <SelectItem value="error">{t("Errors only")}</SelectItem>
         </Choice>
-        <Choice label="Category" value={search.category} onChange={(category) => onChange({ category })} everything="All categories">
+        <Choice
+          label={t("Category")}
+          value={search.category}
+          onChange={(category) => onChange({ category })}
+          everything={t("All categories")}
+        >
           {Object.entries(categories).map(([value, label]) => (
             <SelectItem key={value} value={value}>
-              {label}
+              {t(label)}
             </SelectItem>
           ))}
         </Choice>
         <Choice
-          label="Source"
+          label={t("Source")}
           value={search.source}
           onChange={(source) => onChange({ source: source as LogSearch["source"] })}
-          everything="Master and agents"
+          everything={t("Master and agents")}
         >
-          <SelectItem value="master">Master</SelectItem>
-          <SelectItem value="agent">Agents</SelectItem>
+          <SelectItem value="master">{t("Master")}</SelectItem>
+          <SelectItem value="agent">{t("Agents")}</SelectItem>
         </Choice>
         {nodes.length > 0 && (
-          <Choice label="Node" value={search.node} onChange={(id) => onChange({ node: id, server: undefined })} everything="All nodes">
-            {search.node && !node && <SelectItem value={search.node}>Removed node</SelectItem>}
+          <Choice
+            label={t("Node")}
+            value={search.node}
+            onChange={(id) => onChange({ node: id, server: undefined })}
+            everything={t("All nodes")}
+          >
+            {search.node && !node && <SelectItem value={search.node}>{t("Removed node")}</SelectItem>}
             {nodes.map((n) => (
               <SelectItem key={n.id} value={n.id}>
                 {n.name}
@@ -113,7 +127,7 @@ export function LogFilters({ search, onChange }: { search: LogSearch; onChange: 
               {label}
               <button
                 type="button"
-                aria-label={`Remove the filter: ${label}`}
+                aria-label={t("Remove the filter: {{filter}}", { filter: label })}
                 onClick={() => onChange(change)}
                 className="grid size-5 place-items-center rounded-full outline-none hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-ring"
               >
@@ -131,7 +145,7 @@ export function LogFilters({ search, onChange }: { search: LogSearch; onChange: 
                 onChange(Object.fromEntries(Object.keys(search).map((key) => [key, undefined])))
               }}
             >
-              Clear filters
+              {t("Clear filters")}
             </Button>
           )}
         </div>

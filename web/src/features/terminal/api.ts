@@ -1,3 +1,4 @@
+import { t } from "i18next"
 import { responseError } from "@/lib/api"
 
 /** The target of the master's own commands; other targets are node IDs. */
@@ -30,7 +31,7 @@ export async function runCommand(
   let buffer = ""
   for (;;) {
     const { done, value } = await reader.read()
-    if (done) throw new Error("The connection to the master was lost.")
+    if (done) throw new Error(t("The connection to the master was lost."))
     buffer += value
     for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
       const event: TerminalEvent = JSON.parse(buffer.slice(0, end))

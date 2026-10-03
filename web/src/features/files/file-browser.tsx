@@ -1,6 +1,7 @@
 import { ArrowUpIcon, FolderPlusIcon, UploadSimpleIcon, WarningIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type AnchorHTMLAttributes, type DragEvent, Fragment, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
@@ -48,7 +49,7 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
     if (!writable) return
     const items = [...event.dataTransfer.items].filter((item) => item.kind === "file")
     const isFolder = (item: DataTransferItem) => item.webkitGetAsEntry()?.isDirectory
-    if (items.some(isFolder)) toast.error("Folders can't be uploaded. Create the folder and upload the files inside it.")
+    if (items.some(isFolder)) toast.error(t("Folders can't be uploaded. Create the folder and upload the files inside it."))
     start(items.flatMap((item) => (isFolder(item) ? [] : (item.getAsFile() ?? []))))
   }
 
@@ -71,11 +72,11 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
       onDrop={drop}
     >
       <h2 id="files-heading" className="sr-only">
-        Files
+        {t("Files")}
       </h2>
       {server.state !== "stopped" && (
         <Callout tone="warning" icon={WarningIcon} className="mb-4">
-          The server is running. Stop it before you replace worlds or plugins, as it may overwrite or still use them.
+          {t("The server is running. Stop it before you replace worlds or plugins, as it may overwrite or still use them.")}
         </Callout>
       )}
       <UploadList uploads={uploads} onCancel={cancel} />
@@ -85,11 +86,11 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
           <div className="flex gap-2" hidden={!writable}>
             <Button variant="outline" onClick={() => setCreating(true)}>
               <FolderPlusIcon />
-              New folder
+              {t("New folder")}
             </Button>
             <Button onClick={() => picker.current?.click()}>
               <UploadSimpleIcon />
-              Upload
+              {t("Upload")}
             </Button>
             <input
               ref={picker}
@@ -111,11 +112,11 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden w-28 text-right sm:table-cell">Size</TableHead>
-                <TableHead className="hidden w-48 md:table-cell">Modified</TableHead>
+                <TableHead>{t("Name")}</TableHead>
+                <TableHead className="hidden w-28 text-right sm:table-cell">{t("Size")}</TableHead>
+                <TableHead className="hidden w-48 md:table-cell">{t("Modified")}</TableHead>
                 <TableHead className="w-12">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("Actions")}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -129,7 +130,7 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
                       className="inline-flex items-center gap-2.5 text-muted-foreground hover:text-foreground"
                     >
                       <ArrowUpIcon className="size-4" />
-                      Parent folder
+                      {t("Parent folder")}
                     </FolderLink>
                   </TableCell>
                 </TableRow>
@@ -137,7 +138,7 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
               {data.files.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="py-14 text-center text-muted-foreground">
-                    This folder is empty. Drop files here to upload them.
+                    {t("This folder is empty. Drop files here to upload them.")}
                   </TableCell>
                 </TableRow>
               )}
@@ -159,27 +160,38 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
           </Table>
         )}
       </div>
-      {data?.truncated && <p className="mt-3 text-sm text-muted-foreground">This folder has more entries than can be listed here.</p>}
+      {data?.truncated && (
+        <p className="mt-3 text-sm text-muted-foreground">{t("This folder has more entries than can be listed here.")}</p>
+      )}
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
           <IconTile icon={UploadSimpleIcon} size="lg" />
-          <p className="heading text-lg">Drop to upload to {folder}</p>
+          <p className="heading text-lg">{t("Drop to upload to {{folder}}", { folder })}</p>
         </div>
       )}
       <NameDialog
         open={creating}
         onOpenChange={setCreating}
-        title="New folder"
-        label="Name"
-        action="Create folder"
+        title={t("New folder")}
+        label={t("Name")}
+        action={t("Create folder")}
         onSubmit={(name) => change.mutateAsync({ action: "mkdir", path: join(path, name) })}
       />
       <ConfirmDialog
         open={replace.length > 0}
         onOpenChange={(open) => !open && setReplace([])}
-        title={replace.length === 1 ? `Replace ${replace[0].name}?` : `Replace ${replace.length} files?`}
-        description={`${replace.map((f) => f.name).join(", ")} already ${replace.length === 1 ? "exists" : "exist"} in ${folder}.`}
-        action="Replace"
+        title={
+          replace.length === 1
+            ? t("Replace {{name}}?", { name: replace[0].name })
+            : t("Replace {{count}} files?", { count: replace.length })
+        }
+        description={t("{{names}} already exist in {{folder}}.", {
+          count: replace.length,
+          names: replace.map((f) => f.name).join(", "),
+          folder,
+          defaultValue_one: "{{names}} already exists in {{folder}}.",
+        })}
+        action={t("Replace")}
         destructive
         onConfirm={() => add(replace, path, true)}
       />
@@ -221,7 +233,7 @@ function EntryLink({ files, dir, entry }: { files: ServerFiles; dir: string; ent
     )
   if (entry.size > maxEditableBytes)
     return (
-      <a href={contentUrl(files, path)} download className={className} title="Too large for the editor, downloads the file">
+      <a href={contentUrl(files, path)} download className={className} title={t("Too large for the editor, downloads the file")}>
         {content}
       </a>
     )

@@ -1,6 +1,7 @@
 import { CalendarCheckIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { BackLink } from "@/components/back-link"
@@ -25,23 +26,34 @@ export function PolicyPage() {
   const save = policies.useSaveTask(policyId)
   return (
     <>
-      <BackLink to="/policies">Policies</BackLink>
+      <BackLink to="/policies">{t("Policies")}</BackLink>
       {isPending ? (
         <Skeleton className="h-96 rounded-xl" />
       ) : error ? (
         <ErrorCallout error={error} />
       ) : (
         <>
-          <PageHeader icon={CalendarCheckIcon} tone="warning" title={policy.name} description={actions[policy.settings.action].description} />
+          <PageHeader
+            icon={CalendarCheckIcon}
+            tone="warning"
+            title={policy.name}
+            description={t(actions[policy.settings.action].description)}
+          />
           {/* Without the permission to manage policies, the policy is only shown. */}
           <fieldset disabled={!manage} className="contents">
             <PolicyForm
               // Remounting on save resets the form to what was stored.
               key={JSON.stringify(policy)}
-              initial={{ name: policy.name, enabled: policy.enabled, schedule: policy.schedule, targets: policy.targets, settings: policy.settings }}
-              submitLabel="Save policy"
+              initial={{
+                name: policy.name,
+                enabled: policy.enabled,
+                schedule: policy.schedule,
+                targets: policy.targets,
+                settings: policy.settings,
+              }}
+              submitLabel={t("Save policy")}
               save={save}
-              onSaved={(p) => toast.success(`Saved ${p.name}`)}
+              onSaved={(p) => toast.success(t("Saved {{name}}", { name: p.name }))}
             />
           </fieldset>
         </>
@@ -55,19 +67,19 @@ export function NewPolicyPage() {
   const navigate = useNavigate()
   return (
     <>
-      <BackLink to="/policies">Policies</BackLink>
+      <BackLink to="/policies">{t("Policies")}</BackLink>
       <PageHeader
         icon={CalendarCheckIcon}
         tone="warning"
-        title="New policy"
-        description="Restart, stop or start servers or whole nodes at set times, or run console commands."
+        title={t("New policy")}
+        description={t("Restart, stop or start servers or whole nodes at set times, or run console commands.")}
       />
       <PolicyForm
         initial={emptyPolicy}
-        submitLabel="Create policy"
+        submitLabel={t("Create policy")}
         save={save}
         onSaved={(p) => {
-          toast.success(`Created ${p.name}`)
+          toast.success(t("Created {{name}}", { name: p.name }))
           void navigate({ to: "/policies", ignoreBlocker: true })
         }}
       />
@@ -91,18 +103,18 @@ function PolicyForm({
   return (
     <TaskForm
       initial={initial}
-      noun="policy"
+      kind="policy"
       submitLabel={submitLabel}
       pending={save.isPending}
       error={save.error}
       onSubmit={(input) => save.mutate(input, { onSuccess: onSaved })}
     >
       {(settings, set) => (
-        <FormSection title="Action" description="What happens at the scheduled times.">
+        <FormSection title={t("Action")} description={t("What happens at the scheduled times.")}>
           <RadioGroup
             value={settings.action}
             onValueChange={(action) => set({ action: action as PolicyAction })}
-            aria-label="Action"
+            aria-label={t("Action")}
             className="gap-3 sm:grid-cols-2"
           >
             {Object.entries(actions).map(([action, { label, description, icon: Icon }]) => (
@@ -110,8 +122,8 @@ function PolicyForm({
                 <Field orientation="horizontal" className="items-start">
                   <Icon className="mt-0.5 size-5 shrink-0 text-warning" weight="duotone" />
                   <FieldContent>
-                    <FieldTitle>{label}</FieldTitle>
-                    <FieldDescription>{description}</FieldDescription>
+                    <FieldTitle>{t(label)}</FieldTitle>
+                    <FieldDescription>{t(description)}</FieldDescription>
                   </FieldContent>
                   <RadioGroupItem id={`action-${action}`} value={action} />
                 </Field>
@@ -121,10 +133,11 @@ function PolicyForm({
           {warns(settings.action) && (
             <div className="grid gap-4 sm:grid-cols-[12rem_1fr]">
               <Field>
-                <FieldLabel htmlFor="policy-warnings">Warn the players</FieldLabel>
+                <FieldLabel htmlFor="policy-warnings">{t("Warn the players")}</FieldLabel>
                 <Input
                   id="policy-warnings"
                   inputMode="numeric"
+                  // i18next-instrument-ignore-next-line: an example of what to enter
                   placeholder="10, 5, 1"
                   className="font-mono"
                   value={warnings}
@@ -133,34 +146,38 @@ function PolicyForm({
                     set({ warnings: e.target.value.split(/[\s,]+/).flatMap((m) => (/^\d+$/.test(m) ? [Number(m)] : [])) })
                   }}
                 />
-                <FieldDescription>Minutes before, up to 60.</FieldDescription>
+                <FieldDescription>{t("Minutes before, up to 60.")}</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor="policy-message">Warning</FieldLabel>
+                <FieldLabel htmlFor="policy-message">{t("Warning")}</FieldLabel>
                 <Input
                   id="policy-message"
                   maxLength={200}
-                  placeholder={`The server ${settings.action === "restart" ? "restarts" : "stops"} in {minutes} min.`}
+                  placeholder={
+                    settings.action === "restart" ? t("The server restarts in {minutes} min.") : t("The server stops in {minutes} min.")
+                  }
                   value={settings.message}
                   onChange={(e) => set({ message: e.target.value })}
                 />
-                <FieldDescription>Shown in the chat; {"{minutes}"} becomes the minutes left. Proxies get no warning.</FieldDescription>
+                <FieldDescription>{t("Shown in the chat; {minutes} becomes the minutes left. Proxies get no warning.")}</FieldDescription>
               </Field>
             </div>
           )}
           {settings.action === "command" && (
             <Field>
-              <FieldLabel htmlFor="policy-command">Command</FieldLabel>
+              <FieldLabel htmlFor="policy-command">{t("Command")}</FieldLabel>
               <Input
                 id="policy-command"
                 required
                 maxLength={1000}
-                placeholder="say Vote for us!"
+                placeholder={t("say Vote for us!")}
                 className="font-mono"
                 value={settings.command}
                 onChange={(e) => set({ command: e.target.value })}
               />
-              <FieldDescription>A single console command, without a slash. Proxies don't accept console commands yet.</FieldDescription>
+              <FieldDescription>
+                {t("A single console command, without a slash. Proxies don't accept console commands yet.")}
+              </FieldDescription>
             </Field>
           )}
         </FormSection>

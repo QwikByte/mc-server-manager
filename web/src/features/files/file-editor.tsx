@@ -1,7 +1,9 @@
 import { CaretLeftIcon, DownloadSimpleIcon, FloppyDiskIcon } from "@phosphor-icons/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
+import { t } from "i18next"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Pill } from "@/components/status"
@@ -36,7 +38,7 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
     mutationFn: () => upload(files, path, editor.current?.value() ?? "", { overwrite: true }),
     onSuccess: () => {
       setDirty(false)
-      toast.success(`Saved ${name}`)
+      toast.success(t("Saved {{name}}", { name }))
       void queryClient.invalidateQueries({ queryKey: ["files", files.nodeId, files.serverId] })
     },
     onError: (e) => toast.error(e.message),
@@ -62,24 +64,24 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
         <div className="flex min-w-0 items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
             <CaretLeftIcon />
-            Back
+            {t("Back")}
           </Button>
           <h2 id="editor-heading" className="truncate font-mono text-sm">
             {path}
           </h2>
-          {dirty && <Pill tone="warning">Unsaved</Pill>}
+          {dirty && <Pill tone="warning">{t("Unsaved")}</Pill>}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <a href={contentUrl(files, path)} download>
               <DownloadSimpleIcon />
-              Download
+              {t("Download")}
             </a>
           </Button>
           {writable && (
             <Button disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
               <FloppyDiskIcon />
-              {save.isPending ? "Saving…" : "Save"}
+              {save.isPending ? t("Saving…") : t("Save")}
             </Button>
           )}
         </div>
@@ -96,15 +98,17 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
         </Suspense>
       )}
       <p className="mt-3 text-xs text-muted-foreground" hidden={!writable}>
-        <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem]">Ctrl+S</kbd> saves. Servers read most settings
-        when they start, so restart the server to apply your changes.
+        <Trans
+          i18nKey="<key>Ctrl+S</key> saves. Servers read most settings when they start, so restart the server to apply your changes."
+          components={{ key: <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem]" /> }}
+        />
       </p>
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}
-        title="Discard your changes?"
-        description={`The changes to ${name} haven't been saved.`}
-        action="Discard changes"
+        title={t("Discard your changes?")}
+        description={t("The changes to {{name}} haven't been saved.", { name })}
+        action={t("Discard changes")}
         destructive
         onConfirm={() => blocker.proceed?.()}
       />

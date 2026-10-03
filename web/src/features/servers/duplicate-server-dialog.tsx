@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -61,7 +62,7 @@ export function DuplicateServerDialog({
       { id: server.id, ...values },
       {
         onSuccess: (copy) => {
-          toast.success(`Created ${copy.name}, a copy of ${server.name}`)
+          toast.success(t("Created {{copy}}, a copy of {{name}}", { copy: copy.name, name: server.name }))
           close(false)
           void navigate({ to: "/nodes/$nodeId/servers/$serverId", params: { nodeId, serverId: copy.id } })
         },
@@ -74,18 +75,20 @@ export function DuplicateServerDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Duplicate {server.name}</DialogTitle>
+            <DialogTitle>{t("Duplicate {{name}}", { name: server.name })}</DialogTitle>
             <DialogDescription>
-              The copy gets the worlds, plugins and settings of {server.name}, but not its place in a network. It starts stopped.
+              {t("The copy gets the worlds, plugins and settings of {{name}}, but not its place in a network. It starts stopped.", {
+                name: server.name,
+              })}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="duplicate-name">Name</FieldLabel>
+              <FieldLabel htmlFor="duplicate-name">{t("Name")}</FieldLabel>
               <Input id="duplicate-name" required maxLength={32} value={values.name} onChange={(e) => setName(e.target.value)} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="duplicate-port">Port</FieldLabel>
+              <FieldLabel htmlFor="duplicate-port">{t("Port")}</FieldLabel>
               <Input
                 id="duplicate-port"
                 type="number"
@@ -96,21 +99,21 @@ export function DuplicateServerDialog({
                 value={values.port}
                 onChange={(e) => setPort(e.target.valueAsNumber || 0)}
               />
-              <FieldDescription>Every server on a node needs its own port.</FieldDescription>
+              <FieldDescription>{t("Every server on a node needs its own port.")}</FieldDescription>
             </Field>
             {saves && (
               <FieldDescription>
-                The server saves its worlds first and pauses saving while they are copied. Players stay connected.
+                {t("The server saves its worlds first and pauses saving while they are copied. Players stay connected.")}
               </FieldDescription>
             )}
             {duplicate.error && <FieldError>{duplicate.error.message}</FieldError>}
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={duplicate.isPending}>
-              {duplicate.isPending ? "Copying…" : "Duplicate server"}
+              {duplicate.isPending ? t("Copying…") : t("Duplicate server")}
             </Button>
           </DialogFooter>
         </form>

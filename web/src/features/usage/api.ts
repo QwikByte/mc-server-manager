@@ -1,5 +1,6 @@
 import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import { msg } from "@/lib/i18n"
 
 export interface NodeUsage {
   /** CPU time used, in thousandths of a core. */
@@ -49,8 +50,8 @@ export function useServerUsage(nodeId: string, serverId: string) {
 export type UsageRange = "day" | "week"
 
 export const ranges: Record<UsageRange, { label: string; span: number }> = {
-  day: { label: "24 hours", span: 24 * 3_600_000 },
-  week: { label: "7 days", span: 7 * 24 * 3_600_000 },
+  day: { label: msg("24 hours"), span: 24 * 3_600_000 },
+  week: { label: msg("7 days"), span: 7 * 24 * 3_600_000 },
 }
 
 /** The average usage over a step; players is the most during the step. */
@@ -76,7 +77,9 @@ export const historyQuery = (nodeId: string, serverId: string | undefined, range
   queryOptions({
     queryKey: ["nodes", nodeId, "usage", serverId ?? "", range],
     queryFn: () =>
-      api<UsageHistory>(serverId ? `/nodes/${nodeId}/servers/${serverId}/usage/history?range=${range}` : `/nodes/${nodeId}/usage/history?range=${range}`),
+      api<UsageHistory>(
+        serverId ? `/nodes/${nodeId}/servers/${serverId}/usage/history?range=${range}` : `/nodes/${nodeId}/usage/history?range=${range}`,
+      ),
     refetchInterval: 60_000,
     placeholderData: keepPreviousData,
   })

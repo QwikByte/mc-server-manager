@@ -1,5 +1,6 @@
 import { ClockIcon, CubeIcon, HardDrivesIcon, type Icon, PlayIcon, TrashIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import type { ReactElement, ReactNode } from "react"
 import { toast } from "sonner"
 import { Callout } from "@/components/callout"
@@ -13,14 +14,15 @@ import { nodesQuery } from "@/features/nodes/api"
 import { allServersQuery } from "@/features/servers/api"
 import { formatDateTime } from "@/lib/format"
 import type { Target } from "@/features/servers/api"
+import { msg } from "@/lib/i18n"
 import type { Task, TaskApi } from "./api"
 import { describeSchedule } from "./describe"
 
 function taskStatus(task: Task<unknown>): Status {
-  if (task.running) return { tone: "warning", label: "Running", pulse: true }
-  if (!task.enabled) return { tone: "neutral", label: "Paused" }
-  if (task.lastRun?.error) return { tone: "destructive", label: "Failed" }
-  return { tone: "success", label: "Active" }
+  if (task.running) return { tone: "warning", label: msg("Running"), pulse: true }
+  if (!task.enabled) return { tone: "neutral", label: msg("Paused") }
+  if (task.lastRun?.error) return { tone: "destructive", label: msg("Failed") }
+  return { tone: "success", label: msg("Active") }
 }
 
 /**
@@ -52,11 +54,14 @@ export function TaskCard<S>({
   const run = taskApi.useRunTask()
   const remove = taskApi.useDeleteTask()
   const start = () =>
-    run.mutate(task.id, { onSuccess: () => toast.success(`Started ${task.name}`), onError: (e) => toast.error(e.message) })
+    run.mutate(task.id, {
+      onSuccess: () => toast.success(t("Started {{name}}", { name: task.name })),
+      onError: (e) => toast.error(e.message),
+    })
   const runButton = (
     <Button size="sm" disabled={task.running || run.isPending} onClick={confirmRun ? undefined : start}>
       <PlayIcon />
-      Run now
+      {t("Run now")}
     </Button>
   )
 
@@ -79,17 +84,23 @@ export function TaskCard<S>({
         <Targets targets={task.targets} />
       </div>
       {task.lastRun?.error && (
-        <Callout tone="destructive" title="The last run failed" className="py-3">
+        <Callout tone="destructive" title={t("The last run failed")} className="py-3">
           <span className="whitespace-pre-line">{task.lastRun.error}</span>
         </Callout>
       )}
       <p className="text-xs text-muted-foreground">
-        {task.lastRun ? `Last run ${formatDateTime(task.lastRun.at)}` : "Never run"}
-        {task.nextRun && ` · next ${formatDateTime(task.nextRun)}`}
+        {task.lastRun ? t("Last run {{time}}", { time: formatDateTime(task.lastRun.at) }) : t("Never run")}
+        {task.nextRun && ` · ${t("next {{time}}", { time: formatDateTime(task.nextRun) })}`}
       </p>
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-4" hidden={!manage}>
         {confirmRun ? (
-          <ConfirmDialog trigger={runButton} title={`Run ${task.name} now?`} description={confirmRun} action="Run now" onConfirm={start} />
+          <ConfirmDialog
+            trigger={runButton}
+            title={t("Run {{name}} now?", { name: task.name })}
+            description={confirmRun}
+            action={t("Run now")}
+            onConfirm={start}
+          />
         ) : (
           runButton
         )}
@@ -99,19 +110,22 @@ export function TaskCard<S>({
             <Button
               size="icon-sm"
               variant="ghost"
-              aria-label={`Delete ${task.name}`}
-              title="Delete"
+              aria-label={t("Delete {{name}}", { name: task.name })}
+              title={t("Delete")}
               className="ml-auto text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             >
               <TrashIcon />
             </Button>
           }
-          title={`Delete ${task.name}?`}
-          description="It no longer runs. A run in progress finishes."
-          action="Delete"
+          title={t("Delete {{name}}?", { name: task.name })}
+          description={t("It no longer runs. A run in progress finishes.")}
+          action={t("Delete")}
           destructive
           onConfirm={() =>
-            remove.mutate(task.id, { onSuccess: () => toast.success(`Deleted ${task.name}`), onError: (e) => toast.error(e.message) })
+            remove.mutate(task.id, {
+              onSuccess: () => toast.success(t("Deleted {{name}}", { name: task.name })),
+              onError: (e) => toast.error(e.message),
+            })
           }
         />
       </div>
@@ -123,15 +137,15 @@ export function TaskCard<S>({
 function Targets({ targets }: { targets: Target[] }) {
   const { data: nodes = [] } = useQuery(nodesQuery)
   const { data: servers = [] } = useQuery(allServersQuery)
-  if (targets.length === 0) return <p className="text-sm text-muted-foreground">No servers. Edit it to choose some.</p>
+  if (targets.length === 0) return <p className="text-sm text-muted-foreground">{t("No servers. Edit it to choose some.")}</p>
   return (
     <div className="flex flex-wrap gap-1.5">
-      {targets.map((t) => {
-        const node = nodes.find((n) => n.id === t.nodeId)?.name ?? "Node"
-        const server = servers.find((s) => s.nodeId === t.nodeId && s.id === t.serverId)
+      {targets.map((target) => {
+        const node = nodes.find((n) => n.id === target.nodeId)?.name ?? t("Node")
+        const server = servers.find((s) => s.nodeId === target.nodeId && s.id === target.serverId)
         return (
-          <Chip key={`${t.nodeId}/${t.serverId}`} icon={t.serverId ? CubeIcon : HardDrivesIcon} className="font-normal">
-            {t.serverId ? (server?.name ?? "Unreachable server") : `${node} · all servers`}
+          <Chip key={`${target.nodeId}/${target.serverId}`} icon={target.serverId ? CubeIcon : HardDrivesIcon} className="font-normal">
+            {target.serverId ? (server?.name ?? t("Unreachable server")) : t("{{node}} · all servers", { node })}
           </Chip>
         )
       })}

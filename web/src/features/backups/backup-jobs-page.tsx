@@ -1,6 +1,7 @@
 import { ArchiveIcon, PencilSimpleIcon, PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
@@ -10,14 +11,16 @@ import { useAccess } from "@/features/access/use-access"
 import { TaskCard } from "@/features/schedules/task-card"
 import { describeSelection, jobs } from "./api"
 
-const newJob = (
-  <Button asChild>
-    <Link to="/backups/new">
-      <PlusIcon />
-      New backup job
-    </Link>
-  </Button>
-)
+function NewJob() {
+  return (
+    <Button asChild>
+      <Link to="/backups/new">
+        <PlusIcon />
+        {t("New backup job")}
+      </Link>
+    </Button>
+  )
+}
 
 export function BackupJobsPage() {
   const manage = useAccess().can("backupjobs.manage")
@@ -27,9 +30,9 @@ export function BackupJobsPage() {
       <PageHeader
         icon={ArchiveIcon}
         tone="info"
-        title="Backups"
-        description="Jobs back up servers on a schedule and keep their newest backups. The backups of a server are in its Backups tab."
-        actions={manage && newJob}
+        title={t("Backups")}
+        description={t("Jobs back up servers on a schedule and keep their newest backups. The backups of a server are in its Backups tab.")}
+        actions={manage && <NewJob />}
       />
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -43,10 +46,10 @@ export function BackupJobsPage() {
         <EmptyState
           icon={ArchiveIcon}
           tone="info"
-          title="No backup jobs yet"
-          description="Create a job to back up servers or whole nodes every night, for example."
+          title={t("No backup jobs yet")}
+          description={t("Create a job to back up servers or whole nodes every night, for example.")}
         >
-          {manage && newJob}
+          {manage && <NewJob />}
         </EmptyState>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
@@ -63,12 +66,12 @@ export function BackupJobsPage() {
                   {job.name}
                 </Link>
               }
-              summary={`${describeSelection(job.settings.selection)} · ${job.settings.keep ? `keeps ${job.settings.keep}` : "keeps all"}`}
+              summary={`${describeSelection(job.settings.selection)} · ${job.settings.keep ? t("keeps {{count}}", { count: job.settings.keep }) : t("keeps all")}`}
               edit={
                 <Button asChild size="sm" variant="outline">
                   <Link to="/backups/$jobId" params={{ jobId: job.id }}>
                     <PencilSimpleIcon />
-                    Edit
+                    {t("Edit")}
                   </Link>
                 </Button>
               }

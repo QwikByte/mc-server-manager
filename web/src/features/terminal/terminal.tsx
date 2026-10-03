@@ -1,5 +1,7 @@
 import { BroomIcon, PaperPlaneRightIcon, StopIcon, TerminalWindowIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { Trans } from "react-i18next"
 import { runCommand } from "./api"
 
 type EntryState = "running" | "done" | "failed" | "stopped"
@@ -125,13 +127,13 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-console-muted transition-colors hover:bg-white/10 hover:text-console-foreground disabled:pointer-events-none disabled:opacity-40"
         >
           <BroomIcon className="size-4" />
-          Clear
+          {t("Clear")}
         </button>
       </div>
       <div
         ref={viewport}
         role="log"
-        aria-label="Terminal output"
+        aria-label={t("Terminal output")}
         tabIndex={0}
         onScroll={(e) => {
           const el = e.currentTarget
@@ -143,8 +145,13 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
       >
         {entries.length === 0 ? (
           <p className="text-console-muted">
-            Type <span className="text-console-foreground">help</span> to list the commands. ↑ and ↓ repeat earlier commands, Ctrl+C
-            stops a running one, and <span className="text-console-foreground">clear</span> empties the terminal.
+            <Trans
+              i18nKey="Type <help/> to list the commands. ↑ and ↓ repeat earlier commands, Ctrl+C stops a running one, and <clear/> empties the terminal."
+              components={{
+                help: <span className="text-console-foreground">help</span>,
+                clear: <span className="text-console-foreground">clear</span>,
+              }}
+            />
           </p>
         ) : (
           entries.map((entry) => <EntryView key={entry.id} entry={entry} />)
@@ -162,8 +169,8 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={busy ? "Running… Ctrl+C stops the command" : "Type a command, e.g. status"}
-          aria-label={`Command for ${prompt}`}
+          placeholder={busy ? t("Running… Ctrl+C stops the command") : t("Type a command, e.g. status")}
+          aria-label={t("Command for {{prompt}}", { prompt })}
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
@@ -173,7 +180,7 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
         {busy ? (
           <button
             type="button"
-            aria-label="Stop the command"
+            aria-label={t("Stop the command")}
             onClick={() => controller.current?.abort()}
             className="grid size-9 place-items-center rounded-lg bg-console-error/15 text-console-error transition-colors hover:bg-console-error/25"
           >
@@ -182,7 +189,7 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
         ) : (
           <button
             type="submit"
-            aria-label="Run the command"
+            aria-label={t("Run the command")}
             disabled={!input.trim()}
             className="grid size-9 place-items-center rounded-lg bg-console-command/15 text-console-command transition-colors hover:bg-console-command/25 disabled:pointer-events-none disabled:opacity-30"
           >
@@ -204,8 +211,8 @@ function EntryView({ entry }: { entry: Entry }) {
       </p>
       {/* Not wrapped, so that tables stay aligned on small screens. */}
       {entry.output && <pre className="overflow-x-auto font-mono [scrollbar-width:thin]">{entry.output}</pre>}
-      {entry.state === "failed" && <p className="text-console-error">Error: {entry.error}</p>}
-      {entry.state === "stopped" && <p className="text-console-warn">^C Stopped.</p>}
+      {entry.state === "failed" && <p className="text-console-error">{t("Error: {{error}}", { error: entry.error })}</p>}
+      {entry.state === "stopped" && <p className="text-console-warn">{`^C ${t("Stopped.")}`}</p>}
       {entry.state === "running" && (
         <p aria-hidden className="animate-pulse text-console-muted">
           ▍

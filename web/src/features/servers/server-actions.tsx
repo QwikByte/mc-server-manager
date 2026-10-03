@@ -9,6 +9,7 @@ import {
   StopIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -58,7 +59,7 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
     return (
       <Pill tone="info">
         <CircleNotchIcon className="size-3.5 animate-spin motion-reduce:animate-none" />
-        Moving to {move.toName}
+        {t("Moving to {{node}}", { node: move.toName })}
       </Pill>
     )
   }
@@ -69,23 +70,33 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
       {running ? (
         <>
           {may("servers.restart") && (
-            <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("restart", `Restarted ${server.name}`)}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={mutation.isPending}
+              onClick={() => run("restart", t("Restarted {{name}}", { name: server.name }))}
+            >
               <ArrowClockwiseIcon />
-              Restart
+              {t("Restart")}
             </Button>
           )}
           {may("servers.stop") && (
-            <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => run("stop", `Stopped ${server.name}`)}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={mutation.isPending}
+              onClick={() => run("stop", t("Stopped {{name}}", { name: server.name }))}
+            >
               <StopIcon />
-              Stop
+              {t("Stop")}
             </Button>
           )}
         </>
       ) : (
         may("servers.start") && (
-          <Button size="sm" disabled={mutation.isPending} onClick={() => run("start", `Started ${server.name}`)}>
+          <Button size="sm" disabled={mutation.isPending} onClick={() => run("start", t("Started {{name}}", { name: server.name }))}>
             <PlayIcon />
-            Start
+            {t("Start")}
           </Button>
         )
       )}
@@ -96,8 +107,8 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={`More actions for ${server.name}`}
-                title="More actions"
+                aria-label={t("More actions for {{name}}", { name: server.name })}
+                title={t("More actions")}
                 className="text-muted-foreground"
               >
                 <DotsThreeIcon weight="bold" />
@@ -107,19 +118,19 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
               {duplicate && (
                 <DropdownMenuItem onSelect={() => setDialog("duplicate")}>
                   <CopyIcon />
-                  Duplicate…
+                  {t("Duplicate…")}
                 </DropdownMenuItem>
               )}
               {movable && (
                 <DropdownMenuItem onSelect={() => setDialog("move")}>
                   <ArrowsLeftRightIcon />
-                  Move to another node…
+                  {t("Move to another node…")}
                 </DropdownMenuItem>
               )}
               {saveTemplate && (
                 <DropdownMenuItem onSelect={() => setDialog("template")}>
                   <StackIcon />
-                  Save as template…
+                  {t("Save as template…")}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -131,19 +142,19 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={`Delete ${server.name}`}
-                title="Delete server"
+                aria-label={t("Delete {{name}}", { name: server.name })}
+                title={t("Delete server")}
                 disabled={mutation.isPending}
                 className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               >
                 <TrashIcon />
               </Button>
             }
-            title={`Delete ${server.name}?`}
-            description="This stops the server and permanently deletes it with all worlds, plugins and settings. This can't be undone."
-            action="Delete server"
+            title={t("Delete {{name}}?", { name: server.name })}
+            description={t("This stops the server and permanently deletes it with all worlds, plugins and settings. This can't be undone.")}
+            action={t("Delete server")}
             destructive
-            onConfirm={() => run("delete", `Deleted ${server.name}`, onDeleted)}
+            onConfirm={() => run("delete", t("Deleted {{name}}", { name: server.name }), onDeleted)}
           />
         )}
       </div>

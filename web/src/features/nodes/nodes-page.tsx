@@ -1,6 +1,7 @@
 import { ArrowRightIcon, CpuIcon, CubeIcon, HardDrivesIcon, MemoryIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
@@ -26,8 +27,8 @@ export function NodesPage() {
       <PageHeader
         icon={HardDrivesIcon}
         tone="info"
-        title="Nodes"
-        description="Machines that run the agent and host your servers."
+        title={t("Nodes")}
+        description={t("Machines that run the agent and host your servers.")}
         actions={add}
       />
       {isPending ? (
@@ -42,8 +43,8 @@ export function NodesPage() {
         <EmptyState
           icon={HardDrivesIcon}
           tone="info"
-          title="No nodes yet"
-          description={add ? "Add the first machine that should run Minecraft servers." : "You can't see any nodes yet."}
+          title={t("No nodes yet")}
+          description={add ? t("Add the first machine that should run Minecraft servers.") : t("You can't see any nodes yet.")}
         >
           {add}
         </EmptyState>
@@ -71,17 +72,17 @@ function Overview({ nodes, servers }: { nodes: Node[]; servers?: NodeServer[] })
   const memoryBytes = online.reduce((sum, n) => sum + (n.info?.memoryBytes ?? 0), 0)
   return (
     <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <StatCard icon={HardDrivesIcon} tone="info" label="Nodes online" value={`${online.length} / ${nodes.length}`} />
-      <StatCard icon={CubeIcon} tone="success" label="Servers running" value={servers ? `${running} / ${servers.length}` : "–"} />
+      <StatCard icon={HardDrivesIcon} tone="info" label={t("Nodes online")} value={`${online.length} / ${nodes.length}`} />
+      <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={servers ? `${running} / ${servers.length}` : "–"} />
       <StatCard
         icon={MemoryIcon}
         tone="violet"
-        label="Memory assigned"
+        label={t("Memory assigned")}
         value={assignedMb === undefined ? "–" : formatMegabytes(assignedMb)}
       >
-        {memoryBytes > 0 && `of ${formatBytes(memoryBytes)} on online nodes`}
+        {memoryBytes > 0 && t("of {{memory}} on online nodes", { memory: formatBytes(memoryBytes) })}
       </StatCard>
-      <StatCard icon={CpuIcon} tone="warning" label="CPU cores" value={online.reduce((sum, n) => sum + (n.info?.cpuCount ?? 0), 0)} />
+      <StatCard icon={CpuIcon} tone="warning" label={t("CPU cores")} value={online.reduce((sum, n) => sum + (n.info?.cpuCount ?? 0), 0)} />
     </div>
   )
 }
@@ -107,29 +108,34 @@ function NodeCard({ node, servers }: { node: Node; servers?: NodeServer[] }) {
       {info ? (
         <>
           <dl className="grid grid-cols-3 gap-2">
-            <Fact label="CPUs" value={info.cpuCount} />
-            <Fact label="Memory" value={formatBytes(info.memoryBytes)} />
-            <Fact label="Servers" value={servers ? `${servers.filter((s) => s.state === "running").length} / ${servers.length}` : "–"} />
+            <Fact label={t("CPUs")} value={info.cpuCount} />
+            <Fact label={t("Memory")} value={formatBytes(info.memoryBytes)} />
+            <Fact
+              label={t("Servers")}
+              value={servers ? `${servers.filter((s) => s.state === "running").length} / ${servers.length}` : "–"}
+            />
           </dl>
           {capacityMb !== undefined && servers && (
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Memory assigned</span>
+                <span>{t("Memory assigned")}</span>
                 <span className="tabular-nums">
-                  {formatMegabytes(assignedMb)} of {formatMegabytes(capacityMb)}
+                  {t("{{used}} of {{total}}", { used: formatMegabytes(assignedMb), total: formatMegabytes(capacityMb) })}
                 </span>
               </div>
-              <Meter value={capacityMb ? assignedMb / capacityMb : 1} label={`Memory assigned on ${node.name}`} />
+              <Meter value={capacityMb ? assignedMb / capacityMb : 1} label={t("Memory assigned on {{name}}", { name: node.name })} />
             </div>
           )}
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {node.status === "pending" ? "Connect the agent to start hosting servers." : "The master can't reach the agent right now."}
+          {node.status === "pending" ? t("Connect the agent to start hosting servers.") : t("The master can't reach the agent right now.")}
         </p>
       )}
       <div className="mt-auto flex items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground">
-        <span className="truncate">{info ? `${info.os} · agent ${info.agentVersion}` : "No agent connected"}</span>
+        <span className="truncate">
+          {info ? t("{{os}} · agent {{version}}", { os: info.os, version: info.agentVersion }) : t("No agent connected")}
+        </span>
         <ArrowRightIcon className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
       </div>
     </Link>

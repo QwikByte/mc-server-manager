@@ -1,5 +1,7 @@
 import { ArrowClockwiseIcon, type Icon, PlayIcon, StopIcon, TerminalWindowIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { defaultSchedule, type TaskInput, taskApi } from "@/features/schedules/api"
+import { msg } from "@/lib/i18n"
 
 export type PolicyAction = "restart" | "stop" | "start" | "command"
 
@@ -16,10 +18,18 @@ export interface PolicySettings {
 export const policies = taskApi<PolicySettings>("/policies")
 
 export const actions: Record<PolicyAction, { label: string; description: string; icon: Icon }> = {
-  restart: { label: "Restart", description: "Running servers restart, after a countdown for the players.", icon: ArrowClockwiseIcon },
-  stop: { label: "Stop", description: "Running servers stop, e.g. at the end of the opening hours.", icon: StopIcon },
-  start: { label: "Start", description: "Stopped servers start, e.g. when the opening hours begin.", icon: PlayIcon },
-  command: { label: "Console command", description: "Running game servers run a command, e.g. a broadcast.", icon: TerminalWindowIcon },
+  restart: {
+    label: msg("Restart"),
+    description: msg("Running servers restart, after a countdown for the players."),
+    icon: ArrowClockwiseIcon,
+  },
+  stop: { label: msg("Stop"), description: msg("Running servers stop, e.g. at the end of the opening hours."), icon: StopIcon },
+  start: { label: msg("Start"), description: msg("Stopped servers start, e.g. when the opening hours begin."), icon: PlayIcon },
+  command: {
+    label: msg("Console command"),
+    description: msg("Running game servers run a command, e.g. a broadcast."),
+    icon: TerminalWindowIcon,
+  },
 }
 
 /** Whether the players are warned before the action. */
@@ -33,9 +43,11 @@ export const emptyPolicy: TaskInput<PolicySettings> = {
   settings: { action: "restart", warnings: [10, 5, 1], message: "", command: "" },
 }
 
-/** Describes what a policy does, e.g. "Restart, warnings 10, 5 and 1 min before". */
+/** Describes what a policy does, e.g. "Restart with warnings 10, 5, 1 min before". */
 export function describePolicy(s: PolicySettings): string {
-  if (s.action === "command") return `Runs “${s.command}”`
-  const label = actions[s.action].label
-  return warns(s.action) && s.warnings.length > 0 ? `${label} with warnings ${s.warnings.join(", ")} min before` : label
+  if (s.action === "command") return t("Runs “{{command}}”", { command: s.command })
+  const action = t(actions[s.action].label)
+  return warns(s.action) && s.warnings.length > 0
+    ? t("{{action}} with warnings {{minutes}} min before", { action, minutes: s.warnings.join(", ") })
+    : action
 }

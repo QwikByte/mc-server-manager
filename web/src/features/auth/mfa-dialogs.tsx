@@ -1,5 +1,6 @@
 import { CopyIcon, DownloadSimpleIcon } from "@phosphor-icons/react"
 import type { UseMutationResult } from "@tanstack/react-query"
+import { t } from "i18next"
 import { type FormEvent, type ReactElement, type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
@@ -58,38 +59,39 @@ export function MfaSetupDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>Set up</Button>
+        <Button>{t("Set up")}</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Set up two-factor authentication</DialogTitle>
+            <DialogTitle>{t("Set up two-factor authentication")}</DialogTitle>
             <DialogDescription>
-              Use an authenticator app on your phone, such as Google Authenticator, Microsoft Authenticator, Aegis or your password
-              manager.
+              {t(
+                "Use an authenticator app on your phone, such as Google Authenticator, Microsoft Authenticator, Aegis or your password manager.",
+              )}
             </DialogDescription>
           </DialogHeader>
           <ol className="grid gap-6">
-            <Step n={1} title="Scan this QR code with the app">
+            <Step n={1} title={t("Scan this QR code with the app")}>
               {setup.error ? (
                 <ErrorCallout error={setup.error} />
               ) : setup.data ? (
                 <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-                  <QrCode value={setup.data.uri} label="QR code for your authenticator app" className="size-40 shrink-0" />
+                  <QrCode value={setup.data.uri} label={t("QR code for your authenticator app")} className="size-40 shrink-0" />
                   <div className="w-full min-w-0 space-y-2 text-muted-foreground">
-                    <p>Can't scan it? Enter this key in the app instead.</p>
-                    <CopyField label="Key" value={setup.data.secret} />
+                    <p>{t("Can't scan it? Enter this key in the app instead.")}</p>
+                    <CopyField label={t("Key")} value={setup.data.secret} />
                   </div>
                 </div>
               ) : (
                 <Skeleton className="h-40 rounded-xl" />
               )}
             </Step>
-            <Step n={2} title="Confirm with a code of the app and your password">
+            <Step n={2} title={t("Confirm with a code of the app and your password")}>
               <FieldGroup className="sm:grid sm:grid-cols-2 sm:gap-4">
                 <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
                 <Field>
-                  <FieldLabel htmlFor="mfa-code">Code</FieldLabel>
+                  <FieldLabel htmlFor="mfa-code">{t("Code")}</FieldLabel>
                   <Input
                     id="mfa-code"
                     autoComplete="one-time-code"
@@ -102,7 +104,7 @@ export function MfaSetupDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="mfa-password">Password</FieldLabel>
+                  <FieldLabel htmlFor="mfa-password">{t("Password")}</FieldLabel>
                   <Input
                     id="mfa-password"
                     type="password"
@@ -117,10 +119,10 @@ export function MfaSetupDialog({
           {enable.error && <FieldError>{enable.error.message}</FieldError>}
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={!setup.data || enable.isPending || form.code.length !== 6 || !form.password}>
-              {enable.isPending ? "Turning on…" : "Turn on"}
+              {enable.isPending ? t("Turning on…") : t("Turn on")}
             </Button>
           </DialogFooter>
         </form>
@@ -191,7 +193,7 @@ export function ConfirmPasswordDialog<R>({
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="confirm-password">Password</FieldLabel>
+              <FieldLabel htmlFor="confirm-password">{t("Password")}</FieldLabel>
               <Input
                 id="confirm-password"
                 type="password"
@@ -205,7 +207,7 @@ export function ConfirmPasswordDialog<R>({
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" variant={destructive ? "destructive" : "default"} disabled={change.isPending || !password}>
               {action}
@@ -223,7 +225,7 @@ export function RecoveryCodesDialog({ codes, onClose }: { codes?: string[]; onCl
 
   async function copy() {
     await navigator.clipboard.writeText(text)
-    toast.success("Copied the recovery codes")
+    toast.success(t("Copied the recovery codes"))
   }
 
   function download() {
@@ -236,10 +238,11 @@ export function RecoveryCodesDialog({ codes, onClose }: { codes?: string[]; onCl
     <Dialog open={codes !== undefined} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md" showCloseButton={false} onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Save your recovery codes</DialogTitle>
+          <DialogTitle>{t("Save your recovery codes")}</DialogTitle>
           <DialogDescription>
-            If you lose your phone, each code signs you in once instead of a code of the app. They are shown only now, so keep them
-            somewhere safe, such as your password manager.
+            {t(
+              "If you lose your phone, each code signs you in once instead of a code of the app. They are shown only now, so keep them somewhere safe, such as your password manager.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <ol className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-console px-5 py-4 text-center font-mono text-sm text-console-foreground">
@@ -249,15 +252,15 @@ export function RecoveryCodesDialog({ codes, onClose }: { codes?: string[]; onCl
         </ol>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={copy}>
-            <CopyIcon /> Copy
+            <CopyIcon /> {t("Copy")}
           </Button>
           <Button variant="outline" size="sm" onClick={download}>
-            <DownloadSimpleIcon /> Download
+            <DownloadSimpleIcon /> {t("Download")}
           </Button>
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button>I saved them</Button>
+            <Button>{t("I saved them")}</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

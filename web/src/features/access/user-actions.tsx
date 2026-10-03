@@ -1,4 +1,5 @@
 import { KeyIcon, PencilSimpleIcon, ShieldSlashIcon, TrashIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -36,19 +37,22 @@ export function UserActions({ user, groups, self }: { user: User; groups: Group[
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Turn off two-factor authentication for ${user.username}`}
-              title="Turn off two-factor authentication"
+              aria-label={t("Turn off two-factor authentication for {{name}}", { name: user.username })}
+              title={t("Turn off two-factor authentication")}
             >
               <ShieldSlashIcon />
             </Button>
           }
-          title={`Turn off two-factor authentication for ${user.username}?`}
-          description={`Only do this if ${user.username} lost the authenticator app and the recovery codes, and you are sure you are talking to them. Then their password alone signs them in until they set it up again.`}
-          action="Turn off"
+          title={t("Turn off two-factor authentication for {{name}}?", { name: user.username })}
+          description={t(
+            "Only do this if {{name}} lost the authenticator app and the recovery codes, and you are sure you are talking to them. Then their password alone signs them in until they set it up again.",
+            { name: user.username },
+          )}
+          action={t("Turn off")}
           destructive
           onConfirm={() =>
             resetMfa.mutate(undefined, {
-              onSuccess: () => toast.success(`Turned off two-factor authentication for ${user.username}`),
+              onSuccess: () => toast.success(t("Turned off two-factor authentication for {{name}}", { name: user.username })),
               onError: (e) => toast.error(e.message),
             })
           }
@@ -57,16 +61,19 @@ export function UserActions({ user, groups, self }: { user: User; groups: Group[
       {!self && (
         <ConfirmDialog
           trigger={
-            <Button variant="ghost" size="icon-sm" aria-label={`Delete ${user.username}`} title="Delete">
+            <Button variant="ghost" size="icon-sm" aria-label={t("Delete {{name}}", { name: user.username })} title={t("Delete")}>
               <TrashIcon />
             </Button>
           }
-          title={`Delete ${user.username}?`}
-          description="The user is signed out and can't sign in anymore. Disable the user instead to keep the account."
-          action="Delete user"
+          title={t("Delete {{name}}?", { name: user.username })}
+          description={t("The user is signed out and can't sign in anymore. Disable the user instead to keep the account.")}
+          action={t("Delete user")}
           destructive
           onConfirm={() =>
-            remove.mutate(user.id, { onSuccess: () => toast.success(`Deleted ${user.username}`), onError: (e) => toast.error(e.message) })
+            remove.mutate(user.id, {
+              onSuccess: () => toast.success(t("Deleted {{name}}", { name: user.username })),
+              onError: (e) => toast.error(e.message),
+            })
           }
         />
       )}
@@ -89,7 +96,7 @@ function EditUserDialog({ user, groups, self }: { user: User; groups: Group[]; s
     event.preventDefault()
     update.mutate(form, {
       onSuccess: () => {
-        toast.success(`Saved ${user.username}`)
+        toast.success(t("Saved {{name}}", { name: user.username }))
         setOpen(false)
       },
     })
@@ -98,7 +105,7 @@ function EditUserDialog({ user, groups, self }: { user: User; groups: Group[]; s
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${user.username}`} title="Edit">
+        <Button variant="ghost" size="icon-sm" aria-label={t("Edit {{name}}", { name: user.username })} title={t("Edit")}>
           <PencilSimpleIcon />
         </Button>
       </DialogTrigger>
@@ -106,19 +113,19 @@ function EditUserDialog({ user, groups, self }: { user: User; groups: Group[]; s
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
             <DialogTitle>{user.username}</DialogTitle>
-            <DialogDescription>Changes apply right away, also to sessions in progress.</DialogDescription>
+            <DialogDescription>{t("Changes apply right away, also to sessions in progress.")}</DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <FieldSet>
-              <FieldLegend variant="label">Groups</FieldLegend>
+              <FieldLegend variant="label">{t("Groups")}</FieldLegend>
               <GroupPicker groups={groups} value={form.groups} onChange={(groups) => setForm({ ...form, groups })} />
             </FieldSet>
             {!self && (
               <Field orientation="horizontal">
                 <Switch id="user-disabled" checked={form.disabled} onCheckedChange={(disabled) => setForm({ ...form, disabled })} />
                 <FieldContent>
-                  <FieldLabel htmlFor="user-disabled">Disabled</FieldLabel>
-                  <FieldDescription>The user is signed out and can't sign in until enabled again.</FieldDescription>
+                  <FieldLabel htmlFor="user-disabled">{t("Disabled")}</FieldLabel>
+                  <FieldDescription>{t("The user is signed out and can't sign in until enabled again.")}</FieldDescription>
                 </FieldContent>
               </Field>
             )}
@@ -126,10 +133,10 @@ function EditUserDialog({ user, groups, self }: { user: User; groups: Group[]; s
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={update.isPending}>
-              {update.isPending ? "Saving…" : "Save"}
+              {update.isPending ? t("Saving…") : t("Save")}
             </Button>
           </DialogFooter>
         </form>
@@ -147,8 +154,8 @@ function SetupLinkDialog({ user }: { user: User }) {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label={`New setup link for ${user.username}`}
-        title={user.passwordSet ? "Reset password" : "New setup link"}
+        aria-label={t("New setup link for {{name}}", { name: user.username })}
+        title={user.passwordSet ? t("Reset password") : t("New setup link")}
         disabled={create.isPending || user.disabled}
         onClick={() => create.mutate(undefined, { onSuccess: () => setOpen(true), onError: (e) => toast.error(e.message) })}
       >
@@ -157,15 +164,17 @@ function SetupLinkDialog({ user }: { user: User }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Setup link for {user.username}</DialogTitle>
+            <DialogTitle>{t("Setup link for {{name}}", { name: user.username })}</DialogTitle>
             <DialogDescription>
-              {user.passwordSet ? "The current password works until the user sets a new one. " : ""}Earlier setup links no longer work.
+              {user.passwordSet
+                ? t("The current password works until the user sets a new one. Earlier setup links no longer work.")
+                : t("Earlier setup links no longer work.")}
             </DialogDescription>
           </DialogHeader>
           {create.data && <SetupLinkView username={user.username} link={create.data} />}
           <DialogFooter>
             <DialogClose asChild>
-              <Button>Done</Button>
+              <Button>{t("Done")}</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>

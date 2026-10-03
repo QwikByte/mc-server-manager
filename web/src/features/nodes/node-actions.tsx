@@ -1,5 +1,6 @@
 import { KeyIcon, ShieldCheckIcon, TrashIcon } from "@phosphor-icons/react"
 import { useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -22,18 +23,18 @@ export function NewJoinTokenButton({ node, variant = "outline" }: { node: Node; 
         onClick={() => issue.mutate(undefined, { onSuccess: () => setOpen(true), onError: (e) => toast.error(e.message) })}
       >
         <KeyIcon />
-        New join token
+        {t("New join token")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Connect {node.name}</DialogTitle>
-            <DialogDescription>Any earlier join token of this node no longer works.</DialogDescription>
+            <DialogTitle>{t("Connect {{name}}", { name: node.name })}</DialogTitle>
+            <DialogDescription>{t("Any earlier join token of this node no longer works.")}</DialogDescription>
           </DialogHeader>
           {issue.data && <EnrollSteps token={issue.data} />}
           <DialogFooter>
             <DialogClose asChild>
-              <Button>Done</Button>
+              <Button>{t("Done")}</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
@@ -49,7 +50,7 @@ export function RemoveNodeButton({ node }: { node: Node }) {
   function confirm() {
     remove.mutate(node.id, {
       onSuccess: () => {
-        toast.success(`Removed ${node.name}`)
+        toast.success(t("Removed {{name}}", { name: node.name }))
         navigate({ to: "/nodes" })
       },
       onError: (e) => toast.error(e.message),
@@ -61,12 +62,14 @@ export function RemoveNodeButton({ node }: { node: Node }) {
       trigger={
         <Button variant="destructive">
           <TrashIcon />
-          Remove node
+          {t("Remove node")}
         </Button>
       }
-      title={`Remove ${node.name}?`}
-      description="The panel stops managing this node. Its servers keep running until you stop them on the node or uninstall the agent."
-      action="Remove node"
+      title={t("Remove {{name}}?", { name: node.name })}
+      description={t(
+        "The panel stops managing this node. Its servers keep running until you stop them on the node or uninstall the agent.",
+      )}
+      action={t("Remove node")}
       destructive
       onConfirm={confirm}
     />
@@ -83,13 +86,15 @@ export function RenewCertificateButton({ node }: { node: Node }) {
       onClick={() =>
         renew.mutate(undefined, {
           onSuccess: ({ certificateExpiresAt }) =>
-            toast.success(`Renewed the certificate of ${node.name}`, { description: `Valid until ${formatDate(certificateExpiresAt)}` }),
+            toast.success(t("Renewed the certificate of {{name}}", { name: node.name }), {
+              description: t("Valid until {{date}}", { date: formatDate(certificateExpiresAt) }),
+            }),
           onError: (e) => toast.error(e.message),
         })
       }
     >
       <ShieldCheckIcon />
-      {renew.isPending ? "Renewing…" : "Renew certificate"}
+      {renew.isPending ? t("Renewing…") : t("Renew certificate")}
     </Button>
   )
 }
