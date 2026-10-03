@@ -247,8 +247,15 @@ func printServers(ctx context.Context, conn grpc.ClientConnInterface, out io.Wri
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tNAME\tTYPE\tVERSION\tPORT\tMEMORY\tSTATE")
 	for _, s := range res.GetServers() {
+		state := s.GetState().Slug()
+		if s.GetCrashes() > 0 {
+			state += fmt.Sprintf(", %d crashes", s.GetCrashes())
+		}
+		if s.GetExitCode() != 0 {
+			state += fmt.Sprintf(", exit code %d", s.GetExitCode())
+		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d MB\t%s\n", s.GetId(), s.GetName(), s.GetType().Slug(),
-			s.GetVersion(), s.GetPort(), s.GetMemoryMb(), s.GetState().Slug())
+			s.GetVersion(), s.GetPort(), s.GetMemoryMb(), state)
 	}
 	return w.Flush()
 }

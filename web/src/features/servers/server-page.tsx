@@ -28,7 +28,7 @@ import { useServer } from "./api"
 import { Console } from "./console"
 import { MoveStatus } from "./move-status"
 import { ServerActions } from "./server-actions"
-import { ServerStateBadge } from "./server-state"
+import { CrashNotice, ServerStateBadge } from "./server-state"
 import { displayVersion, serverLook, serverType } from "./server-types"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
@@ -117,6 +117,7 @@ export function ServerPage() {
               <ServerActions nodeId={nodeId} server={server} onDeleted={() => navigate({ to: "/nodes/$nodeId", params: { nodeId } })} />
             }
           />
+          <CrashNotice server={server} />
           <Tabs label="Server">
             {tabs
               .map((tab) => ({ ...tab, label: tab.label(server.type) }))

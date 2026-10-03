@@ -64,6 +64,11 @@ type Spec struct {
 type Server struct {
 	Spec
 	State mcsmv1.ServerState
+	// Crashes counts the crashes since the server was last started, and ExitCode is the
+	// exit code of the latest, if known. Both are only set while it crashes, or after it
+	// stopped because of a crash.
+	Crashes  int
+	ExitCode int
 }
 
 // Network is the role of a server in a network behind a Velocity proxy.

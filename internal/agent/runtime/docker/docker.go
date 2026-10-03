@@ -100,7 +100,11 @@ func (d *Docker) List(ctx context.Context) ([]runtime.Server, error) {
 	for _, c := range res.Items {
 		// The name check skips the old container while a server is being recreated.
 		if spec, ok := specOf(c.Labels); ok && slices.Contains(c.Names, "/"+containerName(spec.ID)) {
-			servers = append(servers, runtime.Server{Spec: spec, State: state(c)})
+			srv := runtime.Server{Spec: spec, State: state(c)}
+			if mayHaveCrashed(c) {
+				d.addCrashes(ctx, c.ID, &srv)
+			}
+			servers = append(servers, srv)
 		}
 	}
 	return servers, nil
@@ -114,9 +118,11 @@ func specOf(labels map[string]string) (runtime.Spec, bool) {
 
 func state(c container.Summary) mcsmv1.ServerState {
 	switch {
-	case c.State != container.StateRunning && c.State != container.StateRestarting:
+	case c.State == container.StateRestarting: // after a crash, until Docker starts it again
+		return mcsmv1.ServerState_SERVER_STATE_CRASHING
+	case c.State != container.StateRunning:
 		return mcsmv1.ServerState_SERVER_STATE_STOPPED
-	case c.State == container.StateRestarting, c.Health != nil && c.Health.Status == container.Starting:
+	case c.Health != nil && c.Health.Status == container.Starting:
 		return mcsmv1.ServerState_SERVER_STATE_STARTING
 	default:
 		return mcsmv1.ServerState_SERVER_STATE_RUNNING

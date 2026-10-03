@@ -60,6 +60,7 @@ export function displayVersion(version: string) {
 export const serverStates: Record<ServerState, Status> = {
   running: { tone: "success", label: "Running" },
   starting: { tone: "warning", label: "Starting", pulse: true },
+  crashing: { tone: "destructive", label: "Crashing", pulse: true },
   stopped: { tone: "neutral", label: "Stopped" },
 }
 

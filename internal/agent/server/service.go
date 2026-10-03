@@ -424,7 +424,7 @@ func toProto(s runtime.Server) *mcsmv1.Server {
 	return &mcsmv1.Server{
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
-		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis,
+		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
 	}
 }
 

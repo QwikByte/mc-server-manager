@@ -36,6 +36,9 @@ version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's fl
 The agent creates the container again with the same data; the old container is only removed once the new one
 exists.
 
+A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
+crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.
+
 A server can be duplicated on its node: the copy gets all files, worlds and settings under a new name and port, and
 starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
 players stay connected. The copy doesn't take over the original's place in a network.

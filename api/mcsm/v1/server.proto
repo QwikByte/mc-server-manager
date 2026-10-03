@@ -65,6 +65,9 @@ enum ServerState {
   SERVER_STATE_STOPPED = 1;
   SERVER_STATE_STARTING = 2;
   SERVER_STATE_RUNNING = 3;
+  // The server crashed and the node starts it again. After several crashes in a row, the
+  // agent stops it.
+  SERVER_STATE_CRASHING = 4;
 }
 
 message Server {
@@ -87,6 +90,11 @@ message Server {
   repeated string jvm_options = 12;
   // CPU limit in thousandths of a core; 0 means no limit.
   uint32 cpu_millis = 13;
+  // How often a crashing server, or one that stopped after a crash, crashed since it was
+  // last started; 0 for servers that run or stopped cleanly.
+  uint32 crashes = 14;
+  // Exit code of the latest crash, if known.
+  int32 exit_code = 15;
 }
 
 message ListServersRequest {}
