@@ -105,7 +105,7 @@ func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := r.URL.Query().Get("path")
-	stream, err := c.ArchiveDirectory(r.Context(), &mcsmv1.ArchiveDirectoryRequest{ServerId: r.PathValue("id"), Path: p})
+	stream, err := c.ArchiveDirectory(r.Context(), &mcsmv1.ArchiveDirectoryRequest{ServerId: r.PathValue("id"), Path: p, HideSecrets: true})
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return

@@ -44,7 +44,7 @@ type BackupServiceClient interface {
 	// A running server is stopped meanwhile and started again.
 	RestoreBackup(ctx context.Context, in *RestoreBackupRequest, opts ...grpc.CallOption) (*RestoreBackupResponse, error)
 	DeleteBackup(ctx context.Context, in *DeleteBackupRequest, opts ...grpc.CallOption) (*DeleteBackupResponse, error)
-	// DownloadBackup sends the archive in chunks. The first message carries its size.
+	// DownloadBackup sends the archive in chunks. The first message carries its size, if known.
 	DownloadBackup(ctx context.Context, in *DownloadBackupRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadBackupResponse], error)
 	// ImportBackup adds a backup of a server that came from another node. The header
 	// describes it, the data that follows is its archive.
@@ -148,7 +148,7 @@ type BackupServiceServer interface {
 	// A running server is stopped meanwhile and started again.
 	RestoreBackup(context.Context, *RestoreBackupRequest) (*RestoreBackupResponse, error)
 	DeleteBackup(context.Context, *DeleteBackupRequest) (*DeleteBackupResponse, error)
-	// DownloadBackup sends the archive in chunks. The first message carries its size.
+	// DownloadBackup sends the archive in chunks. The first message carries its size, if known.
 	DownloadBackup(*DownloadBackupRequest, grpc.ServerStreamingServer[DownloadBackupResponse]) error
 	// ImportBackup adds a backup of a server that came from another node. The header
 	// describes it, the data that follows is its archive.

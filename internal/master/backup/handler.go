@@ -172,7 +172,7 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 	c, err := h.client(r.Context(), r)
 	var stream grpc.ServerStreamingClient[mcsmv1.DownloadBackupResponse]
 	if err == nil {
-		stream, err = c.DownloadBackup(r.Context(), &mcsmv1.DownloadBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup")})
+		stream, err = c.DownloadBackup(r.Context(), &mcsmv1.DownloadBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup"), HideSecrets: true})
 	}
 	var first *mcsmv1.DownloadBackupResponse
 	if err == nil {
@@ -183,7 +183,9 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Attachment(w, "backup-"+r.PathValue("backup")+".zip")
-	w.Header().Set("Content-Length", strconv.FormatInt(first.GetSize(), 10))
+	if size := first.GetSize(); size > 0 { // unknown while the agent hides the secrets
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	}
 	httpapi.Relay(w, first, stream)
 }
 

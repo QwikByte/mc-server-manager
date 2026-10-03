@@ -3,11 +3,13 @@
 package files
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
 	"io"
 	"io/fs"
+	"path"
 	"slices"
 	"strings"
 
@@ -17,6 +19,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/mc-server-manager/internal/agent/secrets"
 )
 
 const (
@@ -24,7 +27,12 @@ const (
 	maxEntries = 5000
 	// MaxFileSize limits uploads; worlds and modpacks stay well below it.
 	MaxFileSize = 16 << 30
+	// maxRedacted limits files with secrets, which are read at once to hide them.
+	maxRedacted = 1 << 20
 )
+
+// errSecret refuses access to the files that only hold secrets, and moves of those with secrets.
+var errSecret = status.Error(codes.PermissionDenied, "This file holds secrets of the server, such as the RCON password, which the panel doesn't show.")
 
 type Service struct {
 	mcsmv1.UnimplementedFileServiceServer
@@ -50,7 +58,7 @@ func (s *Service) ListFiles(ctx context.Context, req *mcsmv1.ListFilesRequest) (
 	}
 	res := &mcsmv1.ListFilesResponse{Truncated: len(entries) > maxEntries}
 	for _, e := range entries[:min(len(entries), maxEntries)] {
-		if info, err := e.Info(); err == nil { // skips entries deleted in the meantime
+		if info, err := e.Info(); err == nil && !secrets.Hidden(path.Join(name, e.Name())) { // also skips entries deleted in the meantime
 			res.Files = append(res.Files, fileInfo(info))
 		}
 	}
@@ -69,6 +77,9 @@ func (s *Service) ReadFile(req *mcsmv1.ReadFileRequest, stream mcsmv1.FileServic
 		return err
 	}
 	defer dir.Close()
+	if secrets.Hidden(name) {
+		return errSecret
+	}
 	f, err := dir.Open(name)
 	if err != nil {
 		return toStatus(err)
@@ -81,8 +92,17 @@ func (s *Service) ReadFile(req *mcsmv1.ReadFileRequest, stream mcsmv1.FileServic
 	if info.IsDir() {
 		return status.Error(codes.InvalidArgument, "This is a folder. Download it as a ZIP archive instead.")
 	}
-	res := &mcsmv1.ReadFileResponse{Size: info.Size()}
-	return sendChunks(f, func(data []byte) error {
+	r, size := io.Reader(f), info.Size()
+	if secrets.Redacted(name) {
+		data, err := readRedacted(f)
+		if err != nil {
+			return err
+		}
+		data = secrets.Redact(name, data)
+		r, size = bytes.NewReader(data), int64(len(data))
+	}
+	res := &mcsmv1.ReadFileResponse{Size: size}
+	return sendChunks(r, func(data []byte) error {
 		res.Data = data
 		err := stream.Send(res)
 		res = &mcsmv1.ReadFileResponse{}
@@ -104,26 +124,26 @@ func (s *Service) WriteFile(stream mcsmv1.FileService_WriteFileServer) error {
 		return err
 	}
 	defer dir.Close()
-	if name == "." {
+	switch {
+	case name == ".":
 		return status.Error(codes.InvalidArgument, "Choose a file name.")
+	case secrets.Hidden(name):
+		return errSecret
 	}
-	var written int64
 	err = dir.Replace(name, header.GetOverwrite(), func(w io.Writer) error {
-		for {
-			msg, err := stream.Recv()
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if written += int64(len(msg.GetData())); written > MaxFileSize {
-				return status.Errorf(codes.ResourceExhausted, "Files can have up to %d GB.", MaxFileSize>>30)
-			}
-			if _, err := w.Write(msg.GetData()); err != nil {
-				return err
-			}
+		if !secrets.Redacted(name) {
+			return receive(stream, w, MaxFileSize)
 		}
+		// The secrets the panel showed as placeholders stay as they are.
+		var data bytes.Buffer
+		if err := receive(stream, &data, maxRedacted); err != nil {
+			return err
+		}
+		current, err := dir.ReadOptional(name)
+		if err == nil {
+			_, err = w.Write(secrets.Restore(name, data.Bytes(), current))
+		}
+		return err
 	})
 	if err != nil {
 		return toStatus(err)
@@ -146,9 +166,13 @@ func (s *Service) ArchiveDirectory(req *mcsmv1.ArchiveDirectoryRequest, stream m
 		return toStatus(err)
 	}
 	defer sub.Close()
+	var censor datadir.Censor
+	if req.GetHideSecrets() {
+		censor = secrets.Censor(name)
+	}
 	r, w := io.Pipe()
 	defer r.Close() // stops WriteZip if the client goes away
-	go func() { w.CloseWithError(datadir.WriteZip(stream.Context(), w, sub, ".")) }()
+	go func() { w.CloseWithError(datadir.WriteZip(stream.Context(), w, sub, censor, ".")) }()
 	return sendChunks(r, func(data []byte) error {
 		return stream.Send(&mcsmv1.ArchiveDirectoryResponse{Data: data})
 	})
@@ -176,8 +200,11 @@ func (s *Service) MoveFile(ctx context.Context, req *mcsmv1.MoveFileRequest) (*m
 	if err != nil {
 		return nil, err
 	}
-	if from == "." || to == "." {
+	switch {
+	case from == "." || to == ".":
 		return nil, status.Error(codes.InvalidArgument, "The server folder itself can't be moved.")
+	case slices.ContainsFunc(secrets.Under(from), func(p string) bool { _, err := dir.Lstat(p); return err == nil }):
+		return nil, errSecret // the secrets would show at the new place
 	}
 	if _, err := dir.Lstat(to); err == nil {
 		return nil, toStatus(fs.ErrExist)
@@ -229,6 +256,42 @@ func clean(p string) (string, error) {
 
 func fileInfo(info fs.FileInfo) *mcsmv1.FileInfo {
 	return &mcsmv1.FileInfo{Name: info.Name(), Directory: info.IsDir(), Size: info.Size(), ModifiedUnix: info.ModTime().Unix()}
+}
+
+// receive writes the data of a WriteFile stream to w, up to limit bytes.
+func receive(stream mcsmv1.FileService_WriteFileServer, w io.Writer, limit int64) error {
+	var written int64
+	for {
+		msg, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if written += int64(len(msg.GetData())); written > limit {
+			return tooLarge(limit)
+		}
+		if _, err := w.Write(msg.GetData()); err != nil {
+			return err
+		}
+	}
+}
+
+// readRedacted reads a file with secrets, up to maxRedacted bytes.
+func readRedacted(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxRedacted+1))
+	if err == nil && len(data) > maxRedacted {
+		return nil, tooLarge(maxRedacted)
+	}
+	return data, toStatus(err)
+}
+
+func tooLarge(limit int64) error {
+	if limit < MaxFileSize {
+		return status.Errorf(codes.ResourceExhausted, "Files with secrets can have up to %d MB.", limit>>20)
+	}
+	return status.Errorf(codes.ResourceExhausted, "Files can have up to %d GB.", limit>>30)
 }
 
 // sendChunks reads r to the end and passes it on in chunks. It always sends at least

@@ -34,7 +34,10 @@ const (
 //
 // FileService is served by every agent and gives access to the files of a server.
 // Paths are relative to the server's data directory and use forward slashes; an empty
-// path is the directory itself. Paths can't leave the directory.
+// path is the directory itself. Paths can't leave the directory. Files that only hold
+// secrets, such as the RCON password, are hidden and can't be read, written or moved, and
+// files with secrets among other settings show them as "<hidden>"; writing such a file
+// keeps the secret wherever it still says so.
 type FileServiceClient interface {
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
 	// ReadFile sends a file in chunks. The first message carries the file size.
@@ -156,7 +159,10 @@ func (c *fileServiceClient) DeleteFile(ctx context.Context, in *DeleteFileReques
 //
 // FileService is served by every agent and gives access to the files of a server.
 // Paths are relative to the server's data directory and use forward slashes; an empty
-// path is the directory itself. Paths can't leave the directory.
+// path is the directory itself. Paths can't leave the directory. Files that only hold
+// secrets, such as the RCON password, are hidden and can't be read, written or moved, and
+// files with secrets among other settings show them as "<hidden>"; writing such a file
+// keeps the secret wherever it still says so.
 type FileServiceServer interface {
 	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
 	// ReadFile sends a file in chunks. The first message carries the file size.

@@ -28,6 +28,7 @@ func TestMoveServer(t *testing.T) {
 	data := filepath.Join(a1.runtime.dir, lobby.ServerID)
 	check(t, os.MkdirAll(filepath.Join(data, "world", "region"), 0o750))
 	check(t, os.WriteFile(filepath.Join(data, "world", "region", "r.0.0.mca"), []byte("chunks"), 0o600))
+	check(t, os.WriteFile(filepath.Join(data, "server.properties"), []byte("rcon.password=s3cret\n"), 0o600))
 	api.do("POST", path(lobby)+"/backups", map[string]any{"label": "Before the move", "selection": map[string]any{"paths": []string{"world"}}}, http.StatusCreated, nil)
 	var mods access.Group
 	api.do("POST", "/api/groups", map[string]any{"name": "Lobby moderators", "permissions": []string{"servers.restart"}, "targets": []network.Ref{lobby}},
@@ -53,6 +54,10 @@ func TestMoveServer(t *testing.T) {
 	}
 	if chunks, err := os.ReadFile(filepath.Join(a2.runtime.dir, lobby.ServerID, "world", "region", "r.0.0.mca")); string(chunks) != "chunks" {
 		t.Fatalf("world = %q, %v", chunks, err)
+	}
+	// Unlike downloads, moves keep the secrets.
+	if props, err := os.ReadFile(filepath.Join(a2.runtime.dir, lobby.ServerID, "server.properties")); string(props) != "rcon.password=s3cret\n" {
+		t.Fatalf("server.properties = %q, %v", props, err)
 	}
 	var backups []struct{ Label string }
 	api.do("GET", path(moved)+"/backups", nil, http.StatusOK, &backups)

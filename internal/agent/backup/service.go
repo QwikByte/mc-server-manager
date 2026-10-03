@@ -5,6 +5,7 @@
 package backup
 
 import (
+	"archive/zip"
 	"cmp"
 	"context"
 	"errors"
@@ -26,6 +27,7 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/mc-server-manager/internal/agent/secrets"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
@@ -178,10 +180,21 @@ func (s *Service) DownloadBackup(req *mcsmv1.DownloadBackupRequest, stream mcsmv
 		return toStatus(err)
 	}
 	defer f.Close()
-	res := &mcsmv1.DownloadBackupResponse{Size: b.Size}
+	r, size := io.Reader(f), b.Size
+	if req.GetHideSecrets() {
+		zr, err := zip.NewReader(f, b.Size)
+		if err != nil {
+			return toStatus(err)
+		}
+		pr, pw := io.Pipe()
+		defer pr.Close() // stops CopyZip if the client goes away
+		go func() { pw.CloseWithError(datadir.CopyZip(pw, zr, secrets.Censor("."))) }()
+		r, size = pr, 0
+	}
+	res := &mcsmv1.DownloadBackupResponse{Size: size}
 	buf := make([]byte, chunkSize)
 	for first := true; ; first = false {
-		n, err := io.ReadFull(f, buf)
+		n, err := io.ReadFull(r, buf)
 		if n > 0 || first {
 			res.Data = buf[:n]
 			if err := stream.Send(res); err != nil {

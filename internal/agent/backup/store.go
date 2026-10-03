@@ -121,7 +121,7 @@ func (s store) find(serverID, id string) (backup, error) {
 
 // create archives paths of a server's data into a new backup in a location.
 func (s store) create(ctx context.Context, data *datadir.Dir, serverID, location string, d details) (backup, error) {
-	return s.add(serverID, location, newID(d.Created), d, func(w io.Writer) error { return datadir.WriteZip(ctx, w, data.Root, d.Paths...) })
+	return s.add(serverID, location, newID(d.Created), d, func(w io.Writer) error { return datadir.WriteZip(ctx, w, data.Root, nil, d.Paths...) })
 }
 
 // add adds a backup to a location, whose archive write writes. It only shows up once its

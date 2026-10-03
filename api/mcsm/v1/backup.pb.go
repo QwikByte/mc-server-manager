@@ -595,9 +595,12 @@ func (*DeleteBackupResponse) Descriptor() ([]byte, []int) {
 }
 
 type DownloadBackupRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	BackupId      string                 `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	BackupId string                 `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	// Hides the secrets like ArchiveDirectoryRequest.hide_secrets; the size of the archive
+	// isn't known in advance then.
+	HideSecrets   bool `protobuf:"varint,3,opt,name=hide_secrets,json=hideSecrets,proto3" json:"hide_secrets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -646,10 +649,18 @@ func (x *DownloadBackupRequest) GetBackupId() string {
 	return ""
 }
 
+func (x *DownloadBackupRequest) GetHideSecrets() bool {
+	if x != nil {
+		return x.HideSecrets
+	}
+	return false
+}
+
 type DownloadBackupResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Size          int64                  `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
-	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Size of the archive, 0 if unknown.
+	Size          int64  `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	Data          []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -918,10 +929,11 @@ const file_mcsm_v1_backup_proto_rawDesc = "" +
 	"\x13DeleteBackupRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
 	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\"\x16\n" +
-	"\x14DeleteBackupResponse\"Q\n" +
+	"\x14DeleteBackupResponse\"t\n" +
 	"\x15DownloadBackupRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
-	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\"@\n" +
+	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\x12!\n" +
+	"\fhide_secrets\x18\x03 \x01(\bR\vhideSecrets\"@\n" +
 	"\x16DownloadBackupResponse\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\"Z\n" +
