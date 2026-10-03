@@ -12,12 +12,14 @@ import { validateLogSearch } from "@/features/logs/search"
 import { ApiError } from "@/lib/api"
 
 export const queryClient = new QueryClient({
-  // An expired session sends the user back to the sign-in page.
+  // An expired session sends the user back to the sign-in page, unless the panel is already
+  // on its way there, e.g. because signing in is checked before a page opens.
   queryCache: new QueryCache({
     onError: (error, query) => {
-      if (error instanceof ApiError && error.status === 401 && query.queryKey[0] !== "me") {
+      const { pathname, href } = router.latestLocation
+      if (error instanceof ApiError && error.status === 401 && query.queryKey[0] !== "me" && pathname !== "/login") {
         queryClient.clear()
-        void router.navigate({ to: "/login", search: { redirect: router.state.location.href } })
+        void router.navigate({ to: "/login", search: { redirect: href } })
       }
     },
   }),
