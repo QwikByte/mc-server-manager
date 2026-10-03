@@ -1,7 +1,7 @@
 // Package settings stores the settings of the master that administrators change in the
 // panel, and describes the running master. Settings apply right away, except the panel's
-// address, which applies when the master starts again. TLS and the enrollment endpoint's
-// listen address stay on the command line.
+// address and HTTPS, which apply when the master starts again. The enrollment endpoint's
+// listen address stays on the command line.
 package settings
 
 import (
@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/mc-server-manager/internal/master/https"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
@@ -39,6 +40,13 @@ type Settings struct {
 	// PanelAddr is the IP:port the panel listens at from the next start of the master;
 	// empty means the address given on the command line.
 	PanelAddr string `json:"panelAddr"`
+	// PanelHTTPS is the certificate the panel serves from the next start of the master, unless
+	// the command line gives one: https.SelfSigned, https.LetsEncrypt, or empty for plain HTTP,
+	// e.g. behind a reverse proxy.
+	PanelHTTPS string `json:"panelHttps"`
+	// PanelDomain is the panel's domain name, which Let's Encrypt certifies and the self-signed
+	// certificate includes.
+	PanelDomain string `json:"panelDomain"`
 	// EnrollAddr is the host:port join tokens tell agents to enroll at; empty means the
 	// address given on the command line.
 	EnrollAddr string `json:"enrollAddr"`
@@ -59,13 +67,17 @@ func defaults() Settings {
 	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, CheckUpdates: true}
 }
 
-// Master describes the running master. Apart from its certificate, it only changes with a restart.
+// Master describes the running master. Apart from its certificates, it only changes with a restart.
 type Master struct {
 	Version   string    `json:"version"`
 	StartedAt time.Time `json:"startedAt"`
-	// PanelAddr is where the panel listens; PanelTLS tells whether it serves HTTPS itself.
-	PanelAddr string `json:"panelAddr"`
-	PanelTLS  bool   `json:"panelTls"`
+	// PanelAddr is where the panel listens. PanelHTTPS is the certificate it serves: one of
+	// https.SelfSigned, https.LetsEncrypt and https.Files, or none behind a reverse proxy.
+	// PanelDomain is the domain it was set up with, PanelCertificate describes the certificate.
+	PanelAddr        string             `json:"panelAddr"`
+	PanelHTTPS       string             `json:"panelHttps"`
+	PanelDomain      string             `json:"panelDomain"`
+	PanelCertificate *https.Certificate `json:"panelCertificate,omitempty"`
 	// PanelDefaultAddr is the panel's address given on the command line, where it listens
 	// while the settings name none. PanelAddrError tells why it listens there although
 	// they name one.
@@ -82,9 +94,10 @@ type Master struct {
 }
 
 type Service struct {
-	db     *sql.DB
-	master Master
-	cert   *pki.Holder // the master's certificate, renewed while it runs
+	db        *sql.DB
+	master    Master
+	cert      *pki.Holder   // the master's certificate, renewed while it runs
+	panelCert *https.Server // nil unless the panel serves a certificate of the settings
 
 	mu      sync.Mutex // one update at a time, so the database and current agree
 	current atomic.Pointer[Settings]
@@ -109,11 +122,12 @@ func Load(ctx context.Context, db *sql.DB, master Master, cert *pki.Holder) (*Se
 // Get returns the current settings.
 func (s *Service) Get() Settings { return *s.current.Load() }
 
-// Update validates and stores the settings. They apply right away, the panel's address
-// when the master starts again.
+// Update validates and stores the settings. They apply right away, the panel's address and
+// HTTPS when the master starts again.
 func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
 	next.EnrollAddr, next.PanelAddr = strings.TrimSpace(next.EnrollAddr), strings.TrimSpace(next.PanelAddr)
-	err := validate(next)
+	next.PanelDomain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(next.PanelDomain), "."))
+	err := validate(next, cmp.Or(next.PanelAddr, s.master.PanelDefaultAddr))
 	if err == nil && next.PanelAddr != "" && next.PanelAddr != s.Get().PanelAddr {
 		err = s.checkPanelAddr(next.PanelAddr)
 	}
@@ -150,6 +164,22 @@ func (s *Service) ListenPanel() (net.Listener, error) {
 	return ln, err
 }
 
+// PanelHTTPS prepares in dir the certificates the panel serves as the settings say, unless the
+// command line gives one, or returns nil for plain HTTP. Call it before anything reads the
+// description of the master.
+func (s *Service) PanelHTTPS(dir string) (*https.Server, error) {
+	if s.master.PanelHTTPS == https.Files || s.Get().PanelHTTPS == "" {
+		return nil, nil
+	}
+	enrollHost, _, _ := net.SplitHostPort(s.EnrollAddr())
+	srv, err := https.New(s.Get().PanelHTTPS, s.Get().PanelDomain, []string{enrollHost}, dir)
+	if err != nil {
+		return nil, err
+	}
+	s.master.PanelHTTPS, s.master.PanelDomain, s.panelCert = s.Get().PanelHTTPS, s.Get().PanelDomain, srv
+	return srv, nil
+}
+
 // checkPanelAddr tells whether the master can listen at addr when it starts again. The port
 // the panel listens at now is only free then, so for it only the IP address is checked.
 func (s *Service) checkPanelAddr(addr string) error {
@@ -172,6 +202,9 @@ func (s *Service) checkPanelAddr(addr string) error {
 func (s *Service) Master() Master {
 	m := s.master
 	m.CertificateExpiresAt = s.cert.Get().Leaf.NotAfter
+	if s.panelCert != nil {
+		m.PanelCertificate = new(s.panelCert.Certificate())
+	}
 	return m
 }
 
@@ -197,10 +230,22 @@ func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
 // SessionTTL is how long new sign-ins to the panel last.
 func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().SessionHours) * time.Hour }
 
-func validate(s Settings) error {
+// validate checks the settings; panelAddr is where the panel listens with them.
+func validate(s Settings, panelAddr string) error {
+	panelIP, panelPort, _ := net.SplitHostPort(panelAddr)
 	switch {
 	case s.PanelAddr != "" && !validAddr(s.PanelAddr, func(host string) bool { return net.ParseIP(host) != nil }):
 		return httpapi.Errorf(http.StatusBadRequest, "Enter the panel's address as IP address and port, for example 0.0.0.0:8080, or leave it empty.")
+	case s.PanelHTTPS != "" && s.PanelHTTPS != https.SelfSigned && s.PanelHTTPS != https.LetsEncrypt:
+		return httpapi.Errorf(http.StatusBadRequest, "Choose a self-signed certificate, Let's Encrypt or none for the panel.")
+	case s.PanelDomain != "" && (!hostname.MatchString(s.PanelDomain) || !strings.Contains(s.PanelDomain, ".") || net.ParseIP(s.PanelDomain) != nil):
+		return httpapi.Errorf(http.StatusBadRequest, "Enter the panel's domain name, for example panel.example.com, or leave it empty.")
+	case s.PanelHTTPS == https.LetsEncrypt && s.PanelDomain == "":
+		return httpapi.Errorf(http.StatusBadRequest, "Let's Encrypt needs the domain name of the panel.")
+	case s.PanelHTTPS == https.LetsEncrypt && net.ParseIP(panelIP).IsLoopback():
+		return httpapi.Errorf(http.StatusBadRequest, "Let's Encrypt has to reach the panel from the internet: let it listen at another address than %s, e.g. 0.0.0.0:443.", panelAddr)
+	case s.PanelHTTPS == https.LetsEncrypt && panelPort == "80":
+		return httpapi.Errorf(http.StatusBadRequest, "With Let's Encrypt, port 80 sends browsers to HTTPS. Let the panel listen at another port, e.g. 443.")
 	case s.EnrollAddr != "" && !validAddr(s.EnrollAddr, func(host string) bool { return hostname.MatchString(host) || net.ParseIP(host) != nil }):
 		return httpapi.Errorf(http.StatusBadRequest, "Enter the enrollment address as host:port, for example panel.example.com:9443, or leave it empty.")
 	case s.SessionHours < 1 || s.SessionHours > maxSessionHours:

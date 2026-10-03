@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
+	"github.com/QwikByte/mc-server-manager/internal/master/https"
 	"github.com/QwikByte/mc-server-manager/internal/master/logs"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
@@ -59,10 +60,10 @@ func (h *Handler) status(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	m := h.master.Master()
-	panel := "HTTP, TLS by a reverse proxy"
-	if m.PanelTLS {
-		panel = "HTTPS"
-	}
+	panel := map[string]string{
+		"": "HTTP, TLS by a reverse proxy", https.Files: "HTTPS, certificate of the command line",
+		https.SelfSigned: "HTTPS, self-signed certificate", https.LetsEncrypt: "HTTPS, certificate of Let's Encrypt",
+	}[m.PanelHTTPS]
 	fmt.Fprintf(cmd.OutOrStdout(), "Master   %s, running since %s\nPanel    %s (%s)\nEnroll   %s, join tokens name %s\nCA       %s\nCert     valid until %s, renewed automatically\nNodes    %d of %d online\n",
 		m.Version, m.StartedAt.Local().Format(time.DateTime), m.PanelAddr, panel, m.EnrollListenAddr, h.master.EnrollAddr(),
 		m.CAFingerprint, m.CertificateExpiresAt.Local().Format(time.DateOnly), online, len(probes))

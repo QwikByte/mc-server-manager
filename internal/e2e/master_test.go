@@ -87,7 +87,7 @@ func TestMasterSettings(t *testing.T) {
 	}
 }
 
-// Only administrators change the panel's address, which can open the panel to other
+// Only administrators change the panel's address and HTTPS, which can open the panel to other
 // networks, and restart the master.
 func TestPanelAddrAndRestart(t *testing.T) {
 	m := startMaster(t)
@@ -115,10 +115,12 @@ func TestPanelAddrAndRestart(t *testing.T) {
 	check(t, addr.Close())
 	editor.do("PUT", "/api/settings", map[string]any{"sessionHours": 24}, http.StatusOK, nil)
 	editor.do("PUT", "/api/settings", map[string]any{"panelAddr": free}, http.StatusForbidden, nil)
+	editor.do("PUT", "/api/settings", map[string]any{"panelHttps": "self-signed"}, http.StatusForbidden, nil)
+	editor.do("PUT", "/api/settings", map[string]any{"panelDomain": "panel.example.com"}, http.StatusForbidden, nil)
 	editor.do("POST", "/api/master/restart", nil, http.StatusForbidden, nil)
-	root.do("PUT", "/api/settings", map[string]any{"panelAddr": free}, http.StatusOK, nil)
-	editor.do("PUT", "/api/settings", map[string]any{"sessionHours": 12, "panelAddr": free}, http.StatusOK, nil)
-	if got := svc.Settings.Get(); got.PanelAddr != free || got.SessionHours != 12 || restarts.Load() != 0 {
+	root.do("PUT", "/api/settings", map[string]any{"panelAddr": free, "panelHttps": "self-signed", "panelDomain": "panel.example.com"}, http.StatusOK, nil)
+	editor.do("PUT", "/api/settings", map[string]any{"sessionHours": 12, "panelAddr": free, "panelHttps": "self-signed", "panelDomain": " panel.example.com"}, http.StatusOK, nil)
+	if got := svc.Settings.Get(); got.PanelAddr != free || got.PanelHTTPS != "self-signed" || got.SessionHours != 12 || restarts.Load() != 0 {
 		t.Fatalf("settings = %+v, restarts = %d", got, restarts.Load())
 	}
 	root.do("POST", "/api/master/restart", nil, http.StatusAccepted, nil)

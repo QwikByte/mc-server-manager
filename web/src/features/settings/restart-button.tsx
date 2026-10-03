@@ -4,10 +4,10 @@ import { t } from "i18next"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
-import { type Master, restartKey, useRestartMaster } from "./api"
+import { currentPanel, type Master, type PanelTarget, panelURL, restartKey, samePanel, useRestartMaster } from "./api"
 
-/** Restarts the master after asking, and tells when it is back. next is where the panel listens then. */
-export function RestartButton({ master, next, label = t("Restart master") }: { master: Master; next: string; label?: string }) {
+/** Restarts the master after asking, and tells when it is back. next is where the panel is then. */
+export function RestartButton({ master, next, label = t("Restart master") }: { master: Master; next: PanelTarget; label?: string }) {
   const restart = useRestartMaster()
   const restarting = useIsMutating({ mutationKey: restartKey }) > 0
   return (
@@ -21,13 +21,13 @@ export function RestartButton({ master, next, label = t("Restart master") }: { m
       }
       title={t("Restart the master?")}
       description={
-        next === master.panelAddr
+        samePanel(next, currentPanel(master))
           ? t(
               "The panel is away for a few seconds. Open consoles and logs reconnect, commands in the terminal stop. Minecraft servers and agents keep running.",
             )
           : t(
               "The panel is away for a few seconds and then listens at {{address}}. Open consoles and logs reconnect, commands in the terminal stop. Minecraft servers and agents keep running.",
-              { address: next },
+              { address: panelURL(next) },
             )
       }
       action={t("Restart")}
