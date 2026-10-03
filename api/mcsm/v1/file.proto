@@ -6,7 +6,10 @@ option go_package = "github.com/QwikByte/mc-server-manager/api/mcsm/v1;mcsmv1";
 
 // FileService is served by every agent and gives access to the files of a server.
 // Paths are relative to the server's data directory and use forward slashes; an empty
-// path is the directory itself. Paths can't leave the directory.
+// path is the directory itself. Paths can't leave the directory. Files that only hold
+// secrets, such as the RCON password, are hidden and can't be read, written or moved, and
+// files with secrets among other settings show them as "<hidden>"; writing such a file
+// keeps the secret wherever it still says so.
 service FileService {
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
   // ReadFile sends a file in chunks. The first message carries the file size.
@@ -73,6 +76,9 @@ message WriteFileResponse {
 message ArchiveDirectoryRequest {
   string server_id = 1;
   string path = 2;
+  // Leaves out the files that only hold secrets, such as the RCON password, and replaces
+  // the secrets in others, as for the panel's users. Moves need all of it.
+  bool hide_secrets = 3;
 }
 
 message ArchiveDirectoryResponse {

@@ -64,6 +64,11 @@ type Spec struct {
 type Server struct {
 	Spec
 	State mcsmv1.ServerState
+	// Crashes counts the crashes since the server was last started, and ExitCode is the
+	// exit code of the latest, if known. Both are only set while it crashes, or after it
+	// stopped because of a crash.
+	Crashes  int
+	ExitCode int
 }
 
 // Network is the role of a server in a network behind a Velocity proxy.
@@ -97,6 +102,12 @@ type Usage struct {
 	Host string
 }
 
+// LogLine is a line of a server's console and when it was written; Time is zero if unknown.
+type LogLine struct {
+	Time time.Time
+	Text string
+}
+
 // Info describes the runtime and the machine it runs on.
 type Info struct {
 	Name        string // e.g. "docker 29.0.0"
@@ -113,9 +124,9 @@ type Runtime interface {
 	Start(ctx context.Context, id string) error
 	Stop(ctx context.Context, id string) error
 	Remove(ctx context.Context, id string) error
-	// Logs yields the last tail console lines, then follows the console until the
-	// server stops or ctx is cancelled.
-	Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error]
+	// Logs yields the last tail console lines written after the time after, if it isn't
+	// zero, then follows the console until the server stops or ctx is cancelled.
+	Logs(ctx context.Context, id string, tail int, after time.Time) iter.Seq2[LogLine, error]
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, id, command string) (string, error)
 	// Usage returns what a running server uses, or ErrNotRunning.

@@ -109,13 +109,13 @@ var Catalog = []Area{
 		scoped(ConsoleCommands, "Send console commands", "Run any command of the server, e.g. op.", ConsoleView),
 	}},
 	{"Files and configuration", []Info{
-		scoped(FilesRead, "Browse and download files", "Also needed to duplicate a server, as the copy contains its files.", ServersView),
-		scoped(FilesWrite, "Change files", "Upload, edit, move and delete files.", FilesRead),
+		scoped(FilesRead, "Browse and download files", "Secrets such as the RCON password stay hidden. Also needed to duplicate a server, as the copy contains its files.", ServersView),
+		scoped(FilesWrite, "Change files", "Upload, edit, move and delete files. Uploaded plugins run with the server and can read its secrets, such as the forwarding secret of its network.", FilesRead),
 		scoped(Properties, "Edit server.properties", "", ServersView),
-		scoped(Plugins, "Manage plugins and mods", "Install, update, upload and remove them.", ServersView),
+		scoped(Plugins, "Manage plugins and mods", "Install, update, upload and remove them. They run with the server and can read its secrets.", ServersView),
 	}},
 	{"Backups", []Info{
-		scoped(BackupsView, "See and download backups", "Backups contain all backed up files.", ServersView),
+		scoped(BackupsView, "See and download backups", "Downloads contain all backed up files, without secrets such as the RCON password.", ServersView),
 		scoped(BackupsCreate, "Back up servers", "", BackupsView),
 		scoped(BackupsRestore, "Restore backups", "Replaces the backed up data; a running server restarts.", BackupsView),
 		scoped(BackupsDelete, "Delete backups", "", BackupsView),

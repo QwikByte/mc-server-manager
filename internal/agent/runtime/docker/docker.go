@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -100,7 +101,11 @@ func (d *Docker) List(ctx context.Context) ([]runtime.Server, error) {
 	for _, c := range res.Items {
 		// The name check skips the old container while a server is being recreated.
 		if spec, ok := specOf(c.Labels); ok && slices.Contains(c.Names, "/"+containerName(spec.ID)) {
-			servers = append(servers, runtime.Server{Spec: spec, State: state(c)})
+			srv := runtime.Server{Spec: spec, State: state(c)}
+			if mayHaveCrashed(c) {
+				d.addCrashes(ctx, c.ID, &srv)
+			}
+			servers = append(servers, srv)
 		}
 	}
 	return servers, nil
@@ -114,9 +119,11 @@ func specOf(labels map[string]string) (runtime.Spec, bool) {
 
 func state(c container.Summary) mcsmv1.ServerState {
 	switch {
-	case c.State != container.StateRunning && c.State != container.StateRestarting:
+	case c.State == container.StateRestarting: // after a crash, until Docker starts it again
+		return mcsmv1.ServerState_SERVER_STATE_CRASHING
+	case c.State != container.StateRunning:
 		return mcsmv1.ServerState_SERVER_STATE_STOPPED
-	case c.State == container.StateRestarting, c.Health != nil && c.Health.Status == container.Starting:
+	case c.Health != nil && c.Health.Status == container.Starting:
 		return mcsmv1.ServerState_SERVER_STATE_STARTING
 	default:
 		return mcsmv1.ServerState_SERVER_STATE_RUNNING
@@ -296,13 +303,15 @@ func (d *Docker) removeData(spec runtime.Spec) error {
 	return errors.Join(root.RemoveAll(spec.ID), root.Close())
 }
 
-func (d *Docker) Logs(ctx context.Context, id string, tail int) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
-		logs, err := d.cli.ContainerLogs(ctx, containerName(id), client.ContainerLogsOptions{
-			ShowStdout: true, ShowStderr: true, Follow: true, Tail: strconv.Itoa(tail),
-		})
+func (d *Docker) Logs(ctx context.Context, id string, tail int, after time.Time) iter.Seq2[runtime.LogLine, error] {
+	return func(yield func(runtime.LogLine, error) bool) {
+		opts := client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Follow: true, Timestamps: true, Tail: strconv.Itoa(tail)}
+		if !after.IsZero() {
+			opts.Since = after.Format(time.RFC3339Nano) // includes the line written at that time
+		}
+		logs, err := d.cli.ContainerLogs(ctx, containerName(id), opts)
 		if err != nil {
-			yield("", notFound(err))
+			yield(runtime.LogLine{}, notFound(err))
 			return
 		}
 		defer logs.Close()
@@ -316,14 +325,25 @@ func (d *Docker) Logs(ctx context.Context, id string, tail int) iter.Seq2[string
 		lines := bufio.NewScanner(r)
 		lines.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
 		for lines.Scan() {
-			if !yield(lines.Text(), nil) {
+			line := logLine(lines.Text())
+			if (after.IsZero() || line.Time.After(after)) && !yield(line, nil) {
 				return
 			}
 		}
 		if err := lines.Err(); err != nil && ctx.Err() == nil {
-			yield("", err)
+			yield(runtime.LogLine{}, err)
 		}
 	}
+}
+
+// logLine splits off the time Docker writes in front of every line.
+func logLine(text string) runtime.LogLine {
+	stamp, rest, _ := strings.Cut(text, " ")
+	t, err := time.Parse(time.RFC3339Nano, stamp)
+	if err != nil {
+		return runtime.LogLine{Text: text}
+	}
+	return runtime.LogLine{Time: t, Text: rest}
 }
 
 // SendCommand runs the command through rcon-cli, which the itzg server image ships

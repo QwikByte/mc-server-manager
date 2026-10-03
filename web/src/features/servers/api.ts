@@ -2,7 +2,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 import { installPlugins } from "@/features/plugins/api"
 import { api } from "@/lib/api"
 
-export type ServerState = "stopped" | "starting" | "running"
+export type ServerState = "stopped" | "starting" | "running" | "crashing"
 
 export interface Server {
   id: string
@@ -12,6 +12,10 @@ export interface Server {
   memoryMb: number
   port: number
   state: ServerState
+  /** Crashes since the server was last started, while it crashes or after it stopped because of one. */
+  crashes: number
+  /** Exit code of the latest crash; 0 if unknown. */
+  exitCode: number
   storage: string
   java: string
   restartPolicy: RestartPolicy

@@ -2,6 +2,7 @@ import { QueryCache, QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, createRoute, createRouter, lazyRouteComponent, Outlet, redirect } from "@tanstack/react-router"
 import { AppShell } from "@/components/app-shell"
 import { home } from "@/components/navigation"
+import { NotFound } from "@/components/not-found"
 import { Toaster } from "@/components/ui/sonner"
 import { accessQuery } from "@/features/access/api"
 import { accessOf } from "@/features/access/use-access"
@@ -11,12 +12,14 @@ import { validateLogSearch } from "@/features/logs/search"
 import { ApiError } from "@/lib/api"
 
 export const queryClient = new QueryClient({
-  // An expired session sends the user back to the sign-in page.
+  // An expired session sends the user back to the sign-in page, unless the panel is already
+  // on its way there, e.g. because signing in is checked before a page opens.
   queryCache: new QueryCache({
     onError: (error, query) => {
-      if (error instanceof ApiError && error.status === 401 && query.queryKey[0] !== "me") {
+      const { pathname, href } = router.latestLocation
+      if (error instanceof ApiError && error.status === 401 && query.queryKey[0] !== "me" && pathname !== "/login") {
         queryClient.clear()
-        void router.navigate({ to: "/login", search: { redirect: router.state.location.href } })
+        void router.navigate({ to: "/login", search: { redirect: href } })
       }
     },
   }),
@@ -65,6 +68,13 @@ const appRoute = createRoute({
     }
   },
   component: AppShell,
+})
+
+// Addresses that lead to no page show a hint within the panel, after signing in.
+const notFoundRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "$",
+  component: NotFound,
 })
 
 const indexRoute = createRoute({
@@ -303,6 +313,7 @@ export const router = createRouter({
         newGroupRoute,
         groupRoute,
       ]),
+      notFoundRoute,
     ]),
   ]),
   context: { queryClient },

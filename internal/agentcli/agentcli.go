@@ -37,16 +37,27 @@ func Commands(agent Agent) []*cobra.Command {
 
 type cli struct{ agent Agent }
 
+// errNoRuntime tells the node's administrator what to do while Docker is down.
+var errNoRuntime = errors.New("can't reach Docker on this node, see: systemctl status docker")
+
 // call runs fn with the time limit of commands that answer right away.
 func (c cli) call(cmd *cobra.Command, fn func(context.Context, grpc.ClientConnInterface) error) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
-	return c.agent(ctx, func(conn grpc.ClientConnInterface) error { return fn(ctx, conn) })
+	return message(c.agent(ctx, func(conn grpc.ClientConnInterface) error { return fn(ctx, conn) }))
 }
 
 // long runs fn without a time limit; it ends when the command's context is done.
 func (c cli) long(cmd *cobra.Command, fn func(context.Context, grpc.ClientConnInterface) error) error {
-	return c.agent(cmd.Context(), func(conn grpc.ClientConnInterface) error { return fn(cmd.Context(), conn) })
+	return message(c.agent(cmd.Context(), func(conn grpc.ClientConnInterface) error { return fn(cmd.Context(), conn) }))
+}
+
+// message returns errors of the agent without the gRPC prefix.
+func message(err error) error {
+	if st, ok := status.FromError(err); ok && err != nil {
+		return errors.New(st.Message())
+	}
+	return err
 }
 
 func (c cli) status() *cobra.Command {
@@ -61,12 +72,18 @@ func (c cli) status() *cobra.Command {
 					return err
 				}
 				out := cmd.OutOrStdout()
-				fmt.Fprintf(out, "Node     %s\nAgent    %s\nRuntime  %s\nSystem   %s, %d CPUs, %.1f GiB\n",
-					info.GetHostname(), info.GetAgentVersion(), info.GetRuntime(), info.GetOs(), info.GetCpuCount(), float64(info.GetMemoryBytes())/(1<<30))
+				running := info.GetRuntime() != mcsmv1.RuntimeUnavailable
+				fmt.Fprintf(out, "Node     %s\nAgent    %s\nRuntime  %s\n", info.GetHostname(), info.GetAgentVersion(), info.GetRuntime())
+				if running {
+					fmt.Fprintf(out, "System   %s, %d CPUs, %.1f GiB\n", info.GetOs(), info.GetCpuCount(), float64(info.GetMemoryBytes())/(1<<30))
+				}
 				if notAfter := info.GetCertificateNotAfterUnix(); notAfter != 0 {
 					fmt.Fprintf(out, "Cert     valid until %s, renewed by the master\n", time.Unix(notAfter, 0).Local().Format(time.DateOnly))
 				}
 				fmt.Fprintln(out)
+				if !running {
+					return errNoRuntime
+				}
 				return printServers(ctx, conn, out)
 			})
 		},
@@ -230,8 +247,15 @@ func printServers(ctx context.Context, conn grpc.ClientConnInterface, out io.Wri
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tNAME\tTYPE\tVERSION\tPORT\tMEMORY\tSTATE")
 	for _, s := range res.GetServers() {
+		state := s.GetState().Slug()
+		if s.GetCrashes() > 0 {
+			state += fmt.Sprintf(", %d crashes", s.GetCrashes())
+		}
+		if s.GetExitCode() != 0 {
+			state += fmt.Sprintf(", exit code %d", s.GetExitCode())
+		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d MB\t%s\n", s.GetId(), s.GetName(), s.GetType().Slug(),
-			s.GetVersion(), s.GetPort(), s.GetMemoryMb(), s.GetState().Slug())
+			s.GetVersion(), s.GetPort(), s.GetMemoryMb(), state)
 	}
 	return w.Flush()
 }

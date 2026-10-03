@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"google.golang.org/grpc/codes"
@@ -297,11 +298,19 @@ func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.Server
 	if !runtime.ValidID(req.GetId()) {
 		return status.Error(codes.InvalidArgument, "invalid server ID")
 	}
-	for line, err := range s.rt.Logs(stream.Context(), req.GetId(), int(min(req.GetTail(), maxTail))) {
+	var after time.Time
+	if req.GetAfterUnixNano() > 0 {
+		after = time.Unix(0, req.GetAfterUnixNano())
+	}
+	for line, err := range s.rt.Logs(stream.Context(), req.GetId(), int(min(req.GetTail(), maxTail)), after) {
 		if err != nil {
 			return toStatus(err)
 		}
-		if err := stream.Send(&mcsmv1.StreamLogsResponse{Line: plain(line)}); err != nil {
+		res := &mcsmv1.StreamLogsResponse{Line: plain(line.Text)}
+		if !line.Time.IsZero() {
+			res.TimeUnixNano = line.Time.UnixNano()
+		}
+		if err := stream.Send(res); err != nil {
 			return err
 		}
 	}
@@ -424,7 +433,7 @@ func toProto(s runtime.Server) *mcsmv1.Server {
 	return &mcsmv1.Server{
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
-		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis,
+		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
 	}
 }
 

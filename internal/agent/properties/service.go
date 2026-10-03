@@ -28,8 +28,8 @@ const (
 
 var keyPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
-// secret properties are never sent to the panel, nor changed through it.
-var secret = map[string]bool{"rcon.password": true, "management-server-secret": true, "management-server-tls-keystore-password": true}
+// Secret properties are never sent to the panel, nor changed through its editor.
+var Secret = map[string]bool{"rcon.password": true, "management-server-secret": true, "management-server-tls-keystore-password": true}
 
 // locked returns the properties the manager sets itself, with the reason; changing
 // them would break the server or its console.
@@ -67,7 +67,7 @@ func (s *Service) GetServerProperties(ctx context.Context, req *mcsmv1.GetServer
 	}
 	res := &mcsmv1.GetServerPropertiesResponse{Exists: err == nil, Properties: map[string]string{}}
 	for _, e := range parse(string(data)) {
-		if e.key != "" && !secret[e.key] {
+		if e.key != "" && !Secret[e.key] {
 			res.Properties[e.key] = e.value
 		}
 	}
@@ -138,7 +138,7 @@ func validate(changes, locked map[string]string) string {
 			return "Invalid property name " + key + "."
 		case locked[key] != "":
 			return key + " can't be changed: " + locked[key]
-		case secret[key]:
+		case Secret[key]:
 			return key + " can only be changed in the file manager."
 		case len(value) > maxValue || strings.ContainsFunc(value, func(r rune) bool { return r != '\n' && unicode.IsControl(r) }):
 			return "The value of " + key + " is too long or contains control characters."

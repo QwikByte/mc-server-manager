@@ -17,7 +17,7 @@ service BackupService {
   // A running server is stopped meanwhile and started again.
   rpc RestoreBackup(RestoreBackupRequest) returns (RestoreBackupResponse);
   rpc DeleteBackup(DeleteBackupRequest) returns (DeleteBackupResponse);
-  // DownloadBackup sends the archive in chunks. The first message carries its size.
+  // DownloadBackup sends the archive in chunks. The first message carries its size, if known.
   rpc DownloadBackup(DownloadBackupRequest) returns (stream DownloadBackupResponse);
   // ImportBackup adds a backup of a server that came from another node. The header
   // describes it, the data that follows is its archive.
@@ -93,9 +93,13 @@ message DeleteBackupResponse {}
 message DownloadBackupRequest {
   string server_id = 1;
   string backup_id = 2;
+  // Hides the secrets like ArchiveDirectoryRequest.hide_secrets; the size of the archive
+  // isn't known in advance then.
+  bool hide_secrets = 3;
 }
 
 message DownloadBackupResponse {
+  // Size of the archive, 0 if unknown.
   int64 size = 1;
   bytes data = 2;
 }

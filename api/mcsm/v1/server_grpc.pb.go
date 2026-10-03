@@ -50,7 +50,8 @@ type ServerServiceClient interface {
 	// the same data, and a running server restarts.
 	UpdateServer(ctx context.Context, in *UpdateServerRequest, opts ...grpc.CallOption) (*UpdateServerResponse, error)
 	// StreamLogs sends the last lines of the server console, then follows it until the
-	// server stops or the client disconnects.
+	// server stops or the client disconnects. Each line has the time it was written, for
+	// clients that connect again to continue after the last line they got.
 	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error)
@@ -225,7 +226,8 @@ type ServerServiceServer interface {
 	// the same data, and a running server restarts.
 	UpdateServer(context.Context, *UpdateServerRequest) (*UpdateServerResponse, error)
 	// StreamLogs sends the last lines of the server console, then follows it until the
-	// server stops or the client disconnects.
+	// server stops or the client disconnects. Each line has the time it was written, for
+	// clients that connect again to continue after the last line they got.
 	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
 	// SendCommand runs a console command and returns its output.
 	SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error)

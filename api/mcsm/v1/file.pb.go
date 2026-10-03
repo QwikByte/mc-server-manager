@@ -487,9 +487,12 @@ func (x *WriteFileResponse) GetFile() *FileInfo {
 }
 
 type ArchiveDirectoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	Path     string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// Leaves out the files that only hold secrets, such as the RCON password, and replaces
+	// the secrets in others, as for the panel's users. Moves need all of it.
+	HideSecrets   bool `protobuf:"varint,3,opt,name=hide_secrets,json=hideSecrets,proto3" json:"hide_secrets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -536,6 +539,13 @@ func (x *ArchiveDirectoryRequest) GetPath() string {
 		return x.Path
 	}
 	return ""
+}
+
+func (x *ArchiveDirectoryRequest) GetHideSecrets() bool {
+	if x != nil {
+		return x.HideSecrets
+	}
+	return false
 }
 
 type ArchiveDirectoryResponse struct {
@@ -885,10 +895,11 @@ const file_mcsm_v1_file_proto_rawDesc = "" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1c\n" +
 	"\toverwrite\x18\x03 \x01(\bR\toverwrite\":\n" +
 	"\x11WriteFileResponse\x12%\n" +
-	"\x04file\x18\x01 \x01(\v2\x11.mcsm.v1.FileInfoR\x04file\"J\n" +
+	"\x04file\x18\x01 \x01(\v2\x11.mcsm.v1.FileInfoR\x04file\"m\n" +
 	"\x17ArchiveDirectoryRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\".\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
+	"\fhide_secrets\x18\x03 \x01(\bR\vhideSecrets\".\n" +
 	"\x18ArchiveDirectoryResponse\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\"I\n" +
 	"\x16CreateDirectoryRequest\x12\x1b\n" +

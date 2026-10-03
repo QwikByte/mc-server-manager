@@ -46,6 +46,21 @@ func TestTerminal(t *testing.T) {
 		}
 	}
 
+	// While Docker is down, status leaves out what it can't know and says what to do.
+	a.runtime.mu.Lock()
+	a.runtime.down = true
+	a.runtime.mu.Unlock()
+	out, err := run(a.node.ID, "status")
+	if want := "can't reach Docker on this node, see: systemctl status docker"; err != want || !strings.Contains(out, "Runtime  unavailable") || strings.Contains(out, "System") {
+		t.Errorf("status while Docker is down: output %q, error %q; want %q", out, err, want)
+	}
+	if _, err := run(a.node.ID, "server list"); !strings.HasPrefix(err, errDown.Error()) {
+		t.Errorf("server list while Docker is down: error %q, want it without the gRPC prefix", err)
+	}
+	a.runtime.mu.Lock()
+	a.runtime.down = false
+	a.runtime.mu.Unlock()
+
 	// The master's commands describe the master and its nodes.
 	for command, want := range map[string]string{
 		"status":            "Nodes    1 of 1 online",

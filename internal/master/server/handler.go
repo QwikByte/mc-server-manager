@@ -101,6 +101,10 @@ type view struct {
 	Port     uint32 `json:"port"`
 	State    string `json:"state"`
 	Storage  string `json:"storage"`
+	// Crashes since the server was last started, while it crashes or after it stopped
+	// because of a crash, and the exit code of the latest one, 0 if unknown.
+	Crashes  uint32 `json:"crashes"`
+	ExitCode int32  `json:"exitCode"`
 	settings
 }
 
@@ -129,7 +133,7 @@ func (s settings) check() (mcsmv1.RestartPolicy, uint32, error) {
 func toView(s *mcsmv1.Server) view {
 	return view{
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
-		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(),
+		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(), Crashes: s.GetCrashes(), ExitCode: s.GetExitCode(),
 		settings: settings{
 			Java: s.GetJava(), RestartPolicy: s.GetRestartPolicy().Slug(), AikarFlags: s.GetAikarFlags(),
 			JVMOptions: append([]string{}, s.GetJvmOptions()...), CPULimit: float64(s.GetCpuMillis()) / 1000,

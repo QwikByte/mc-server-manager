@@ -29,12 +29,19 @@ the master), edits configuration files in the browser and downloads files or who
 `server.properties` can be edited as a form: grouped settings with switches, choices and validated numbers, a
 MOTD editor with colour codes and preview, and a search. Only properties of the server's Minecraft version are
 shown, comments in the file are kept, and properties the manager relies on (container port, RCON) are locked.
-Secrets such as the RCON password never reach the panel.
+
+Secrets such as the RCON password and the forwarding secret of a network never reach the panel. The file manager
+hides files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`) and shows
+`server.properties` and `config/paper-global.yml` with their secrets as `<hidden>`, which saving keeps. Downloads of
+folders and backups leave them out the same way. Plugins and mods run with the server, though, and can read them.
 
 The settings of a server can be changed after it was created: name, Minecraft version, memory, port, Java
 version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
 The agent creates the container again with the same data; the old container is only removed once the new one
 exists.
+
+A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
+crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.
 
 A server can be duplicated on its node: the copy gets all files, worlds and settings under a new name and port, and
 starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
@@ -337,7 +344,9 @@ Users get their permissions from groups; a user can be in several groups and has
   script can't interpret as shell syntax, and can't override the memory limit.
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
-  uploaded HTML file can't run scripts in the panel.
+  uploaded HTML file can't run scripts in the panel. Secrets of the server stay on the node: files that only hold
+  them can't be listed, read, written or moved, others show them as `<hidden>`, no file or folder with secrets can be
+  moved where they would show, and archives leave them out. Only moving a server to another node copies them.
 - **Plugins.** The master downloads only from Modrinth's CDN, up to 256 MB, and only uses a file whose SHA-512 hash
   matches the one Modrinth's API lists. The agent decides the folder from the server type and only accepts plain
   `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth and the
@@ -349,10 +358,12 @@ Users get their permissions from groups; a user can be in several groups and has
   compromised server can't read or tamper with them. The master can only choose among the storage locations the
   node's administrator allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry
   to the server's folder, and backups never contain symbolic links. Downloads are attachments like those of the file
-  manager.
+  manager and hide the secrets the same way; the backups on the node keep them, so restoring works.
 - **Permissions.** Every API route states the permission it needs when it is registered, so none can be added
   without; the terminal checks each command the same way and refuses commands without a check. Permissions are loaded
-  for every request, so changes, disabling and deleting apply right away; disabled users are signed out. Users can only
+  for every request, so changes, disabling and deleting apply right away; disabled users are signed out. Streams that
+  follow output, the console and terminal commands such as `server logs`, end every 5 minutes, so the panel checks
+  the session and the permissions again; the console connects again on its own and continues. Users can only
   grant permissions they have themselves, within their own scope, and only manage users who have no more permissions
   than they do, so no one can raise their own permissions. The last enabled administrator can't be disabled, deleted or
   removed from the Administrators. The master logs every change with the user who made it, also denied attempts.

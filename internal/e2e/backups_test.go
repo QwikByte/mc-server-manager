@@ -3,6 +3,7 @@ package e2e
 import (
 	"archive/zip"
 	"bytes"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,7 +39,7 @@ func TestBackups(t *testing.T) {
 	}
 	write("world/level.dat", "level")
 	write("world/region/r.0.0.mca", "chunks")
-	write("server.properties", "motd=hi\n")
+	write("server.properties", "motd=hi\nrcon.password=s3cret\n")
 	write("plugins/LuckPerms.jar", "jar")
 
 	// A running server saves its worlds before they are archived, and keeps running.
@@ -62,13 +63,19 @@ func TestBackups(t *testing.T) {
 	if want := []string{"server.properties", "world/", "world/level.dat", "world/region/", "world/region/r.0.0.mca"}; !slices.Equal(names, want) {
 		t.Fatalf("archive = %q, want %q", names, want)
 	}
+	// Downloads hide the secrets; the backup itself keeps them.
+	properties, err := zr.Open("server.properties")
+	check(t, err)
+	if content, _ := io.ReadAll(properties); string(content) != "motd=hi\nrcon.password=<hidden>\n" {
+		t.Fatalf("downloaded server.properties = %q", content)
+	}
 
 	// Restoring brings back the worlds and settings, but leaves the plugins.
 	write("world/region/r.0.0.mca", "griefed")
 	write("server.properties", "motd=changed\n")
 	write("plugins/Other.jar", "jar")
 	api.do("POST", base+"/backups/"+b.ID+"/restore", nil, http.StatusNoContent, nil)
-	if read("world/region/r.0.0.mca") != "chunks" || read("server.properties") != "motd=hi\n" || read("plugins/Other.jar") != "jar" {
+	if read("world/region/r.0.0.mca") != "chunks" || read("server.properties") != "motd=hi\nrcon.password=s3cret\n" || read("plugins/Other.jar") != "jar" {
 		t.Fatal("the backup was not restored as selected")
 	}
 	if servers, _ := a.runtime.List(t.Context()); servers[0].State != mcsmv1.ServerState_SERVER_STATE_RUNNING {

@@ -153,6 +153,9 @@ const (
 	ServerState_SERVER_STATE_STOPPED     ServerState = 1
 	ServerState_SERVER_STATE_STARTING    ServerState = 2
 	ServerState_SERVER_STATE_RUNNING     ServerState = 3
+	// The server crashed and the node starts it again. After several crashes in a row, the
+	// agent stops it.
+	ServerState_SERVER_STATE_CRASHING ServerState = 4
 )
 
 // Enum value maps for ServerState.
@@ -162,12 +165,14 @@ var (
 		1: "SERVER_STATE_STOPPED",
 		2: "SERVER_STATE_STARTING",
 		3: "SERVER_STATE_RUNNING",
+		4: "SERVER_STATE_CRASHING",
 	}
 	ServerState_value = map[string]int32{
 		"SERVER_STATE_UNSPECIFIED": 0,
 		"SERVER_STATE_STOPPED":     1,
 		"SERVER_STATE_STARTING":    2,
 		"SERVER_STATE_RUNNING":     3,
+		"SERVER_STATE_CRASHING":    4,
 	}
 )
 
@@ -218,7 +223,12 @@ type Server struct {
 	// Additional JVM options, e.g. "-Dfile.encoding=UTF-8".
 	JvmOptions []string `protobuf:"bytes,12,rep,name=jvm_options,json=jvmOptions,proto3" json:"jvm_options,omitempty"`
 	// CPU limit in thousandths of a core; 0 means no limit.
-	CpuMillis     uint32 `protobuf:"varint,13,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	CpuMillis uint32 `protobuf:"varint,13,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	// How often a crashing server, or one that stopped after a crash, crashed since it was
+	// last started; 0 for servers that run or stopped cleanly.
+	Crashes uint32 `protobuf:"varint,14,opt,name=crashes,proto3" json:"crashes,omitempty"`
+	// Exit code of the latest crash, if known.
+	ExitCode      int32 `protobuf:"varint,15,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -340,6 +350,20 @@ func (x *Server) GetJvmOptions() []string {
 func (x *Server) GetCpuMillis() uint32 {
 	if x != nil {
 		return x.CpuMillis
+	}
+	return 0
+}
+
+func (x *Server) GetCrashes() uint32 {
+	if x != nil {
+		return x.Crashes
+	}
+	return 0
+}
+
+func (x *Server) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
 	}
 	return 0
 }
@@ -1096,7 +1120,10 @@ type StreamLogsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Number of past lines to send first, at most 1000.
-	Tail          uint32 `protobuf:"varint,2,opt,name=tail,proto3" json:"tail,omitempty"`
+	Tail uint32 `protobuf:"varint,2,opt,name=tail,proto3" json:"tail,omitempty"`
+	// Leaves out the past lines up to this time, e.g. those a client that connects again
+	// has already; 0 leaves out none.
+	AfterUnixNano int64 `protobuf:"varint,3,opt,name=after_unix_nano,json=afterUnixNano,proto3" json:"after_unix_nano,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1145,9 +1172,18 @@ func (x *StreamLogsRequest) GetTail() uint32 {
 	return 0
 }
 
+func (x *StreamLogsRequest) GetAfterUnixNano() int64 {
+	if x != nil {
+		return x.AfterUnixNano
+	}
+	return 0
+}
+
 type StreamLogsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Line          string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Line  string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	// When the server wrote the line; 0 if unknown.
+	TimeUnixNano  int64 `protobuf:"varint,2,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1187,6 +1223,13 @@ func (x *StreamLogsResponse) GetLine() string {
 		return x.Line
 	}
 	return ""
+}
+
+func (x *StreamLogsResponse) GetTimeUnixNano() int64 {
+	if x != nil {
+		return x.TimeUnixNano
+	}
+	return 0
 }
 
 type SendCommandRequest struct {
@@ -1712,7 +1755,7 @@ var File_mcsm_v1_server_proto protoreflect.FileDescriptor
 
 const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x14mcsm/v1/server.proto\x12\amcsm.v1\"\x9a\x03\n" +
+	"\x14mcsm/v1/server.proto\x12\amcsm.v1\"\xd1\x03\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12'\n" +
@@ -1730,7 +1773,9 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\vjvm_options\x18\f \x03(\tR\n" +
 	"jvmOptions\x12\x1d\n" +
 	"\n" +
-	"cpu_millis\x18\r \x01(\rR\tcpuMillis\"\x14\n" +
+	"cpu_millis\x18\r \x01(\rR\tcpuMillis\x12\x18\n" +
+	"\acrashes\x18\x0e \x01(\rR\acrashes\x12\x1b\n" +
+	"\texit_code\x18\x0f \x01(\x05R\bexitCode\"\x14\n" +
 	"\x12ListServersRequest\"@\n" +
 	"\x13ListServersResponse\x12)\n" +
 	"\aservers\x18\x01 \x03(\v2\x0f.mcsm.v1.ServerR\aservers\"\x99\x04\n" +
@@ -1788,12 +1833,14 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server\"%\n" +
 	"\x13DeleteServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x16\n" +
-	"\x14DeleteServerResponse\"7\n" +
+	"\x14DeleteServerResponse\"_\n" +
 	"\x11StreamLogsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04tail\x18\x02 \x01(\rR\x04tail\"(\n" +
+	"\x04tail\x18\x02 \x01(\rR\x04tail\x12&\n" +
+	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"N\n" +
 	"\x12StreamLogsResponse\x12\x12\n" +
-	"\x04line\x18\x01 \x01(\tR\x04line\">\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line\x12$\n" +
+	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\">\n" +
 	"\x12SendCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\"-\n" +
@@ -1836,12 +1883,13 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x1aRESTART_POLICY_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15RESTART_POLICY_ALWAYS\x10\x01\x12\x1b\n" +
 	"\x17RESTART_POLICY_ON_CRASH\x10\x02\x12\x18\n" +
-	"\x14RESTART_POLICY_NEVER\x10\x03*z\n" +
+	"\x14RESTART_POLICY_NEVER\x10\x03*\x95\x01\n" +
 	"\vServerState\x12\x1c\n" +
 	"\x18SERVER_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SERVER_STATE_STOPPED\x10\x01\x12\x19\n" +
 	"\x15SERVER_STATE_STARTING\x10\x02\x12\x18\n" +
-	"\x14SERVER_STATE_RUNNING\x10\x032\xb2\a\n" +
+	"\x14SERVER_STATE_RUNNING\x10\x03\x12\x19\n" +
+	"\x15SERVER_STATE_CRASHING\x10\x042\xb2\a\n" +
 	"\rServerService\x12H\n" +
 	"\vListServers\x12\x1b.mcsm.v1.ListServersRequest\x1a\x1c.mcsm.v1.ListServersResponse\x12K\n" +
 	"\fCreateServer\x12\x1c.mcsm.v1.CreateServerRequest\x1a\x1d.mcsm.v1.CreateServerResponse\x12H\n" +

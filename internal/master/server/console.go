@@ -1,11 +1,13 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,22 +16,40 @@ import (
 )
 
 const (
-	logTail        = 300
+	logTail = 300
+	// maxTail is the most lines a browser that connects again gets of what it missed.
+	maxTail        = 1000
 	commandTimeout = 30 * time.Second
+	// A console stream ends after maxStream with a "renew" event, so that the browser
+	// connects again, which checks the session and the permissions again.
+	maxStream = 5 * time.Minute
 )
 
 // lineBreaks would let a log line forge additional events in the stream.
 var lineBreaks = strings.NewReplacer("\r", " ", "\n", " ")
 
-// logs streams the console of a server as Server-Sent Events, one line per event.
-// An "end" event tells the browser not to reconnect, e.g. because the server stopped.
+// logs streams the console of a server as Server-Sent Events, one line per event, whose ID
+// is the time the line was written. A browser that connects again with the ID of the last
+// line it got, as Last-Event-ID or after, continues after it. An "end" event tells the
+// browser not to connect again, e.g. because the server stopped.
 func (h *Handler) logs(w http.ResponseWriter, r *http.Request) {
-	c, err := h.client(r.Context(), r)
+	after, err := strconv.ParseInt(cmp.Or(r.Header.Get("Last-Event-ID"), r.URL.Query().Get("after"), "0"), 10, 64)
+	if err != nil {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "The console can't continue after that line."))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), maxStream)
+	defer cancel()
+	c, err := h.client(ctx, r)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	stream, err := c.StreamLogs(r.Context(), &mcsmv1.StreamLogsRequest{Id: r.PathValue("id"), Tail: logTail})
+	req := &mcsmv1.StreamLogsRequest{Id: r.PathValue("id"), Tail: logTail, AfterUnixNano: after}
+	if after > 0 {
+		req.Tail = maxTail
+	}
+	stream, err := c.StreamLogs(ctx, req)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -46,16 +66,22 @@ func (h *Handler) logs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no") // keeps nginx from buffering the stream
 	flusher := http.NewResponseController(w)
 	for ; err == nil; res, err = stream.Recv() {
+		if t := res.GetTimeUnixNano(); t > 0 {
+			fmt.Fprintf(w, "id: %d\n", t)
+		}
 		// Plain text for EventSource, served with nosniff and rendered as text by the panel.
 		fmt.Fprintf(w, "data: %s\n\n", lineBreaks.Replace(res.GetLine())) //nolint:gosec // not HTML, see above
 		if flusher.Flush() != nil {
 			return
 		}
 	}
-	if errors.Is(err, io.EOF) {
+	switch {
+	case errors.Is(err, io.EOF):
 		fmt.Fprint(w, "event: end\ndata:\n\n")
-		_ = flusher.Flush()
+	case r.Context().Err() == nil && errors.Is(ctx.Err(), context.DeadlineExceeded):
+		fmt.Fprint(w, "event: renew\ndata:\n\n")
 	}
+	_ = flusher.Flush()
 }
 
 func (h *Handler) command(w http.ResponseWriter, r *http.Request) {

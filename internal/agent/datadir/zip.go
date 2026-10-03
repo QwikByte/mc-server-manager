@@ -18,9 +18,17 @@ import (
 // costs time for nothing, which matters for worlds of several gigabytes.
 var stored = map[string]bool{".mca": true, ".jar": true, ".zip": true, ".gz": true, ".png": true, ".jpg": true, ".ogg": true}
 
+// maxEdited limits the files a Censor changes, which are read at once.
+const maxEdited = 1 << 20
+
+// A Censor decides about each file of an archive, by its name, whether to omit it and how
+// to edit its content, if at all.
+type Censor func(name string) (omit bool, edit func([]byte) []byte)
+
 // WriteZip writes files and folders of root as a ZIP archive; "." writes all of it.
-// Symbolic links, other special files and temporary files of the agent are left out.
-func WriteZip(ctx context.Context, w io.Writer, root *os.Root, paths ...string) error {
+// Symbolic links, other special files and temporary files of the agent are left out, and
+// censor, if not nil, omits or edits files.
+func WriteZip(ctx context.Context, w io.Writer, root *os.Root, censor Censor, paths ...string) error {
 	zw := zip.NewWriter(w)
 	var err error
 	for _, p := range paths {
@@ -33,7 +41,14 @@ func WriteZip(ctx context.Context, w io.Writer, root *os.Root, paths ...string) 
 			case name == "." || IsTemp(d.Name()) || (!d.IsDir() && !d.Type().IsRegular()):
 				return nil
 			}
-			return addFile(zw, root, name, d)
+			var edit func([]byte) []byte
+			if censor != nil && !d.IsDir() {
+				var omit bool
+				if omit, edit = censor(name); omit {
+					return nil
+				}
+			}
+			return addFile(zw, root, name, d, edit)
 		}); err != nil {
 			break
 		}
@@ -41,7 +56,54 @@ func WriteZip(ctx context.Context, w io.Writer, root *os.Root, paths ...string) 
 	return errors.Join(err, zw.Close())
 }
 
-func addFile(zw *zip.Writer, root *os.Root, name string, d fs.DirEntry) error {
+// CopyZip copies the archive zr to w, without compressing it again, as censor says.
+func CopyZip(w io.Writer, zr *zip.Reader, censor Censor) error {
+	zw := zip.NewWriter(w)
+	for _, f := range zr.File {
+		omit, edit := censor(f.Name)
+		var err error
+		switch {
+		case omit:
+			continue
+		case edit == nil:
+			err = zw.Copy(f)
+		default:
+			err = copyEdited(zw, f, edit)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return zw.Close()
+}
+
+func copyEdited(zw *zip.Writer, f *zip.File, edit func([]byte) []byte) error {
+	r, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	data, err := readEdited(r)
+	if err != nil {
+		return err
+	}
+	header := f.FileHeader
+	fw, err := zw.CreateHeader(&header)
+	if err == nil {
+		_, err = fw.Write(edit(data))
+	}
+	return err
+}
+
+func readEdited(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxEdited+1))
+	if err == nil && len(data) > maxEdited {
+		err = fmt.Errorf("a file with secrets has more than %d bytes", maxEdited)
+	}
+	return data, err
+}
+
+func addFile(zw *zip.Writer, root *os.Root, name string, d fs.DirEntry, edit func([]byte) []byte) error {
 	info, err := d.Info()
 	if err != nil {
 		return err
@@ -64,8 +126,16 @@ func addFile(zw *zip.Writer, root *os.Root, name string, d fs.DirEntry) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(fw, f)
-	return errors.Join(err, f.Close())
+	defer f.Close()
+	if edit == nil {
+		_, err = io.Copy(fw, f)
+		return err
+	}
+	data, err := readEdited(f)
+	if err == nil {
+		_, err = fw.Write(edit(data))
+	}
+	return err
 }
 
 // ExtractZip extracts an archive written by WriteZip into the directory dest. Entries
