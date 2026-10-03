@@ -1,4 +1,4 @@
-import { CheckCircleIcon, DownloadSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import { CaretDownIcon, CheckCircleIcon, DownloadSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { useState } from "react"
@@ -19,24 +19,33 @@ import { useAccess } from "@/features/access/use-access"
 import { key, refOf } from "@/features/networks/servers"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { displayVersion, serverType } from "@/features/servers/server-types"
-import { type InstallResult, type SearchHit, supports, useInstallPlugins } from "./api"
+import { type InstallResult, type ProjectVersion, type SearchHit, supports, useInstallPlugins } from "./api"
 import { PluginIcon } from "./plugin-icon"
+import { VersionMenu } from "./version-menu"
 
 /** Installs a plugin or mod on any number of servers it runs on. */
 export function InstallDialog({ hit }: { hit: SearchHit }) {
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
+  const [pinned, setPinned] = useState<ProjectVersion>()
   const { data: servers = [] } = useQuery({ ...allServersQuery, enabled: open })
   const install = useInstallPlugins()
   const { can } = useAccess()
   const suitable = servers.filter((s) => supports(hit.loaders, s.type) && can("plugins.manage", s.nodeId, s.id))
-  const toggle = (k: string, on: boolean) => setSelected((list) => (on ? [...list, k] : list.filter((s) => s !== k)))
+  const chosen = suitable.filter((s) => selected.includes(key(refOf(s))))
+  // A version can be chosen for servers that run the same software and Minecraft version.
+  const same = chosen.length > 0 && chosen.every((s) => s.type === chosen[0].type && s.version === chosen[0].version)
+  const toggle = (k: string, on: boolean) => {
+    setSelected((list) => (on ? [...list, k] : list.filter((s) => s !== k)))
+    setPinned(undefined)
+  }
 
   function onOpenChange(next: boolean) {
     setOpen(next)
     if (!next) {
       install.reset()
       setSelected([])
+      setPinned(undefined)
     }
   }
 
@@ -77,6 +86,23 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
             ))}
           </ul>
         )}
+        {!install.data && chosen.length > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+            <span className="font-medium">{t("Version")}</span>
+            {same ? (
+              <VersionMenu project={hit.id} type={chosen[0].type} version={chosen[0].version} current={pinned?.id} onNewest={() => setPinned(undefined)} onPick={setPinned}>
+                <Button size="sm" variant="outline">
+                  {pinned ? <span className="font-mono">{pinned.number}</span> : t("Newest suitable release")}
+                  <CaretDownIcon />
+                </Button>
+              </VersionMenu>
+            ) : (
+              <span className="text-right text-xs text-muted-foreground">
+                {t("The newest suitable release, as the servers run different software or Minecraft versions.")}
+              </span>
+            )}
+          </div>
+        )}
         {install.error && <FieldError>{install.error.message}</FieldError>}
         <DialogFooter>
           <DialogClose asChild>
@@ -86,7 +112,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
             <Button
               disabled={selected.length === 0 || install.isPending}
               onClick={() =>
-                install.mutate({ projects: [hit.id], servers: suitable.filter((s) => selected.includes(key(refOf(s)))).map(refOf) })
+                install.mutate({ projects: [hit.id], servers: chosen.map(refOf), versions: pinned && { [hit.id]: pinned.id } })
               }
             >
               {install.isPending

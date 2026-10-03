@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -30,6 +31,8 @@ const (
 	maxProjects = 50
 	iconRoute   = "/api/plugins/icons/"
 )
+
+var errVanilla = httpapi.Errorf(http.StatusConflict, "Vanilla servers can't load plugins or mods.")
 
 // Nodes provides connections to node agents.
 type Nodes interface {
@@ -83,6 +86,8 @@ type Plugin struct {
 	Size     int64    `json:"size"`
 	Project  *Project `json:"project,omitempty"`
 	Version  string   `json:"version,omitempty"`
+	// VersionID is the ID of the version on Modrinth.
+	VersionID string `json:"versionId,omitempty"`
 	// Update is a newer release of the project for the server.
 	Update string `json:"update,omitempty"`
 }
@@ -122,7 +127,7 @@ func (s *Service) describe(ctx context.Context, srv *mcsmv1.Server, files []*mcs
 	for i, f := range files {
 		hashes[i] = f.GetSha512()
 	}
-	t, err := s.target(ctx, srv)
+	t, err := s.target(ctx, srv.GetType(), srv.GetVersion())
 	if err != nil {
 		return err
 	}
@@ -149,7 +154,7 @@ func (s *Service) describe(ctx context.Context, srv *mcsmv1.Server, files []*mcs
 			continue
 		}
 		project := s.Describe(projects[j])
-		plugins[i].Project, plugins[i].Version = &project, v.VersionNumber
+		plugins[i].Project, plugins[i].Version, plugins[i].VersionID = &project, v.VersionNumber, v.ID
 		if u, ok := updates[hash]; ok && u.ID != v.ID && u.Published.After(v.Published) {
 			plugins[i].Update = u.VersionNumber
 		}
@@ -172,10 +177,11 @@ type Result struct {
 }
 
 // Install installs the newest suitable release of each project on the given servers,
-// together with the projects it requires. Installed projects are updated, but projects
-// that are only required are left as they are.
-func (s *Service) Install(ctx context.Context, projects []string, servers []Ref) []Result {
-	run := &installation{Service: s}
+// or the version chosen for it by project ID, together with the projects it requires.
+// Installed projects are updated, but projects that are only required are left as they
+// are.
+func (s *Service) Install(ctx context.Context, projects []string, chosen map[string]string, servers []Ref) []Result {
+	run := &installation{Service: s, chosen: chosen}
 	results := make([]Result, len(servers))
 	var wg sync.WaitGroup
 	for i, ref := range servers {
@@ -194,6 +200,7 @@ func (s *Service) Install(ctx context.Context, projects []string, servers []Ref)
 // installation shares lookups and downloads between the servers of one Install call.
 type installation struct {
 	*Service
+	chosen    map[string]string // version IDs by project ID
 	versions  memo[[]modrinth.Version]
 	downloads memo[[]byte]
 	titles    memo[string]
@@ -204,7 +211,7 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 	if err != nil {
 		return nil, err
 	}
-	t, err := r.target(ctx, srv)
+	t, err := r.target(ctx, srv.GetType(), srv.GetVersion())
 	if err != nil {
 		return nil, err
 	}
@@ -281,27 +288,65 @@ func (r *installation) resolve(ctx context.Context, t target, projects []string,
 	return picked, nil
 }
 
-// pick returns the newest release of a project for a server, or else its newest version.
+// pick returns the version chosen for a project if it suits the server, else the
+// newest release of the project for the server, or else its newest version.
 func (r *installation) pick(ctx context.Context, project string, t target) (modrinth.Version, error) {
-	key := project + "|" + strings.Join(t.loaders, ",") + "|" + t.gameVersion
-	versions, err := r.versions.get(key, func() ([]modrinth.Version, error) {
-		return r.modrinth.Versions(ctx, project, t.loaders, t.gameVersion)
-	})
+	versions, err := r.compatible(ctx, project, t)
 	if err != nil {
 		return modrinth.Version{}, err
 	}
 	i := max(0, slices.IndexFunc(versions, func(v modrinth.Version) bool { return v.VersionType == "release" }))
-	if len(versions) == 0 || len(versions[i].Files) == 0 {
-		title, _ := r.titles.get(project, func() (string, error) {
-			projects, err := r.modrinth.Projects(ctx, []string{project})
-			if err != nil || len(projects) == 0 {
-				return project, err
-			}
-			return projects[0].Title, nil
-		})
-		return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "%s has no version for %s.", title, t)
+	chosen := r.chosen[project]
+	if chosen != "" {
+		i = slices.IndexFunc(versions, func(v modrinth.Version) bool { return v.ID == chosen })
 	}
-	return versions[i], nil
+	if i >= 0 && i < len(versions) && len(versions[i].Files) > 0 {
+		return versions[i], nil
+	}
+	title, _ := r.titles.get(project, func() (string, error) {
+		projects, err := r.modrinth.Projects(ctx, []string{project})
+		if err != nil || len(projects) == 0 {
+			return project, err
+		}
+		return projects[0].Title, nil
+	})
+	if chosen != "" {
+		return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "The chosen version of %s doesn't run on %s.", title, t)
+	}
+	return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "%s has no version for %s.", title, t)
+}
+
+// compatible returns the versions of a project that run on a server, the newest first.
+func (r *installation) compatible(ctx context.Context, project string, t target) ([]modrinth.Version, error) {
+	key := project + "|" + strings.Join(t.loaders, ",") + "|" + t.gameVersion
+	return r.versions.get(key, func() ([]modrinth.Version, error) {
+		return r.modrinth.Versions(ctx, project, t.loaders, t.gameVersion)
+	})
+}
+
+// Version is a version of a project as the panel shows it.
+type Version struct {
+	ID        string    `json:"id"`
+	Number    string    `json:"number"`
+	Channel   string    `json:"channel"` // release, beta or alpha
+	Published time.Time `json:"published"`
+}
+
+// Versions returns the versions of a project that run on servers of a type and
+// Minecraft version, the newest first.
+func (s *Service) Versions(ctx context.Context, project string, typ mcsmv1.ServerType, gameVersion string) ([]Version, error) {
+	t, err := s.target(ctx, typ, gameVersion)
+	if err != nil {
+		return nil, err
+	}
+	found, err := s.modrinth.Versions(ctx, project, t.loaders, t.gameVersion)
+	versions := make([]Version, 0, len(found))
+	for _, v := range found {
+		if len(v.Files) > 0 {
+			versions = append(versions, Version{ID: v.ID, Number: v.VersionNumber, Channel: v.VersionType, Published: v.Published})
+		}
+	}
+	return versions, err
 }
 
 // target is what a plugin must support to run on a server.
@@ -315,19 +360,21 @@ func (t target) String() string {
 	return strings.TrimSpace(name + " " + t.gameVersion)
 }
 
-func (s *Service) target(ctx context.Context, srv *mcsmv1.Server) (target, error) {
-	t := target{loaders: modrinth.Loaders(srv.GetType())}
+// target returns what plugins must support to run on servers of a type and Minecraft
+// version.
+func (s *Service) target(ctx context.Context, typ mcsmv1.ServerType, gameVersion string) (target, error) {
+	t := target{loaders: modrinth.Loaders(typ)}
 	switch {
 	case len(t.loaders) == 0:
-		return t, httpapi.Errorf(http.StatusConflict, "Vanilla servers can't load plugins or mods.")
-	case srv.GetType().Proxy():
+		return t, errVanilla
+	case typ.Proxy():
 		return t, nil
-	case srv.GetVersion() == "LATEST":
+	case gameVersion == "LATEST":
 		var err error
 		t.gameVersion, err = s.modrinth.LatestRelease(ctx)
 		return t, err
 	}
-	t.gameVersion = srv.GetVersion()
+	t.gameVersion = gameVersion
 	return t, nil
 }
 

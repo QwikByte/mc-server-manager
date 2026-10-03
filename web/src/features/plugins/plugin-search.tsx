@@ -1,22 +1,55 @@
-import { DownloadSimpleIcon, MagnifyingGlassIcon } from "@phosphor-icons/react"
-import { useInfiniteQuery } from "@tanstack/react-query"
+import {
+  ArrowsDownUpIcon,
+  CaretDownIcon,
+  ClockCounterClockwiseIcon,
+  DownloadSimpleIcon,
+  HeartIcon,
+  MagnifyingGlassIcon,
+  SquaresFourIcon,
+  UsersThreeIcon,
+} from "@phosphor-icons/react"
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { type ReactNode, useState } from "react"
+import { Choice } from "@/components/choice"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
+import { FilterChip } from "@/components/filter-chip"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
+import { serverType, serverTypes } from "@/features/servers/server-types"
+import { formatDate } from "@/lib/format"
+import { locale, msg } from "@/lib/i18n"
 import { useDebounced } from "@/lib/use-debounced"
-import { type SearchHit, searchQuery } from "./api"
+import { gameVersionsQuery, type Search, type SearchHit, type Sort, searchQuery } from "./api"
+import { categories } from "./categories"
 import { PluginIcon } from "./plugin-icon"
-import { locale } from "@/lib/i18n"
 
-const downloads = new Intl.NumberFormat(locale, { notation: "compact" })
+const numbers = new Intl.NumberFormat(locale)
+const compact = new Intl.NumberFormat(locale, { notation: "compact" })
+
+const sorts: Record<Sort, string> = {
+  relevance: msg("Relevance"),
+  downloads: msg("Most downloads"),
+  follows: msg("Most followers"),
+  newest: msg("Newest"),
+  updated: msg("Recently updated"),
+}
+
+const modLoaders = serverTypes.flatMap((s) => (s.addons?.kind === "mods" ? s.addons.loaders : []))
+
+type Filters = Omit<Search, "query">
+
+// Without a fixed type, Paper is searched first, the most common software.
+const initial: Filters = { type: "paper", categories: [], sort: "relevance", serverOnly: false }
 
 /**
- * Searches Modrinth for plugins and mods of a server type and Minecraft version. Without
- * a query, the most downloaded ones are shown.
+ * Searches Modrinth for plugins and mods, in categories and sorted. A given server type and Minecraft version are
+ * fixed, otherwise they can be chosen. Without a query, the most downloaded ones come first.
  */
 export function PluginSearch({
   type,
@@ -31,24 +64,121 @@ export function PluginSearch({
 }) {
   const [input, setInput] = useState("")
   const query = useDebounced(input.trim())
-  const { data, error, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery(searchQuery({ query, type, version }))
+  const [filters, setFilters] = useState(initial)
+  const set = (change: Partial<Filters>) => setFilters((f) => ({ ...f, ...change }))
+  const software = type ?? filters.type
+  // Players may have to install mods too, never plugins.
+  const mods = !software || serverType(software).addons?.kind === "mods"
+  const search: Search = { ...filters, query, type: software, version: version ?? filters.version, serverOnly: filters.serverOnly && mods }
+  const { data: releases = [] } = useQuery({ ...gameVersionsQuery, enabled: version === undefined })
+  const { data, error, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery(searchQuery(search))
   const hits = data?.pages.flatMap((p) => p.hits) ?? []
+  const total = data?.pages[0]?.total ?? 0
+  const narrowed = filters.categories.length > 0 || search.serverOnly || (version === undefined && !!filters.version)
+  const toggle = (category: string, on: boolean) =>
+    set({ categories: on ? [...filters.categories, category] : filters.categories.filter((c) => c !== category) })
 
   return (
     <div className="grid grid-cols-1 gap-4">
-      <InputGroup>
-        <InputGroupAddon>
-          <MagnifyingGlassIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          type="search"
-          placeholder={t("Search Modrinth, e.g. LuckPerms")}
-          aria-label={t("Search plugins and mods")}
-          autoFocus={autoFocus}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-        />
-      </InputGroup>
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <InputGroup className="min-w-56 flex-1">
+            <InputGroupAddon>
+              <MagnifyingGlassIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              placeholder={t("Search Modrinth, e.g. LuckPerms")}
+              aria-label={t("Search plugins and mods")}
+              autoFocus={autoFocus}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+            />
+          </InputGroup>
+          <Select value={filters.sort} onValueChange={(sort) => set({ sort: sort as Sort })}>
+            <SelectTrigger aria-label={t("Sort")} className="max-sm:flex-1">
+              <ArrowsDownUpIcon className="text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(sorts).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {t(label)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {type === undefined && (
+            <Choice label={t("Software")} value={filters.type} onChange={(type) => set({ type })} everything={t("All software")}>
+              {serverTypes
+                .filter((s) => s.addons)
+                .map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+            </Choice>
+          )}
+          {/* Proxies run plugins of any Minecraft version. */}
+          {version === undefined && !(software && serverType(software).proxy) && (
+            <Choice
+              label={t("Minecraft version")}
+              value={filters.version}
+              onChange={(version) => set({ version })}
+              everything={t("All Minecraft versions")}
+            >
+              {releases.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {t("Minecraft {{version}}", { version: r })}
+                </SelectItem>
+              ))}
+            </Choice>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="font-normal max-sm:flex-1">
+                <SquaresFourIcon className="text-muted-foreground" />
+                {t("Categories")}
+                {filters.categories.length > 0 && (
+                  <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{filters.categories.length}</span>
+                )}
+                <CaretDownIcon className="text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="max-h-80 w-56">
+              {Object.entries(categories).map(([value, { label, icon: Icon }]) => (
+                <DropdownMenuCheckboxItem
+                  key={value}
+                  checked={filters.categories.includes(value)}
+                  onCheckedChange={(on) => toggle(value, on)}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <Icon className="text-muted-foreground" weight="duotone" />
+                  {t(label)}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {mods && (
+            <label className="flex h-9 cursor-pointer items-center gap-2 px-1 text-sm" title={t("Only mods that players don't have to install")}>
+              <Switch checked={filters.serverOnly} onCheckedChange={(serverOnly) => set({ serverOnly })} />
+              {t("Server-side only")}
+            </label>
+          )}
+        </div>
+        {narrowed && (
+          <div className="flex flex-wrap items-center gap-2">
+            {filters.categories.map((c) => (
+              <FilterChip key={c} label={t(categories[c].label)} onRemove={() => toggle(c, false)} />
+            ))}
+            <Button variant="ghost" size="sm" onClick={() => set({ categories: [], serverOnly: false, version: undefined })}>
+              {t("Clear filters")}
+            </Button>
+          </div>
+        )}
+      </div>
       {isPending ? (
         <div className="grid gap-2">
           {[0, 1, 2].map((i) => (
@@ -58,35 +188,18 @@ export function PluginSearch({
       ) : error ? (
         <ErrorCallout error={error} />
       ) : hits.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">{t("Nothing found. Try another search.")}</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">{t("Nothing found. Try another search or fewer filters.")}</p>
       ) : (
-        <ul className="grid grid-cols-1 gap-2">
-          {hits.map((hit) => (
-            <li key={hit.id} className="flex items-start gap-3 rounded-xl p-3 ring-1 ring-foreground/8 transition-colors hover:bg-muted/50">
-              <PluginIcon src={hit.icon} />
-              <div className="min-w-0 flex-1 space-y-1">
-                <p className="truncate text-sm font-semibold">
-                  <a href={`https://modrinth.com/project/${hit.slug}`} target="_blank" rel="noreferrer" className="hover:underline">
-                    {hit.title}
-                  </a>
-                  <span className="font-normal text-muted-foreground"> {t("by {{author}}", { author: hit.author })}</span>
-                </p>
-                <p className="line-clamp-2 text-xs text-muted-foreground">{hit.description}</p>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <Chip icon={DownloadSimpleIcon}>{downloads.format(hit.downloads)}</Chip>
-                  {/* With a type, all results suit it; otherwise they tell what they run on. */}
-                  {!type &&
-                    hit.loaders.slice(0, 5).map((l) => (
-                      <Chip key={l} className="font-normal capitalize">
-                        {l}
-                      </Chip>
-                    ))}
-                </div>
-              </div>
-              <div className="shrink-0 self-center">{action(hit)}</div>
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            {t("{{total}} results", { count: total, total: numbers.format(total), defaultValue_one: "{{total}} result" })}
+          </p>
+          <ul className="grid grid-cols-1 gap-2">
+            {hits.map((hit) => (
+              <Hit key={hit.id} hit={hit} loaders={!software} action={action(hit)} />
+            ))}
+          </ul>
+        </div>
       )}
       {hasNextPage && (
         <Button variant="outline" className="justify-self-center" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
@@ -94,5 +207,51 @@ export function PluginSearch({
         </Button>
       )}
     </div>
+  )
+}
+
+/** A project found on Modrinth; with loaders, it tells what it runs on. */
+function Hit({ hit, loaders, action }: { hit: SearchHit; loaders: boolean; action: ReactNode }) {
+  const clientToo = hit.clientSide === "required" && hit.loaders.some((l) => modLoaders.includes(l))
+  return (
+    <li className="flex items-start gap-3 rounded-xl p-3 ring-1 ring-foreground/8 transition-colors hover:bg-muted/50">
+      <PluginIcon src={hit.icon} />
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="truncate text-sm font-semibold">
+          <a href={`https://modrinth.com/project/${hit.slug}`} target="_blank" rel="noreferrer" className="hover:underline">
+            {hit.title}
+          </a>
+          <span className="font-normal text-muted-foreground"> {t("by {{author}}", { author: hit.author })}</span>
+        </p>
+        <p className="line-clamp-2 text-xs text-muted-foreground">{hit.description}</p>
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          <Chip icon={DownloadSimpleIcon}>
+            <span className="sr-only">{t("Downloads")}</span>
+            {compact.format(hit.downloads)}
+          </Chip>
+          <Chip icon={HeartIcon}>
+            <span className="sr-only">{t("Followers")}</span>
+            {compact.format(hit.follows)}
+          </Chip>
+          <Chip icon={ClockCounterClockwiseIcon}>{t("Updated {{date}}", { date: formatDate(hit.updated) })}</Chip>
+          {clientToo && (
+            <Chip icon={UsersThreeIcon} className="bg-warning/10 text-warning">
+              {t("Players need it too")}
+            </Chip>
+          )}
+          {hit.categories.slice(0, 3).flatMap((c) => {
+            const category = categories[c]
+            return category ? [<Chip key={c} icon={category.icon} className="font-normal">{t(category.label)}</Chip>] : []
+          })}
+          {loaders &&
+            hit.loaders.slice(0, 5).map((l) => (
+              <Chip key={l} className="font-normal capitalize">
+                {l}
+              </Chip>
+            ))}
+        </div>
+      </div>
+      <div className="shrink-0 self-center">{action}</div>
+    </li>
   )
 }

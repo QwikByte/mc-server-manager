@@ -1,17 +1,17 @@
-import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react"
+import { MagnifyingGlassIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Choice } from "@/components/choice"
+import { FilterChip } from "@/components/filter-chip"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SelectItem } from "@/components/ui/select"
 import { nodesQuery } from "@/features/nodes/api"
 import { serversQuery } from "@/features/servers/api"
 import { categories } from "./meta"
 import { type LogSearch, ranges } from "./search"
 import { locale } from "@/lib/i18n"
-
-const all = "all"
 
 /** The filters of the log page in one row, and the narrower ones as removable chips below it. */
 export function LogFilters({ search, onChange }: { search: LogSearch; onChange: (change: Partial<LogSearch>) => void }) {
@@ -121,20 +121,7 @@ export function LogFilters({ search, onChange }: { search: LogSearch; onChange: 
       {(chips.length > 0 || filtered) && (
         <div className="flex flex-wrap items-center gap-2">
           {chips.map(([label, change]) => (
-            <span
-              key={label}
-              className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-0.5 pr-1 pl-3 text-xs font-medium text-primary"
-            >
-              {label}
-              <button
-                type="button"
-                aria-label={t("Remove the filter: {{filter}}", { filter: label })}
-                onClick={() => onChange(change)}
-                className="grid size-5 place-items-center rounded-full outline-none hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <XIcon className="size-3" weight="bold" />
-              </button>
-            </span>
+            <FilterChip key={label} label={label} onRemove={() => onChange(change)} />
           ))}
           {filtered && (
             <Button
@@ -152,32 +139,5 @@ export function LogFilters({ search, onChange }: { search: LogSearch; onChange: 
         </div>
       )}
     </div>
-  )
-}
-
-/** A select whose first option selects everything. */
-function Choice({
-  label,
-  value,
-  onChange,
-  everything,
-  children,
-}: {
-  label: string
-  value?: string
-  onChange: (value: string | undefined) => void
-  everything: string
-  children: ReactNode
-}) {
-  return (
-    <Select value={value ?? all} onValueChange={(v) => onChange(v === all ? undefined : v)}>
-      <SelectTrigger aria-label={label} className="max-sm:flex-1">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={all}>{everything}</SelectItem>
-        {children}
-      </SelectContent>
-    </Select>
   )
 }

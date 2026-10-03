@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,7 +26,8 @@ type fakeModrinth struct {
 	*httptest.Server
 	projects []modrinth.Project
 	versions []fakeVersion
-	files    map[string][]byte // by CDN path
+	files    map[string][]byte          // by CDN path
+	search   atomic.Pointer[url.Values] // the query of the last search
 }
 
 type fakeVersion struct {
@@ -50,6 +53,8 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	f.files["/cdn/data/broken/broken-1.0.jar"] = []byte("tampered")
 
 	mux.HandleFunc("GET /v2/search", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		f.search.Store(&q)
 		hits := []modrinth.SearchHit{}
 		for _, p := range f.projects {
 			if strings.Contains(r.URL.Query().Get("facets"), "categories:"+p.Loaders[0]) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
@@ -49,6 +50,27 @@ func TestPlugins(t *testing.T) {
 	}
 	api.do("GET", "/api/plugins/icons/luckperms/icon.svg", nil, http.StatusNotFound, nil)
 
+	// Filters, the sort and the Minecraft version go to Modrinth as facets; others are refused.
+	api.do("GET", "/api/plugins/search?type=fabric&version=LATEST&category=economy&category=utility&sort=follows&serverOnly=true", nil, http.StatusOK, &found)
+	q := *m.modrinth.search.Load()
+	for _, facet := range []string{`["categories:economy"]`, `["categories:utility"]`, `["versions:1.21.4"]`, `["client_side:optional","client_side:unsupported"]`} {
+		if !strings.Contains(q.Get("facets"), facet) || q.Get("index") != "follows" {
+			t.Fatalf("search query = %v, want facet %s", q, facet)
+		}
+	}
+	api.do("GET", "/api/plugins/search?sort=random", nil, http.StatusBadRequest, nil)
+	api.do("GET", "/api/plugins/search?category=Eco+nomy", nil, http.StatusBadRequest, nil)
+	var releases []string
+	api.do("GET", "/api/plugins/game-versions", nil, http.StatusOK, &releases)
+	if !slices.Equal(releases, []string{"1.21.4"}) {
+		t.Fatalf("game versions = %q", releases)
+	}
+	var versions []plugin.Version
+	api.do("GET", "/api/plugins/projects/luckperms/versions?type=paper&version=LATEST", nil, http.StatusOK, &versions)
+	if len(versions) != 2 || versions[0].Number != "2.0" || versions[1].ID != "luckperms10" || versions[1].Channel != "release" {
+		t.Fatalf("versions = %+v", versions)
+	}
+
 	// Installing on several servers adds the required projects; vanilla servers have no plugins.
 	var installed struct{ Results []plugin.Result }
 	api.do("POST", "/api/plugins/install", map[string]any{"projects": []string{"luckperms"}, "servers": []plugin.Ref{lobbyRef, survivalRef, vanillaRef}},
@@ -89,6 +111,24 @@ func TestPlugins(t *testing.T) {
 	if want := []string{"Custom Plugin.jar", "luckperms-2.0.jar", "vault-1.7.jar"}; !slices.Equal(names, want) {
 		t.Fatalf("plugins = %q, want %q", names, want)
 	}
+
+	// A chosen version replaces the installed one, as long as it runs on the server.
+	install := func(versions map[string]string) plugin.Result {
+		api.do("POST", "/api/plugins/install", map[string]any{"projects": []string{"luckperms"}, "versions": versions, "servers": []plugin.Ref{lobbyRef}},
+			http.StatusOK, &installed)
+		return installed.Results[0]
+	}
+	if r := install(map[string]string{"luckperms": "luckperms10"}); r.Error != "" || file(lobbyRef, "luckperms-2.0.jar") != "" {
+		t.Fatalf("result = %+v", r)
+	}
+	if p := pluginsOf(lobbyRef).Plugins[0]; p.Version != "1.0" || p.VersionID != "luckperms10" || p.Update != "2.0" {
+		t.Fatalf("plugin = %+v", p)
+	}
+	if r := install(map[string]string{"luckperms": "vault17"}); r.Error != "The chosen version of LuckPerms doesn't run on Paper 1.21.4." {
+		t.Fatalf("result = %+v", r)
+	}
+	api.do("POST", "/api/plugins/install", map[string]any{"projects": []string{"luckperms"}, "versions": map[string]string{"vault": "vault17"}, "servers": []plugin.Ref{lobbyRef}},
+		http.StatusBadRequest, nil)
 
 	// Mods for other loaders, corrupted downloads and invalid file names are refused.
 	api.do("POST", "/api/plugins/install", map[string]any{"projects": []string{"fabricapi", "broken"}, "servers": []plugin.Ref{lobbyRef}}, http.StatusOK, &installed)
