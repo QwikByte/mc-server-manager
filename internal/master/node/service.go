@@ -40,7 +40,7 @@ var errNotFound = httpapi.Errorf(http.StatusNotFound, "Node not found.")
 type Node struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
-	Address    string     `json:"address"`
+	Address    string     `json:"address,omitempty"`
 	EnrolledAt *time.Time `json:"enrolledAt,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	Settings
