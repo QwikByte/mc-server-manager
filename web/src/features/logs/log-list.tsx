@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { msg } from "@/lib/i18n"
+import { locale, msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { type LogEntry, type LogFilter, logsQuery, useLiveLogs } from "./api"
 import { categoryLabel, formatEntryTime, levels } from "./meta"
@@ -100,7 +100,7 @@ function dayLabel(iso: string) {
   const day = new Date(iso).toDateString()
   if (day === new Date().toDateString()) return t("Today")
   if (day === new Date(Date.now() - 86_400_000).toDateString()) return t("Yesterday")
-  return new Date(iso).toLocaleDateString(undefined, { dateStyle: "full" })
+  return new Date(iso).toLocaleDateString(locale, { dateStyle: "full" })
 }
 
 function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogFilter) => void }) {
@@ -143,7 +143,7 @@ function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogF
 
 function EntryDetails({ id, entry, onFilter }: { id: string; entry: LogEntry; onFilter?: (change: LogFilter) => void }) {
   const facts: [string, string | undefined][] = [
-    [t("Time"), new Date(entry.time).toLocaleString(undefined, { dateStyle: "full", timeStyle: "medium" })],
+    [t("Time"), new Date(entry.time).toLocaleString(locale, { dateStyle: "full", timeStyle: "medium" })],
     [t("Level"), t(levels[entry.level].label)],
     [t("Logged by"), entry.source === "agent" ? t("The agent of {{node}}", { node: entry.nodeName ?? entry.nodeId }) : t("The master")],
     [t("Category"), categoryLabel(entry.category)],

@@ -2,16 +2,18 @@ import { ListIcon, SignOutIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
-import { Fragment, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
+import { LanguageMenu } from "@/components/language-menu"
 import { Logo } from "@/components/logo"
 import { navigation } from "@/components/navigation"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { useAccess } from "@/features/access/use-access"
-import { meQuery, useLogout } from "@/features/auth/api"
+import { meQuery, useLogout, useSetLanguage } from "@/features/auth/api"
 import { LogAlerts } from "@/features/logs/log-alerts"
 import { UpdateBanner } from "@/features/updates/update-banner"
+import { chooseLanguage, chosenLanguage } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 /** A sidebar on large screens; on small ones, a bar at the top whose menu holds the navigation. */
@@ -21,6 +23,11 @@ export function AppShell() {
   const logout = useLogout()
   const navigate = useNavigate()
   const [menu, setMenu] = useState(false)
+  const setLanguage = useSetLanguage()
+  // The language the user chose applies in every browser, once signed in.
+  useEffect(() => {
+    if (user?.language) chooseLanguage(user.language)
+  }, [user?.language])
 
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
@@ -50,6 +57,7 @@ export function AppShell() {
         <div className="ml-auto flex items-center gap-2 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:gap-3">
           <div className="flex items-center gap-2">
             {access.canSomewhere("logs.view") && <LogAlerts />}
+            <LanguageMenu value={user?.language ?? chosenLanguage()} onChoose={(language) => setLanguage.mutate(language)} />
             <ThemeToggle className="md:flex-1" />
           </div>
           <div className="flex items-center gap-2 md:gap-3 md:rounded-xl md:bg-muted/60 md:p-2">

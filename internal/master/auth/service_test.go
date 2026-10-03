@@ -141,3 +141,38 @@ func TestInviteDisableAndChangePassword(t *testing.T) {
 		t.Fatal("username taken twice")
 	}
 }
+
+// The language a user chose comes with each sign-in and session, to every browser.
+func TestLanguage(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	svc, ctx := NewService(db), t.Context()
+	user, err := svc.CreateUser(ctx, "admin", "a-long-enough-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"deu", "DE", "de-DE", "../en"} {
+		if err := svc.SetLanguage(ctx, user.ID, bad); err == nil {
+			t.Errorf("language %q accepted", bad)
+		}
+	}
+	if err := svc.SetLanguage(ctx, user.ID, "de"); err != nil {
+		t.Fatal(err)
+	}
+	user, token, err := svc.Login(ctx, "admin", "a-long-enough-password", "", time.Hour)
+	if err != nil || user.Language != "de" {
+		t.Fatalf("sign-in: %+v, %v", user, err)
+	}
+	if user, err := svc.Authenticate(ctx, token); err != nil || user.Language != "de" {
+		t.Fatalf("session: %+v, %v", user, err)
+	}
+	if err := svc.SetLanguage(ctx, user.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if user, err := svc.Authenticate(ctx, token); err != nil || user.Language != "" {
+		t.Fatalf("after following the browser again: %+v, %v", user, err)
+	}
+}

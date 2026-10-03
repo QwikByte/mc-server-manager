@@ -3,15 +3,20 @@ import { t } from "i18next"
 import type { ReactNode } from "react"
 import { Trans } from "react-i18next"
 import { Callout } from "@/components/callout"
+import { LanguageMenu } from "@/components/language-menu"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { chosenLanguage } from "@/lib/i18n"
 
 /** The frame of the pages before signing in: the logo, a title and a card. */
 export function AuthLayout({ title, description, children }: { title: string; description: ReactNode; children: ReactNode }) {
   return (
     <main className="relative grid min-h-svh place-items-center overflow-hidden px-4 py-16">
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-blocks" />
-      <ThemeToggle className="absolute top-4 right-4 w-28" />
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        <LanguageMenu value={chosenLanguage()} />
+        <ThemeToggle className="w-28" />
+      </div>
       <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-5 text-center">
           <Logo className="size-14" />

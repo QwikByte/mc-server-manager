@@ -10,8 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useDebounced } from "@/lib/use-debounced"
 import { type SearchHit, searchQuery } from "./api"
 import { PluginIcon } from "./plugin-icon"
+import { locale } from "@/lib/i18n"
 
-const downloads = new Intl.NumberFormat(undefined, { notation: "compact" })
+const downloads = new Intl.NumberFormat(locale, { notation: "compact" })
 
 /**
  * Searches Modrinth for plugins and mods of a server type and Minecraft version. Without

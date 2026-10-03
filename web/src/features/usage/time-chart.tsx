@@ -3,6 +3,7 @@ import { type KeyboardEvent, type PointerEvent, useState } from "react"
 import { niceMax } from "@/lib/chart"
 import { cn } from "@/lib/utils"
 import type { UsagePoint } from "./api"
+import { locale } from "@/lib/i18n"
 
 /** The colour classes of the series, checked for colour vision deficiencies in both themes. */
 const tones = {
@@ -243,13 +244,13 @@ function ticks(from: number, to: number, span: number) {
 function formatTick(t: number, span: number) {
   const date = new Date(t)
   return span <= day
-    ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    : date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    ? date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleDateString(locale, { month: "short", day: "numeric" })
 }
 
 function formatTime(t: number, span: number) {
   const date = new Date(t)
   return span <= day
-    ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    : date.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+    ? date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleString(locale, { weekday: "short", hour: "2-digit", minute: "2-digit" })
 }

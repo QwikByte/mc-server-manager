@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 import { filterQuery, type LogEntry, type LogFilter, useLogStream } from "./api"
 import { formatEntryTime, levels } from "./meta"
+import { locale } from "@/lib/i18n"
 
 const problems: LogFilter = { level: "warn" }
 const shown = 8
@@ -112,7 +113,7 @@ export function LogAlerts() {
                   <span className="block truncate text-xs text-muted-foreground">{about(e) || formatEntryTime(e.time)}</span>
                 </span>
                 <time dateTime={e.time} className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums">
-                  {new Date(e.time).toLocaleTimeString(undefined, { timeStyle: "short" })}
+                  {new Date(e.time).toLocaleTimeString(locale, { timeStyle: "short" })}
                 </time>
               </Link>
             </DropdownMenuItem>

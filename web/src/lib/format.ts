@@ -1,3 +1,5 @@
+import { locale } from "./i18n"
+
 const units = ["B", "KB", "MB", "GB", "TB"]
 
 /** Formats a size in bytes using binary units, e.g. "31.3 GB" or "512 B". */
@@ -15,12 +17,12 @@ export function formatMegabytes(mb: number): string {
 
 /** Formats an ISO timestamp as a date in the viewer's locale, e.g. "30 Dec 2026". */
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" })
+  return new Date(iso).toLocaleDateString(locale, { dateStyle: "medium" })
 }
 
 /** Formats an ISO timestamp as date and time in the viewer's locale. */
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+  return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })
 }
 
 /** Formats a duration in its largest whole unit in the viewer's locale, e.g. "3 days" or "5 minutes". */
@@ -31,5 +33,5 @@ export function formatDuration(ms: number): string {
     ["minute", 60_000],
   ] as const
   const [unit, size] = units.find(([, size]) => ms >= size) ?? units[2]
-  return new Intl.NumberFormat(undefined, { style: "unit", unit, unitDisplay: "long" }).format(Math.floor(ms / size))
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long" }).format(Math.floor(ms / size))
 }

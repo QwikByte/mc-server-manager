@@ -30,11 +30,14 @@ var (
 	errInvalidSetup = httpapi.Errorf(http.StatusNotFound, "This setup link is invalid, expired or used already. Ask for a new one.")
 
 	usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
+	languagePattern = regexp.MustCompile(`^([a-z]{2})?$`)
 )
 
 type User struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
+	// Language is the language of the panel the user chose, e.g. de; empty follows the browser.
+	Language string `json:"language,omitempty"`
 }
 
 // Account is a user as the user management shows it.
@@ -167,8 +170,8 @@ func (s *Service) NewSetupLink(ctx context.Context, id int64) (SetupLink, error)
 func (s *Service) SetupUser(ctx context.Context, token string) (User, error) {
 	var u User
 	err := s.db.QueryRowContext(ctx, `
-		SELECT u.id, u.username FROM setup_tokens t JOIN users u ON u.id = t.user_id
-		WHERE t.token_hash = ? AND t.expires_at > ? AND u.disabled = 0`, hashToken(token), time.Now().Unix()).Scan(&u.ID, &u.Username)
+		SELECT u.id, u.username, u.language FROM setup_tokens t JOIN users u ON u.id = t.user_id
+		WHERE t.token_hash = ? AND t.expires_at > ? AND u.disabled = 0`, hashToken(token), time.Now().Unix()).Scan(&u.ID, &u.Username, &u.Language)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = errInvalidSetup
 	}
@@ -241,8 +244,8 @@ func (s *Service) Login(ctx context.Context, username, password, code string, tt
 	var hash string
 	var mfa bool
 	err := s.db.QueryRowContext(ctx, `
-		SELECT u.id, u.username, u.password_hash, COALESCE(m.enabled, 0) FROM users u LEFT JOIN user_mfa m ON m.user_id = u.id
-		WHERE u.username = ? AND u.disabled = 0`, username).Scan(&user.ID, &user.Username, &hash, &mfa)
+		SELECT u.id, u.username, u.language, u.password_hash, COALESCE(m.enabled, 0) FROM users u LEFT JOIN user_mfa m ON m.user_id = u.id
+		WHERE u.username = ? AND u.disabled = 0`, username).Scan(&user.ID, &user.Username, &user.Language, &hash, &mfa)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && hash == "" {
 		verifyPassword(dummyHash(), password) // takes as long as for existing users
 		return User{}, "", ErrInvalidCredentials
@@ -281,13 +284,22 @@ func (s *Service) startSession(ctx context.Context, userID int64, ttl time.Durat
 func (s *Service) Authenticate(ctx context.Context, token string) (User, error) {
 	var user User
 	err := s.db.QueryRowContext(ctx, `
-		SELECT u.id, u.username FROM sessions s JOIN users u ON u.id = s.user_id
+		SELECT u.id, u.username, u.language FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0`, hashToken(token), time.Now().Unix()).
-		Scan(&user.ID, &user.Username)
+		Scan(&user.ID, &user.Username, &user.Language)
 	if errors.Is(err, sql.ErrNoRows) {
 		return user, ErrNoSession
 	}
 	return user, err
+}
+
+// SetLanguage stores the language of the panel a user chose, e.g. de, or empty for the browser's.
+func (s *Service) SetLanguage(ctx context.Context, id int64, language string) error {
+	if !languagePattern.MatchString(language) {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose a language by its two-letter code, e.g. de, or none to follow the browser.")
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET language = ? WHERE id = ?`, language, id)
+	return err
 }
 
 // Logout ends the session identified by token.
