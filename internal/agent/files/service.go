@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"os"
 	"path"
 	"slices"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/secrets"
+	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
 
 const (
@@ -130,9 +132,17 @@ func (s *Service) WriteFile(stream mcsmv1.FileService_WriteFileServer) error {
 	case secrets.Hidden(name):
 		return errSecret
 	}
+	top, err := dir.Open(".")
+	if err != nil {
+		return toStatus(err)
+	}
+	defer top.Close()
+	if err := storage.Fits(top, header.GetSize()); err != nil {
+		return toStatus(err)
+	}
 	err = dir.Replace(name, header.GetOverwrite(), func(w io.Writer) error {
 		if !secrets.Redacted(name) {
-			return receive(stream, w, MaxFileSize)
+			return receive(stream, &spaceChecked{w: w, dir: top}, MaxFileSize)
 		}
 		// The secrets the panel showed as placeholders stay as they are.
 		var data bytes.Buffer
@@ -278,6 +288,26 @@ func receive(stream mcsmv1.FileService_WriteFileServer, w io.Writer, limit int64
 	}
 }
 
+// spaceChecked stops writing before the free space of the file system of dir falls below
+// storage.MinFree, checking every checkEvery bytes.
+type spaceChecked struct {
+	w         io.Writer
+	dir       *os.File
+	unchecked int
+}
+
+const checkEvery = 64 << 20
+
+func (s *spaceChecked) Write(p []byte) (int, error) {
+	if s.unchecked += len(p); s.unchecked >= checkEvery {
+		s.unchecked = 0
+		if err := storage.Fits(s.dir, int64(len(p))); err != nil {
+			return 0, err
+		}
+	}
+	return s.w.Write(p)
+}
+
 // readRedacted reads a file with secrets, up to maxRedacted bytes.
 func readRedacted(r io.Reader) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(r, maxRedacted+1))
@@ -328,6 +358,8 @@ func toStatus(err error) error {
 		return status.Error(codes.PermissionDenied, "The agent isn't allowed to access this file.")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()
+	case errors.As(err, new(storage.FullError)):
+		return status.Error(codes.ResourceExhausted, err.Error())
 	case strings.Contains(err.Error(), "path escapes from parent"): // os.Root, e.g. through a symbolic link
 		return status.Error(codes.InvalidArgument, "This path leads outside of the server folder.")
 	}

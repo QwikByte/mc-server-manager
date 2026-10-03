@@ -24,7 +24,7 @@ Each server has a live console in the panel: its output streams in as it happens
 through the RCON connection the server image provides.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
-the master), edits configuration files in the browser and downloads files or whole folders as ZIP archives.
+the master, as long as 1 GB stays free on the node, like for backups), edits configuration files in the browser and downloads files or whole folders as ZIP archives.
 
 `server.properties` can be edited as a form: grouped settings with switches, choices and validated numbers, a
 MOTD editor with colour codes and preview, and a search. Only properties of the server's Minecraft version are
