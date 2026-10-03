@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -33,9 +34,6 @@ import (
 const (
 	labelManaged = "io.mcsm.managed"
 	labelSpec    = "io.mcsm.spec"
-	// networkName is a Docker network shared by all servers of the node, so a proxy can
-	// reach backends on the same node by container name.
-	networkName = "mcsm"
 
 	serverImage = "itzg/minecraft-server"
 	proxyImage  = "itzg/mc-proxy"
@@ -51,6 +49,14 @@ type image struct {
 	typ  string // value of the TYPE variable
 	port int    // port inside the container
 	data string // data directory inside the container
+}
+
+// capabilities are all the images need: they start as root to hand the data directory to
+// the server's user and switch to it. The proxy image works on as root in the directory
+// it handed over, which needs reading it regardless of its permissions.
+var capabilities = map[string][]string{
+	serverImage: {"CHOWN", "SETUID", "SETGID"},
+	proxyImage:  {"CHOWN", "SETUID", "SETGID", "DAC_READ_SEARCH"},
 }
 
 var images = map[mcsmv1.ServerType]image{
@@ -144,7 +150,7 @@ func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {
 	if err := os.Mkdir(path, 0o750); err != nil {
 		return err
 	}
-	return d.createContainer(ctx, spec)
+	return d.createContainer(ctx, spec, home(spec))
 }
 
 // dataPath returns the host directory with the data of a server.
@@ -178,7 +184,6 @@ func (d *Docker) Data(ctx context.Context, id string) (*datadir.Dir, error) {
 	return datadir.Open(path)
 }
 
-// createContainer creates the container of a server whose image and data directory exist.
 // imageRef returns the image of a server. The tags of the server image select the
 // Java version; latest has the newest.
 func imageRef(spec runtime.Spec) string {
@@ -196,12 +201,14 @@ var restartPolicies = map[mcsmv1.RestartPolicy]container.RestartPolicyMode{
 	mcsmv1.RestartPolicy_RESTART_POLICY_NEVER:       container.RestartPolicyDisabled,
 }
 
-func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
+// createContainer creates the container of a server whose image and data directory exist,
+// in the network netName.
+func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName string) error {
 	path, err := d.dataPath(spec)
 	if err != nil {
 		return err
 	}
-	if err := d.ensureNetwork(ctx); err != nil {
+	if err := d.ensureNetwork(ctx, netName); err != nil {
 		return err
 	}
 	img := images[spec.Type]
@@ -221,6 +228,10 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
 		env = append(env, "JVM_OPTS="+strings.Join(spec.JVMOptions, " "))
 	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", img.port))
+	published := network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}}
+	if spec.BehindProxy && spec.ProxyOnNode {
+		published = nil // only its proxy connects, over their network
+	}
 	_, err = d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: containerName(spec.ID),
 		Config: &container.Config{
@@ -229,12 +240,14 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
 			Labels:       map[string]string{labelManaged: "true", labelSpec: string(specJSON)},
 			ExposedPorts: network.PortSet{port: {}},
 		},
-		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{networkName: {}}},
+		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{netName: {}}},
 		HostConfig: &container.HostConfig{
 			Binds:         []string{path + ":" + img.data},
-			PortBindings:  network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}},
+			PortBindings:  published,
 			RestartPolicy: container.RestartPolicy{Name: restartPolicies[spec.RestartPolicy]},
 			SecurityOpt:   []string{"no-new-privileges:true"},
+			CapDrop:       []string{"ALL"},
+			CapAdd:        capabilities[img.ref],
 			Resources: container.Resources{
 				// The JVM needs memory beyond its heap, so the hard limit gets some headroom.
 				Memory:    int64(spec.MemoryMB*5/4+256) << 20,
@@ -247,6 +260,9 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec) error {
 }
 
 func (d *Docker) Start(ctx context.Context, id string) error {
+	if err := d.prepare(ctx, id); err != nil {
+		return err
+	}
 	_, err := d.cli.ContainerStart(ctx, containerName(id), client.ContainerStartOptions{})
 	return notFound(err)
 }
@@ -261,13 +277,13 @@ func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
 	if err != nil {
 		return err
 	}
-	spec.Type, spec.Storage, spec.BehindProxy = current.Type, current.Storage, current.BehindProxy
+	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode = current.Type, current.Storage, current.BehindProxy, current.ProxyOnNode
 	if imageRef(spec) != imageRef(current) {
 		if err := d.pull(ctx, imageRef(spec)); err != nil {
 			return err
 		}
 	}
-	return d.recreate(ctx, spec, c.State.Running)
+	return d.recreate(ctx, spec, c.State.Running, placement(c, spec))
 }
 
 func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
@@ -282,7 +298,7 @@ func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
 	if err != nil || img.ID == c.Image {
 		return false, err
 	}
-	if err := d.recreate(ctx, spec, c.State.Running); err != nil {
+	if err := d.recreate(ctx, spec, c.State.Running, placement(c, spec)); err != nil {
 		return true, err
 	}
 	// The old image goes once no container uses it; Docker refuses to remove it before.
@@ -290,7 +306,11 @@ func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
 	return true, nil
 }
 
+// Restart stops a server gracefully and starts it again.
 func (d *Docker) Restart(ctx context.Context, id string) error {
+	if err := d.prepare(ctx, id); err != nil {
+		return err
+	}
 	_, err := d.cli.ContainerRestart(ctx, containerName(id), client.ContainerRestartOptions{Timeout: new(stopTimeoutSeconds)})
 	return notFound(err)
 }
@@ -306,6 +326,11 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 	}
 	if _, err := d.cli.ContainerRemove(ctx, containerName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
 		return notFound(err)
+	}
+	if spec.Type == mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
+		if _, err := d.cli.NetworkRemove(ctx, proxyNetwork(id), client.NetworkRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
+			return err
+		}
 	}
 	return d.removeData(spec)
 }
@@ -379,8 +404,13 @@ func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, e
 	if !c.State.Running {
 		return "", runtime.ErrNotRunning
 	}
+	// As the server's user: root in the container may not read its data.
+	user, err := d.owner(spec)
+	if err != nil {
+		return "", err
+	}
 	exec, err := d.cli.ExecCreate(ctx, containerName(id), client.ExecCreateOptions{
-		Cmd: []string{"rcon-cli", command}, AttachStdout: true, AttachStderr: true,
+		User: user, Cmd: []string{"rcon-cli", command}, AttachStdout: true, AttachStderr: true,
 	})
 	if err != nil {
 		return "", err
@@ -414,6 +444,24 @@ func (d *Docker) pull(ctx context.Context, ref string) error {
 		return fmt.Errorf("pull %s: %w", ref, err)
 	}
 	return nil
+}
+
+// owner returns the user and group that own the data of a server, as uid:gid; the image
+// hands the data to the user it runs the server as.
+func (d *Docker) owner(spec runtime.Spec) (string, error) {
+	path, err := d.dataPath(spec)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", errors.New("the owner of the server's data is unknown")
+	}
+	return fmt.Sprintf("%d:%d", st.Uid, st.Gid), nil
 }
 
 func containerName(id string) string { return "mcsm-" + id }

@@ -212,6 +212,9 @@ message ConfigureNetworkRequest {
   string forwarding_secret = 2;
   // Backends of a proxy, in the order players are sent to them.
   repeated NetworkBackend backends = 3;
+  // For a backend: its proxy runs on the same node and reaches it over a Docker network,
+  // so its port isn't published.
+  bool proxy_on_node = 4;
 }
 
 message NetworkBackend {
