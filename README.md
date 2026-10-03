@@ -335,7 +335,8 @@ Users get their permissions from groups; a user can be in several groups and has
   codes aren't checked for a minute that doubles with every further wrong one, up to a day; parallel guesses count
   too. Recovery codes have 50 random bits and are stored as SHA-256 hashes. The secret of the app is stored in the
   master's database, which needs the same protection as the CA key next to it. The panel must be served over HTTPS (reverse proxy or
-  `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt).
+  `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt). With
+  `--tls-cert`, the master tells browsers to use HTTPS only (HSTS, one year); behind a reverse proxy, set it there.
 - **Networks.** Only Velocity's modern forwarding is supported: it signs the forwarded player data with a random
   secret per network. BungeeCord's forwarding can be spoofed by anyone who reaches a backend. The secret is stored in
   the master's database and on the network's servers; the API never returns it.
