@@ -2,6 +2,7 @@ package network
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/pelletier/go-toml/v2"
@@ -122,5 +123,15 @@ func TestPaperGlobal(t *testing.T) {
 				t.Fatal("other settings were lost")
 			}
 		})
+	}
+}
+
+func TestVelocityBackends(t *testing.T) {
+	got := VelocityBackends([]byte(defaultVelocity))
+	if len(got) != 2 || !slices.Contains(got, "127.0.0.1:30066") || !slices.Contains(got, "127.0.0.1:30067") {
+		t.Fatalf("backends = %q", got)
+	}
+	if got := VelocityBackends([]byte("not toml [")); got != nil {
+		t.Fatalf("backends of a broken file = %q", got)
 	}
 }

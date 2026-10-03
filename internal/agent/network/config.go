@@ -62,6 +62,21 @@ func VelocityConfig(current []byte, backends []Backend) (config []byte, changed 
 	return config, !bytes.Equal(before, after), err
 }
 
+// VelocityBackends returns the addresses of the backends in velocity.toml.
+func VelocityBackends(config []byte) []string {
+	var settings struct{ Servers map[string]any }
+	if toml.Unmarshal(config, &settings) != nil {
+		return nil
+	}
+	var addresses []string
+	for name, address := range settings.Servers {
+		if s, ok := address.(string); ok && name != "try" {
+			addresses = append(addresses, s)
+		}
+	}
+	return addresses
+}
+
 // PaperGlobal returns paper-global.yml with Velocity forwarding enabled for secret,
 // keeping every other setting of current, which may be empty. An empty secret disables
 // forwarding. Paper fills in missing settings when it starts. changed reports whether

@@ -1335,7 +1335,10 @@ type ConfigureNetworkRequest struct {
 	// Shared secret of Velocity's modern forwarding. Required for proxies.
 	ForwardingSecret string `protobuf:"bytes,2,opt,name=forwarding_secret,json=forwardingSecret,proto3" json:"forwarding_secret,omitempty"`
 	// Backends of a proxy, in the order players are sent to them.
-	Backends      []*NetworkBackend `protobuf:"bytes,3,rep,name=backends,proto3" json:"backends,omitempty"`
+	Backends []*NetworkBackend `protobuf:"bytes,3,rep,name=backends,proto3" json:"backends,omitempty"`
+	// For a backend: its proxy runs on the same node and reaches it over a Docker network,
+	// so its port isn't published.
+	ProxyOnNode   bool `protobuf:"varint,4,opt,name=proxy_on_node,json=proxyOnNode,proto3" json:"proxy_on_node,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1389,6 +1392,13 @@ func (x *ConfigureNetworkRequest) GetBackends() []*NetworkBackend {
 		return x.Backends
 	}
 	return nil
+}
+
+func (x *ConfigureNetworkRequest) GetProxyOnNode() bool {
+	if x != nil {
+		return x.ProxyOnNode
+	}
+	return false
 }
 
 type NetworkBackend struct {
@@ -1845,11 +1855,12 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\"-\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\"\x8b\x01\n" +
+	"\x06output\x18\x01 \x01(\tR\x06output\"\xaf\x01\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x123\n" +
-	"\bbackends\x18\x03 \x03(\v2\x17.mcsm.v1.NetworkBackendR\bbackends\"i\n" +
+	"\bbackends\x18\x03 \x03(\v2\x17.mcsm.v1.NetworkBackendR\bbackends\x12\"\n" +
+	"\rproxy_on_node\x18\x04 \x01(\bR\vproxyOnNode\"i\n" +
 	"\x0eNetworkBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\tserver_id\x18\x02 \x01(\tH\x00R\bserverId\x12\x1a\n" +
