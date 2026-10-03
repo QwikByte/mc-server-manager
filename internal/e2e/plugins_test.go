@@ -58,6 +58,13 @@ func TestPlugins(t *testing.T) {
 			t.Fatalf("search query = %v, want facet %s", q, facet)
 		}
 	}
+	// A kind limits the search to plugins or mods and the loaders of its server types.
+	api.do("GET", "/api/plugins/search?kind=mods", nil, http.StatusOK, &found)
+	q = *m.modrinth.search.Load()
+	if len(found.Hits) != 1 || found.Hits[0].ID != "fabricapi" || !strings.Contains(q.Get("facets"), `["project_type:mod"]`) {
+		t.Fatalf("search = %+v, query = %v", found, q)
+	}
+	api.do("GET", "/api/plugins/search?kind=datapacks", nil, http.StatusBadRequest, nil)
 	api.do("GET", "/api/plugins/search?sort=random", nil, http.StatusBadRequest, nil)
 	api.do("GET", "/api/plugins/search?category=Eco+nomy", nil, http.StatusBadRequest, nil)
 	var releases []string

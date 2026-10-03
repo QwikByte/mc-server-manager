@@ -25,7 +25,7 @@ import { serverType, serverTypes } from "@/features/servers/server-types"
 import { formatDate } from "@/lib/format"
 import { locale, msg } from "@/lib/i18n"
 import { useDebounced } from "@/lib/use-debounced"
-import { gameVersionsQuery, type Search, type SearchHit, type Sort, searchQuery } from "./api"
+import { gameVersionsQuery, type Kind, type Search, type SearchHit, type Sort, searchQuery } from "./api"
 import { categories } from "./categories"
 import { PluginIcon } from "./plugin-icon"
 
@@ -42,34 +42,43 @@ const sorts: Record<Sort, string> = {
 
 const modLoaders = serverTypes.flatMap((s) => (s.addons?.kind === "mods" ? s.addons.loaders : []))
 
-type Filters = Omit<Search, "query">
-
-// Without a fixed type, Paper is searched first, the most common software.
-const initial: Filters = { type: "paper", categories: [], sort: "relevance", serverOnly: false }
+type Filters = Omit<Search, "query" | "kind">
 
 /**
  * Searches Modrinth for plugins and mods, in categories and sorted. A given server type and Minecraft version are
- * fixed, otherwise they can be chosen. Without a query, the most downloaded ones come first.
+ * fixed, otherwise they can be chosen, among the software of a kind if given. Without a query, the most downloaded
+ * ones come first.
  */
 export function PluginSearch({
+  kind,
   type,
   version,
   action,
   autoFocus,
 }: {
+  kind?: Kind
   type?: string
   version?: string
   action: (hit: SearchHit) => ReactNode
   autoFocus?: boolean
 }) {
+  const choices = serverTypes.filter((s) => s.addons && (!kind || s.addons.kind === kind))
   const [input, setInput] = useState("")
   const query = useDebounced(input.trim())
-  const [filters, setFilters] = useState(initial)
+  // The first software is searched first, the most common one.
+  const [filters, setFilters] = useState<Filters>({ type: choices[0].value, categories: [], sort: "relevance", serverOnly: false })
   const set = (change: Partial<Filters>) => setFilters((f) => ({ ...f, ...change }))
   const software = type ?? filters.type
   // Players may have to install mods too, never plugins.
-  const mods = !software || serverType(software).addons?.kind === "mods"
-  const search: Search = { ...filters, query, type: software, version: version ?? filters.version, serverOnly: filters.serverOnly && mods }
+  const mods = software ? serverType(software).addons?.kind === "mods" : kind !== "plugins"
+  const search: Search = {
+    ...filters,
+    query,
+    kind,
+    type: software,
+    version: version ?? filters.version,
+    serverOnly: filters.serverOnly && mods,
+  }
   const { data: releases = [] } = useQuery({ ...gameVersionsQuery, enabled: version === undefined })
   const { data, error, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery(searchQuery(search))
   const hits = data?.pages.flatMap((p) => p.hits) ?? []
@@ -111,14 +120,17 @@ export function PluginSearch({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {type === undefined && (
-            <Choice label={t("Software")} value={filters.type} onChange={(type) => set({ type })} everything={t("All software")}>
-              {serverTypes
-                .filter((s) => s.addons)
-                .map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
+            <Choice
+              label={t("Software")}
+              value={filters.type}
+              onChange={(type) => set({ type })}
+              everything={kind === "mods" ? t("All mod loaders") : kind === "plugins" ? t("All plugin software") : t("All software")}
+            >
+              {choices.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
             </Choice>
           )}
           {/* Proxies run plugins of any Minecraft version. */}
