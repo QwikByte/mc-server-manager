@@ -11,6 +11,7 @@ import (
 
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/mc-server-manager/internal/master/ratelimit"
 )
 
 // The __Host- prefix makes browsers enforce Secure, Path=/ and no Domain attribute.
@@ -24,16 +25,16 @@ type userKey struct{}
 type Handler struct {
 	svc        *Service
 	sessionTTL func() time.Duration
-	clients    *limiter
-	usernames  *limiter
-	users      *limiter
+	clients    *ratelimit.Limiter
+	usernames  *ratelimit.Limiter
+	users      *ratelimit.Limiter
 }
 
 // NewHandler returns the handler of the sign-in. sessionTTL tells how long new sessions last.
 func NewHandler(svc *Service, sessionTTL func() time.Duration) *Handler {
 	return &Handler{
-		svc: svc, sessionTTL: sessionTTL, clients: newLimiter(clientBurst, clientEvery),
-		usernames: newLimiter(usernameBurst, usernameEvery), users: newLimiter(clientBurst, clientEvery),
+		svc: svc, sessionTTL: sessionTTL, clients: ratelimit.New(clientBurst, clientEvery),
+		usernames: ratelimit.New(usernameBurst, usernameEvery), users: ratelimit.New(clientBurst, clientEvery),
 	}
 }
 
@@ -71,10 +72,10 @@ func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 }
 
 // limitedBy returns a wrapper that rate limits requests by the key of each.
-func limitedBy(l *limiter, key func(*http.Request) string) func(http.HandlerFunc) http.HandlerFunc {
+func limitedBy(l *ratelimit.Limiter, key func(*http.Request) string) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			if !l.allow(key(r)) {
+			if !l.Allow(key(r)) {
 				tooManyAttempts(w, r)
 				return
 			}
@@ -101,7 +102,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Names that don't fit the pattern belong to no account. Usernames are case-insensitive.
-	if usernamePattern.MatchString(req.Username) && !h.usernames.allow(strings.ToLower(req.Username)) {
+	if usernamePattern.MatchString(req.Username) && !h.usernames.Allow(strings.ToLower(req.Username)) {
 		tooManyAttempts(w, r, logging.KeyUser, req.Username)
 		return
 	}

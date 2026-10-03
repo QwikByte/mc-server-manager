@@ -149,6 +149,8 @@ func serve(ctx context.Context, cfg config) error {
 			Usage: usageStore, Moves: moves, Restart: restart,
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Requests themselves have no time limit, as uploads and streams last long.
+		IdleTimeout: 2 * time.Minute,
 	}
 	httpServer.RegisterOnShutdown(endRequests)
 
@@ -252,6 +254,10 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
+		// Only if the master serves TLS itself (--tls-cert); behind a proxy, the proxy decides.
+		if r.TLS != nil {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

@@ -57,12 +57,37 @@ func (l *Locations) List() ([]Location, error) {
 	for i, loc := range locations {
 		var st unix.Statfs_t
 		if unix.Statfs(loc.Path, &st) == nil {
-			//nolint:gosec // block counts and sizes are never negative
-			locations[i].FreeBytes, locations[i].TotalBytes = st.Bavail*uint64(st.Bsize), st.Blocks*uint64(st.Bsize)
+			locations[i].FreeBytes, locations[i].TotalBytes = free(st), st.Blocks*uint64(st.Bsize) //nolint:gosec // never negative
 		}
 	}
 	return locations, nil
 }
+
+// MinFree is the space that uploads and backups leave free on a file system, so that the
+// servers can keep saving their worlds.
+const MinFree = 1 << 30
+
+// FullError refuses what would leave less than MinFree free.
+type FullError struct{ Free, Need uint64 }
+
+func (e FullError) Error() string {
+	return fmt.Sprintf("The node has %.1f GB free, but this needs %.1f GB, as 1 GB stays free for the servers.",
+		float64(e.Free)/(1<<30), float64(e.Need)/(1<<30))
+}
+
+// Fits returns a FullError unless size more bytes leave MinFree free on the file system of
+// the open file or folder f. A file system whose free space is unknown passes.
+func Fits(f *os.File, size int64) error {
+	var st unix.Statfs_t
+	need := uint64(max(size, 0)) + MinFree
+	if unix.Fstatfs(int(f.Fd()), &st) == nil && need > free(st) { //nolint:gosec // a file descriptor fits an int
+		return FullError{free(st), need}
+	}
+	return nil
+}
+
+//nolint:gosec // block counts and sizes are never negative
+func free(st unix.Statfs_t) uint64 { return st.Bavail * uint64(st.Bsize) }
 
 // Path returns the directory of a location; an empty name means the default location.
 func (l *Locations) Path(name string) (string, error) {

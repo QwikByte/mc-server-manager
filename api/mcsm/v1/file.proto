@@ -67,6 +67,8 @@ message WriteFileHeader {
   string path = 2;
   // Replace an existing file; otherwise writing to an existing file fails.
   bool overwrite = 3;
+  // Size of the file if known, so that one that doesn't fit is refused before it is sent.
+  int64 size = 4;
 }
 
 message WriteFileResponse {
