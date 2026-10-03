@@ -1,6 +1,7 @@
 import { CrownIcon, GlobeIcon, TargetIcon, TrashIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useBlocker, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { BackLink } from "@/components/back-link"
@@ -63,7 +64,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
     event.preventDefault()
     save.mutate(form, {
       onSuccess: (saved) => {
-        toast.success(`Saved ${saved.name}`)
+        toast.success(t("Saved {{name}}", { name: saved.name }))
         if (!group) void navigate({ to: "/settings/groups/$groupId", params: { groupId: saved.id }, replace: true })
       },
       onError: (e) => toast.error(e.message),
@@ -72,22 +73,23 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
 
   return (
     <>
-      <BackLink to="/settings/groups">Groups</BackLink>
+      <BackLink to="/settings/groups">{t("Groups")}</BackLink>
       <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
         <fieldset disabled={!editable} className="contents">
-          <FormSection title="Group" description="What the group is for, e.g. the moderators of a server.">
+          <FormSection title={t("Group")} description={t("What the group is for, e.g. the moderators of a server.")}>
             {group?.builtin && (
               <Callout tone="warning" icon={CrownIcon}>
-                Administrators have every permission on all servers, also permissions that later versions add. Only the members of this
-                group change, on the Users tab.
+                {t(
+                  "Administrators have every permission on all servers, also permissions that later versions add. Only the members of this group change, on the Users tab.",
+                )}
               </Callout>
             )}
             <Field>
-              <FieldLabel htmlFor="group-name">Name</FieldLabel>
+              <FieldLabel htmlFor="group-name">{t("Name")}</FieldLabel>
               <Input id="group-name" required maxLength={64} value={form.name} onChange={(e) => set({ name: e.target.value })} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="group-description">Description</FieldLabel>
+              <FieldLabel htmlFor="group-description">{t("Description")}</FieldLabel>
               <Textarea
                 id="group-description"
                 rows={2}
@@ -100,31 +102,31 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
 
           {!group?.builtin && (
             <>
-              <FormSection title="Scope" description="Where the node and server permissions apply. The others apply everywhere.">
+              <FormSection title={t("Scope")} description={t("Where the node and server permissions apply. The others apply everywhere.")}>
                 <RadioGroup
                   value={form.allServers ? "all" : "some"}
                   onValueChange={(v) => set({ allServers: v === "all" })}
-                  aria-label="Scope"
+                  aria-label={t("Scope")}
                   className="gap-3 sm:grid-cols-2"
                 >
                   <ScopeOption
                     value="all"
                     icon={GlobeIcon}
-                    title="All servers"
-                    description="On every node, also on nodes and servers added later."
+                    title={t("All servers")}
+                    description={t("On every node, also on nodes and servers added later.")}
                   />
                   <ScopeOption
                     value="some"
                     icon={TargetIcon}
-                    title="Selected nodes and servers"
-                    description="Whole nodes include servers created later."
+                    title={t("Selected nodes and servers")}
+                    description={t("Whole nodes include servers created later.")}
                   />
                 </RadioGroup>
                 {!form.allServers && <TargetsField value={form.targets} onChange={(targets) => set({ targets })} />}
               </FormSection>
               <FormSection
-                title="Permissions"
-                description="Choosing a permission also chooses what it needs, e.g. seeing the servers one may restart."
+                title={t("Permissions")}
+                description={t("Choosing a permission also chooses what it needs, e.g. seeing the servers one may restart.")}
               >
                 {catalog ? (
                   <PermissionsField
@@ -142,10 +144,10 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
         </fieldset>
 
         {group && (
-          <FormSection title="Members" description="Choose the groups of a user on the Users tab.">
+          <FormSection title={t("Members")} description={t("Choose the groups of a user on the Users tab.")}>
             <div className="flex flex-wrap gap-2">
               {members.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No members yet.</p>
+                <p className="text-sm text-muted-foreground">{t("No members yet.")}</p>
               ) : (
                 members.map((u) => <Chip key={u.id}>{u.username}</Chip>)
               )}
@@ -160,17 +162,17 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
                 trigger={
                   <Button type="button" variant="ghost" className="text-destructive">
                     <TrashIcon />
-                    Delete group
+                    {t("Delete group")}
                   </Button>
                 }
-                title={`Delete ${group.name}?`}
-                description="Its members lose the permissions they only have through this group."
-                action="Delete group"
+                title={t("Delete {{name}}?", { name: group.name })}
+                description={t("Its members lose the permissions they only have through this group.")}
+                action={t("Delete group")}
                 destructive
                 onConfirm={() =>
                   remove.mutate(group.id, {
                     onSuccess: () => {
-                      toast.success(`Deleted ${group.name}`)
+                      toast.success(t("Deleted {{name}}", { name: group.name }))
                       void navigate({ to: "/settings/groups" })
                     },
                     onError: (e) => toast.error(e.message),
@@ -181,16 +183,16 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
               <span />
             )}
             <Button type="submit" disabled={(!!group && !dirty) || save.isPending}>
-              {save.isPending ? "Saving…" : group ? "Save group" : "Create group"}
+              {save.isPending ? t("Saving…") : group ? t("Save group") : t("Create group")}
             </Button>
           </div>
         )}
         <ConfirmDialog
           open={blocker.status === "blocked"}
           onOpenChange={(open) => !open && blocker.reset?.()}
-          title="Discard your changes?"
-          description="Your changes to the group haven't been saved."
-          action="Discard changes"
+          title={t("Discard your changes?")}
+          description={t("Your changes to the group haven't been saved.")}
+          action={t("Discard changes")}
           destructive
           onConfirm={() => blocker.proceed?.()}
         />
@@ -258,7 +260,7 @@ function PermissionsField({
             <div className="flex items-center justify-between gap-3">
               <legend className="text-sm font-semibold">{area.name}</legend>
               <Button type="button" variant="ghost" size="xs" onClick={() => (all ? remove(ids) : add(ids))}>
-                {all ? "Clear" : "Choose all"}
+                {all ? t("Clear") : t("Choose all")}
               </Button>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -275,7 +277,7 @@ function PermissionsField({
                   <span className="min-w-0 space-y-0.5">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
                       {p.label}
-                      {scoped && !p.scoped && <Pill tone="neutral">Everywhere</Pill>}
+                      {scoped && !p.scoped && <Pill tone="neutral">{t("Everywhere")}</Pill>}
                     </span>
                     {p.description && <span className="block text-xs text-muted-foreground">{p.description}</span>}
                   </span>

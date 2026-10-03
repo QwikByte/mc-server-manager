@@ -1,3 +1,4 @@
+import { t } from "i18next"
 import type { ReactElement, ReactNode } from "react"
 import {
   AlertDialog,
@@ -43,7 +44,7 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
           <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
             {action}
           </AlertDialogAction>

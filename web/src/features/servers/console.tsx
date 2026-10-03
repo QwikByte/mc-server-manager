@@ -1,6 +1,8 @@
 import { PaperPlaneRightIcon, TerminalIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useAccess } from "@/features/access/use-access"
+import { msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { type Server, useSendCommand } from "./api"
 import { serverType } from "./server-types"
@@ -18,11 +20,11 @@ const maxLines = 1000
 const historySteps: Partial<Record<string, number>> = { ArrowUp: -1, ArrowDown: 1 }
 
 const connections: Record<Connection, { text: string; dot: string }> = {
-  connecting: { text: "Connecting…", dot: "bg-console-warn animate-pulse" },
-  live: { text: "Live", dot: "bg-console-command shadow-[0_0_8px_var(--console-command)]" },
-  ended: { text: "Showing the last output", dot: "bg-console-muted" },
-  lost: { text: "Connection lost, reconnecting…", dot: "bg-console-warn animate-pulse" },
-  failed: { text: "The console is not available right now.", dot: "bg-console-error" },
+  connecting: { text: msg("Connecting…"), dot: "bg-console-warn animate-pulse" },
+  live: { text: msg("Live"), dot: "bg-console-command shadow-[0_0_8px_var(--console-command)]" },
+  ended: { text: msg("Showing the last output"), dot: "bg-console-muted" },
+  lost: { text: msg("Connection lost, reconnecting…"), dot: "bg-console-warn animate-pulse" },
+  failed: { text: msg("The console is not available right now."), dot: "bg-console-error" },
 }
 
 function lineClass({ kind, text }: Line) {
@@ -125,11 +127,11 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
   }
 
   const disabledReason = !can("console.commands", nodeId, server.id)
-    ? "Your groups don't let you send commands"
+    ? t("Your groups don't let you send commands")
     : proxy
-      ? "Proxies don't accept console commands yet"
+      ? t("Proxies don't accept console commands yet")
       : !live
-        ? "Start the server to send commands"
+        ? t("Start the server to send commands")
         : undefined
 
   return (
@@ -140,18 +142,18 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-white/10 px-4 py-3">
         <h2 id="console-heading" className="flex items-center gap-2 text-sm font-semibold">
           <TerminalIcon className="size-4 text-console-command" weight="duotone" />
-          Console
+          {t("Console")}
         </h2>
         <p role="status" className="flex items-center gap-2 text-xs text-console-muted">
           <span aria-hidden className={cn("size-2 rounded-full", connections[connection].dot)} />
-          {connections[connection].text}
+          {t(connections[connection].text)}
         </p>
       </div>
       {/* Ligatures are off so that output like "<--" shows exactly what the server printed. */}
       <div
         ref={viewport}
         role="log"
-        aria-label={`Console output of ${server.name}`}
+        aria-label={t("Console output of {{name}}", { name: server.name })}
         tabIndex={0}
         onScroll={(e) => {
           const el = e.currentTarget
@@ -160,7 +162,7 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
         className="h-[60vh] min-h-72 overflow-y-auto px-4 py-3 font-mono text-xs leading-5 [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       >
         {lines.length === 0 ? (
-          <p className="text-console-muted">{connection === "connecting" ? "Loading output…" : "No output yet."}</p>
+          <p className="text-console-muted">{connection === "connecting" ? t("Loading output…") : t("No output yet.")}</p>
         ) : (
           lines.map((line) => (
             <div key={line.id} className={cn("break-words whitespace-pre-wrap", lineClass(line))}>
@@ -181,8 +183,8 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={browseHistory}
           disabled={disabledReason !== undefined}
-          placeholder={disabledReason ?? "Type a command, e.g. say Hello"}
-          aria-label="Console command"
+          placeholder={disabledReason ?? t("Type a command, e.g. say Hello")}
+          aria-label={t("Console command")}
           autoComplete="off"
           spellCheck={false}
           maxLength={1000}
@@ -190,7 +192,7 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
         />
         <button
           type="submit"
-          aria-label="Send command"
+          aria-label={t("Send command")}
           disabled={disabledReason !== undefined || !input.trim()}
           className="grid size-9 place-items-center rounded-lg bg-console-command/15 text-console-command transition-colors hover:bg-console-command/25 disabled:pointer-events-none disabled:opacity-30"
         >

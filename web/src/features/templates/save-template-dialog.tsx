@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -41,12 +42,22 @@ export function SaveTemplateDialog({
   const props = Object.fromEntries(Object.entries(properties.data?.properties ?? {}).filter(([key]) => !locked.has(key)))
   const projects = plugins.data?.plugins.flatMap((p) => (p.project ? [p.project.id] : [])) ?? []
   const others = (plugins.data?.plugins.length ?? 0) - projects.length
-  const kind = type.addons?.kind ?? "plugins"
+  const software = type.proxy ? type.label : `${type.label} ${displayVersion(server.version)}`
+  const count = projects.length
   const summary = [
-    `${type.label}${type.proxy ? "" : ` ${displayVersion(server.version)}`} with ${formatMegabytes(server.memoryMb)} and the server's settings`,
-    !type.proxy && `${Object.keys(props).length} properties of server.properties`,
+    t("{{software}} with {{memory}} and the server's settings", { software, memory: formatMegabytes(server.memoryMb) }),
+    !type.proxy &&
+      t("{{count}} properties of server.properties", {
+        count: Object.keys(props).length,
+        defaultValue_one: "{{count}} property of server.properties",
+      }),
     type.addons &&
-      `${projects.length} ${projects.length === 1 ? kind.slice(0, -1) : kind} from Modrinth${others > 0 ? `; ${others} other files are left out` : ""}`,
+      (type.addons.kind === "mods"
+        ? t("{{count}} mods from Modrinth", { count, defaultValue_one: "{{count}} mod from Modrinth" })
+        : t("{{count}} plugins from Modrinth", { count, defaultValue_one: "{{count}} plugin from Modrinth" })),
+    type.addons &&
+      others > 0 &&
+      t("{{count}} other files are left out", { count: others, defaultValue_one: "{{count}} other file is left out" }),
   ].filter(Boolean)
 
   function submit(event: FormEvent) {
@@ -68,10 +79,10 @@ export function SaveTemplateDialog({
         plugins: projects,
       },
       {
-        onSuccess: (t) => {
-          toast.success(`Saved ${server.name} as the template ${t.name}`)
+        onSuccess: (template) => {
+          toast.success(t("Saved {{server}} as the template {{template}}", { server: server.name, template: template.name }))
           onOpenChange(false)
-          void navigate({ to: "/templates/$templateId", params: { templateId: t.id } })
+          void navigate({ to: "/templates/$templateId", params: { templateId: template.id } })
         },
       },
     )
@@ -82,18 +93,20 @@ export function SaveTemplateDialog({
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Save as template</DialogTitle>
+            <DialogTitle>{t("Save as template")}</DialogTitle>
             <DialogDescription>
-              New servers can start with the setup of {server.name}. Worlds and plugin configurations aren't included.
+              {t("New servers can start with the setup of {{name}}. Worlds and plugin configurations aren't included.", {
+                name: server.name,
+              })}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="template-name">Name</FieldLabel>
+              <FieldLabel htmlFor="template-name">{t("Name")}</FieldLabel>
               <Input id="template-name" required maxLength={64} value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="template-description">Description</FieldLabel>
+              <FieldLabel htmlFor="template-description">{t("Description")}</FieldLabel>
               <Textarea
                 id="template-description"
                 rows={2}
@@ -114,10 +127,10 @@ export function SaveTemplateDialog({
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={save.isPending || properties.isLoading || plugins.isLoading}>
-              {save.isPending ? "Saving…" : "Save template"}
+              {save.isPending ? t("Saving…") : t("Save template")}
             </Button>
           </DialogFooter>
         </form>

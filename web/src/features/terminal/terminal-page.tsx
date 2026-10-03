@@ -1,6 +1,7 @@
 import { ShieldCheckIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi } from "@tanstack/react-router"
+import { t } from "i18next"
 import { Callout } from "@/components/callout"
 import { StatusDot } from "@/components/status"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -25,7 +26,7 @@ export function TerminalPage() {
   return (
     <>
       <Field className="mb-4 sm:w-80">
-        <FieldLabel htmlFor="terminal-target">Run commands on</FieldLabel>
+        <FieldLabel htmlFor="terminal-target">{t("Run commands on")}</FieldLabel>
         <Select
           value={node?.id ?? masterTarget}
           onValueChange={(next) => navigate({ search: { target: next === masterTarget ? undefined : next }, replace: true })}
@@ -34,22 +35,22 @@ export function TerminalPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={masterTarget}>Master</SelectItem>
+            <SelectItem value={masterTarget}>{t("Master")}</SelectItem>
             {enrolled.map((n) => (
               <SelectItem key={n.id} value={n.id}>
                 <StatusDot status={{ tone: n.status === "online" ? "success" : "destructive", label: n.status }} />
                 {n.name}
-                <span className="text-muted-foreground">agent</span>
+                <span className="text-muted-foreground">{t("agent")}</span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </Field>
       <Terminal target={node?.id ?? masterTarget} prompt={node ? `mcsm-agent@${node.name}` : "mcsm-master"} />
-      <Callout className="mt-6" icon={ShieldCheckIcon} title="Not a shell">
-        The commands of an agent are those of mcsm-agent on the node. They reach it through the master's mutually authenticated
-        connection, like everything the panel does, and nothing runs in a shell. Storage locations and enrollment can only be
-        changed in the CLI on the node itself. The master logs every command with your user name.
+      <Callout className="mt-6" icon={ShieldCheckIcon} title={t("Not a shell")}>
+        {t(
+          "The commands of an agent are those of mcsm-agent on the node. They reach it through the master's mutually authenticated connection, like everything the panel does, and nothing runs in a shell. Storage locations and enrollment can only be changed in the CLI on the node itself. The master logs every command with your user name.",
+        )}
       </Callout>
     </>
   )

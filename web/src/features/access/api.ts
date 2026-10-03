@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { t } from "i18next"
 import type { Target } from "@/features/servers/api"
 import { api } from "@/lib/api"
 import type { Permission } from "./permissions"
@@ -61,11 +62,14 @@ export type GroupInput = Pick<Group, "name" | "description" | "permissions" | "a
 
 /** Where the node and server permissions of a group apply, e.g. "2 nodes · 1 server". */
 export function describeScope(group: Pick<Group, "allServers" | "targets">) {
-  if (group.allServers) return "All servers"
-  const nodes = group.targets.filter((t) => !t.serverId).length
+  if (group.allServers) return t("All servers")
+  const nodes = group.targets.filter((target) => !target.serverId).length
   const servers = group.targets.length - nodes
-  const parts = [nodes && `${nodes} ${nodes === 1 ? "node" : "nodes"}`, servers && `${servers} ${servers === 1 ? "server" : "servers"}`]
-  return parts.filter(Boolean).join(" · ") || "No servers"
+  const parts = [
+    nodes && t("{{count}} nodes", { count: nodes, defaultValue_one: "{{count}} node" }),
+    servers && t("{{count}} servers", { count: servers, defaultValue_one: "{{count}} server" }),
+  ]
+  return parts.filter(Boolean).join(" · ") || t("No servers")
 }
 
 export const groupsQuery = queryOptions({ queryKey: ["groups"], queryFn: () => api<Group[]>("/groups") })

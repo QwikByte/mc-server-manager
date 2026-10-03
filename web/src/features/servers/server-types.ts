@@ -1,5 +1,7 @@
 import { ArrowsSplitIcon, CubeIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import type { Status } from "@/components/status"
+import { msg } from "@/lib/i18n"
 import type { ServerState } from "./api"
 
 export interface ServerType {
@@ -26,7 +28,7 @@ export const serverTypes: ServerType[] = [
 export const memoryOptionsMb = [512, 1024, 2048, 4096, 6144, 8192, 12288, 16384]
 
 export function serverType(value: string): ServerType {
-  return serverTypes.find((t) => t.value === value) ?? { value, label: value, proxy: false }
+  return serverTypes.find((type) => type.value === value) ?? { value, label: value, proxy: false }
 }
 
 /** Sensible defaults: proxies listen on 25577 and need far less memory than game servers. */
@@ -54,14 +56,14 @@ export function nextName(name: string, taken: string[]): string {
 
 /** Shows the version a server was created with; "LATEST" follows new releases. */
 export function displayVersion(version: string) {
-  return version === "LATEST" ? "latest" : version
+  return version === "LATEST" ? t("latest") : version
 }
 
 export const serverStates: Record<ServerState, Status> = {
-  running: { tone: "success", label: "Running" },
-  starting: { tone: "warning", label: "Starting", pulse: true },
-  crashing: { tone: "destructive", label: "Crashing", pulse: true },
-  stopped: { tone: "neutral", label: "Stopped" },
+  running: { tone: "success", label: msg("Running") },
+  starting: { tone: "warning", label: msg("Starting"), pulse: true },
+  crashing: { tone: "destructive", label: msg("Crashing"), pulse: true },
+  stopped: { tone: "neutral", label: msg("Stopped") },
 }
 
 /** Game servers are emerald blocks, proxies violet forks. */

@@ -1,3 +1,4 @@
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -37,7 +38,7 @@ export function PasswordDialog({ username }: { username: string }) {
       { current: form.current, new: form.next },
       {
         onSuccess: () => {
-          toast.success("Changed your password", { description: "You were signed out everywhere else." })
+          toast.success(t("Changed your password"), { description: t("You were signed out everywhere else.") })
           onOpenChange(false)
         },
       },
@@ -47,18 +48,20 @@ export function PasswordDialog({ username }: { username: string }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline">Change password</Button>
+        <Button variant="outline">{t("Change password")}</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
-            <DialogTitle>Change your password</DialogTitle>
-            <DialogDescription>Other devices where you are signed in as {username} are signed out.</DialogDescription>
+            <DialogTitle>{t("Change your password")}</DialogTitle>
+            <DialogDescription>
+              {t("Other devices where you are signed in as {{name}} are signed out.", { name: username })}
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
             <Field>
-              <FieldLabel htmlFor="password-current">Current password</FieldLabel>
+              <FieldLabel htmlFor="password-current">{t("Current password")}</FieldLabel>
               <Input
                 id="password-current"
                 type="password"
@@ -69,7 +72,7 @@ export function PasswordDialog({ username }: { username: string }) {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="password-new">New password</FieldLabel>
+              <FieldLabel htmlFor="password-new">{t("New password")}</FieldLabel>
               <Input
                 id="password-new"
                 type="password"
@@ -79,10 +82,10 @@ export function PasswordDialog({ username }: { username: string }) {
                 value={form.next}
                 onChange={(e) => setForm({ ...form, next: e.target.value })}
               />
-              <FieldDescription>At least 12 characters.</FieldDescription>
+              <FieldDescription>{t("At least 12 characters.")}</FieldDescription>
             </Field>
             <Field data-invalid={mismatch}>
-              <FieldLabel htmlFor="password-repeat">Repeat new password</FieldLabel>
+              <FieldLabel htmlFor="password-repeat">{t("Repeat new password")}</FieldLabel>
               <Input
                 id="password-repeat"
                 type="password"
@@ -92,16 +95,16 @@ export function PasswordDialog({ username }: { username: string }) {
                 value={form.repeat}
                 onChange={(e) => setForm({ ...form, repeat: e.target.value })}
               />
-              {mismatch && <FieldError>The passwords don't match.</FieldError>}
+              {mismatch && <FieldError>{t("The passwords don't match.")}</FieldError>}
             </Field>
             {change.error && <FieldError>{change.error.message}</FieldError>}
           </FieldGroup>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline">{t("Cancel")}</Button>
             </DialogClose>
             <Button type="submit" disabled={change.isPending || mismatch}>
-              {change.isPending ? "Saving…" : "Change password"}
+              {change.isPending ? t("Saving…") : t("Change password")}
             </Button>
           </DialogFooter>
         </form>

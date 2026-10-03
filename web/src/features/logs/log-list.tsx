@@ -1,5 +1,6 @@
 import { CopyIcon, FunnelIcon, ScrollIcon } from "@phosphor-icons/react"
 import { useInfiniteQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { useId, useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
@@ -7,25 +8,26 @@ import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { type LogEntry, type LogFilter, logsQuery, useLiveLogs } from "./api"
 import { categoryLabel, formatEntryTime, levels } from "./meta"
 
 /** Labels of attributes that the master and the agents add to entries. */
 const attrLabels: Record<string, string> = {
-  err: "Error",
-  ip: "IP address",
-  status: "HTTP status",
-  duration: "Duration",
-  route: "Route",
-  origin: "Called by",
-  peer: "Master address",
-  code: "Error code",
-  command: "Command",
-  path: "Path",
-  task: "Task",
-  account: "Account",
-  group: "Group",
+  err: msg("Error"),
+  ip: msg("IP address"),
+  status: msg("HTTP status"),
+  duration: msg("Duration"),
+  route: msg("Route"),
+  origin: msg("Called by"),
+  peer: msg("Master address"),
+  code: msg("Error code"),
+  command: msg("Command"),
+  path: msg("Path"),
+  task: msg("Task"),
+  account: msg("Account"),
+  group: msg("Group"),
 }
 
 /** Entries of the log, newest first and grouped by day. Each opens to show its details. */
@@ -58,8 +60,8 @@ export function LogList({
       <EmptyState
         icon={ScrollIcon}
         tone="neutral"
-        title="No entries"
-        description={live ? "Nothing matches yet. New entries show up here as they are logged." : "Nothing matches the filter."}
+        title={t("No entries")}
+        description={live ? t("Nothing matches yet. New entries show up here as they are logged.") : t("Nothing matches the filter.")}
       />
     )
   }
@@ -86,7 +88,7 @@ export function LogList({
       {hasNextPage && (
         <div className="border-t p-2 text-center">
           <Button variant="ghost" size="sm" disabled={isFetchingNextPage} onClick={() => void fetchNextPage()}>
-            {isFetchingNextPage ? "Loading…" : "Show older entries"}
+            {isFetchingNextPage ? t("Loading…") : t("Show older entries")}
           </Button>
         </div>
       )}
@@ -96,8 +98,8 @@ export function LogList({
 
 function dayLabel(iso: string) {
   const day = new Date(iso).toDateString()
-  if (day === new Date().toDateString()) return "Today"
-  if (day === new Date(Date.now() - 86_400_000).toDateString()) return "Yesterday"
+  if (day === new Date().toDateString()) return t("Today")
+  if (day === new Date(Date.now() - 86_400_000).toDateString()) return t("Yesterday")
   return new Date(iso).toLocaleDateString(undefined, { dateStyle: "full" })
 }
 
@@ -106,7 +108,7 @@ function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogF
   const id = useId()
   const level = levels[entry.level]
   const about = [entry.nodeName ?? entry.nodeId, entry.serverName ?? entry.serverId].filter(Boolean).join(" › ")
-  const meta = [categoryLabel(entry.category), entry.user, about, entry.source === "agent" && "from the agent"].filter(Boolean)
+  const meta = [categoryLabel(entry.category), entry.user, about, entry.source === "agent" && t("from the agent")].filter(Boolean)
 
   return (
     <li>
@@ -120,7 +122,7 @@ function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogF
         <IconTile icon={level.icon} tone={level.tone} size="sm" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium break-words">
-            <span className="sr-only">{level.label}: </span>
+            <span className="sr-only">{t("{{level}}:", { level: t(level.label) })} </span>
             {entry.message}
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">
@@ -141,21 +143,21 @@ function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogF
 
 function EntryDetails({ id, entry, onFilter }: { id: string; entry: LogEntry; onFilter?: (change: LogFilter) => void }) {
   const facts: [string, string | undefined][] = [
-    ["Time", new Date(entry.time).toLocaleString(undefined, { dateStyle: "full", timeStyle: "medium" })],
-    ["Level", levels[entry.level].label],
-    ["Logged by", entry.source === "agent" ? `The agent of ${entry.nodeName ?? entry.nodeId}` : "The master"],
-    ["Category", categoryLabel(entry.category)],
-    ["User", entry.user],
-    ["Node", entry.nodeId && `${entry.nodeName ?? "Removed node"} (${entry.nodeId})`],
-    ["Server", entry.serverId && `${entry.serverName ?? "Unknown server"} (${entry.serverId})`],
+    [t("Time"), new Date(entry.time).toLocaleString(undefined, { dateStyle: "full", timeStyle: "medium" })],
+    [t("Level"), t(levels[entry.level].label)],
+    [t("Logged by"), entry.source === "agent" ? t("The agent of {{node}}", { node: entry.nodeName ?? entry.nodeId }) : t("The master")],
+    [t("Category"), categoryLabel(entry.category)],
+    [t("User"), entry.user],
+    [t("Node"), entry.nodeId && `${entry.nodeName ?? t("Removed node")} (${entry.nodeId})`],
+    [t("Server"), entry.serverId && `${entry.serverName ?? t("Unknown server")} (${entry.serverId})`],
     ...Object.entries(entry.attrs)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]): [string, string] => [attrLabels[key] ?? key, value]),
+      .map(([key, value]): [string, string] => [attrLabels[key] ? t(attrLabels[key]) : key, value]),
   ]
   const narrow: [string, LogFilter][] = []
-  if (entry.user) narrow.push([`Actions of ${entry.user}`, { user: entry.user }])
-  if (entry.serverId) narrow.push(["This server", { node: entry.nodeId, server: entry.serverId }])
-  else if (entry.nodeId) narrow.push(["This node", { node: entry.nodeId }])
+  if (entry.user) narrow.push([t("Actions of {{user}}", { user: entry.user }), { user: entry.user }])
+  if (entry.serverId) narrow.push([t("This server"), { node: entry.nodeId, server: entry.serverId }])
+  else if (entry.nodeId) narrow.push([t("This node"), { node: entry.nodeId }])
   narrow.push([categoryLabel(entry.category), { category: entry.category }])
 
   return (
@@ -183,13 +185,13 @@ function EntryDetails({ id, entry, onFilter }: { id: string; entry: LogEntry; on
           size="sm"
           onClick={() =>
             navigator.clipboard.writeText(JSON.stringify(entry, null, 2)).then(
-              () => toast.success("Copied the entry"),
-              () => toast.error("The entry can't be copied here."),
+              () => toast.success(t("Copied the entry")),
+              () => toast.error(t("The entry can't be copied here.")),
             )
           }
         >
           <CopyIcon />
-          Copy as JSON
+          {t("Copy as JSON")}
         </Button>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { CheckCircleIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import type { Upload } from "./use-uploads"
@@ -6,7 +7,7 @@ import type { Upload } from "./use-uploads"
 export function UploadList({ uploads, onCancel }: { uploads: Upload[]; onCancel: (id: number) => void }) {
   if (uploads.length === 0) return null
   return (
-    <ul className="surface mb-4 divide-y overflow-hidden rounded-xl" aria-label="Uploads">
+    <ul className="surface mb-4 divide-y overflow-hidden rounded-xl" aria-label={t("Uploads")}>
       {uploads.map((u) => (
         <li key={u.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
           {u.state === "done" ? (
@@ -18,10 +19,10 @@ export function UploadList({ uploads, onCancel }: { uploads: Upload[]; onCancel:
           {u.state === "failed" ? (
             <span className="text-xs text-destructive">{u.error}</span>
           ) : u.state === "done" ? (
-            <span className="text-xs text-muted-foreground">Uploaded</span>
+            <span className="text-xs text-muted-foreground">{t("Uploaded")}</span>
           ) : (
             <>
-              <Progress value={u.progress * 100} className="w-32 sm:w-48" aria-label={`Upload of ${u.name}`} />
+              <Progress value={u.progress * 100} className="w-32 sm:w-48" aria-label={t("Upload of {{name}}", { name: u.name })} />
               <span className="w-10 text-right text-xs text-muted-foreground tabular-nums">
                 {u.state === "queued" ? "–" : `${Math.floor(u.progress * 100)}%`}
               </span>
@@ -30,7 +31,11 @@ export function UploadList({ uploads, onCancel }: { uploads: Upload[]; onCancel:
           <Button
             size="icon-xs"
             variant="ghost"
-            aria-label={u.state === "uploading" || u.state === "queued" ? `Cancel upload of ${u.name}` : `Dismiss ${u.name}`}
+            aria-label={
+              u.state === "uploading" || u.state === "queued"
+                ? t("Cancel upload of {{name}}", { name: u.name })
+                : t("Dismiss {{name}}", { name: u.name })
+            }
             onClick={() => onCancel(u.id)}
           >
             <XIcon />

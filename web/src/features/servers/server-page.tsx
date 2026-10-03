@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Outlet, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { BackLink } from "@/components/back-link"
@@ -34,16 +35,16 @@ import { displayVersion, serverLook, serverType } from "./server-types"
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
 
 /**
- * Tabs of a server with the permission they need; label is a function for tabs that some
- * types of servers don't have.
+ * Tabs of a server with the permission they need. label is a function, which translates it when the
+ * page renders, and returns nothing for tabs that some types of servers don't have.
  */
 const tabs = [
-  { to: "/nodes/$nodeId/servers/$serverId", label: () => "Console", icon: TerminalIcon, exact: true, permission: "console.view" },
-  { to: "/nodes/$nodeId/servers/$serverId/usage", label: () => "Usage", icon: ChartLineIcon, exact: false, permission: "servers.view" },
-  { to: "/nodes/$nodeId/servers/$serverId/files", label: () => "Files", icon: FolderIcon, exact: false, permission: "files.read" },
+  { to: "/nodes/$nodeId/servers/$serverId", label: () => t("Console"), icon: TerminalIcon, exact: true, permission: "console.view" },
+  { to: "/nodes/$nodeId/servers/$serverId/usage", label: () => t("Usage"), icon: ChartLineIcon, exact: false, permission: "servers.view" },
+  { to: "/nodes/$nodeId/servers/$serverId/files", label: () => t("Files"), icon: FolderIcon, exact: false, permission: "files.read" },
   {
     to: "/nodes/$nodeId/servers/$serverId/properties",
-    label: (type: string) => (serverType(type).proxy ? undefined : "Properties"),
+    label: (type: string) => (serverType(type).proxy ? undefined : t("Properties")),
     icon: SlidersHorizontalIcon,
     exact: false,
     permission: "properties.edit",
@@ -52,23 +53,29 @@ const tabs = [
     to: "/nodes/$nodeId/servers/$serverId/plugins",
     label: (type: string) => {
       const kind = serverType(type).addons?.kind
-      return kind && (kind === "mods" ? "Mods" : "Plugins")
+      return kind && (kind === "mods" ? t("Mods") : t("Plugins"))
     },
     icon: PuzzlePieceIcon,
     exact: false,
     permission: "servers.view",
   },
-  { to: "/nodes/$nodeId/servers/$serverId/backups", label: () => "Backups", icon: ArchiveIcon, exact: false, permission: "backups.view" },
+  {
+    to: "/nodes/$nodeId/servers/$serverId/backups",
+    label: () => t("Backups"),
+    icon: ArchiveIcon,
+    exact: false,
+    permission: "backups.view",
+  },
   {
     to: "/nodes/$nodeId/servers/$serverId/activity",
-    label: () => "Activity",
+    label: () => t("Activity"),
     icon: ClockCounterClockwiseIcon,
     exact: false,
     permission: "logs.view",
   },
   {
     to: "/nodes/$nodeId/servers/$serverId/settings",
-    label: () => "Settings",
+    label: () => t("Settings"),
     icon: GearIcon,
     exact: false,
     permission: "servers.settings",
@@ -86,7 +93,7 @@ export function ServerPage() {
   return (
     <>
       <BackLink to="/nodes/$nodeId" params={{ nodeId }}>
-        {node?.name ?? "Node"}
+        {node?.name ?? t("Node")}
       </BackLink>
       <MoveStatus nodeId={nodeId} serverId={serverId} />
       {isPending ? (
@@ -94,7 +101,7 @@ export function ServerPage() {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : !server ? (
-        <p className="text-sm text-muted-foreground">This server no longer exists.</p>
+        <p className="text-sm text-muted-foreground">{t("This server no longer exists.")}</p>
       ) : (
         <>
           <PageHeader
@@ -118,7 +125,7 @@ export function ServerPage() {
             }
           />
           <CrashNotice server={server} />
-          <Tabs label="Server">
+          <Tabs label={t("Server")}>
             {tabs
               .map((tab) => ({ ...tab, label: tab.label(server.type) }))
               .filter((tab) => tab.label && can(tab.permission, nodeId, serverId))
@@ -146,8 +153,8 @@ export function ServerConsole() {
       <EmptyState
         icon={TerminalIcon}
         tone="neutral"
-        title="No console"
-        description="Your groups don't let you read the console of this server."
+        title={t("No console")}
+        description={t("Your groups don't let you read the console of this server.")}
       />
     )
   }

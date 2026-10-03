@@ -1,6 +1,7 @@
 import { BellIcon, BellRingingIcon } from "@phosphor-icons/react"
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -44,7 +45,8 @@ function writeSeen(id: number) {
   }
 }
 
-const about = (e: LogEntry) => [e.serverName ?? e.nodeName, e.user && `by ${e.user}`, e.attrs.err].filter(Boolean).join(" · ")
+const about = (e: LogEntry) =>
+  [e.serverName ?? e.nodeName, e.user && t("by {{user}}", { user: e.user }), e.attrs.err].filter(Boolean).join(" · ")
 
 /**
  * The bell with the latest warnings and errors and how many are new. New ones also show up
@@ -63,12 +65,12 @@ export function LogAlerts() {
     const notify = entry.level === "error" ? toast.error : toast.warning
     notify(entry.message, {
       description: about(entry),
-      action: { label: "Show", onClick: () => void navigate({ to: "/logs", search: { level: "warn" } }) },
+      action: { label: t("Show"), onClick: () => void navigate({ to: "/logs", search: { level: "warn" } }) },
     })
   })
 
   const unread = entries.filter((e) => e.id > seen).length
-  const label = unread > 0 ? `${unread}${unread === 20 ? "+" : ""} new warnings and errors` : "Warnings and errors"
+  const label = unread > 0 ? t("{{number}} new warnings and errors", { number: unread === 20 ? "20+" : unread }) : t("Warnings and errors")
   // Closing the menu marks what it showed as seen.
   const markSeen = (open: boolean) => {
     if (open || !entries[0]) return
@@ -92,16 +94,16 @@ export function LogAlerts() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel>Warnings and errors</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("Warnings and errors")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {entries.length === 0 && <p className="px-2 py-4 text-center text-sm text-muted-foreground">Nothing went wrong lately.</p>}
+        {entries.length === 0 && <p className="px-2 py-4 text-center text-sm text-muted-foreground">{t("Nothing went wrong lately.")}</p>}
         {entries.slice(0, shown).map((e) => {
           const { icon: Icon, tone, label } = levels[e.level]
           return (
             <DropdownMenuItem key={e.id} asChild className={cn("items-start gap-2.5", e.id > seen && "bg-muted/60")}>
               <Link to="/logs" search={{ level: "warn" }}>
                 <Icon
-                  aria-label={label}
+                  aria-label={t(label)}
                   weight="duotone"
                   className={cn("mt-0.5", tone === "destructive" ? "text-destructive" : "text-warning")}
                 />
@@ -118,7 +120,7 @@ export function LogAlerts() {
         })}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link to="/logs">Open the log</Link>
+          <Link to="/logs">{t("Open the log")}</Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

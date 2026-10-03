@@ -1,4 +1,5 @@
 import { WarningCircleIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { Callout } from "@/components/callout"
 import { StatusBadge } from "@/components/status"
 import type { Server, ServerState } from "./api"
@@ -12,22 +13,39 @@ export function ServerStateBadge({ state }: { state: ServerState }) {
 export function CrashNotice({ server }: { server: Server }) {
   const { state, crashes, exitCode } = server
   if (crashes === 0 || (state !== "crashing" && state !== "stopped")) return null
-  const times = crashes === 1 ? "once" : `${crashes} times`
-  const code = exitCode ? `, last with exit code ${exitCode}` : ""
+
   return (
     <Callout
       tone="destructive"
       icon={WarningCircleIcon}
       role="alert"
       className="mb-6"
-      title={state === "crashing" ? `${server.name} keeps crashing` : `${server.name} stopped after crashing`}
+      title={
+        state === "crashing"
+          ? t("{{name}} keeps crashing", { name: server.name })
+          : t("{{name}} stopped after crashing", { name: server.name })
+      }
     >
       <p>
-        It crashed {times} since it was started{code}. The console shows why.{" "}
-        {state === "crashing"
-          ? "The node starts it again on its own, and stops it if it keeps crashing."
-          : "Fix the cause, then start it again."}
-        {exitCode === 137 && " Exit code 137 means the server was killed, often because it ran out of memory."}
+        {[
+          exitCode
+            ? t("It crashed {{count}} times since it was started, last with exit code {{code}}.", {
+                count: crashes,
+                code: exitCode,
+                defaultValue_one: "It crashed once since it was started, with exit code {{code}}.",
+              })
+            : t("It crashed {{count}} times since it was started.", {
+                count: crashes,
+                defaultValue_one: "It crashed once since it was started.",
+              }),
+          t("The console shows why."),
+          state === "crashing"
+            ? t("The node starts it again on its own, and stops it if it keeps crashing.")
+            : t("Fix the cause, then start it again."),
+          exitCode === 137 && t("Exit code 137 means the server was killed, often because it ran out of memory."),
+        ]
+          .filter(Boolean)
+          .join(" ")}
       </p>
     </Callout>
   )

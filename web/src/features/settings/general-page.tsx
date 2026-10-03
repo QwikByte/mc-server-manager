@@ -1,7 +1,9 @@
 import { ArrowClockwiseIcon, ClockIcon, CubeIcon, LockIcon, ShieldCheckIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
+import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -47,24 +49,30 @@ function MasterFacts({ master, settings }: { master: Master; settings: MasterSet
   const [openedAt] = useState(Date.now)
   const canRestart = useCanRestart(master)
   const details: [string, string][] = [
-    ["Enrollment endpoint", master.enrollListenAddr],
-    ["Join tokens connect to", settings.enrollAddr || master.enrollAddr],
-    ["CA fingerprint (SHA-256)", master.caFingerprint],
+    [t("Enrollment endpoint"), master.enrollListenAddr],
+    [t("Join tokens connect to"), settings.enrollAddr || master.enrollAddr],
+    [t("CA fingerprint (SHA-256)"), master.caFingerprint],
   ]
   return (
     <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon={CubeIcon} tone="info" label="Master" value={master.version}>
+        <StatCard icon={CubeIcon} tone="info" label={t("Master")} value={master.version}>
+          {/* i18next-instrument-ignore-next-line: the name of the program */}
           mcsm-master
         </StatCard>
-        <StatCard icon={ClockIcon} tone="success" label="Running for" value={formatDuration(openedAt - Date.parse(master.startedAt))}>
-          since {formatDateTime(master.startedAt)}
+        <StatCard icon={ClockIcon} tone="success" label={t("Running for")} value={formatDuration(openedAt - Date.parse(master.startedAt))}>
+          {t("since {{time}}", { time: formatDateTime(master.startedAt) })}
         </StatCard>
-        <StatCard icon={LockIcon} tone="violet" label="Panel" value={master.panelTls ? "HTTPS" : "Reverse proxy"}>
+        <StatCard icon={LockIcon} tone="violet" label={t("Panel")} value={master.panelTls ? "HTTPS" : t("Reverse proxy")}>
           <span className="font-mono">{master.panelAddr}</span>
         </StatCard>
-        <StatCard icon={ShieldCheckIcon} tone="warning" label="Certificate valid until" value={formatDate(master.certificateExpiresAt)}>
-          Renewed automatically
+        <StatCard
+          icon={ShieldCheckIcon}
+          tone="warning"
+          label={t("Certificate valid until")}
+          value={formatDate(master.certificateExpiresAt)}
+        >
+          {t("Renewed automatically")}
         </StatCard>
       </div>
       <div className="mt-4 surface flex flex-wrap items-center gap-x-6 gap-y-4 rounded-xl px-5 py-4">
@@ -100,8 +108,8 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
   function submit(event: FormEvent) {
     event.preventDefault()
     toast.promise(update.mutateAsync({ ...form, nodeDefaults: limitsOf(form.nodeDefaults) }), {
-      loading: "Saving…",
-      success: "Saved the settings",
+      loading: t("Saving…"),
+      success: t("Saved the settings"),
       error: (e: Error) => e.message,
     })
   }
@@ -110,9 +118,12 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
     <form onSubmit={submit} className="mt-10 surface rounded-2xl px-5 sm:px-8">
       {/* Without the permission to change them, the settings are only shown. */}
       <fieldset disabled={!editable} className="contents">
-        <FormSection title="Panel" description="Where this panel can be reached. A new address applies when the master starts again.">
+        <FormSection
+          title={t("Panel")}
+          description={t("Where this panel can be reached. A new address applies when the master starts again.")}
+        >
           <Field>
-            <FieldLabel htmlFor="settings-panel-addr">Listen address</FieldLabel>
+            <FieldLabel htmlFor="settings-panel-addr">{t("Listen address")}</FieldLabel>
             <Input
               id="settings-panel-addr"
               className="font-mono"
@@ -123,18 +134,21 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               onChange={(e) => set({ panelAddr: e.target.value })}
             />
             <FieldDescription>
-              IP address and port, e.g. <span className="font-mono">0.0.0.0:8080</span> for all interfaces, with a port from 1024 on. Leave it
-              empty to use <span className="font-mono">{master.panelDefaultAddr}</span> from the command line, which the panel also falls back
-              to if it can't listen at this address. Browsers only sign in over HTTPS, e.g. through a reverse proxy. Only administrators can
-              change it, as it can open the panel to other networks.
+              <Trans
+                i18nKey="IP address and port, e.g. <example/> for all interfaces, with a port from 1024 on. Leave it empty to use <default/> from the command line, which the panel also falls back to if it can't listen at this address. Browsers only sign in over HTTPS, e.g. through a reverse proxy. Only administrators can change it, as it can open the panel to other networks."
+                components={{
+                  example: <span className="font-mono">0.0.0.0:8080</span>,
+                  default: <span className="font-mono">{master.panelDefaultAddr}</span>,
+                }}
+              />
             </FieldDescription>
           </Field>
           <PanelRestartNotice settings={settings} master={master} />
         </FormSection>
 
-        <FormSection title="Enrollment" description="How new agents reach the master with their join token.">
+        <FormSection title={t("Enrollment")} description={t("How new agents reach the master with their join token.")}>
           <Field>
-            <FieldLabel htmlFor="settings-enroll-addr">Enrollment address</FieldLabel>
+            <FieldLabel htmlFor="settings-enroll-addr">{t("Enrollment address")}</FieldLabel>
             <Input
               id="settings-enroll-addr"
               className="font-mono"
@@ -144,63 +158,82 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               onChange={(e) => set({ enrollAddr: e.target.value })}
             />
             <FieldDescription>
-              Host and port that join tokens tell agents to connect to, e.g. after the master moved to another domain. Leave it empty to use{" "}
-              <span className="font-mono">{master.enrollAddr}</span> from the command line.
+              <Trans
+                i18nKey="Host and port that join tokens tell agents to connect to, e.g. after the master moved to another domain. Leave it empty to use <default/> from the command line."
+                components={{ default: <span className="font-mono">{master.enrollAddr}</span> }}
+              />
             </FieldDescription>
           </Field>
           <Field>
-            <FieldLabel htmlFor="settings-join-token">Join tokens are valid for</FieldLabel>
+            <FieldLabel htmlFor="settings-join-token">{t("Join tokens are valid for")}</FieldLabel>
             <NumberInput
               id="settings-join-token"
               min={5}
               max={1440}
-              unit="minutes"
+              unit={t("minutes")}
               value={form.joinTokenMinutes}
               onChange={(joinTokenMinutes) => set({ joinTokenMinutes })}
             />
-            <FieldDescription>From 5 minutes to a day. Each token works only once.</FieldDescription>
+            <FieldDescription>{t("From 5 minutes to a day. Each token works only once.")}</FieldDescription>
           </Field>
         </FormSection>
 
-        <FormSection title="Sign-in" description="Sessions of administrators in this panel.">
+        <FormSection title={t("Sign-in")} description={t("Sessions of administrators in this panel.")}>
           <Field>
-            <FieldLabel htmlFor="settings-session">Sessions last</FieldLabel>
+            <FieldLabel htmlFor="settings-session">{t("Sessions last")}</FieldLabel>
             <NumberInput
               id="settings-session"
               min={1}
               max={168}
-              unit="hours"
+              unit={t("hours")}
               value={form.sessionHours}
               onChange={(sessionHours) => set({ sessionHours })}
             />
-            <FieldDescription>Up to a week. Applies from the next sign-in; shorter sessions are safer.</FieldDescription>
+            <FieldDescription>{t("Up to a week. Applies from the next sign-in; shorter sessions are safer.")}</FieldDescription>
           </Field>
         </FormSection>
 
-        <FormSection title="Log" description="What the master and its agents did and what went wrong, shown on the Logs page.">
+        <FormSection title={t("Log")} description={t("What the master and its agents did and what went wrong, shown on the Logs page.")}>
           <Field>
-            <FieldLabel htmlFor="settings-log-days">Keep entries for</FieldLabel>
-            <NumberInput id="settings-log-days" min={1} max={365} unit="days" value={form.logDays} onChange={(logDays) => set({ logDays })} />
+            <FieldLabel htmlFor="settings-log-days">{t("Keep entries for")}</FieldLabel>
+            <NumberInput
+              id="settings-log-days"
+              min={1}
+              max={365}
+              unit={t("days")}
+              value={form.logDays}
+              onChange={(logDays) => set({ logDays })}
+            />
             <FieldDescription>
-              Up to a year. Older entries are deleted every hour; the newest million are kept at most. Export entries to keep them longer.
+              {t(
+                "Up to a year. Older entries are deleted every hour; the newest million are kept at most. Export entries to keep them longer.",
+              )}
             </FieldDescription>
           </Field>
         </FormSection>
 
-        <FormSection title="Updates" description="New releases of MC Server Manager, which administrators install from the panel.">
+        <FormSection
+          title={t("Updates")}
+          description={t("New releases of MC Server Manager, which administrators install from the panel.")}
+        >
           <Field orientation="horizontal">
             <Switch id="settings-check-updates" checked={form.checkUpdates} onCheckedChange={(checkUpdates) => set({ checkUpdates })} />
             <FieldContent>
-              <FieldLabel htmlFor="settings-check-updates">Check for updates</FieldLabel>
+              <FieldLabel htmlFor="settings-check-updates">{t("Check for updates")}</FieldLabel>
               <FieldDescription>
-                The master asks GitHub for the latest release every 6 hours. Administrators then see a notice and install it with a click.
+                {t(
+                  "The master asks GitHub for the latest release every 6 hours. Administrators then see a notice and install it with a click.",
+                )}
               </FieldDescription>
             </FieldContent>
           </Field>
           {access.admin && <UpdateCheck />}
         </FormSection>
 
-        <FormSection title="New nodes" description="Limits that nodes get when they are added. Change them for each node in its settings.">
+        <FormSection
+          title={t("New nodes")}
+          description={t("Limits that nodes get when they are added. Change them for each node in its settings.")}
+        >
           <LimitsFields
             id="settings-node-defaults"
             form={form.nodeDefaults}
@@ -212,17 +245,17 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
         className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8"
         hidden={!editable}
       >
-        <p className="text-sm text-muted-foreground">Changes apply right away, the panel's address when the master starts again.</p>
+        <p className="text-sm text-muted-foreground">{t("Changes apply right away, the panel's address when the master starts again.")}</p>
         <Button type="submit" disabled={!dirty || update.isPending}>
-          {update.isPending ? "Saving…" : "Save settings"}
+          {update.isPending ? t("Saving…") : t("Save settings")}
         </Button>
       </div>
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}
-        title="Discard your changes?"
-        description="Your changes to the settings haven't been saved."
-        action="Discard changes"
+        title={t("Discard your changes?")}
+        description={t("Your changes to the settings haven't been saved.")}
+        action={t("Discard changes")}
         destructive
         onConfirm={() => blocker.proceed?.()}
       />
@@ -236,20 +269,28 @@ function PanelRestartNotice({ settings, master }: { settings: MasterSettings; ma
   const next = nextPanelAddr(settings, master)
   if (next === master.panelAddr) return null
   return (
-    <Callout tone={master.panelAddrError ? "warning" : "info"} icon={ArrowClockwiseIcon} role="status" title="Applies after a restart">
+    <Callout tone={master.panelAddrError ? "warning" : "info"} icon={ArrowClockwiseIcon} role="status" title={t("Applies after a restart")}>
       <p>
-        The panel listens at <span className="font-mono">{master.panelAddr}</span> until the master starts again, e.g. with{" "}
-        <span className="font-mono">systemctl restart mcsm-master</span> or the next update, then at <span className="font-mono">{next}</span>.
-        Point a reverse proxy in front of it to the new address as well.
+        <Trans
+          i18nKey="The panel listens at <current/> until the master starts again, e.g. with <command/> or the next update, then at <next/>. Point a reverse proxy in front of it to the new address as well."
+          components={{
+            current: <span className="font-mono">{master.panelAddr}</span>,
+            command: <span className="font-mono">systemctl restart mcsm-master</span>,
+            next: <span className="font-mono">{next}</span>,
+          }}
+        />
       </p>
       {master.panelAddrError && (
         <p className="mt-1">
-          When it started last, it couldn't listen at the address from the settings: <span className="font-mono">{master.panelAddrError}</span>
+          <Trans
+            i18nKey="When it started last, it couldn't listen at the address from the settings: <error/>"
+            components={{ error: <span className="font-mono">{master.panelAddrError}</span> }}
+          />
         </p>
       )}
       {canRestart && (
         <div className="mt-3">
-          <RestartButton master={master} next={next} label="Restart now" />
+          <RestartButton master={master} next={next} label={t("Restart now")} />
         </div>
       )}
     </Callout>

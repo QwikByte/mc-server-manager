@@ -1,4 +1,5 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -32,8 +33,8 @@ export function LoginPage() {
   const needsCode = code !== undefined
   return (
     <AuthLayout
-      title={needsCode ? "Two-factor authentication" : "Welcome back"}
-      description={needsCode ? "Enter the code of your authenticator app." : "Sign in to manage your nodes, servers and networks."}
+      title={needsCode ? t("Two-factor authentication") : t("Welcome back")}
+      description={needsCode ? t("Enter the code of your authenticator app.") : t("Sign in to manage your nodes, servers and networks.")}
     >
       <form onSubmit={submit} noValidate>
         <FieldGroup>
@@ -42,7 +43,7 @@ export function LoginPage() {
           ) : (
             <>
               <Field>
-                <FieldLabel htmlFor="username">Username</FieldLabel>
+                <FieldLabel htmlFor="username">{t("Username")}</FieldLabel>
                 <Input
                   id="username"
                   autoComplete="username"
@@ -53,7 +54,7 @@ export function LoginPage() {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <FieldLabel htmlFor="password">{t("Password")}</FieldLabel>
                 <Input
                   id="password"
                   type="password"
@@ -67,11 +68,11 @@ export function LoginPage() {
           )}
           {login.error && <FieldError>{login.error.message}</FieldError>}
           <Button type="submit" size="lg" className="w-full" disabled={login.isPending || code === ""}>
-            {login.isPending ? "Signing in…" : needsCode ? "Verify" : "Sign in"}
+            {login.isPending ? t("Signing in…") : needsCode ? t("Verify") : t("Sign in")}
           </Button>
           {needsCode && (
             <Button type="button" variant="ghost" className="-mt-2 w-full" onClick={back}>
-              Sign in as someone else
+              {t("Sign in as someone else")}
             </Button>
           )}
         </FieldGroup>
@@ -85,7 +86,7 @@ function CodeField({ value, onChange }: { value: string; onChange: (code: string
   const [recovery, setRecovery] = useState(false)
   return (
     <Field>
-      <FieldLabel htmlFor="code">{recovery ? "Recovery code" : "Code"}</FieldLabel>
+      <FieldLabel htmlFor="code">{recovery ? t("Recovery code") : t("Code")}</FieldLabel>
       <Input
         // Remounts, and so takes the focus, when switching between the kinds of code.
         key={String(recovery)}
@@ -100,7 +101,7 @@ function CodeField({ value, onChange }: { value: string; onChange: (code: string
         onChange={(e) => onChange(recovery ? e.target.value.trim() : e.target.value.replace(/\D/g, ""))}
       />
       <FieldDescription>
-        {recovery ? "Each recovery code works once." : "Lost your device?"}{" "}
+        {recovery ? t("Each recovery code works once.") : t("Lost your device?")}{" "}
         <button
           type="button"
           className="font-medium text-foreground underline-offset-4 hover:underline"
@@ -109,7 +110,7 @@ function CodeField({ value, onChange }: { value: string; onChange: (code: string
             onChange("")
           }}
         >
-          {recovery ? "Use your app instead" : "Use a recovery code"}
+          {recovery ? t("Use your app instead") : t("Use a recovery code")}
         </button>
       </FieldDescription>
     </Field>

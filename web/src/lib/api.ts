@@ -1,3 +1,5 @@
+import { t } from "i18next"
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -21,7 +23,10 @@ export async function api<T = void>(path: string, init: { method?: string; body?
 }
 
 /** Reads the message the master sent with a failed response. */
-export async function responseError(res: Response, fallback = `The request failed with status ${res.status}.`): Promise<ApiError> {
+export async function responseError(
+  res: Response,
+  fallback = t("The request failed with status {{status}}.", { status: res.status }),
+): Promise<ApiError> {
   const data = await res.json().catch(() => ({}))
   return new ApiError(res.status, data.error ?? fallback)
 }

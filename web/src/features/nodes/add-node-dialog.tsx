@@ -1,4 +1,5 @@
 import { PlusIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,60 +42,63 @@ export function AddNodeDialog() {
       <DialogTrigger asChild>
         <Button>
           <PlusIcon />
-          Add node
+          {t("Add node")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         {create.data ? (
           <>
             <DialogHeader>
-              <DialogTitle>Connect {create.data.node.name}</DialogTitle>
-              <DialogDescription>The node was added. Connect its agent to start hosting servers.</DialogDescription>
+              <DialogTitle>{t("Connect {{name}}", { name: create.data.node.name })}</DialogTitle>
+              <DialogDescription>{t("The node was added. Connect its agent to start hosting servers.")}</DialogDescription>
             </DialogHeader>
             <EnrollSteps token={create.data} />
             <DialogFooter>
               <DialogClose asChild>
-                <Button>Done</Button>
+                <Button>{t("Done")}</Button>
               </DialogClose>
             </DialogFooter>
           </>
         ) : (
           <form onSubmit={submit} className="grid gap-6">
             <DialogHeader>
-              <DialogTitle>Add node</DialogTitle>
-              <DialogDescription>Register a machine that will run Minecraft servers.</DialogDescription>
+              <DialogTitle>{t("Add node")}</DialogTitle>
+              <DialogDescription>{t("Register a machine that will run Minecraft servers.")}</DialogDescription>
             </DialogHeader>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="node-name">Name</FieldLabel>
+                <FieldLabel htmlFor="node-name">{t("Name")}</FieldLabel>
                 <Input
                   id="node-name"
-                  placeholder="Frankfurt 1"
+                  placeholder={t("Frankfurt 1")}
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="node-address">Agent address</FieldLabel>
+                <FieldLabel htmlFor="node-address">{t("Agent address")}</FieldLabel>
                 <Input
                   id="node-address"
+                  // i18next-instrument-ignore-next-line: an example of what to enter
                   placeholder="203.0.113.10:7443"
                   className="font-mono"
                   required
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                 />
-                <FieldDescription>Host and port the master uses to reach the agent. The agent listens on port 7443.</FieldDescription>
+                <FieldDescription>
+                  {t("Host and port the master uses to reach the agent. The agent listens on port 7443.")}
+                </FieldDescription>
               </Field>
               {create.error && <FieldError>{create.error.message}</FieldError>}
             </FieldGroup>
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline">{t("Cancel")}</Button>
               </DialogClose>
               <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? "Adding…" : "Add node"}
+                {create.isPending ? t("Adding…") : t("Add node")}
               </Button>
             </DialogFooter>
           </form>

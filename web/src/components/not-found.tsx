@@ -1,5 +1,7 @@
 import { HouseIcon, SignpostIcon } from "@phosphor-icons/react"
 import { Link, useLocation } from "@tanstack/react-router"
+import { t } from "i18next"
+import { Trans } from "react-i18next"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 
@@ -10,17 +12,18 @@ export function NotFound() {
     <EmptyState
       icon={SignpostIcon}
       tone="warning"
-      title="Page not found"
+      title={t("Page not found")}
       description={
-        <>
-          The panel has no page at <span className="font-mono break-all">{pathname}</span>. It may have moved, or the link is mistyped.
-        </>
+        <Trans
+          i18nKey="The panel has no page at <path/>. It may have moved, or the link is mistyped."
+          components={{ path: <span className="font-mono break-all">{pathname}</span> }}
+        />
       }
     >
       <Button asChild>
         <Link to="/">
           <HouseIcon />
-          Go to the start page
+          {t("Go to the start page")}
         </Link>
       </Button>
     </EmptyState>

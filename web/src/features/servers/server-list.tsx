@@ -1,6 +1,7 @@
 import { CpuIcon, CubeIcon, HardDrivesIcon, HashIcon, MemoryIcon, UsersIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { EmptyState } from "@/components/empty-state"
@@ -24,7 +25,7 @@ export function ServerList({ nodeId }: { nodeId: string }) {
   const create = can("servers.create", nodeId) && <CreateServerDialog nodeId={nodeId} />
 
   return (
-    <Section title="Servers" actions={servers && servers.length > 0 && create}>
+    <Section title={t("Servers")} actions={servers && servers.length > 0 && create}>
       {isPending ? (
         <Skeleton className="h-44 rounded-xl" />
       ) : error ? (
@@ -32,8 +33,10 @@ export function ServerList({ nodeId }: { nodeId: string }) {
       ) : servers.length === 0 ? (
         <EmptyState
           icon={CubeIcon}
-          title="No servers on this node"
-          description={create ? "Create a game server or a proxy that connects servers to a network." : "There are no servers you can see."}
+          title={t("No servers on this node")}
+          description={
+            create ? t("Create a game server or a proxy that connects servers to a network.") : t("There are no servers you can see.")
+          }
         >
           {create}
         </EmptyState>
@@ -52,7 +55,17 @@ export function ServerList({ nodeId }: { nodeId: string }) {
  * The whole card opens the server; its buttons sit above the link. Running servers show what they
  * use. Cards of servers on different nodes show the node's name.
  */
-export function ServerCard({ nodeId, nodeName, server, usage }: { nodeId: string; nodeName?: string; server: Server; usage?: ServerUsage }) {
+export function ServerCard({
+  nodeId,
+  nodeName,
+  server,
+  usage,
+}: {
+  nodeId: string
+  nodeName?: string
+  server: Server
+  usage?: ServerUsage
+}) {
   const live = usage?.running ? usage : undefined
   const look = serverLook(server.type)
   return (
@@ -80,7 +93,9 @@ export function ServerCard({ nodeId, nodeName, server, usage }: { nodeId: string
         </Chip>
         {/* While it runs, its memory of the container's limit, which includes what Java needs besides the heap. */}
         <Chip icon={MemoryIcon}>
-          {live?.memoryLimitBytes ? `${formatBytes(live.memoryBytes)} / ${formatBytes(live.memoryLimitBytes)}` : formatMegabytes(server.memoryMb)}
+          {live?.memoryLimitBytes
+            ? `${formatBytes(live.memoryBytes)} / ${formatBytes(live.memoryLimitBytes)}`
+            : formatMegabytes(server.memoryMb)}
         </Chip>
         {live && <Chip icon={CpuIcon}>{formatCores(live.cpuMillis)}</Chip>}
         {live?.players && (

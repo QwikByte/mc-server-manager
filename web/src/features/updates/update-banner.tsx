@@ -1,6 +1,7 @@
 import { ArrowsClockwiseIcon, DownloadSimpleIcon, HardDrivesIcon, SparkleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Callout } from "@/components/callout"
@@ -52,12 +53,17 @@ export function UpdateBanner() {
 function Available({ status, release }: { status: UpdateStatus; release: Release }) {
   const install = useUpdateAction("master")
   return (
-    <Callout icon={SparkleIcon} title={`MC Server Manager ${release.version} is available`}>
+    <Callout icon={SparkleIcon} title={t("MC Server Manager {{version}} is available", { version: release.version })}>
       <p>
-        You run {status.version}.{release.publishedAt && ` The new release was published on ${formatDate(release.publishedAt)}.`}
-        {!status.updatable && " This master wasn't installed from a package, so update it on its host:"}
+        {[
+          t("You run {{version}}.", { version: status.version }),
+          release.publishedAt && t("The new release was published on {{date}}.", { date: formatDate(release.publishedAt) }),
+          !status.updatable && t("This master wasn't installed from a package, so update it on its host:"),
+        ]
+          .filter(Boolean)
+          .join(" ")}
       </p>
-      {!status.updatable && <CopyField label="Update command" prefix="$" value={updateCommand} />}
+      {!status.updatable && <CopyField label={t("Update command")} prefix="$" value={updateCommand} />}
       <div className="mt-3 flex flex-wrap gap-2">
         <ReleaseNotes release={release} />
         {status.updatable && (
@@ -65,12 +71,14 @@ function Available({ status, release }: { status: UpdateStatus; release: Release
             trigger={
               <Button size="sm" disabled={install.isPending}>
                 <DownloadSimpleIcon />
-                Install now
+                {t("Install now")}
               </Button>
             }
-            title={`Install ${release.version}?`}
-            description="The master installs the release and restarts, which interrupts the panel for a moment. Then it updates the agents. Minecraft servers keep running."
-            action="Install now"
+            title={t("Install {{version}}?", { version: release.version })}
+            description={t(
+              "The master installs the release and restarts, which interrupts the panel for a moment. Then it updates the agents. Minecraft servers keep running.",
+            )}
+            action={t("Install now")}
             onConfirm={() => install.mutate(undefined, onError)}
           />
         )}
@@ -83,19 +91,23 @@ function MasterProgress({ status: { master, latest } }: { status: UpdateStatus }
   const retry = useUpdateAction("master")
   if (master?.error) {
     return (
-      <Callout tone="destructive" icon={WarningCircleIcon} role="alert" title="The update of the master failed">
+      <Callout tone="destructive" icon={WarningCircleIcon} role="alert" title={t("The update of the master failed")}>
         <p>{master.error}</p>
         {latest && (
           <Button size="sm" variant="outline" className="mt-3" disabled={retry.isPending} onClick={() => retry.mutate(undefined, onError)}>
-            Try again
+            {t("Try again")}
           </Button>
         )}
       </Callout>
     )
   }
   return (
-    <Callout icon={ArrowsClockwiseIcon} role="status" title={`Installing ${latest?.version ?? "the update"}…`}>
-      The master restarts on the new release, then the panel reloads and the agents are updated. Minecraft servers keep running.
+    <Callout
+      icon={ArrowsClockwiseIcon}
+      role="status"
+      title={latest ? t("Installing {{version}}…", { version: latest.version }) : t("Installing the update…")}
+    >
+      {t("The master restarts on the new release, then the panel reloads and the agents are updated. Minecraft servers keep running.")}
     </Callout>
   )
 }
@@ -107,7 +119,10 @@ function OutdatedAgents({ status: { version, agents } }: { status: UpdateStatus 
     <Callout
       tone="warning"
       icon={HardDrivesIcon}
-      title={agents.length === 1 ? "An agent is older than the master" : `${agents.length} agents are older than the master`}
+      title={t("{{count}} agents are older than the master", {
+        count: agents.length,
+        defaultValue_one: "An agent is older than the master",
+      })}
     >
       <ul className="space-y-1">
         {agents.map((a) => (
@@ -116,14 +131,14 @@ function OutdatedAgents({ status: { version, agents } }: { status: UpdateStatus 
               {a.name}
             </Link>{" "}
             <span className="font-mono text-xs">{a.version}</span>
-            {a.update && (a.update.error ? <span className="text-destructive"> · {a.update.error}</span> : " · updating…")}
+            {a.update && (a.update.error ? <span className="text-destructive"> · {a.update.error}</span> : ` · ${t("updating…")}`)}
           </li>
         ))}
       </ul>
       {waiting && (
         <Button size="sm" className="mt-3" disabled={update.isPending} onClick={() => update.mutate(undefined, onError)}>
           <DownloadSimpleIcon />
-          Update to {version}
+          {t("Update to {{version}}", { version })}
         </Button>
       )}
     </Callout>
@@ -135,25 +150,27 @@ function ReleaseNotes({ release }: { release: Release }) {
     <Dialog>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          What's new
+          {t("What's new")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>What's new in {release.version}</DialogTitle>
-          {release.publishedAt && <DialogDescription>Published on {formatDate(release.publishedAt)}.</DialogDescription>}
+          <DialogTitle>{t("What's new in {{version}}", { version: release.version })}</DialogTitle>
+          {release.publishedAt && (
+            <DialogDescription>{t("Published on {{date}}.", { date: formatDate(release.publishedAt) })}</DialogDescription>
+          )}
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto rounded-lg bg-muted/50 p-4">
-          <Markdown text={release.notes.trim() || "Read the notes of this release on GitHub."} />
+          <Markdown text={release.notes.trim() || t("Read the notes of this release on GitHub.")} />
         </div>
         <DialogFooter>
           <Button variant="outline" asChild>
             <a href={release.url} target="_blank" rel="noreferrer">
-              Open on GitHub
+              {t("Open on GitHub")}
             </a>
           </Button>
           <DialogClose asChild>
-            <Button>Close</Button>
+            <Button>{t("Close")}</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

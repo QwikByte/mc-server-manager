@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import i18next, { t } from "i18next"
 import { defaultSchedule, type TaskInput, taskApi } from "@/features/schedules/api"
 import { api } from "@/lib/api"
 
@@ -52,20 +53,20 @@ export const emptyJob: TaskInput<JobSettings> = {
 /** Whether a selection backs up nothing. */
 export const nothingSelected = (s: Selection) => !s.everything && !s.worlds && !s.plugins && !s.config && s.paths.length === 0
 
-const and = new Intl.ListFormat("en", { type: "conjunction" })
+const and = (parts: string[]) => new Intl.ListFormat(i18next.language, { type: "conjunction" }).format(parts)
 
 /** Describes a selection, e.g. "Worlds, plugins and configuration". */
 export function describeSelection(s: Selection): string {
-  if (s.everything) return "Everything"
-  const parts = [s.worlds && "worlds", s.plugins && "plugins or mods", s.config && "configuration", ...s.paths].filter(
+  if (s.everything) return t("Everything")
+  const parts = [s.worlds && t("worlds"), s.plugins && t("plugins or mods"), s.config && t("configuration"), ...s.paths].filter(
     (p): p is string => !!p,
   )
-  const text = and.format(parts)
+  const text = and(parts)
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 /** Describes what a backup contains, e.g. "world, plugins and server.properties". */
-export const describeContent = (paths: string[]) => (paths.includes(".") ? "Everything" : and.format(paths))
+export const describeContent = (paths: string[]) => (paths.includes(".") ? t("Everything") : and(paths))
 
 const base = (nodeId: string, serverId: string) => `/nodes/${nodeId}/servers/${serverId}/backups`
 
@@ -83,7 +84,8 @@ export function useBackups(nodeId: string, serverId: string) {
   const onSettled = () => queryClient.invalidateQueries({ queryKey: backupsQuery(nodeId, serverId).queryKey })
   return {
     create: useMutation({
-      mutationFn: (input: { label: string; selection: Selection; location: string }) => api<Backup>(base(nodeId, serverId), { body: input }),
+      mutationFn: (input: { label: string; selection: Selection; location: string }) =>
+        api<Backup>(base(nodeId, serverId), { body: input }),
       onSettled,
     }),
     restore: useMutation({

@@ -1,3 +1,4 @@
+import { t } from "i18next"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { NodeServer } from "@/features/servers/api"
 import type { ServerRef } from "./api"
@@ -27,15 +28,13 @@ export function ServerSelect({
       disabled={servers.length === 0}
     >
       <SelectTrigger id={id} className="w-full">
-        <SelectValue placeholder={servers.length === 0 ? "No suitable server available" : placeholder} />
+        <SelectValue placeholder={servers.length === 0 ? t("No suitable server available") : placeholder} />
       </SelectTrigger>
       <SelectContent>
         {servers.map((s) => (
           <SelectItem key={key(refOf(s))} value={key(refOf(s))}>
             {s.name}
-            <span className="text-muted-foreground">
-              {s.nodeName} · port {s.port}
-            </span>
+            <span className="text-muted-foreground">{t("{{node}} · port {{port}}", { node: s.nodeName, port: s.port })}</span>
           </SelectItem>
         ))}
       </SelectContent>

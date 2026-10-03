@@ -1,5 +1,6 @@
 import { ArrowsClockwiseIcon, TrashIcon } from "@phosphor-icons/react"
 import { useNavigate } from "@tanstack/react-router"
+import { t } from "i18next"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import type { Network } from "./api"
@@ -12,11 +13,16 @@ export function ApplyNetworkButton({ network }: { network: Network }) {
     <Button
       variant="outline"
       disabled={isPending}
-      title="Configure all servers again, e.g. after a node was offline. Only changed servers restart."
-      onClick={() => run({ action: "apply" }, { loading: `Applying ${network.name}…`, success: `Applied ${network.name}` })}
+      title={t("Configure all servers again, e.g. after a node was offline. Only changed servers restart.")}
+      onClick={() =>
+        run(
+          { action: "apply" },
+          { loading: t("Applying {{name}}…", { name: network.name }), success: t("Applied {{name}}", { name: network.name }) },
+        )
+      }
     >
       <ArrowsClockwiseIcon />
-      Apply again
+      {t("Apply again")}
     </Button>
   )
 }
@@ -29,16 +35,18 @@ export function DeleteNetworkButton({ network }: { network: Network }) {
       trigger={
         <Button variant="destructive" disabled={isPending}>
           <TrashIcon />
-          Delete network
+          {t("Delete network")}
         </Button>
       }
-      title={`Delete ${network.name}?`}
-      description="Its servers restart and accept players directly again. The proxy keeps running without servers."
-      action="Delete network"
+      title={t("Delete {{name}}?", { name: network.name })}
+      description={t("Its servers restart and accept players directly again. The proxy keeps running without servers.")}
+      action={t("Delete network")}
       destructive
       onConfirm={() =>
-        run({ action: "delete" }, { loading: `Deleting ${network.name}…`, success: `Deleted ${network.name}` }, () =>
-          navigate({ to: "/networks" }),
+        run(
+          { action: "delete" },
+          { loading: t("Deleting {{name}}…", { name: network.name }), success: t("Deleted {{name}}", { name: network.name }) },
+          () => navigate({ to: "/networks" }),
         )
       }
     />

@@ -1,4 +1,5 @@
 import { DotsThreeIcon, DownloadSimpleIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react"
+import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -27,7 +28,7 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
       {/* Not modal, so that focus moves to the dialogs opened from it. */}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button size="icon-sm" variant="ghost" aria-label={`Actions for ${entry.name}`}>
+          <Button size="icon-sm" variant="ghost" aria-label={t("Actions for {{name}}", { name: entry.name })}>
             <DotsThreeIcon weight="bold" />
           </Button>
         </DropdownMenuTrigger>
@@ -35,19 +36,19 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
           <DropdownMenuItem asChild>
             <a href={entry.directory ? archiveUrl(files, path) : contentUrl(files, path)} download>
               <DownloadSimpleIcon />
-              {entry.directory ? "Download as ZIP" : "Download"}
+              {entry.directory ? t("Download as ZIP") : t("Download")}
             </a>
           </DropdownMenuItem>
           {writable && (
             <>
               <DropdownMenuItem onSelect={() => setDialog("rename")}>
                 <PencilSimpleIcon />
-                Rename
+                {t("Rename")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setDialog("delete")}>
                 <TrashIcon />
-                Delete
+                {t("Delete")}
               </DropdownMenuItem>
             </>
           )}
@@ -56,27 +57,27 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
       <NameDialog
         open={dialog === "rename"}
         onOpenChange={close}
-        title={`Rename ${entry.name}`}
-        label="New name"
+        title={t("Rename {{name}}", { name: entry.name })}
+        label={t("New name")}
         initial={entry.name}
-        action="Rename"
+        action={t("Rename")}
         onSubmit={(name) => change.mutateAsync({ action: "move", from: path, to: join(dir, name) })}
       />
       <ConfirmDialog
         open={dialog === "delete"}
         onOpenChange={close}
-        title={`Delete ${entry.name}?`}
+        title={t("Delete {{name}}?", { name: entry.name })}
         description={
           entry.directory
-            ? "The folder and everything in it will be deleted. This can't be undone."
-            : "The file will be deleted. This can't be undone."
+            ? t("The folder and everything in it will be deleted. This can't be undone.")
+            : t("The file will be deleted. This can't be undone.")
         }
-        action="Delete"
+        action={t("Delete")}
         destructive
         onConfirm={() =>
           change.mutate(
             { action: "delete", path },
-            { onSuccess: () => toast.success(`Deleted ${entry.name}`), onError: (e) => toast.error(e.message) },
+            { onSuccess: () => toast.success(t("Deleted {{name}}", { name: entry.name })), onError: (e) => toast.error(e.message) },
           )
         }
       />

@@ -1,5 +1,6 @@
 import { ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { type Status, StatusBadge } from "@/components/status"
@@ -7,15 +8,16 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { meQuery } from "@/features/auth/api"
 import { formatDate } from "@/lib/format"
+import { msg } from "@/lib/i18n"
 import { groupsQuery, type User, usersQuery } from "./api"
 import { InviteDialog } from "./invite-dialog"
 import { useAccess } from "./use-access"
 import { UserActions } from "./user-actions"
 
 function statusOf(user: User): Status {
-  if (user.disabled) return { tone: "neutral", label: "Disabled" }
-  if (!user.passwordSet) return { tone: "warning", label: "Invited" }
-  return { tone: "success", label: "Active" }
+  if (user.disabled) return { tone: "neutral", label: msg("Disabled") }
+  if (!user.passwordSet) return { tone: "warning", label: msg("Invited") }
+  return { tone: "success", label: msg("Active") }
 }
 
 /** The Users tab: everyone who can sign in, with their groups. */
@@ -31,19 +33,19 @@ export function UsersPage() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Users get their permissions from their groups.</p>
+        <p className="text-sm text-muted-foreground">{t("Users get their permissions from their groups.")}</p>
         {manage && <InviteDialog groups={groups} />}
       </div>
       <div className="surface overflow-hidden rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Groups</TableHead>
-              <TableHead className="hidden md:table-cell">Added</TableHead>
+              <TableHead>{t("User")}</TableHead>
+              <TableHead>{t("Groups")}</TableHead>
+              <TableHead className="hidden md:table-cell">{t("Added")}</TableHead>
               {manage && (
                 <TableHead>
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("Actions")}</span>
                 </TableHead>
               )}
             </TableRow>
@@ -60,10 +62,11 @@ export function UsersPage() {
                       {user.username.charAt(0)}
                     </span>
                     <span className="font-medium">{user.username}</span>
-                    {user.id === me?.id && <Chip>You</Chip>}
+                    {user.id === me?.id && <Chip>{t("You")}</Chip>}
                     <StatusBadge status={statusOf(user)} />
                     {user.mfa && (
                       <Chip icon={ShieldCheckIcon} className="max-sm:hidden">
+                        {/* i18next-instrument-ignore-next-line: the common abbreviation */}
                         2FA
                       </Chip>
                     )}
@@ -72,7 +75,7 @@ export function UsersPage() {
                 <TableCell>
                   <span className="flex flex-wrap gap-1.5">
                     {user.groups.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">No groups, no permissions</span>
+                      <span className="text-xs text-muted-foreground">{t("No groups, no permissions")}</span>
                     ) : (
                       user.groups.map((id) => (
                         <Chip key={id} icon={UsersIcon}>

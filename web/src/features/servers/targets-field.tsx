@@ -1,5 +1,6 @@
 import { HardDrivesIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { t } from "i18next"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { nodesQuery } from "@/features/nodes/api"
@@ -11,17 +12,17 @@ const same = (a: Target, b: Target) => a.nodeId === b.nodeId && a.serverId === b
 export function TargetsField({ value, onChange }: { value: Target[]; onChange: (targets: Target[]) => void }) {
   const { data: nodes, isPending } = useQuery(nodesQuery)
   const { data: servers = [] } = useQuery(allServersQuery)
-  const has = (t: Target) => value.some((v) => same(v, t))
+  const has = (target: Target) => value.some((v) => same(v, target))
 
-  function toggle(t: Target, on: boolean) {
+  function toggle(target: Target, on: boolean) {
     // A whole node replaces the single servers chosen on it.
-    const rest = value.filter((v) => !same(v, t) && !(t.serverId === "" && v.nodeId === t.nodeId))
-    onChange(on ? [...rest, t] : rest)
+    const rest = value.filter((v) => !same(v, target) && !(target.serverId === "" && v.nodeId === target.nodeId))
+    onChange(on ? [...rest, target] : rest)
   }
 
   if (isPending) return <Skeleton className="h-28 rounded-xl" />
   const enrolled = nodes?.filter((n) => n.enrolledAt) ?? []
-  if (enrolled.length === 0) return <p className="text-sm text-muted-foreground">Add a node first.</p>
+  if (enrolled.length === 0) return <p className="text-sm text-muted-foreground">{t("Add a node first.")}</p>
 
   return (
     <ul className="grid gap-3">
@@ -35,7 +36,7 @@ export function TargetsField({ value, onChange }: { value: Target[]; onChange: (
               <Checkbox checked={whole} onCheckedChange={(on) => toggle({ nodeId: node.id, serverId: "" }, on === true)} />
               <HardDrivesIcon className="size-4 text-info" weight="duotone" />
               <span className="text-sm font-semibold">{node.name}</span>
-              <span className="text-xs text-muted-foreground">All servers, also new ones</span>
+              <span className="text-xs text-muted-foreground">{t("All servers, also new ones")}</span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2 pl-7">
               {onNode.map((s) => (
@@ -51,16 +52,19 @@ export function TargetsField({ value, onChange }: { value: Target[]; onChange: (
                   {s.name}
                 </label>
               ))}
-              {unknown.map((t) => (
-                <label key={t.serverId} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground ring-1 ring-foreground/8">
-                  <Checkbox checked onCheckedChange={() => toggle(t, false)} />
-                  Unreachable server
+              {unknown.map((target) => (
+                <label
+                  key={target.serverId}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground ring-1 ring-foreground/8"
+                >
+                  <Checkbox checked onCheckedChange={() => toggle(target, false)} />
+                  {t("Unreachable server")}
                 </label>
               ))}
               {node.status !== "online" ? (
-                <p className="text-xs text-muted-foreground">The node is offline, so its servers can't be listed.</p>
+                <p className="text-xs text-muted-foreground">{t("The node is offline, so its servers can't be listed.")}</p>
               ) : (
-                onNode.length === 0 && <p className="text-xs text-muted-foreground">No servers yet.</p>
+                onNode.length === 0 && <p className="text-xs text-muted-foreground">{t("No servers yet.")}</p>
               )}
             </div>
           </li>

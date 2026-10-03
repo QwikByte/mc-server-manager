@@ -513,9 +513,16 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 | --------------- | ------------------------------------------------------------------------------ |
 | `make build`    | Builds the panel and both binaries into `bin/`                                 |
 | `make test`     | Runs all Go tests, including the end-to-end test                               |
-| `make lint`     | golangci-lint, oxlint and the TypeScript type check                            |
+| `make lint`     | golangci-lint, oxlint, the translation checks and the TypeScript type check    |
 | `make generate` | Regenerates the gRPC code after changing `api/**/*.proto`                      |
 | `make packages` | Builds the packages and archives of a release into `dist/`, without publishing |
+
+**Translations.** The panel's texts are English and serve as the keys of their translations
+([i18next](https://www.i18next.com)): components show them with `t("…")`, or `<Trans>` for texts with markup, and
+`msg("…")` marks those outside of components. `npm run i18n` in `web` lists them in `web/src/locales/en.json`, and
+`make lint` fails while it is out of date or a component shows a text without `t`. A language is a copy of `en.json`
+with the texts translated, e.g. `de.json`. Browsers that prefer it get it, and texts it lacks stay English. What the
+master and the agents send, such as errors, the log and the descriptions of permissions, stays English.
 
 **Releasing.** The release workflow tests, builds the panel and both programs with [GoReleaser](https://goreleaser.com)
 and publishes a GitHub release with the packages, archives, checksums, attestations and the installer, which installs

@@ -1,6 +1,7 @@
 import { CubeIcon, MagnifyingGlassIcon, WifiSlashIcon } from "@phosphor-icons/react"
 import { useQueries, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
+import { t } from "i18next"
 import { useState } from "react"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
@@ -33,10 +34,18 @@ export function ServersPage() {
 
   return (
     <>
-      <PageHeader icon={CubeIcon} title="Servers" description="The servers on all nodes. They are created on the page of a node." />
+      <PageHeader
+        icon={CubeIcon}
+        title={t("Servers")}
+        description={t("The servers on all nodes. They are created on the page of a node.")}
+      />
       {offline.length > 0 && (
-        <Callout tone="warning" icon={WifiSlashIcon} title="Some nodes are offline" className="mb-6">
-          The servers on {offline.join(", ")} aren't listed until {offline.length === 1 ? "it is" : "they are"} back.
+        <Callout tone="warning" icon={WifiSlashIcon} title={t("Some nodes are offline")} className="mb-6">
+          {t("The servers on {{nodes}} aren't listed until they are back.", {
+            nodes: offline.join(", "),
+            count: offline.length,
+            defaultValue_one: "The servers on {{nodes}} aren't listed until it is back.",
+          })}
         </Callout>
       )}
       {isPending ? (
@@ -47,9 +56,9 @@ export function ServersPage() {
         // Servers on offline nodes may exist; the notice above tells about them.
         nodes &&
         offline.length === 0 && (
-          <EmptyState icon={CubeIcon} title="No servers yet" description="Open a node to create a game server or a proxy on it.">
+          <EmptyState icon={CubeIcon} title={t("No servers yet")} description={t("Open a node to create a game server or a proxy on it.")}>
             <Button asChild>
-              <Link to="/nodes">Go to the nodes</Link>
+              <Link to="/nodes">{t("Go to the nodes")}</Link>
             </Button>
           </EmptyState>
         )
@@ -61,22 +70,16 @@ export function ServersPage() {
             </InputGroupAddon>
             <InputGroupInput
               type="search"
-              placeholder="Search servers"
-              aria-label="Search servers"
+              placeholder={t("Search servers")}
+              aria-label={t("Search servers")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </InputGroup>
-          {found?.length === 0 && <p className="text-sm text-muted-foreground">No server matches your search.</p>}
+          {found?.length === 0 && <p className="text-sm text-muted-foreground">{t("No server matches your search.")}</p>}
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {found?.map((server) => (
-              <ServerCard
-                key={server.id}
-                nodeId={server.nodeId}
-                nodeName={server.nodeName}
-                server={server}
-                usage={usage.get(server.id)}
-              />
+              <ServerCard key={server.id} nodeId={server.nodeId} nodeName={server.nodeName} server={server} usage={usage.get(server.id)} />
             ))}
           </ul>
         </>
