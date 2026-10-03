@@ -124,7 +124,7 @@ export function JvmOptionsField({ value, onChange }: { value: string; onChange: 
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      <FieldDescription>One option per line. The memory is set above, not here.</FieldDescription>
+      <FieldDescription>One option per line. The memory is set above, not here. Options that run code, such as Java agents, aren't allowed.</FieldDescription>
     </Field>
   )
 }

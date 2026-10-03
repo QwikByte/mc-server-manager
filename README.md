@@ -24,7 +24,7 @@ Each server has a live console in the panel: its output streams in as it happens
 through the RCON connection the server image provides.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
-the master), edits configuration files in the browser and downloads files or whole folders as ZIP archives.
+the master, as long as 1 GB stays free on the node, like for backups), edits configuration files in the browser and downloads files or whole folders as ZIP archives.
 
 `server.properties` can be edited as a form: grouped settings with switches, choices and validated numbers, a
 MOTD editor with colour codes and preview, and a search. Only properties of the server's Minecraft version are
@@ -80,7 +80,7 @@ curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/latest/downlo
 It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), for the IP address
 and port the panel listens at (`--panel-addr`, `127.0.0.1:8080` by default, `0.0.0.0:<port>` for all interfaces, ports
 from 1024 on), and for the password of the first administrator, `admin` unless `--admin` names another (piped, it
-generates one and shows it). The password needs at least 12 characters and isn't shown while you type it. These options
+generates one and writes it to `/etc/mcsm/admin-password`, which only root can read). The password needs at least 12 characters and isn't shown while you type it. These options
 only apply to a new installation; later, both addresses can be changed in the panel's settings.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
 `cdn.modrinth.com`. Browsers only sign in over HTTPS, so serve the panel with a reverse proxy, e.g. with
@@ -339,7 +339,8 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Enrollment.** Adding a node creates a single-use join token (valid for one hour unless the settings say
   otherwise, stored only as a hash). It contains the master address, the node ID, the secret and the CA fingerprint.
   The agent creates its key pair locally, sends a CSR and pins the CA fingerprint, so the exchange can't be
-  intercepted. Private keys never leave the node.
+  intercepted. Private keys never leave the node. The master checks the token before it signs the CSR, and a
+  client gets 5 attempts, then one every 12 seconds.
 - **Agents only obey the master.** The agent requires a client certificate with the master identity. Node
   certificates are server-only, so a compromised node can't command other nodes. Locally, the agent is controlled
   through a Unix socket (mode `0600` inside a `0700` data directory).
@@ -353,14 +354,16 @@ Users get their permissions from groups; a user can be in several groups and has
   codes aren't checked for a minute that doubles with every further wrong one, up to a day; parallel guesses count
   too. Recovery codes have 50 random bits and are stored as SHA-256 hashes. The secret of the app is stored in the
   master's database, which needs the same protection as the CA key next to it. The panel must be served over HTTPS (reverse proxy or
-  `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt).
+  `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt). With
+  `--tls-cert`, the master tells browsers to use HTTPS only (HSTS, one year); behind a reverse proxy, set it there.
 - **Networks.** Only Velocity's modern forwarding is supported: it signs the forwarded player data with a random
   secret per network. BungeeCord's forwarding can be spoofed by anyone who reaches a backend. The secret is stored in
   the master's database and on the network's servers; the API never returns it.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), containers run with `no-new-privileges` and memory and PID limits, and servers are only created
   after the operator accepts the Minecraft EULA. JVM options may only contain characters that the image's start
-  script can't interpret as shell syntax, and can't override the memory limit.
+  script can't interpret as shell syntax, can't override the memory limit and can't run code: Java agents, commands
+  on errors, and debugging or JMX ports are refused.
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
   uploaded HTML file can't run scripts in the panel. Secrets of the server stay on the node: files that only hold

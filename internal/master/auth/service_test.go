@@ -108,6 +108,18 @@ func TestInviteDisableAndChangePassword(t *testing.T) {
 		t.Fatalf("other session still valid: %v", err)
 	}
 
+	// A setup link no longer works once the user changed the password.
+	stale, err := svc.NewSetupLink(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ChangePassword(ctx, user.ID, "a-brand-new-password", "the-newest-password", session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetupUser(ctx, stale.Token); err == nil {
+		t.Fatal("setup link outlived a password change")
+	}
+
 	// Disabled users lose their sessions and can't sign in or use setup links.
 	reset, err := svc.NewSetupLink(ctx, user.ID)
 	if err != nil {
@@ -119,7 +131,7 @@ func TestInviteDisableAndChangePassword(t *testing.T) {
 	if _, err := svc.Authenticate(ctx, session); !errors.Is(err, ErrNoSession) {
 		t.Fatalf("session of a disabled user still valid: %v", err)
 	}
-	if _, _, err := svc.Login(ctx, "alice", "a-brand-new-password", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "alice", "the-newest-password", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("disabled user signed in: %v", err)
 	}
 	if _, err := svc.SetupUser(ctx, reset.Token); err == nil {

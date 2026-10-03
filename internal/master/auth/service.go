@@ -218,11 +218,18 @@ func (s *Service) ChangePassword(ctx context.Context, id int64, current, next, k
 	if err := checkPassword(next); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hashPassword(next), id); err != nil {
+	// A setup link would set the password again, and other sessions may belong to whoever
+	// knew the old one.
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hashPassword(next), id)
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `DELETE FROM setup_tokens WHERE user_id = ?`, id)
+		}
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`, id, hashToken(keep))
+		}
 		return err
-	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`, id, hashToken(keep))
-	return err
+	})
 }
 
 // Login verifies the credentials and starts a session that lasts for ttl, identified by

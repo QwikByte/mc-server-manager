@@ -231,7 +231,7 @@ func (s *Service) ImportBackup(stream mcsmv1.BackupService_ImportBackupServer) e
 		return err
 	}
 	defer release()
-	imported, err := s.store.add(srv.ID, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, func(w io.Writer) error {
+	imported, err := s.store.add(srv.ID, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, b.GetSize(), func(w io.Writer) error {
 		for {
 			msg, err := stream.Recv()
 			if errors.Is(err, io.EOF) {
@@ -323,6 +323,8 @@ func toStatus(err error) error {
 		return status.Error(codes.AlreadyExists, "The backup exists already.")
 	case errors.Is(err, storage.ErrUnknown):
 		return status.Errorf(codes.InvalidArgument, "%s. Add it on the node with: mcsm-agent storage add", err)
+	case errors.As(err, new(storage.FullError)):
+		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()
 	}

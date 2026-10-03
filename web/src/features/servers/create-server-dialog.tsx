@@ -179,7 +179,7 @@ export function CreateServerDialog({
                     {nodes.map((n) => (
                       <SelectItem key={n.id} value={n.id} disabled={n.status !== "online"}>
                         {n.name}
-                        <span className="text-muted-foreground">{n.status === "online" ? n.address : n.status}</span>
+                        <span className="text-muted-foreground">{n.status === "online" ? (n.address ?? n.status) : n.status}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
