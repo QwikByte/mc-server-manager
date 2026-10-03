@@ -44,11 +44,15 @@ export function ServersPage() {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : servers.length === 0 ? (
-        <EmptyState icon={CubeIcon} title="No servers yet" description="Open a node to create a game server or a proxy on it.">
-          <Button asChild>
-            <Link to="/nodes">Go to the nodes</Link>
-          </Button>
-        </EmptyState>
+        // Servers on offline nodes may exist; the notice above tells about them.
+        nodes &&
+        offline.length === 0 && (
+          <EmptyState icon={CubeIcon} title="No servers yet" description="Open a node to create a game server or a proxy on it.">
+            <Button asChild>
+              <Link to="/nodes">Go to the nodes</Link>
+            </Button>
+          </EmptyState>
+        )
       ) : (
         <>
           <InputGroup className="mb-6 w-full sm:max-w-xs">
