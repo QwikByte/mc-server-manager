@@ -62,6 +62,11 @@ Each node has settings for its servers: the storage location preselected for new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
 the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
 
+The panel speaks English and German. It follows the browser until someone chooses a language with the button next to the
+colour theme, which the panel stores for the signed-in user, so that it applies in all their browsers; on the sign-in
+page, the choice applies to the browser. Dates, times and numbers follow the language too. What the master and the
+agents send, such as errors, the log and the descriptions of permissions, stays English.
+
 ## Installation
 
 Releases contain packages for Debian, Ubuntu and their derivatives (`.deb`), Fedora, RHEL, Rocky Linux, AlmaLinux and
@@ -544,10 +549,11 @@ go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 
 **Translations.** The panel's texts are English and serve as the keys of their translations
 ([i18next](https://www.i18next.com)): components show them with `t("…")`, or `<Trans>` for texts with markup, and
-`msg("…")` marks those outside of components. `npm run i18n` in `web` lists them in `web/src/locales/en.json`, and
-`make lint` fails while it is out of date or a component shows a text without `t`. A language is a copy of `en.json`
-with the texts translated, e.g. `de.json`. Browsers that prefer it get it, and texts it lacks stay English. What the
-master and the agents send, such as errors, the log and the descriptions of permissions, stays English.
+`msg("…")` marks those outside of components. `npm run i18n` in `web` lists them in `web/src/locales/en.json` and adds
+new ones to the other languages, e.g. `de.json`, untranslated: they are empty there and show in English until someone
+translates them. `make lint` fails while the files are out of date or a component shows a text without `t`. A new
+language is a copy of `en.json` with the texts translated and its code added to `locales` in `web/i18next.config.ts`;
+the language menu offers it then.
 
 **Releasing.** The release workflow tests, builds the panel and both programs with [GoReleaser](https://goreleaser.com)
 and creates a draft of a GitHub release with the packages, archives, checksums, attestations and the installer, which
@@ -569,4 +575,3 @@ has it in `RELEASE_KEY` is still signed with the old one.
 
 - Console commands for proxies, so that network changes reload the proxy instead of restarting it
 - More runtimes (plain processes)
-- German translation of the panel

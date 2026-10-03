@@ -7,6 +7,7 @@ import { niceMax } from "@/lib/chart"
 import { cn } from "@/lib/utils"
 import { type LogBucket, type LogFilter, statsQuery } from "./api"
 import { levels } from "./meta"
+import { locale } from "@/lib/i18n"
 
 /** The stacked series, bottom first. Info stays quiet so that warnings and errors stand out. */
 const series = [
@@ -15,8 +16,8 @@ const series = [
   { key: "error", fill: "bg-destructive" },
 ] as const
 
-const count = new Intl.NumberFormat()
-const hourOf = (b: LogBucket) => new Date(b.start).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+const count = new Intl.NumberFormat(locale)
+const hourOf = (b: LogBucket) => new Date(b.start).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
 const totalOf = (b: LogBucket) => b.debug + b.info + b.warn + b.error
 
 /** Key figures and a chart of the last 24 hours, for the entries of a filter. */

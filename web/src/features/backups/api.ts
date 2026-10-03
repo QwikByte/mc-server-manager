@@ -1,7 +1,8 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
-import i18next, { t } from "i18next"
+import { t } from "i18next"
 import { defaultSchedule, type TaskInput, taskApi } from "@/features/schedules/api"
 import { api } from "@/lib/api"
+import { locale } from "@/lib/i18n"
 
 /** What of a server is backed up; the agent finds the matching files when it backs up. */
 export interface Selection {
@@ -53,7 +54,7 @@ export const emptyJob: TaskInput<JobSettings> = {
 /** Whether a selection backs up nothing. */
 export const nothingSelected = (s: Selection) => !s.everything && !s.worlds && !s.plugins && !s.config && s.paths.length === 0
 
-const and = (parts: string[]) => new Intl.ListFormat(i18next.language, { type: "conjunction" }).format(parts)
+const and = (parts: string[]) => new Intl.ListFormat(locale, { type: "conjunction" }).format(parts)
 
 /** Describes a selection, e.g. "Worlds, plugins and configuration". */
 export function describeSelection(s: Selection): string {

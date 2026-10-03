@@ -1,9 +1,12 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import { chooseLanguage } from "@/lib/i18n"
 
 export interface User {
   id: number
   username: string
+  /** The language of the panel the user chose, e.g. de; missing follows the browser. */
+  language?: string
 }
 
 export const meQuery = queryOptions({
@@ -12,6 +15,18 @@ export const meQuery = queryOptions({
   retry: false,
   staleTime: Infinity,
 })
+
+/** Stores the language the signed-in user chose, "" for the browser's, and shows it. */
+export function useSetLanguage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (language: string) => api<User>("/auth/language", { method: "PUT", body: { language } }),
+    onSuccess: (user) => {
+      queryClient.setQueryData(meQuery.queryKey, user)
+      chooseLanguage(user.language ?? "")
+    },
+  })
+}
 
 /** With two-factor authentication, signing in without a code only tells that one is needed. */
 export type LoginResult = User | { mfaRequired: true }
@@ -89,8 +104,7 @@ function useMfaChange<T, R>(mutationFn: (input: T) => Promise<R>) {
 export const useEnableMfa = () =>
   useMfaChange((input: { password: string; code: string }) => api<{ recoveryCodes: string[] }>("/auth/mfa", { body: input }))
 
-export const useDisableMfa = () =>
-  useMfaChange((password: string) => api("/auth/mfa", { method: "DELETE", body: { password } }))
+export const useDisableMfa = () => useMfaChange((password: string) => api("/auth/mfa", { method: "DELETE", body: { password } }))
 
 export const useNewRecoveryCodes = () =>
   useMfaChange((password: string) => api<{ recoveryCodes: string[] }>("/auth/mfa/recovery-codes", { body: { password } }))

@@ -1,7 +1,8 @@
 import { t } from "i18next"
 import { formatBytes } from "@/lib/format"
+import { locale } from "@/lib/i18n"
 
-const decimal = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
+const decimal = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 })
 
 /** Formats thousandths of a CPU core, e.g. "0.42 cores". */
 export function formatCores(millis: number) {

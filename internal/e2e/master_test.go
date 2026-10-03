@@ -131,3 +131,29 @@ func TestPanelAddrAndRestart(t *testing.T) {
 	// A master that its service manager doesn't start again can't restart itself.
 	apiClient{t: t, url: m.panel(t).URL}.do("POST", "/api/master/restart", nil, http.StatusConflict, nil)
 }
+
+// Each user keeps the language they chose, and the session tells it to every browser.
+func TestLanguage(t *testing.T) {
+	m := startMaster(t)
+	svc := m.services(t)
+	srv := httptest.NewTLSServer(masterapp.Handler(svc))
+	t.Cleanup(srv.Close)
+	_, err := svc.Users.CreateUser(t.Context(), "admin", "the-admins-password")
+	check(t, err)
+	login := map[string]string{"username": "admin", "password": "the-admins-password"}
+	first := browser(t, srv)
+	first.do("POST", "/api/auth/login", login, http.StatusOK, nil)
+	first.do("PUT", "/api/auth/language", map[string]string{"language": "../de"}, http.StatusBadRequest, nil)
+	first.do("PUT", "/api/auth/language", map[string]string{"language": "de"}, http.StatusOK, nil)
+
+	var user auth.User
+	second := browser(t, srv)
+	second.do("POST", "/api/auth/login", login, http.StatusOK, &user)
+	if user.Language != "de" {
+		t.Fatalf("signed in as %+v", user)
+	}
+	first.do("GET", "/api/auth/me", nil, http.StatusOK, &user)
+	if user.Language != "de" {
+		t.Fatalf("me = %+v", user)
+	}
+}

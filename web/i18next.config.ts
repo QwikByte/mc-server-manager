@@ -1,10 +1,11 @@
 import { defineConfig, recommendedAcceptedAttributes } from 'i18next-cli'
 
 // The panel's English texts are the keys of their translations. `npm run i18n` lists them in
-// src/locales/en.json, which `npm run lint` checks; a language is a copy of it with the texts
-// translated. msg marks texts outside of components, which these translate with t.
+// src/locales/en.json and adds new ones to the other languages untranslated (empty, so that they
+// show in English), which `npm run lint` checks. msg marks texts outside of components, which
+// these translate with t.
 export default defineConfig({
-  locales: ['en'],
+  locales: ['en', 'de'],
   extract: {
     input: ['src/**/*.{ts,tsx}'],
     output: 'src/locales/{{language}}.json',

@@ -54,6 +54,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/auth/me", h.me)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
 	mux.HandleFunc("PUT /api/auth/password", perUser(h.changePassword))
+	mux.HandleFunc("PUT /api/auth/language", h.setLanguage)
 	mux.HandleFunc("GET /api/auth/mfa", h.mfa)
 	mux.HandleFunc("POST /api/auth/mfa/setup", h.setUpMFA)
 	mux.HandleFunc("POST /api/auth/mfa", perUser(h.enableMFA))
@@ -285,6 +286,24 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, r.Context().Value(userKey{}))
+}
+
+// setLanguage stores the language of the panel the user chose.
+func (h *Handler) setLanguage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Language string `json:"language"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	user, _ := UserFrom(r.Context())
+	if err := h.svc.SetLanguage(r.Context(), user.ID, req.Language); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	user.Language = req.Language
+	httpapi.WriteJSON(w, http.StatusOK, user)
 }
 
 // Require rejects requests without a valid session.
