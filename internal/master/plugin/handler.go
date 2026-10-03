@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -33,6 +34,8 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // servers at once checks the permission for each of them.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/plugins/search", access.SignedIn, h.search)
+	mux.Handle("GET /api/plugins/game-versions", access.SignedIn, h.gameVersions)
+	mux.Handle("GET /api/plugins/projects/{project}/versions", access.SignedIn, h.versions)
 	mux.Handle("GET /api/plugins/icons/{project}/{file}", access.SignedIn, h.icon)
 	mux.Handle("POST /api/plugins/install", access.SignedIn, h.install)
 	const base = "/api/nodes/{node}/servers/{id}/plugins"
@@ -43,47 +46,75 @@ func (h *Handler) Register(mux access.Mux) {
 
 type hit struct {
 	Project
-	Description string   `json:"description"`
-	Author      string   `json:"author"`
-	Downloads   int64    `json:"downloads"`
-	Loaders     []string `json:"loaders"`
+	Description string    `json:"description"`
+	Author      string    `json:"author"`
+	Downloads   int64     `json:"downloads"`
+	Follows     int64     `json:"follows"`
+	Updated     time.Time `json:"updated"`
+	// ClientSide tells whether players need the project too: required, optional, unsupported or unknown.
+	ClientSide string   `json:"clientSide"`
+	Loaders    []string `json:"loaders"`
+	Categories []string `json:"categories"` // the main ones, e.g. economy
 }
 
-// search finds plugins and mods for a server type and Minecraft version, both optional.
+// search finds plugins and mods for a server type and Minecraft version, both optional,
+// in categories, sorted and limited to those players don't need.
 func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	q := r.URL.Query()
-	typ, version := mcsmv1.ParseServerType(q.Get("type")), q.Get("version")
-	offset, _ := strconv.Atoi(q.Get("offset"))
-	loaders := modrinth.Loaders(typ)
+	s := modrinth.Search{Query: q.Get("query"), Categories: q["category"], Sort: q.Get("sort"), ServerOnly: q.Get("serverOnly") == "true"}
+	s.Offset, _ = strconv.Atoi(q.Get("offset"))
+	t := target{gameVersion: q.Get("version")}
 	var err error
 	switch {
-	case q.Get("type") != "" && len(loaders) == 0:
-		err = httpapi.Errorf(http.StatusBadRequest, "Vanilla servers can't load plugins or mods.")
-	case !gameVersion.MatchString(version) || offset < 0 || offset > 10_000:
+	case !s.Valid() || !gameVersion.MatchString(t.gameVersion) || s.Offset < 0 || s.Offset > 10_000:
 		err = httpapi.Errorf(http.StatusBadRequest, "invalid search")
-	case typ.Proxy():
-		version = "" // proxies run plugins of any Minecraft version
-	case version == "LATEST":
-		version, err = h.svc.modrinth.LatestRelease(ctx)
+	case q.Get("type") != "":
+		t, err = h.svc.target(ctx, mcsmv1.ParseServerType(q.Get("type")), t.gameVersion)
+	case t.gameVersion == "LATEST":
+		t.gameVersion, err = h.svc.modrinth.LatestRelease(ctx)
 	}
 	var res modrinth.SearchResult
 	if err == nil {
-		res, err = h.svc.modrinth.Search(ctx, q.Get("query"), loaders, version, offset)
+		s.Loaders, s.GameVersion = t.loaders, t.gameVersion
+		res, err = h.svc.modrinth.Search(ctx, s)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
 	hits, all := make([]hit, 0, len(res.Hits)), modrinth.AllLoaders()
+	loader := func(c string) bool { return slices.Contains(all, c) }
 	for _, m := range res.Hits {
 		project := h.svc.Describe(modrinth.Project{ID: m.ProjectID, Slug: m.Slug, Title: m.Title, IconURL: m.IconURL})
 		// The categories include the loaders; only those of manageable servers are of interest.
-		loaders := slices.DeleteFunc(slices.Clone(m.Categories), func(c string) bool { return !slices.Contains(all, c) })
-		hits = append(hits, hit{project, m.Description, m.Author, m.Downloads, loaders})
+		loaders := slices.DeleteFunc(slices.Clone(m.Categories), func(c string) bool { return !loader(c) })
+		categories := slices.DeleteFunc(slices.Clone(m.DisplayCategories), loader)
+		hits = append(hits, hit{project, m.Description, m.Author, m.Downloads, m.Follows, m.Updated, m.ClientSide, loaders, categories})
 	}
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"hits": hits, "total": res.Total})
+}
+
+// gameVersions lists the releases of Minecraft, the newest first.
+func (h *Handler) gameVersions(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+	releases, err := h.svc.modrinth.Releases(ctx)
+	write(w, r, http.StatusOK, releases, err)
+}
+
+// versions lists the versions of a project for a server type and Minecraft version.
+func (h *Handler) versions(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+	q := r.URL.Query()
+	if !gameVersion.MatchString(q.Get("version")) {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "invalid Minecraft version"))
+		return
+	}
+	versions, err := h.svc.Versions(ctx, r.PathValue("project"), mcsmv1.ParseServerType(q.Get("type")), q.Get("version"))
+	write(w, r, http.StatusOK, versions, err)
 }
 
 // icon serves a project icon from Modrinth's CDN, so the browser doesn't contact Modrinth.
@@ -104,15 +135,23 @@ func (h *Handler) icon(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Projects []string `json:"projects"`
-		Servers  []Ref    `json:"servers"`
+		// Versions are the IDs of the versions chosen for projects, by project ID.
+		Versions map[string]string `json:"versions"`
+		Servers  []Ref             `json:"servers"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	badVersion := func(project string) bool {
+		return !slices.Contains(req.Projects, project) || !modrinth.ValidProjectID(req.Versions[project])
+	}
 	switch {
 	case len(req.Projects) == 0 || len(req.Projects) > maxProjects || slices.ContainsFunc(req.Projects, func(id string) bool { return !modrinth.ValidProjectID(id) }):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose up to %d projects to install.", maxProjects))
+		return
+	case slices.ContainsFunc(slices.Collect(maps.Keys(req.Versions)), badVersion):
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose versions only for the projects to install."))
 		return
 	case len(req.Servers) == 0 || len(req.Servers) > maxServers || len(slices.Compact(slices.SortedFunc(slices.Values(req.Servers), compareRefs))) != len(req.Servers):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", maxServers))
@@ -124,7 +163,7 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	// The installation finishes even if the browser goes away.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), installTimeout)
 	defer cancel()
-	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"results": h.svc.Install(ctx, req.Projects, req.Servers)})
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"results": h.svc.Install(ctx, req.Projects, req.Versions, req.Servers)})
 }
 
 func compareRefs(a, b Ref) int {

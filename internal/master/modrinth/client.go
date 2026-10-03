@@ -49,6 +49,9 @@ var (
 		mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {"neoforge"},
 	}
 	projectID = regexp.MustCompile(`^[A-Za-z0-9]{1,32}$`)
+	category  = regexp.MustCompile(`^[a-z-]{1,32}$`)
+	// Sorts are the orders of search results; without a query, relevance means downloads.
+	Sorts = []string{"relevance", "downloads", "follows", "newest", "updated"}
 	// iconName matches the path of a project icon on the CDN, e.g. AABBCCDD/icon.png.
 	iconName   = regexp.MustCompile(`^[A-Za-z0-9]{1,32}/[A-Za-z0-9_-]{1,128}\.(png|jpe?g|webp|gif)$`)
 	iconTypes  = map[string]string{"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
@@ -69,7 +72,7 @@ func AllLoaders() []string {
 	return slices.Compact(all)
 }
 
-// ValidProjectID reports whether id is a well-formed project ID.
+// ValidProjectID reports whether id is a well-formed project or version ID.
 func ValidProjectID(id string) bool { return projectID.MatchString(id) }
 
 type Project struct {
@@ -88,14 +91,39 @@ type SearchResult struct {
 }
 
 type SearchHit struct {
-	ProjectID   string   `json:"project_id"`
-	Slug        string   `json:"slug"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Author      string   `json:"author"`
-	IconURL     string   `json:"icon_url"`
-	Downloads   int64    `json:"downloads"`
-	Categories  []string `json:"categories"` // includes the loaders
+	ProjectID   string    `json:"project_id"`
+	Slug        string    `json:"slug"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Author      string    `json:"author"`
+	IconURL     string    `json:"icon_url"`
+	Downloads   int64     `json:"downloads"`
+	Follows     int64     `json:"follows"`
+	Updated     time.Time `json:"date_modified"`
+	ClientSide  string    `json:"client_side"` // required, optional, unsupported or unknown
+	Categories  []string  `json:"categories"`  // includes the loaders
+	// DisplayCategories are the main categories and loaders.
+	DisplayCategories []string `json:"display_categories"`
+}
+
+// Search is a search for server-side plugins and mods.
+type Search struct {
+	Query string
+	// Loaders are those the projects must support, one of them; all loaders if empty.
+	Loaders     []string
+	GameVersion string // empty for any version
+	// Categories are those the projects must all be in, e.g. economy.
+	Categories []string
+	Sort       string // one of Sorts, relevance if empty
+	// ServerOnly limits the search to projects that players don't have to install.
+	ServerOnly bool
+	Offset     int
+}
+
+// Valid reports whether the categories and the sort are well-formed.
+func (s Search) Valid() bool {
+	return len(s.Categories) <= 10 && !slices.ContainsFunc(s.Categories, func(c string) bool { return !category.MatchString(c) }) &&
+		(s.Sort == "" || slices.Contains(Sorts, s.Sort))
 }
 
 type Version struct {
@@ -135,9 +163,9 @@ type Client struct {
 	api, cdn string
 	http     *http.Client
 
-	mu        sync.Mutex
-	release   string // the newest Minecraft release
-	releaseAt time.Time
+	mu         sync.Mutex
+	releases   []string // of Minecraft, the newest first
+	releasesAt time.Time
 }
 
 // New returns a client for the API and CDN at the given base URLs.
@@ -145,24 +173,33 @@ func New(api, cdn string) *Client {
 	return &Client{api: api, cdn: cdn, http: &http.Client{Timeout: 2 * time.Minute}}
 }
 
-// Search finds server-side plugins and mods for the given loaders, all of them if none
-// are given, and optionally a Minecraft version. Without a query, the most downloaded
-// projects come first.
-func (c *Client) Search(ctx context.Context, query string, loaderNames []string, gameVersion string, offset int) (SearchResult, error) {
-	if len(loaderNames) == 0 {
-		loaderNames = AllLoaders()
+// Search finds server-side plugins and mods. Without a query, the most downloaded
+// projects are the most relevant.
+func (c *Client) Search(ctx context.Context, s Search) (SearchResult, error) {
+	if len(s.Loaders) == 0 {
+		s.Loaders = AllLoaders()
 	}
 	facets := [][]string{
-		prefixed("categories:", loaderNames),
+		prefixed("categories:", s.Loaders),
 		{"server_side:required", "server_side:optional"},
 		{"project_type:plugin", "project_type:mod"},
 	}
-	if gameVersion != "" {
-		facets = append(facets, []string{"versions:" + gameVersion})
+	for _, c := range s.Categories {
+		facets = append(facets, []string{"categories:" + c})
 	}
-	q := url.Values{"query": {query}, "facets": {jsonText(facets)}, "limit": {strconv.Itoa(pageSize)}, "offset": {strconv.Itoa(offset)}}
-	if query == "" {
-		q.Set("index", "downloads")
+	if s.GameVersion != "" {
+		facets = append(facets, []string{"versions:" + s.GameVersion})
+	}
+	if s.ServerOnly {
+		facets = append(facets, []string{"client_side:optional", "client_side:unsupported"})
+	}
+	index := cmp.Or(s.Sort, "relevance")
+	if s.Query == "" && index == "relevance" {
+		index = "downloads"
+	}
+	q := url.Values{
+		"query": {s.Query}, "facets": {jsonText(facets)}, "index": {index},
+		"limit": {strconv.Itoa(pageSize)}, "offset": {strconv.Itoa(s.Offset)},
 	}
 	var res SearchResult
 	return res, c.call(ctx, http.MethodGet, "/search?"+q.Encode(), nil, &res)
@@ -210,23 +247,38 @@ func (c *Client) Updates(ctx context.Context, hashes, loaderNames []string, game
 	return versions, c.call(ctx, http.MethodPost, "/version_files/update", body, &versions)
 }
 
-// LatestRelease returns the newest release of Minecraft.
-func (c *Client) LatestRelease(ctx context.Context) (string, error) {
+// Releases returns the releases of Minecraft, the newest first. Callers must not change
+// the list.
+func (c *Client) Releases(ctx context.Context) ([]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if time.Since(c.releaseAt) < releaseTTL {
-		return c.release, nil
+	if time.Since(c.releasesAt) < releaseTTL {
+		return c.releases, nil
 	}
 	var versions []gameVersion
 	if err := c.call(ctx, http.MethodGet, "/tag/game_version", nil, &versions); err != nil {
+		return nil, err
+	}
+	var releases []string
+	for _, v := range versions {
+		if v.Type == "release" {
+			releases = append(releases, v.Version)
+		}
+	}
+	if len(releases) == 0 {
+		return nil, httpapi.Errorf(http.StatusBadGateway, "Modrinth lists no Minecraft release.")
+	}
+	c.releases, c.releasesAt = releases, time.Now()
+	return releases, nil
+}
+
+// LatestRelease returns the newest release of Minecraft.
+func (c *Client) LatestRelease(ctx context.Context) (string, error) {
+	releases, err := c.Releases(ctx)
+	if err != nil {
 		return "", err
 	}
-	i := slices.IndexFunc(versions, func(v gameVersion) bool { return v.Type == "release" })
-	if i < 0 {
-		return "", httpapi.Errorf(http.StatusBadGateway, "Modrinth lists no Minecraft release.")
-	}
-	c.release, c.releaseAt = versions[i].Version, time.Now()
-	return c.release, nil
+	return releases[0], nil
 }
 
 // gameVersion is a Minecraft version, the newest first.

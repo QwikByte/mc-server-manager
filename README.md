@@ -174,10 +174,14 @@ that come from Modrinth. Worlds and plugin configurations are not part of templa
 
 Plugins (Paper, Purpur, Velocity, BungeeCord) and mods (Fabric, Forge, NeoForge) are installed from
 [Modrinth](https://modrinth.com), either on any number of servers at once from the **Plugins** page or from the
-**Plugins**/**Mods** tab of a server. The master picks the newest release for each server's software and Minecraft
-version, installs the projects it requires, and replaces an older version of the same project. Installed files are
+**Plugins**/**Mods** tab of a server. The search filters by software, Minecraft version, categories (e.g. economy,
+management, optimization) and, for mods, those players don't have to install, and sorts by relevance, downloads,
+followers, newest or recently updated. The master picks the newest release for each server's software and Minecraft
+version, installs the projects it requires, and replaces an older version of the same project. Another version that
+suits the server, betas and alphas included, can be chosen instead, also to downgrade a project. Installed files are
 recognised by their hash, so the tab shows their project, version and available updates, also for files uploaded
-by hand. Own `.jar` files can be uploaded too. Servers load changes when they restart.
+by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once. Own `.jar` files
+can be uploaded too. Servers load changes when they restart.
 
 ## Backups
 

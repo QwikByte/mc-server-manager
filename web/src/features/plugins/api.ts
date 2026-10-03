@@ -17,8 +17,36 @@ export interface SearchHit extends Project {
   description: string
   author: string
   downloads: number
+  follows: number
+  updated: string
+  /** Whether players need the project too. */
+  clientSide: "required" | "optional" | "unsupported" | "unknown"
   /** Loaders of manageable servers the project supports, e.g. "paper" or "fabric". */
   loaders: string[]
+  /** The main categories of the project, e.g. "economy". */
+  categories: string[]
+}
+
+export type Sort = "relevance" | "downloads" | "follows" | "newest" | "updated"
+
+/** A search on Modrinth; without a type or version, projects for any of them are found. */
+export interface Search {
+  query: string
+  type?: string
+  version?: string
+  /** Categories the projects must all be in. */
+  categories: string[]
+  sort: Sort
+  /** Only projects that players don't have to install. */
+  serverOnly: boolean
+}
+
+/** A version of a project. */
+export interface ProjectVersion {
+  id: string
+  number: string
+  channel: "release" | "beta" | "alpha"
+  published: string
 }
 
 /** A plugin file on a server; files from Modrinth are recognised by their hash. */
@@ -27,6 +55,7 @@ export interface InstalledPlugin {
   size: number
   project?: Project
   version?: string
+  versionId?: string
   /** A newer release that suits the server. */
   update?: string
 }
@@ -48,20 +77,38 @@ export function supports(loaders: string[], type: string) {
   return serverType(type).addons?.loaders.some((l) => loaders.includes(l)) ?? false
 }
 
-/** Searches Modrinth for plugins and mods of a server type and Minecraft version, both optional. */
-export const searchQuery = (params: { query: string; type?: string; version?: string }) =>
+/** Searches Modrinth for plugins and mods. */
+export const searchQuery = (search: Search) =>
   infiniteQueryOptions({
-    queryKey: ["plugins", "search", params],
-    queryFn: ({ pageParam }) =>
-      api<{ hits: SearchHit[]; total: number }>(
-        `/plugins/search?${new URLSearchParams({ ...params, type: params.type ?? "", version: params.version ?? "", offset: String(pageParam) })}`,
-      ),
+    queryKey: ["plugins", "search", search],
+    queryFn: ({ pageParam }) => {
+      const { query, type = "", version = "", categories, sort, serverOnly } = search
+      const params = new URLSearchParams({ query, type, version, sort, offset: String(pageParam) })
+      for (const category of categories) params.append("category", category)
+      if (serverOnly) params.set("serverOnly", "true")
+      return api<{ hits: SearchHit[]; total: number }>(`/plugins/search?${params}`)
+    },
     initialPageParam: 0,
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((n, p) => n + p.hits.length, 0)
       return loaded < last.total && last.hits.length > 0 ? loaded : undefined
     },
     placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  })
+
+/** The releases of Minecraft, the newest first. */
+export const gameVersionsQuery = queryOptions({
+  queryKey: ["plugins", "game-versions"],
+  queryFn: () => api<string[]>("/plugins/game-versions"),
+  staleTime: 3_600_000,
+})
+
+/** The versions of a project that run on a server type and Minecraft version, the newest first. */
+export const versionsQuery = (project: string, type: string, version: string) =>
+  queryOptions({
+    queryKey: ["plugins", "versions", project, type, version],
+    queryFn: () => api<ProjectVersion[]>(`/plugins/projects/${project}/versions?${new URLSearchParams({ type, version })}`),
     staleTime: 60_000,
   })
 
@@ -73,14 +120,18 @@ export const pluginsQuery = (ref: ServerRef) =>
     queryFn: () => api<PluginListing>(base(ref)),
   })
 
-/** Installs or updates projects, with the projects they require, on servers. */
-export const installPlugins = (projects: string[], servers: ServerRef[]) =>
-  api<{ results: InstallResult[] }>("/plugins/install", { body: { projects, servers } }).then((res) => res.results)
+/**
+ * Installs or updates projects, with the projects they require, on servers: the newest release that suits each
+ * server, or the version chosen for a project.
+ */
+export const installPlugins = (projects: string[], servers: ServerRef[], versions?: Record<string, string>) =>
+  api<{ results: InstallResult[] }>("/plugins/install", { body: { projects, servers, versions } }).then((res) => res.results)
 
 export function useInstallPlugins() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ projects, servers }: { projects: string[]; servers: ServerRef[] }) => installPlugins(projects, servers),
+    mutationFn: ({ projects, servers, versions }: { projects: string[]; servers: ServerRef[]; versions?: Record<string, string> }) =>
+      installPlugins(projects, servers, versions),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
   })
 }
