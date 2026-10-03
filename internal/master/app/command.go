@@ -101,7 +101,14 @@ func Command() *cobra.Command {
 	nodeCmd := &cobra.Command{Use: "node", Short: "Manage the nodes"}
 	nodeCmd.AddCommand(addNodeCmd)
 
-	root.AddCommand(serve, user, nodeCmd, logsCmd)
+	backupCmd := &cobra.Command{
+		Use:   "backup <file>",
+		Short: "Save the database and the certificate authority to a .tar.gz file, or to stdout with -, while the master may run",
+		Args:  cobra.ExactArgs(1),
+		RunE:  func(cmd *cobra.Command, args []string) error { return backupMaster(cmd.Context(), cfg, args[0]) },
+	}
+
+	root.AddCommand(serve, user, nodeCmd, logsCmd, backupCmd)
 	return root
 }
 
