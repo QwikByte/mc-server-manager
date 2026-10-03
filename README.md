@@ -79,7 +79,7 @@ curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/latest/downlo
 It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), for the IP address
 and port the panel listens at (`--panel-addr`, `127.0.0.1:8080` by default, `0.0.0.0:<port>` for all interfaces, ports
 from 1024 on), and for the password of the first administrator, `admin` unless `--admin` names another (piped, it
-generates one and shows it). The password needs at least 12 characters and isn't shown while you type it. These options
+generates one and writes it to `/etc/mcsm/admin-password`, which only root can read). The password needs at least 12 characters and isn't shown while you type it. These options
 only apply to a new installation; later, both addresses can be changed in the panel's settings.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
 `cdn.modrinth.com`. Browsers only sign in over HTTPS, so serve the panel with a reverse proxy, e.g. with

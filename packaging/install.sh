@@ -19,6 +19,8 @@ set -Eeuo pipefail
 version=latest
 readonly REPO=https://github.com/QwikByte/mc-server-manager
 readonly ENROLL_PORT=9443 AGENT_PORT=7443 PANEL_ADDR=127.0.0.1:8080
+# A generated password goes here rather than into logs of provisioning tools, for root only.
+readonly PASSWORD_FILE=/etc/mcsm/admin-password
 
 public_host="" panel_addr="" admin=admin join="" install_docker=no only="" local_agent=no fresh_master=no password=""
 
@@ -184,7 +186,8 @@ setup_master() {
       runuser -u mcsm -- mcsm-master user add "$admin"
     else
       password=$(head -c 18 /dev/urandom | base64)
-      printf '%s\n' "$password" | runuser -u mcsm -- mcsm-master user add "$admin"
+      (umask 077 && printf '%s\n' "$password" >"$PASSWORD_FILE")
+      runuser -u mcsm -- mcsm-master user add "$admin" <"$PASSWORD_FILE"
     fi
   fi
   systemctl enable --now --quiet mcsm-master
@@ -236,7 +239,7 @@ setup_all() {
 summary_master() {
   printf '\nThe master is running.\n\n'
   if [ "$fresh_master" = yes ]; then
-    printf '  Sign in     as %s%s\n' "$admin" "${password:+ with the password $password, then change it in the panel}"
+    printf '  Sign in     as %s%s\n' "$admin" "${password:+ with the password in $PASSWORD_FILE, then change it in the panel and delete the file}"
   else
     panel_addr=$(sed -n 's/^MCSM_MASTER_OPTS=.*--http-addr \([^ "]*\).*/\1/p' /etc/mcsm/master.env)
     panel_addr=${panel_addr:-$PANEL_ADDR}
