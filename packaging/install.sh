@@ -143,8 +143,9 @@ ask_panel_addr() {
   [ -n "$panel_addr" ] || panel_addr=$(ask "IP address and port the panel listens at, 0.0.0.0:<port> for all interfaces [$PANEL_ADDR]:" "")
   panel_addr=${panel_addr:-$PANEL_ADDR}
   local port=${panel_addr##*:}
-  [[ "$panel_addr" =~ ^([0-9]{1,3}(\.[0-9]{1,3}){3}|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) ||
+  if ! [[ "$panel_addr" =~ ^([0-9]{1,3}(\.[0-9]{1,3}){3}|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$ ]] || ((10#$port < 1024 || 10#$port > 65535)); then
     die "Enter the panel's address as IP address and port from 1024 to 65535, e.g. 127.0.0.1:8080 or [::1]:8080: $panel_addr"
+  fi
   ((10#$port != ENROLL_PORT && 10#$port != AGENT_PORT)) || die "Ports $ENROLL_PORT and $AGENT_PORT are for the nodes, choose another one for the panel."
 }
 
