@@ -20,6 +20,7 @@ import (
 	agentlogs "github.com/QwikByte/noryx/internal/agent/logs"
 	"github.com/QwikByte/noryx/internal/agent/network"
 	"github.com/QwikByte/noryx/internal/agent/node"
+	"github.com/QwikByte/noryx/internal/agent/player"
 	"github.com/QwikByte/noryx/internal/agent/plugin"
 	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/properties"
@@ -62,6 +63,7 @@ func serve(ctx context.Context, cfg config) error {
 	remote := svc.grpcServer(agentlogs.FromMaster, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
 	localSrv := svc.grpcServer(agentlogs.FromLocal, grpc.Creds(local.NewCredentials()))
 	go svc.stats.Run(ctx)
+	go svc.player.Run(ctx)
 	go rt.Watch(ctx)
 
 	tcpListener, err := net.Listen("tcp", cfg.listenAddr)
@@ -111,6 +113,7 @@ type services struct {
 	properties *properties.Service
 	proxy      *network.Service
 	plugin     *plugin.Service
+	player     *player.Service
 	backup     *backup.Service
 	stats      *stats.Service
 	log        *agentlogs.Service
@@ -129,6 +132,7 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 		properties: properties.NewService(rt),
 		proxy:      network.NewService(rt),
 		plugin:     plugin.NewService(rt),
+		player:     player.NewService(rt),
 		backup:     backups,
 		stats:      stats.NewService(rt),
 		log:        agentlogs.NewService(buf),
@@ -148,6 +152,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 	noryxv1.RegisterPropertiesServiceServer(srv, s.properties)
 	noryxv1.RegisterProxyServiceServer(srv, s.proxy)
 	noryxv1.RegisterPluginServiceServer(srv, s.plugin)
+	noryxv1.RegisterPlayerServiceServer(srv, s.player)
 	noryxv1.RegisterBackupServiceServer(srv, s.backup)
 	noryxv1.RegisterStatsServiceServer(srv, s.stats)
 	noryxv1.RegisterLogServiceServer(srv, s.log)

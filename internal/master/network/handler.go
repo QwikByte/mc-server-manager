@@ -25,9 +25,9 @@ func NewHandler(svc *Service, ops *operation.Operations) *Handler {
 const networkTimeout = time.Hour
 
 // run runs an action on a network as an operation, which those see who may see networks.
-func (h *Handler) run(w http.ResponseWriter, r *http.Request, kind, name, id string, status int, task operation.Task) {
+func (h *Handler) run(w http.ResponseWriter, r *http.Request, kind, name, id string, status int, task operation.Task, steps ...string) {
 	h.ops.Run(w, r, operation.Spec{
-		Kind: kind, Subject: name, NetworkID: id, Status: status, Timeout: networkTimeout, Category: logging.Networks,
+		Kind: kind, Subject: name, NetworkID: id, Steps: steps, Status: status, Timeout: networkTimeout, Category: logging.Networks,
 		Visible: func(g access.Grants) bool { return g.Has(access.NetworksView) },
 	}, task)
 }
@@ -91,6 +91,74 @@ func (h *Handler) Register(mux access.Mux) {
 			err = h.svc.Broadcast(r.Context(), n, req.Message)
 		}
 		write(w, r, http.StatusNoContent, nil, err)
+	})
+	mux.Handle("POST /api/networks/{id}/rolling-restart", view, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Batch int `json:"batch"`
+		}
+		n, err := h.allowed(r, access.ServersRestart)
+		if err == nil {
+			err = httpapi.ReadJSON(w, r, &req)
+		}
+		if err != nil {
+			httpapi.WriteError(w, r, err)
+			return
+		}
+		h.run(w, r, "network.rolling-restart", n.Name, n.ID, http.StatusNoContent, func(ctx context.Context) (any, error) {
+			return nil, h.svc.RollingRestart(ctx, n, req.Batch)
+		}, "servers")
+	})
+	mux.Handle("GET /api/networks/{id}/maintenance", view, func(w http.ResponseWriter, r *http.Request) {
+		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+		var m Maintenance
+		if err == nil {
+			m, err = h.svc.Maintenance(r.Context(), n)
+		}
+		write(w, r, http.StatusOK, m, err)
+	})
+	mux.Handle("POST /api/networks/{id}/maintenance", manage, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Enabled bool `json:"enabled"`
+		}
+		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+		if err == nil {
+			err = httpapi.ReadJSON(w, r, &req)
+		}
+		var m Maintenance
+		if err == nil {
+			m, err = h.svc.Maintenance(r.Context(), n)
+		}
+		if err != nil {
+			httpapi.WriteError(w, r, err)
+			return
+		}
+		logging.Note(r.Context(), slog.String("name", n.Name), slog.Bool("enabled", req.Enabled))
+		steps, kind := []string{"maintenance"}, "network.maintenance-off"
+		if req.Enabled {
+			kind = "network.maintenance-on"
+			if !m.Installed {
+				steps = []string{"plugin", "proxy-restart", "maintenance"}
+			}
+		}
+		h.run(w, r, kind, n.Name, n.ID, http.StatusOK, func(ctx context.Context) (any, error) {
+			return h.svc.SetMaintenance(ctx, n, req.Enabled)
+		}, steps...)
+	})
+	mux.Handle("POST /api/networks/{id}/maintenance/players", manage, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Name string `json:"name"`
+			Add  bool   `json:"add"`
+		}
+		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+		if err == nil {
+			err = httpapi.ReadJSON(w, r, &req)
+		}
+		var m Maintenance
+		if err == nil {
+			logging.Note(r.Context(), slog.String("name", n.Name), slog.String("player", req.Name), slog.Bool("add", req.Add))
+			m, err = h.svc.ChangeMaintenancePlayer(r.Context(), n, req.Add, req.Name)
+		}
+		write(w, r, http.StatusOK, m, err)
 	})
 	mux.Handle("GET /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.proxySettings)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.updateProxySettings)

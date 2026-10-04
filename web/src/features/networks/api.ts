@@ -85,7 +85,10 @@ export function useUpdateNetwork(id: string) {
   })
 }
 
-export type NetworkAction = { action: "apply" | "delete" | "start" | "stop" | "restart" } | { action: "broadcast"; message: string }
+export type NetworkAction =
+  | { action: "apply" | "delete" | "start" | "stop" | "restart" }
+  | { action: "broadcast"; message: string }
+  | { action: "rolling-restart"; batch: number }
 
 /** Acts on a network or on all its servers. */
 export function useNetworkAction(id: string) {
@@ -98,6 +101,8 @@ export function useNetworkAction(id: string) {
           return operate(path, { method: "DELETE" }, a.onStart)
         case "broadcast":
           return api(`${path}/broadcast`, { body: { message: a.message } })
+        case "rolling-restart":
+          return operate(`${path}/rolling-restart`, { body: { batch: a.batch } }, a.onStart)
         default:
           return operate(`${path}/${a.action}`, { method: "POST" }, a.onStart)
       }
@@ -107,6 +112,43 @@ export function useNetworkAction(id: string) {
       void queryClient.invalidateQueries({ queryKey: networksQuery.queryKey, exact: a.action === "delete" })
       if (a.action !== "apply" && a.action !== "delete") void queryClient.invalidateQueries({ queryKey: ["servers"] })
     },
+  })
+}
+
+/** The maintenance of a network, as the Maintenance plugin of its proxy keeps it. */
+export interface Maintenance {
+  /** The proxy loaded the plugin; the first time maintenance turns on, the panel installs it. */
+  installed: boolean
+  enabled: boolean
+  /** Who may join during maintenance. */
+  players: { name: string; uuid: string }[]
+  proxyRunning: boolean
+}
+
+export const maintenanceQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["networks", id, "maintenance"],
+    queryFn: () => api<Maintenance>(`/networks/${id}/maintenance`),
+    staleTime: 10_000,
+  })
+
+/** Turns maintenance of a network on or off. */
+export function useSetMaintenance(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ enabled, onStart }: { enabled: boolean } & Followed) =>
+      operate<Maintenance>(`/networks/${id}/maintenance`, { body: { enabled } }, onStart),
+    onSuccess: (m) => queryClient.setQueryData(maintenanceQuery(id).queryKey, m),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: maintenanceQuery(id).queryKey }),
+  })
+}
+
+/** Adds or removes a player who may join during maintenance. */
+export function useMaintenancePlayer(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { name: string; add: boolean }) => api<Maintenance>(`/networks/${id}/maintenance/players`, { body }),
+    onSuccess: (m) => queryClient.setQueryData(maintenanceQuery(id).queryKey, m),
   })
 }
 

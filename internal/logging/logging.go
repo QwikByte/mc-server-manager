@@ -43,6 +43,7 @@ var (
 	Plugins   = Category("plugins")
 	Backups   = Category("backups")
 	Networks  = Category("networks")
+	Players   = Category("players")
 	Templates = Category("templates")
 	Policies  = Category("policies")
 	Terminal  = Category("terminal")

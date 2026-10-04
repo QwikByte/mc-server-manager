@@ -13,6 +13,7 @@ import (
 	masterapp "github.com/QwikByte/noryx/internal/master/app"
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/network"
+	"github.com/QwikByte/noryx/internal/master/player"
 )
 
 func TestUsersGroupsAndPermissions(t *testing.T) {
@@ -88,6 +89,14 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	mod.do("POST", "/api/servers/actions", map[string]any{"action": "restart", "servers": []network.Ref{lobby, survival}}, http.StatusForbidden, nil)
 	mod.do("POST", "/api/servers/actions", map[string]any{"action": "stop", "servers": []network.Ref{lobby}}, http.StatusForbidden, nil)
 	mod.do("POST", "/api/servers/tags", map[string]any{"servers": []network.Ref{lobby}, "add": []string{"lobby"}}, http.StatusForbidden, nil)
+	// Players have their own permission, and the lists only show the servers one may see.
+	mod.do("POST", "/api/players/actions", map[string]any{"action": "ban", "name": "Alex", "servers": []network.Ref{lobby}}, http.StatusForbidden, nil)
+	var lists player.Lists
+	mod.do("GET", "/api/players/lists", nil, http.StatusOK, &lists)
+	if len(lists.Servers) != 1 || lists.Servers[0].Ref != lobby {
+		t.Fatalf("lists of the moderator = %+v", lists.Servers)
+	}
+	mod.do("GET", "/api/players/lists?node="+survival.NodeID+"&server="+survival.ServerID, nil, http.StatusForbidden, nil)
 
 	// Nor the details of the node, which only those who may see the node get.
 	type nodeView struct {

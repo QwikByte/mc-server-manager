@@ -29,6 +29,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/player"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/properties"
@@ -262,6 +263,7 @@ func API(s Services) *http.ServeMux {
 	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations).Register(m)
+	player.NewHandler(player.NewService(s.Nodes, s.Networks), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
 	plugin.NewHandler(s.Plugins, s.Operations).Register(m)

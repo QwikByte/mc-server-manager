@@ -21,6 +21,62 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type MaintenanceChange int32
+
+const (
+	MaintenanceChange_MAINTENANCE_CHANGE_UNSPECIFIED MaintenanceChange = 0
+	MaintenanceChange_MAINTENANCE_CHANGE_ON          MaintenanceChange = 1
+	MaintenanceChange_MAINTENANCE_CHANGE_OFF         MaintenanceChange = 2
+	// Adds or removes a player who may join during maintenance.
+	MaintenanceChange_MAINTENANCE_CHANGE_ADD    MaintenanceChange = 3
+	MaintenanceChange_MAINTENANCE_CHANGE_REMOVE MaintenanceChange = 4
+)
+
+// Enum value maps for MaintenanceChange.
+var (
+	MaintenanceChange_name = map[int32]string{
+		0: "MAINTENANCE_CHANGE_UNSPECIFIED",
+		1: "MAINTENANCE_CHANGE_ON",
+		2: "MAINTENANCE_CHANGE_OFF",
+		3: "MAINTENANCE_CHANGE_ADD",
+		4: "MAINTENANCE_CHANGE_REMOVE",
+	}
+	MaintenanceChange_value = map[string]int32{
+		"MAINTENANCE_CHANGE_UNSPECIFIED": 0,
+		"MAINTENANCE_CHANGE_ON":          1,
+		"MAINTENANCE_CHANGE_OFF":         2,
+		"MAINTENANCE_CHANGE_ADD":         3,
+		"MAINTENANCE_CHANGE_REMOVE":      4,
+	}
+)
+
+func (x MaintenanceChange) Enum() *MaintenanceChange {
+	p := new(MaintenanceChange)
+	*p = x
+	return p
+}
+
+func (x MaintenanceChange) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MaintenanceChange) Descriptor() protoreflect.EnumDescriptor {
+	return file_noryx_v1_proxy_proto_enumTypes[0].Descriptor()
+}
+
+func (MaintenanceChange) Type() protoreflect.EnumType {
+	return &file_noryx_v1_proxy_proto_enumTypes[0]
+}
+
+func (x MaintenanceChange) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MaintenanceChange.Descriptor instead.
+func (MaintenanceChange) EnumDescriptor() ([]byte, []int) {
+	return file_noryx_v1_proxy_proto_rawDescGZIP(), []int{0}
+}
+
 type GetProxySettingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
@@ -236,6 +292,313 @@ func (x *UpdateProxySettingsResponse) GetReloaded() bool {
 	return false
 }
 
+type GetMaintenanceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMaintenanceRequest) Reset() {
+	*x = GetMaintenanceRequest{}
+	mi := &file_noryx_v1_proxy_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMaintenanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMaintenanceRequest) ProtoMessage() {}
+
+func (x *GetMaintenanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_proxy_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMaintenanceRequest.ProtoReflect.Descriptor instead.
+func (*GetMaintenanceRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_proxy_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetMaintenanceRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+type GetMaintenanceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Maintenance   *Maintenance           `protobuf:"bytes,1,opt,name=maintenance,proto3" json:"maintenance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMaintenanceResponse) Reset() {
+	*x = GetMaintenanceResponse{}
+	mi := &file_noryx_v1_proxy_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMaintenanceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMaintenanceResponse) ProtoMessage() {}
+
+func (x *GetMaintenanceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_proxy_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMaintenanceResponse.ProtoReflect.Descriptor instead.
+func (*GetMaintenanceResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_proxy_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetMaintenanceResponse) GetMaintenance() *Maintenance {
+	if x != nil {
+		return x.Maintenance
+	}
+	return nil
+}
+
+type ChangeMaintenanceRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	Change   MaintenanceChange      `protobuf:"varint,2,opt,name=change,proto3,enum=noryx.v1.MaintenanceChange" json:"change,omitempty"`
+	// The player to add or remove.
+	Player        string `protobuf:"bytes,3,opt,name=player,proto3" json:"player,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeMaintenanceRequest) Reset() {
+	*x = ChangeMaintenanceRequest{}
+	mi := &file_noryx_v1_proxy_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeMaintenanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeMaintenanceRequest) ProtoMessage() {}
+
+func (x *ChangeMaintenanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_proxy_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeMaintenanceRequest.ProtoReflect.Descriptor instead.
+func (*ChangeMaintenanceRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_proxy_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ChangeMaintenanceRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *ChangeMaintenanceRequest) GetChange() MaintenanceChange {
+	if x != nil {
+		return x.Change
+	}
+	return MaintenanceChange_MAINTENANCE_CHANGE_UNSPECIFIED
+}
+
+func (x *ChangeMaintenanceRequest) GetPlayer() string {
+	if x != nil {
+		return x.Player
+	}
+	return ""
+}
+
+type ChangeMaintenanceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Maintenance   *Maintenance           `protobuf:"bytes,1,opt,name=maintenance,proto3" json:"maintenance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeMaintenanceResponse) Reset() {
+	*x = ChangeMaintenanceResponse{}
+	mi := &file_noryx_v1_proxy_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeMaintenanceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeMaintenanceResponse) ProtoMessage() {}
+
+func (x *ChangeMaintenanceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_proxy_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeMaintenanceResponse.ProtoReflect.Descriptor instead.
+func (*ChangeMaintenanceResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_proxy_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ChangeMaintenanceResponse) GetMaintenance() *Maintenance {
+	if x != nil {
+		return x.Maintenance
+	}
+	return nil
+}
+
+type Maintenance struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The plugin created its files, which it does when the proxy loads it.
+	Installed bool `protobuf:"varint,1,opt,name=installed,proto3" json:"installed,omitempty"`
+	Enabled   bool `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// Who may join during maintenance.
+	Players       []*MaintenancePlayer `protobuf:"bytes,3,rep,name=players,proto3" json:"players,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Maintenance) Reset() {
+	*x = Maintenance{}
+	mi := &file_noryx_v1_proxy_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Maintenance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Maintenance) ProtoMessage() {}
+
+func (x *Maintenance) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_proxy_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Maintenance.ProtoReflect.Descriptor instead.
+func (*Maintenance) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_proxy_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *Maintenance) GetInstalled() bool {
+	if x != nil {
+		return x.Installed
+	}
+	return false
+}
+
+func (x *Maintenance) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *Maintenance) GetPlayers() []*MaintenancePlayer {
+	if x != nil {
+		return x.Players
+	}
+	return nil
+}
+
+type MaintenancePlayer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Uuid          string                 `protobuf:"bytes,2,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MaintenancePlayer) Reset() {
+	*x = MaintenancePlayer{}
+	mi := &file_noryx_v1_proxy_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MaintenancePlayer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MaintenancePlayer) ProtoMessage() {}
+
+func (x *MaintenancePlayer) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_proxy_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MaintenancePlayer.ProtoReflect.Descriptor instead.
+func (*MaintenancePlayer) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_proxy_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MaintenancePlayer) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MaintenancePlayer) GetUuid() string {
+	if x != nil {
+		return x.Uuid
+	}
+	return ""
+}
+
 var File_noryx_v1_proxy_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_proxy_proto_rawDesc = "" +
@@ -258,10 +621,35 @@ const file_noryx_v1_proxy_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"9\n" +
 	"\x1bUpdateProxySettingsResponse\x12\x1a\n" +
-	"\breloaded\x18\x01 \x01(\bR\breloaded2\xcd\x01\n" +
+	"\breloaded\x18\x01 \x01(\bR\breloaded\"4\n" +
+	"\x15GetMaintenanceRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\"Q\n" +
+	"\x16GetMaintenanceResponse\x127\n" +
+	"\vmaintenance\x18\x01 \x01(\v2\x15.noryx.v1.MaintenanceR\vmaintenance\"\x84\x01\n" +
+	"\x18ChangeMaintenanceRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x123\n" +
+	"\x06change\x18\x02 \x01(\x0e2\x1b.noryx.v1.MaintenanceChangeR\x06change\x12\x16\n" +
+	"\x06player\x18\x03 \x01(\tR\x06player\"T\n" +
+	"\x19ChangeMaintenanceResponse\x127\n" +
+	"\vmaintenance\x18\x01 \x01(\v2\x15.noryx.v1.MaintenanceR\vmaintenance\"|\n" +
+	"\vMaintenance\x12\x1c\n" +
+	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x18\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\x125\n" +
+	"\aplayers\x18\x03 \x03(\v2\x1b.noryx.v1.MaintenancePlayerR\aplayers\";\n" +
+	"\x11MaintenancePlayer\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04uuid\x18\x02 \x01(\tR\x04uuid*\xa9\x01\n" +
+	"\x11MaintenanceChange\x12\"\n" +
+	"\x1eMAINTENANCE_CHANGE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15MAINTENANCE_CHANGE_ON\x10\x01\x12\x1a\n" +
+	"\x16MAINTENANCE_CHANGE_OFF\x10\x02\x12\x1a\n" +
+	"\x16MAINTENANCE_CHANGE_ADD\x10\x03\x12\x1d\n" +
+	"\x19MAINTENANCE_CHANGE_REMOVE\x10\x042\x80\x03\n" +
 	"\fProxyService\x12Y\n" +
 	"\x10GetProxySettings\x12!.noryx.v1.GetProxySettingsRequest\x1a\".noryx.v1.GetProxySettingsResponse\x12b\n" +
-	"\x13UpdateProxySettings\x12$.noryx.v1.UpdateProxySettingsRequest\x1a%.noryx.v1.UpdateProxySettingsResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
+	"\x13UpdateProxySettings\x12$.noryx.v1.UpdateProxySettingsRequest\x1a%.noryx.v1.UpdateProxySettingsResponse\x12S\n" +
+	"\x0eGetMaintenance\x12\x1f.noryx.v1.GetMaintenanceRequest\x1a .noryx.v1.GetMaintenanceResponse\x12\\\n" +
+	"\x11ChangeMaintenance\x12\".noryx.v1.ChangeMaintenanceRequest\x1a#.noryx.v1.ChangeMaintenanceResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_proxy_proto_rawDescOnce sync.Once
@@ -275,29 +663,45 @@ func file_noryx_v1_proxy_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_proxy_proto_rawDescData
 }
 
-var file_noryx_v1_proxy_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_noryx_v1_proxy_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_noryx_v1_proxy_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_noryx_v1_proxy_proto_goTypes = []any{
-	(*GetProxySettingsRequest)(nil),     // 0: noryx.v1.GetProxySettingsRequest
-	(*GetProxySettingsResponse)(nil),    // 1: noryx.v1.GetProxySettingsResponse
-	(*UpdateProxySettingsRequest)(nil),  // 2: noryx.v1.UpdateProxySettingsRequest
-	(*UpdateProxySettingsResponse)(nil), // 3: noryx.v1.UpdateProxySettingsResponse
-	nil,                                 // 4: noryx.v1.GetProxySettingsResponse.SettingsEntry
-	nil,                                 // 5: noryx.v1.UpdateProxySettingsRequest.SettingsEntry
-	(*LockedProperty)(nil),              // 6: noryx.v1.LockedProperty
+	(MaintenanceChange)(0),              // 0: noryx.v1.MaintenanceChange
+	(*GetProxySettingsRequest)(nil),     // 1: noryx.v1.GetProxySettingsRequest
+	(*GetProxySettingsResponse)(nil),    // 2: noryx.v1.GetProxySettingsResponse
+	(*UpdateProxySettingsRequest)(nil),  // 3: noryx.v1.UpdateProxySettingsRequest
+	(*UpdateProxySettingsResponse)(nil), // 4: noryx.v1.UpdateProxySettingsResponse
+	(*GetMaintenanceRequest)(nil),       // 5: noryx.v1.GetMaintenanceRequest
+	(*GetMaintenanceResponse)(nil),      // 6: noryx.v1.GetMaintenanceResponse
+	(*ChangeMaintenanceRequest)(nil),    // 7: noryx.v1.ChangeMaintenanceRequest
+	(*ChangeMaintenanceResponse)(nil),   // 8: noryx.v1.ChangeMaintenanceResponse
+	(*Maintenance)(nil),                 // 9: noryx.v1.Maintenance
+	(*MaintenancePlayer)(nil),           // 10: noryx.v1.MaintenancePlayer
+	nil,                                 // 11: noryx.v1.GetProxySettingsResponse.SettingsEntry
+	nil,                                 // 12: noryx.v1.UpdateProxySettingsRequest.SettingsEntry
+	(*LockedProperty)(nil),              // 13: noryx.v1.LockedProperty
 }
 var file_noryx_v1_proxy_proto_depIdxs = []int32{
-	4, // 0: noryx.v1.GetProxySettingsResponse.settings:type_name -> noryx.v1.GetProxySettingsResponse.SettingsEntry
-	6, // 1: noryx.v1.GetProxySettingsResponse.locked:type_name -> noryx.v1.LockedProperty
-	5, // 2: noryx.v1.UpdateProxySettingsRequest.settings:type_name -> noryx.v1.UpdateProxySettingsRequest.SettingsEntry
-	0, // 3: noryx.v1.ProxyService.GetProxySettings:input_type -> noryx.v1.GetProxySettingsRequest
-	2, // 4: noryx.v1.ProxyService.UpdateProxySettings:input_type -> noryx.v1.UpdateProxySettingsRequest
-	1, // 5: noryx.v1.ProxyService.GetProxySettings:output_type -> noryx.v1.GetProxySettingsResponse
-	3, // 6: noryx.v1.ProxyService.UpdateProxySettings:output_type -> noryx.v1.UpdateProxySettingsResponse
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	11, // 0: noryx.v1.GetProxySettingsResponse.settings:type_name -> noryx.v1.GetProxySettingsResponse.SettingsEntry
+	13, // 1: noryx.v1.GetProxySettingsResponse.locked:type_name -> noryx.v1.LockedProperty
+	12, // 2: noryx.v1.UpdateProxySettingsRequest.settings:type_name -> noryx.v1.UpdateProxySettingsRequest.SettingsEntry
+	9,  // 3: noryx.v1.GetMaintenanceResponse.maintenance:type_name -> noryx.v1.Maintenance
+	0,  // 4: noryx.v1.ChangeMaintenanceRequest.change:type_name -> noryx.v1.MaintenanceChange
+	9,  // 5: noryx.v1.ChangeMaintenanceResponse.maintenance:type_name -> noryx.v1.Maintenance
+	10, // 6: noryx.v1.Maintenance.players:type_name -> noryx.v1.MaintenancePlayer
+	1,  // 7: noryx.v1.ProxyService.GetProxySettings:input_type -> noryx.v1.GetProxySettingsRequest
+	3,  // 8: noryx.v1.ProxyService.UpdateProxySettings:input_type -> noryx.v1.UpdateProxySettingsRequest
+	5,  // 9: noryx.v1.ProxyService.GetMaintenance:input_type -> noryx.v1.GetMaintenanceRequest
+	7,  // 10: noryx.v1.ProxyService.ChangeMaintenance:input_type -> noryx.v1.ChangeMaintenanceRequest
+	2,  // 11: noryx.v1.ProxyService.GetProxySettings:output_type -> noryx.v1.GetProxySettingsResponse
+	4,  // 12: noryx.v1.ProxyService.UpdateProxySettings:output_type -> noryx.v1.UpdateProxySettingsResponse
+	6,  // 13: noryx.v1.ProxyService.GetMaintenance:output_type -> noryx.v1.GetMaintenanceResponse
+	8,  // 14: noryx.v1.ProxyService.ChangeMaintenance:output_type -> noryx.v1.ChangeMaintenanceResponse
+	11, // [11:15] is the sub-list for method output_type
+	7,  // [7:11] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_proxy_proto_init() }
@@ -311,13 +715,14 @@ func file_noryx_v1_proxy_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_proxy_proto_rawDesc), len(file_noryx_v1_proxy_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
+			NumEnums:      1,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_noryx_v1_proxy_proto_goTypes,
 		DependencyIndexes: file_noryx_v1_proxy_proto_depIdxs,
+		EnumInfos:         file_noryx_v1_proxy_proto_enumTypes,
 		MessageInfos:      file_noryx_v1_proxy_proto_msgTypes,
 	}.Build()
 	File_noryx_v1_proxy_proto = out.File

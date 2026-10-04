@@ -1,4 +1,14 @@
-import { ArrowsSplitIcon, CubeIcon, GraphIcon, HardDrivesIcon, HashIcon, ShieldCheckIcon, SlidersHorizontalIcon, UsersThreeIcon } from "@phosphor-icons/react"
+import {
+  ArrowsSplitIcon,
+  CubeIcon,
+  GraphIcon,
+  HardDrivesIcon,
+  HashIcon,
+  ShieldCheckIcon,
+  SlidersHorizontalIcon,
+  UsersThreeIcon,
+  WrenchIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link, Outlet } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -7,13 +17,15 @@ import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
+import { Pill } from "@/components/status"
 import { TabLink } from "@/components/tab-link"
 import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
-import { networkQuery } from "./api"
+import { maintenanceQuery, networkQuery } from "./api"
+import { MaintenanceSection } from "./maintenance"
 import { NetworkActions } from "./network-actions"
 import { NetworkEditor } from "./network-editor"
 import { ProxySettingsEditor } from "./proxy-settings"
@@ -30,6 +42,7 @@ export function NetworkPage() {
   const { data: network, isPending, error } = useQuery(networkQuery(networkId))
   const { data: servers } = useQuery(allServersQuery)
   const usage = useNetworkUsage(network ? [network] : [])
+  const { data: maintenance } = useQuery(maintenanceQuery(networkId))
 
   if (isPending)
     return (
@@ -57,6 +70,14 @@ export function NetworkPage() {
         icon={GraphIcon}
         tone="violet"
         title={network.name}
+        badge={
+          maintenance?.enabled && (
+            <Pill tone="warning">
+              <WrenchIcon weight="bold" />
+              {t("In maintenance")}
+            </Pill>
+          )
+        }
         description={
           <span className="mt-1 flex flex-wrap gap-2 text-foreground">
             <Chip icon={ArrowsSplitIcon}>{serverType(network.proxyType).label}</Chip>
@@ -110,7 +131,13 @@ function ProxyLink({ network }: { network: { proxy: { nodeId: string; serverId: 
 export function NetworkOverview() {
   const { networkId } = route.useParams()
   const { data: network } = useQuery(networkQuery(networkId))
-  return network ? <NetworkEditor network={network} /> : null
+  if (!network) return null
+  return (
+    <>
+      <MaintenanceSection network={network} />
+      <NetworkEditor network={network} />
+    </>
+  )
 }
 
 /** The Proxy configuration tab: the settings of the proxy in its own file. */

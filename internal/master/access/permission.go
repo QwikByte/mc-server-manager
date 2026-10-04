@@ -27,6 +27,8 @@ const (
 	ConsoleView     Permission = "console.view"
 	ConsoleCommands Permission = "console.commands"
 
+	PlayersManage Permission = "players.manage"
+
 	FilesRead  Permission = "files.read"
 	FilesWrite Permission = "files.write"
 	Properties Permission = "properties.edit"
@@ -107,6 +109,9 @@ var Catalog = []Area{
 	{"Console", []Info{
 		scoped(ConsoleView, "Read the console", "The live output of servers.", ServersView),
 		scoped(ConsoleCommands, "Send console commands", "Run any command of the server, e.g. op.", ConsoleView),
+	}},
+	{"Players", []Info{
+		scoped(PlayersManage, "Manage players", "Kick and ban players, change the whitelist and send players to other servers of a network. Making players operators also needs the permission to send console commands.", ServersView),
 	}},
 	{"Files and configuration", []Info{
 		scoped(FilesRead, "Browse and download files", "Secrets such as the RCON password stay hidden. Also needed to duplicate a server, as the copy contains its files.", ServersView),

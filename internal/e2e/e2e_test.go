@@ -355,6 +355,10 @@ type fakeRuntime struct {
 	servers  []runtime.Server
 	networks map[string]runtime.Network
 	commands []string
+	sent     map[string][]string // the console commands of each server
+	// on, if set, acts on console commands and on restarts ("restart"), e.g. like a plugin.
+	on       func(id, what string)
+	restarts []string
 	reloads  []string // proxies that reloaded their configuration
 	// createErr makes creating servers fail, e.g. on a node that is full.
 	createErr error
@@ -449,6 +453,12 @@ func (f *fakeRuntime) UpdateImage(_ context.Context, id string) (bool, error) {
 }
 
 func (f *fakeRuntime) Restart(_ context.Context, id string) error {
+	f.mu.Lock()
+	f.restarts = append(f.restarts, id)
+	if f.on != nil {
+		f.on(id, "restart")
+	}
+	f.mu.Unlock()
 	return f.setState(id, noryxv1.ServerState_SERVER_STATE_RUNNING)
 }
 
@@ -474,11 +484,32 @@ func (f *fakeRuntime) Logs(_ context.Context, _ string, _ int, after time.Time) 
 	}
 }
 
-func (f *fakeRuntime) SendCommand(_ context.Context, _, command string) (string, error) {
+func (f *fakeRuntime) SendCommand(_ context.Context, id, command string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.commands = append(f.commands, command)
+	if f.sent == nil {
+		f.sent = map[string][]string{}
+	}
+	f.sent[id] = append(f.sent[id], command)
+	if f.on != nil {
+		f.on(id, command)
+	}
 	return "§6ran " + command, nil
+}
+
+// commandsTo returns the console commands a server got.
+func (f *fakeRuntime) commandsTo(id string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.sent[id])
+}
+
+// restarted returns the servers that restarted, in order.
+func (f *fakeRuntime) restarted() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.restarts)
 }
 
 func (f *fakeRuntime) Usage(_ context.Context, id string) (runtime.Usage, error) {

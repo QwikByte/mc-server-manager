@@ -40,6 +40,30 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Stop the network {{name}}", { name: subject })
     case "network.restart":
       return t("Restart the network {{name}}", { name: subject })
+    case "network.rolling-restart":
+      return t("Restart {{name}} server by server", { name: subject })
+    case "network.maintenance-on":
+      return t("Turn on maintenance of {{name}}", { name: subject })
+    case "network.maintenance-off":
+      return t("Turn off maintenance of {{name}}", { name: subject })
+    case "players.kick":
+      return t("Kick {{name}}", { name: subject })
+    case "players.ban":
+      return t("Ban {{name}}", { name: subject })
+    case "players.pardon":
+      return t("Pardon {{name}}", { name: subject })
+    case "players.whitelist_add":
+      return t("Add {{name}} to the whitelist", { name: subject })
+    case "players.whitelist_remove":
+      return t("Remove {{name}} from the whitelist", { name: subject })
+    case "players.op":
+      return t("Make {{name}} an operator", { name: subject })
+    case "players.deop":
+      return t("Take operator away from {{name}}", { name: subject })
+    case "players.whitelist_on":
+      return t("Turn on the whitelist of {{count}} servers", { count, defaultValue_one: "Turn on the whitelist of {{count}} server" })
+    case "players.whitelist_off":
+      return t("Turn off the whitelist of {{count}} servers", { count, defaultValue_one: "Turn off the whitelist of {{count}} server" })
     case "servers.start":
       return t("Start {{count}} servers", { count, defaultValue_one: "Start {{count}} server" })
     case "servers.stop":
@@ -86,7 +110,15 @@ export function stepOf(op: Operation, step: string): string {
       return t("Stop the proxy")
     case "proxy-start":
       return t("Start the proxy")
+    case "proxy-restart":
+      return t("Restart the proxy")
+    case "plugin":
+      return t("Install the Maintenance plugin")
+    case "maintenance":
+      return op.kind === "network.maintenance-off" ? t("Turn maintenance off") : t("Turn maintenance on")
     case "servers":
+      if (op.kind.startsWith("players.")) return t("Apply it on the servers")
+      if (verb === "rolling-restart") return t("Restart the servers one after the other")
       if (verb === "start") return t("Start the servers")
       if (verb === "stop") return t("Stop the servers")
       if (verb === "restart") return t("Restart the servers")

@@ -4,23 +4,22 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 const (
 	maxBulk     = 500
 	bulkTimeout = 10 * time.Minute
-	// perNode is how many servers of a node a bulk action handles at a time, so that
-	// starting all its servers doesn't overwhelm a node.
-	perNode = 8
 )
 
 // bulkAction is an action on many servers and the permission it needs on each.
@@ -54,8 +53,8 @@ type bulkResult struct {
 	Error string `json:"error,omitempty"`
 }
 
-// bulk starts, stops or restarts servers, or sends them a console command, and tells how it
-// ended on each. It finishes even if the browser goes away.
+// bulk starts, stops or restarts servers, or sends them a console command, as an operation
+// that tells how it ended on each.
 func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Action  string       `json:"action"`
@@ -80,21 +79,20 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logging.Note(r.Context(), slog.String("action", req.Action), slog.String("command", req.Command), slog.Int("servers", len(req.Servers)))
-
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), bulkTimeout)
-	defer cancel()
-	slots := map[string]chan struct{}{}
-	for _, s := range req.Servers {
-		if slots[s.NodeID] == nil {
-			slots[s.NodeID] = make(chan struct{}, perNode)
-		}
-	}
-	results := make([]bulkResult, len(req.Servers))
-	var wg sync.WaitGroup
+	nodes := make([]string, len(req.Servers))
 	for i, s := range req.Servers {
-		wg.Go(func() {
-			slots[s.NodeID] <- struct{}{}
-			defer func() { <-slots[s.NodeID] }()
+		nodes[i] = s.NodeID
+	}
+	h.ops.Run(w, r, operation.Spec{
+		Kind: "servers." + req.Action, Subject: strconv.Itoa(len(req.Servers)), Steps: []string{"servers"},
+		Status: http.StatusOK, Timeout: bulkTimeout, Category: logging.Servers,
+		Visible: func(g access.Grants) bool {
+			return !slices.ContainsFunc(req.Servers, func(s tag.Server) bool { return !g.On(access.ServersView, s.NodeID, s.ServerID) })
+		},
+	}, func(ctx context.Context) (any, error) {
+		results := make([]bulkResult, len(req.Servers))
+		operation.Each(ctx, nodes, func(i int) {
+			s := req.Servers[i]
 			results[i].Server = s
 			err := h.moves.Check(s.ServerID)
 			if err == nil {
@@ -107,9 +105,8 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 				results[i].Error = httpapi.Message(err)
 			}
 		})
-	}
-	wg.Wait()
-	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
+		return map[string]any{"results": results}, nil
+	})
 }
 
 // changeTags adds and removes tags of servers, all or none of them.

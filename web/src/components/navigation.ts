@@ -9,6 +9,7 @@ import {
   ScrollIcon,
   SquaresFourIcon,
   StackIcon,
+  UsersThreeIcon,
 } from "@phosphor-icons/react"
 import type { Access } from "@/features/access/use-access"
 import { seesSettings } from "@/features/settings/tabs"
@@ -33,6 +34,7 @@ export const navigation = [
       },
       { to: "/servers", label: msg("Servers"), icon: CubeIcon, visible: (a: Access) => a.canSomewhere("servers.view") },
       { to: "/networks", label: msg("Networks"), icon: GraphIcon, visible: (a: Access) => a.can("networks.view") },
+      { to: "/players", label: msg("Players"), icon: UsersThreeIcon, visible: (a: Access) => a.canSomewhere("servers.view") },
       { to: "/templates", label: msg("Templates"), icon: StackIcon, visible: (a: Access) => a.can("templates.view") },
       { to: "/plugins", label: msg("Plugins"), icon: PuzzlePieceIcon, visible: (a: Access) => a.canSomewhere("plugins.manage") },
       { to: "/backups", label: msg("Backups"), icon: ArchiveIcon, visible: (a: Access) => a.can("backupjobs.view") },

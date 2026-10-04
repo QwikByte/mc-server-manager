@@ -23,6 +23,7 @@ import (
 //   - fabricapi: a Fabric mod
 //   - 8dI2tmqs: FabricProxy-Lite, a Fabric mod that requires fabricapi
 //   - broken: a Paper plugin whose download doesn't match its hash
+//   - VCAqN1ln: Maintenance, a plugin for proxies
 type fakeModrinth struct {
 	*httptest.Server
 	projects []modrinth.Project
@@ -54,6 +55,9 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	f.project("broken", "Broken", paper)
 	f.version("broken", "1.0", paper)
 	f.files["/cdn/data/broken/broken-1.0.jar"] = []byte("tampered")
+	proxies := []string{"velocity", "bungeecord", "waterfall"}
+	f.project("VCAqN1ln", "Maintenance", proxies)
+	f.version("VCAqN1ln", "5.1.0", proxies)
 
 	mux.HandleFunc("GET /v2/search", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

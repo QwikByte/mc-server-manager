@@ -13,6 +13,12 @@ service ProxyService {
   // UpdateProxySettings changes settings that the file has and keeps the others. A running
   // proxy reloads its configuration.
   rpc UpdateProxySettings(UpdateProxySettingsRequest) returns (UpdateProxySettingsResponse);
+  // GetMaintenance tells what the Maintenance plugin of a proxy keeps in its files: whether
+  // maintenance is on, and which players may join meanwhile.
+  rpc GetMaintenance(GetMaintenanceRequest) returns (GetMaintenanceResponse);
+  // ChangeMaintenance runs a command of the Maintenance plugin on the console of a running
+  // proxy, and returns once the plugin saved the change.
+  rpc ChangeMaintenance(ChangeMaintenanceRequest) returns (ChangeMaintenanceResponse);
 }
 
 message GetProxySettingsRequest {
@@ -40,4 +46,45 @@ message UpdateProxySettingsRequest {
 message UpdateProxySettingsResponse {
   // The proxy runs and reloaded its configuration.
   bool reloaded = 1;
+}
+
+message GetMaintenanceRequest {
+  string server_id = 1;
+}
+
+message GetMaintenanceResponse {
+  Maintenance maintenance = 1;
+}
+
+message ChangeMaintenanceRequest {
+  string server_id = 1;
+  MaintenanceChange change = 2;
+  // The player to add or remove.
+  string player = 3;
+}
+
+message ChangeMaintenanceResponse {
+  Maintenance maintenance = 1;
+}
+
+enum MaintenanceChange {
+  MAINTENANCE_CHANGE_UNSPECIFIED = 0;
+  MAINTENANCE_CHANGE_ON = 1;
+  MAINTENANCE_CHANGE_OFF = 2;
+  // Adds or removes a player who may join during maintenance.
+  MAINTENANCE_CHANGE_ADD = 3;
+  MAINTENANCE_CHANGE_REMOVE = 4;
+}
+
+message Maintenance {
+  // The plugin created its files, which it does when the proxy loads it.
+  bool installed = 1;
+  bool enabled = 2;
+  // Who may join during maintenance.
+  repeated MaintenancePlayer players = 3;
+}
+
+message MaintenancePlayer {
+  string name = 1;
+  string uuid = 2;
 }

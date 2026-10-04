@@ -51,6 +51,7 @@ message ServerStats {
 message Players {
   uint32 online = 1;
   uint32 max = 2;
-  // Names of some of the players online, as the server lists them.
+  // Names of the players online: of all, up to 1000, if the console of a game server
+  // answers, otherwise of some, as the server lists them.
   repeated string names = 3;
 }
