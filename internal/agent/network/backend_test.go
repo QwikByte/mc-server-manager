@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
 
@@ -14,7 +14,7 @@ func TestWriteBackendPaper(t *testing.T) {
 	dir := dataDir(t, map[string]string{"config/paper-global.yml": paperGlobal})
 	write := func(f runtime.Forwarding, secret string) bool {
 		t.Helper()
-		changed, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_PAPER, f, secret)
+		changed, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_PAPER, f, secret)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -47,7 +47,7 @@ func TestWriteBackendPaper(t *testing.T) {
 func TestWriteBackendKeepsUntouchedFiles(t *testing.T) {
 	const commented = "# Paper's comments\nproxies:\n  velocity:\n    enabled: false\n    online-mode: true\n    secret: ''\n"
 	dir := dataDir(t, map[string]string{"config/paper-global.yml": commented})
-	if changed, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_PURPUR, runtime.ForwardingNone, ""); changed || err != nil {
+	if changed, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_PURPUR, runtime.ForwardingNone, ""); changed || err != nil {
 		t.Fatalf("changed = %v, err = %v", changed, err)
 	}
 	if data, _ := dir.ReadFile("config/paper-global.yml"); string(data) != commented {
@@ -57,32 +57,32 @@ func TestWriteBackendKeepsUntouchedFiles(t *testing.T) {
 
 func TestWriteBackendMods(t *testing.T) {
 	dir := dataDir(t, nil)
-	if changed, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_FABRIC, runtime.ForwardingModern, "s3cret"); !changed || err != nil {
+	if changed, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_FABRIC, runtime.ForwardingModern, "s3cret"); !changed || err != nil {
 		t.Fatalf("changed = %v, err = %v", changed, err)
 	}
 	want(t, read(t, dir, "config/FabricProxy-Lite.toml"), map[string]any{"secret": "s3cret"})
-	if _, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_FABRIC, runtime.ForwardingLegacy, ""); !errors.Is(err, ErrModernOnly) {
+	if _, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_FABRIC, runtime.ForwardingLegacy, ""); !errors.Is(err, ErrModernOnly) {
 		t.Fatalf("legacy forwarding on Fabric: err = %v", err)
 	}
 
 	for f, mode := range map[runtime.Forwarding]string{runtime.ForwardingModern: "MODERN", runtime.ForwardingLegacy: "LEGACY"} {
-		if _, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_NEOFORGE, f, "s3cret"); err != nil {
+		if _, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_NEOFORGE, f, "s3cret"); err != nil {
 			t.Fatal(err)
 		}
 		secret := map[runtime.Forwarding]string{runtime.ForwardingModern: "s3cret"}[f]
 		want(t, read(t, dir, "config/proxy-compatible-forge.toml"), map[string]any{"forwarding": map[string]any{"enabled": true, "mode": mode, "secret": secret}})
 	}
-	if _, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_FORGE, runtime.ForwardingNone, ""); err != nil {
+	if _, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_FORGE, runtime.ForwardingNone, ""); err != nil {
 		t.Fatal(err)
 	}
 	want(t, read(t, dir, "config/proxy-compatible-forge.toml"), map[string]any{"forwarding/enabled": false, "forwarding/secret": ""})
 
 	// A server that never joined a network gets no configuration of a mod it doesn't have.
 	dir = dataDir(t, nil)
-	if changed, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_FABRIC, runtime.ForwardingNone, ""); changed || err != nil {
+	if changed, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_FABRIC, runtime.ForwardingNone, ""); changed || err != nil {
 		t.Fatalf("changed = %v, err = %v", changed, err)
 	}
-	if _, err := WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_VANILLA, runtime.ForwardingModern, "s3cret"); !errors.Is(err, runtime.ErrUnsupported) {
+	if _, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_VANILLA, runtime.ForwardingModern, "s3cret"); !errors.Is(err, runtime.ErrUnsupported) {
 		t.Fatalf("vanilla: err = %v", err)
 	}
 }

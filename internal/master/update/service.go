@@ -1,4 +1,4 @@
-// Package update tells administrators about new releases of MC Server Manager and installs
+// Package update tells administrators about new releases of Noryx and installs
 // them. The master may not install anything itself: it asks a systemd unit that runs as root
 // to install the latest release, restarts on it and then updates the agents through their
 // connections.
@@ -21,7 +21,7 @@ import (
 	"golang.org/x/mod/semver"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
@@ -35,7 +35,7 @@ const (
 	// doesn't limit how often an IP address asks for it, unlike the API.
 	DefaultPage = buildinfo.Repository + "/releases/latest"
 	// DefaultUnit makes systemd install the latest release when the master asks for it.
-	DefaultUnit = "/usr/lib/systemd/system/mcsm-master-update.path"
+	DefaultUnit = "/usr/lib/systemd/system/noryx-master-update.path"
 
 	checkEvery   = 6 * time.Hour
 	probeTimeout = 5 * time.Second
@@ -44,7 +44,7 @@ const (
 	pending = 5 * time.Minute
 )
 
-// Release is a published release of MC Server Manager.
+// Release is a published release of Noryx.
 type Release struct {
 	Version string `json:"version"`
 	// Notes and PublishedAt are empty if the version comes from the release page.
@@ -85,7 +85,7 @@ type Config interface{ CheckUpdates() bool }
 
 // Options locate what the service uses.
 type Options struct {
-	// DataDir is the master's; mcsm-master-update.path watches the file update-request in it.
+	// DataDir is the master's; noryx-master-update.path watches the file update-request in it.
 	DataDir string
 	API     string // DefaultAPI if empty
 	Page    string // DefaultPage if empty
@@ -253,9 +253,9 @@ func (s *Service) Status(ctx context.Context) (Status, error) {
 	if !s.master.IsZero() {
 		st.Master = &Progress{Since: s.master}
 		if time.Since(s.master) > pending {
-			st.Master.Error = "The update didn't finish. See: journalctl -u mcsm-master-update"
+			st.Master.Error = "The update didn't finish. See: journalctl -u noryx-master-update"
 			if _, err := os.Stat(s.request); err == nil {
-				st.Master.Error = "The update didn't start. See: systemctl status mcsm-master-update.path"
+				st.Master.Error = "The update didn't start. See: systemctl status noryx-master-update.path"
 			}
 		}
 	}
@@ -264,7 +264,7 @@ func (s *Service) Status(ctx context.Context) (Status, error) {
 		outdated[a.NodeID] = true
 		if p, ok := s.agents[a.NodeID]; ok {
 			if p.Error == "" && time.Since(p.Since) > pending {
-				p.Error = "The update didn't finish. See on the node: journalctl -u mcsm-agent-update"
+				p.Error = "The update didn't finish. See on the node: journalctl -u noryx-agent-update"
 			}
 			st.Agents[i].Update = &p
 		}
@@ -325,7 +325,7 @@ func (s *Service) updateAgent(ctx context.Context, a Agent) {
 	p := Progress{Since: time.Now()}
 	conn, err := s.nodes.Conn(ctx, a.NodeID)
 	if err == nil {
-		_, err = mcsmv1.NewNodeServiceClient(conn).Update(ctx, &mcsmv1.UpdateRequest{Version: buildinfo.Version})
+		_, err = noryxv1.NewNodeServiceClient(conn).Update(ctx, &noryxv1.UpdateRequest{Version: buildinfo.Version})
 	}
 	attrs := []any{logging.Nodes, logging.KeyNode, a.NodeID, logging.KeyNodeName, a.Name, "version", buildinfo.Version}
 	if err != nil {

@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
@@ -105,7 +105,7 @@ func (s *Service) List(ctx context.Context, ref Ref) (Listing, error) {
 	if err != nil {
 		return Listing{}, err
 	}
-	res, err := mcsmv1.NewPluginServiceClient(conn).ListPlugins(ctx, &mcsmv1.ListPluginsRequest{ServerId: ref.ServerID})
+	res, err := noryxv1.NewPluginServiceClient(conn).ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: ref.ServerID})
 	if err != nil {
 		return Listing{}, err
 	}
@@ -122,7 +122,7 @@ func (s *Service) List(ctx context.Context, ref Ref) (Listing, error) {
 }
 
 // describe adds the Modrinth project, version and available update to each plugin.
-func (s *Service) describe(ctx context.Context, srv *mcsmv1.Server, files []*mcsmv1.PluginFile, plugins []Plugin) error {
+func (s *Service) describe(ctx context.Context, srv *noryxv1.Server, files []*noryxv1.PluginFile, plugins []Plugin) error {
 	hashes := make([]string, len(files))
 	for i, f := range files {
 		hashes[i] = f.GetSha512()
@@ -215,7 +215,7 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 	if err != nil {
 		return nil, err
 	}
-	plugins := mcsmv1.NewPluginServiceClient(conn)
+	plugins := noryxv1.NewPluginServiceClient(conn)
 	present, err := r.present(ctx, plugins, ref.ServerID)
 	if err != nil {
 		return nil, err
@@ -232,7 +232,7 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 			if err != nil {
 				return installed, err
 			}
-			header := &mcsmv1.InstallPluginHeader{ServerId: ref.ServerID, FileName: f.Filename, Replaces: present[v.ProjectID]}
+			header := &noryxv1.InstallPluginHeader{ServerId: ref.ServerID, FileName: f.Filename, Replaces: present[v.ProjectID]}
 			if _, err := send(ctx, plugins, header, bytes.NewReader(data)); err != nil {
 				return installed, err
 			}
@@ -243,8 +243,8 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 }
 
 // present returns the file of each Modrinth project installed on a server.
-func (r *installation) present(ctx context.Context, c mcsmv1.PluginServiceClient, serverID string) (map[string]string, error) {
-	res, err := c.ListPlugins(ctx, &mcsmv1.ListPluginsRequest{ServerId: serverID})
+func (r *installation) present(ctx context.Context, c noryxv1.PluginServiceClient, serverID string) (map[string]string, error) {
+	res, err := c.ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: serverID})
 	if err != nil || len(res.GetPlugins()) == 0 {
 		return map[string]string{}, err
 	}
@@ -334,7 +334,7 @@ type Version struct {
 
 // Versions returns the versions of a project that run on servers of a type and
 // Minecraft version, the newest first.
-func (s *Service) Versions(ctx context.Context, project string, typ mcsmv1.ServerType, gameVersion string) ([]Version, error) {
+func (s *Service) Versions(ctx context.Context, project string, typ noryxv1.ServerType, gameVersion string) ([]Version, error) {
 	t, err := s.target(ctx, typ, gameVersion)
 	if err != nil {
 		return nil, err
@@ -362,7 +362,7 @@ func (t target) String() string {
 
 // target returns what plugins must support to run on servers of a type and Minecraft
 // version.
-func (s *Service) target(ctx context.Context, typ mcsmv1.ServerType, gameVersion string) (target, error) {
+func (s *Service) target(ctx context.Context, typ noryxv1.ServerType, gameVersion string) (target, error) {
 	t := target{loaders: modrinth.Loaders(typ)}
 	switch {
 	case len(t.loaders) == 0:
@@ -386,7 +386,7 @@ func (s *Service) Ensure(ctx context.Context, ref Ref, project string) error {
 		return err
 	}
 	run := &installation{Service: s}
-	present, err := run.present(ctx, mcsmv1.NewPluginServiceClient(conn), ref.ServerID)
+	present, err := run.present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID)
 	if _, ok := present[project]; ok || err != nil {
 		return err
 	}
@@ -400,7 +400,7 @@ func (s *Service) Uninstall(ctx context.Context, ref Ref, project string) error 
 	if err != nil {
 		return err
 	}
-	present, err := (&installation{Service: s}).present(ctx, mcsmv1.NewPluginServiceClient(conn), ref.ServerID)
+	present, err := (&installation{Service: s}).present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID)
 	if file, ok := present[project]; ok && err == nil {
 		return s.Remove(ctx, ref, file)
 	}
@@ -413,7 +413,7 @@ func (s *Service) Remove(ctx context.Context, ref Ref, fileName string) error {
 	if err != nil {
 		return err
 	}
-	_, err = mcsmv1.NewPluginServiceClient(conn).RemovePlugin(ctx, &mcsmv1.RemovePluginRequest{ServerId: ref.ServerID, FileName: fileName})
+	_, err = noryxv1.NewPluginServiceClient(conn).RemovePlugin(ctx, &noryxv1.RemovePluginRequest{ServerId: ref.ServerID, FileName: fileName})
 	return err
 }
 
@@ -423,23 +423,23 @@ func (s *Service) Upload(ctx context.Context, ref Ref, fileName string, content 
 	if err != nil {
 		return Plugin{}, err
 	}
-	header := &mcsmv1.InstallPluginHeader{ServerId: ref.ServerID, FileName: fileName}
-	p, err := send(ctx, mcsmv1.NewPluginServiceClient(conn), header, content)
+	header := &noryxv1.InstallPluginHeader{ServerId: ref.ServerID, FileName: fileName}
+	p, err := send(ctx, noryxv1.NewPluginServiceClient(conn), header, content)
 	return Plugin{FileName: p.GetFileName(), Size: p.GetSize()}, err
 }
 
 // send streams a plugin file to the agent.
-func send(ctx context.Context, c mcsmv1.PluginServiceClient, header *mcsmv1.InstallPluginHeader, content io.Reader) (*mcsmv1.PluginFile, error) {
+func send(ctx context.Context, c noryxv1.PluginServiceClient, header *noryxv1.InstallPluginHeader, content io.Reader) (*noryxv1.PluginFile, error) {
 	stream, err := c.InstallPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	err = stream.Send(&mcsmv1.InstallPluginRequest{Content: &mcsmv1.InstallPluginRequest_Header{Header: header}})
+	err = stream.Send(&noryxv1.InstallPluginRequest{Content: &noryxv1.InstallPluginRequest_Header{Header: header}})
 	buf := make([]byte, chunkSize)
 	for err == nil {
 		n, readErr := io.ReadFull(content, buf)
 		if n > 0 {
-			err = stream.Send(&mcsmv1.InstallPluginRequest{Content: &mcsmv1.InstallPluginRequest_Data{Data: buf[:n]}})
+			err = stream.Send(&noryxv1.InstallPluginRequest{Content: &noryxv1.InstallPluginRequest_Data{Data: buf[:n]}})
 		}
 		if err == nil {
 			err = readErr
@@ -455,16 +455,16 @@ func send(ctx context.Context, c mcsmv1.PluginServiceClient, header *mcsmv1.Inst
 }
 
 // server looks up a server on its node.
-func (s *Service) server(ctx context.Context, ref Ref) (grpc.ClientConnInterface, *mcsmv1.Server, error) {
+func (s *Service) server(ctx context.Context, ref Ref) (grpc.ClientConnInterface, *noryxv1.Server, error) {
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)
 	if err != nil {
 		return nil, nil, err
 	}
-	res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+	res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
 		return nil, nil, err
 	}
-	i := slices.IndexFunc(res.GetServers(), func(srv *mcsmv1.Server) bool { return srv.GetId() == ref.ServerID })
+	i := slices.IndexFunc(res.GetServers(), func(srv *noryxv1.Server) bool { return srv.GetId() == ref.ServerID })
 	if i < 0 {
 		return nil, nil, httpapi.Errorf(http.StatusNotFound, "Server not found.")
 	}

@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -18,19 +18,19 @@ import (
 // Service implements the ProxyService of the agent, with which the panel edits the
 // settings of proxies in their own configuration file.
 type Service struct {
-	mcsmv1.UnimplementedProxyServiceServer
+	noryxv1.UnimplementedProxyServiceServer
 	rt runtime.Runtime
 }
 
 func NewService(rt runtime.Runtime) *Service { return &Service{rt: rt} }
 
-func (s *Service) GetProxySettings(ctx context.Context, req *mcsmv1.GetProxySettingsRequest) (*mcsmv1.GetProxySettingsResponse, error) {
+func (s *Service) GetProxySettings(ctx context.Context, req *noryxv1.GetProxySettingsRequest) (*noryxv1.GetProxySettingsResponse, error) {
 	_, p, dir, err := s.open(ctx, req.GetServerId())
 	if err != nil {
 		return nil, err
 	}
 	defer dir.Close()
-	res := &mcsmv1.GetProxySettingsResponse{File: p.File}
+	res := &noryxv1.GetProxySettingsResponse{File: p.File}
 	data, err := dir.ReadFile(p.File)
 	if errors.Is(err, fs.ErrNotExist) {
 		return res, nil
@@ -44,13 +44,13 @@ func (s *Service) GetProxySettings(ctx context.Context, req *mcsmv1.GetProxySett
 	}
 	res.Exists, res.Settings = true, settings
 	for key, reason := range locked {
-		res.Locked = append(res.Locked, &mcsmv1.LockedProperty{Key: key, Reason: reason})
+		res.Locked = append(res.Locked, &noryxv1.LockedProperty{Key: key, Reason: reason})
 	}
-	slices.SortFunc(res.Locked, func(a, b *mcsmv1.LockedProperty) int { return cmp.Compare(a.GetKey(), b.GetKey()) })
+	slices.SortFunc(res.Locked, func(a, b *noryxv1.LockedProperty) int { return cmp.Compare(a.GetKey(), b.GetKey()) })
 	return res, nil
 }
 
-func (s *Service) UpdateProxySettings(ctx context.Context, req *mcsmv1.UpdateProxySettingsRequest) (*mcsmv1.UpdateProxySettingsResponse, error) {
+func (s *Service) UpdateProxySettings(ctx context.Context, req *noryxv1.UpdateProxySettingsRequest) (*noryxv1.UpdateProxySettingsResponse, error) {
 	srv, p, dir, err := s.open(ctx, req.GetServerId())
 	if err != nil {
 		return nil, err
@@ -70,13 +70,13 @@ func (s *Service) UpdateProxySettings(ctx context.Context, req *mcsmv1.UpdatePro
 	if err := dir.WriteFile(p.File, config); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	running := srv.State == mcsmv1.ServerState_SERVER_STATE_RUNNING
+	running := srv.State == noryxv1.ServerState_SERVER_STATE_RUNNING
 	if running {
 		if err := s.rt.Reload(ctx, srv.ID); err != nil {
 			return nil, status.Errorf(codes.FailedPrecondition, "The settings were saved, but %s", err)
 		}
 	}
-	return &mcsmv1.UpdateProxySettingsResponse{Reloaded: running}, nil
+	return &noryxv1.UpdateProxySettingsResponse{Reloaded: running}, nil
 }
 
 // open finds a proxy and opens its data directory.

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -29,9 +29,9 @@ func (h *Handler) proxySettings(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	c, err := h.proxyClient(ctx, r)
-	var res *mcsmv1.GetProxySettingsResponse
+	var res *noryxv1.GetProxySettingsResponse
 	if err == nil {
-		res, err = c.GetProxySettings(ctx, &mcsmv1.GetProxySettingsRequest{ServerId: r.PathValue("id")})
+		res, err = c.GetProxySettings(ctx, &noryxv1.GetProxySettingsRequest{ServerId: r.PathValue("id")})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -63,17 +63,17 @@ func (h *Handler) updateProxySettings(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), configureTimeout)
 	defer cancel()
 	c, err := h.proxyClient(ctx, r)
-	var res *mcsmv1.UpdateProxySettingsResponse
+	var res *noryxv1.UpdateProxySettingsResponse
 	if err == nil {
-		res, err = c.UpdateProxySettings(ctx, &mcsmv1.UpdateProxySettingsRequest{ServerId: r.PathValue("id"), Settings: settings})
+		res, err = c.UpdateProxySettings(ctx, &noryxv1.UpdateProxySettingsRequest{ServerId: r.PathValue("id"), Settings: settings})
 	}
 	write(w, r, http.StatusOK, map[string]bool{"reloaded": res.GetReloaded()}, err)
 }
 
-func (h *Handler) proxyClient(ctx context.Context, r *http.Request) (mcsmv1.ProxyServiceClient, error) {
+func (h *Handler) proxyClient(ctx context.Context, r *http.Request) (noryxv1.ProxyServiceClient, error) {
 	conn, err := h.svc.nodes.Conn(ctx, r.PathValue("node"))
 	if err != nil {
 		return nil, err
 	}
-	return mcsmv1.NewProxyServiceClient(conn), nil
+	return noryxv1.NewProxyServiceClient(conn), nil
 }

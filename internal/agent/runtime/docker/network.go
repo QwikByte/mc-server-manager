@@ -16,7 +16,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
@@ -119,11 +119,11 @@ func mounted(c container.InspectResponse, dir string) bool {
 const (
 	// sharedNetwork connects the servers of the node that aren't part of a network to the
 	// internet, but not to each other.
-	sharedNetwork = "mcsm-servers"
+	sharedNetwork = "noryx-servers"
 	// legacyNetwork was shared by all servers of older agents, which could reach each other.
 	legacyNetwork = "mcsm"
 	// A Velocity proxy and its backends on the node have a network of their own.
-	proxyNetworkPrefix = "mcsm-proxy-"
+	proxyNetworkPrefix = "noryx-proxy-"
 )
 
 func proxyNetwork(proxyID string) string { return proxyNetworkPrefix + proxyID }
@@ -263,7 +263,7 @@ func (d *Docker) adopt(ctx context.Context) error {
 	for _, spec := range specs {
 		members := []string{spec.ID}
 		to := sharedNetwork
-		if spec.Type == mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
+		if spec.Type == noryxv1.ServerType_SERVER_TYPE_VELOCITY {
 			members, to = append(members, d.localBackends(spec)...), proxyNetwork(spec.ID)
 		} else if adopted[spec.ID] {
 			continue
@@ -291,7 +291,7 @@ func (d *Docker) adopt(ctx context.Context) error {
 }
 
 func proxyRank(spec runtime.Spec) int {
-	if spec.Type == mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
+	if spec.Type == noryxv1.ServerType_SERVER_TYPE_VELOCITY {
 		return 1
 	}
 	return 0

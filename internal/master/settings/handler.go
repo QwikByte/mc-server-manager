@@ -58,7 +58,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 
 // restartMaster restarts the master once the response is sent.
 func (h *Handler) restartMaster(w http.ResponseWriter, r *http.Request) {
-	err := httpapi.Errorf(http.StatusConflict, "This master can't restart itself. Restart it on its host, e.g. with: systemctl restart mcsm-master")
+	err := httpapi.Errorf(http.StatusConflict, "This master can't restart itself. Restart it on its host, e.g. with: systemctl restart noryx-master")
 	if h.restart != nil {
 		err = h.restart()
 	}

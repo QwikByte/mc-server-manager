@@ -3,7 +3,7 @@ package network
 import (
 	"errors"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -23,13 +23,13 @@ var ErrModernOnly = errors.New("Fabric servers only support Velocity's modern fo
 // accepts players directly again with runtime.ForwardingNone: Paper and Purpur in their own
 // configuration, Fabric, Forge and NeoForge in that of the forwarding mod the master
 // installs, FabricProxy-Lite or Proxy-Compatible-Forge. It reports whether a file changed.
-func WriteBackend(dir *datadir.Dir, typ mcsmv1.ServerType, f runtime.Forwarding, secret string) (bool, error) {
+func WriteBackend(dir *datadir.Dir, typ noryxv1.ServerType, f runtime.Forwarding, secret string) (bool, error) {
 	modern, legacy, joined := f == runtime.ForwardingModern, f == runtime.ForwardingLegacy, f != runtime.ForwardingNone
 	if !modern {
 		secret = ""
 	}
 	switch typ {
-	case mcsmv1.ServerType_SERVER_TYPE_PAPER, mcsmv1.ServerType_SERVER_TYPE_PURPUR:
+	case noryxv1.ServerType_SERVER_TYPE_PAPER, noryxv1.ServerType_SERVER_TYPE_PURPUR:
 		// Paper fills in missing settings when it starts.
 		paper, err := edit(dir, PaperGlobalFile, true, func(s map[string]any) error {
 			velocity := child(child(s, "proxies"), "velocity")
@@ -44,7 +44,7 @@ func WriteBackend(dir *datadir.Dir, typ mcsmv1.ServerType, f runtime.Forwarding,
 			return nil
 		})
 		return paper || spigot, err
-	case mcsmv1.ServerType_SERVER_TYPE_FABRIC:
+	case noryxv1.ServerType_SERVER_TYPE_FABRIC:
 		if legacy {
 			return false, ErrModernOnly
 		}
@@ -52,7 +52,7 @@ func WriteBackend(dir *datadir.Dir, typ mcsmv1.ServerType, f runtime.Forwarding,
 			s["secret"] = secret
 			return nil
 		})
-	case mcsmv1.ServerType_SERVER_TYPE_FORGE, mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:
+	case noryxv1.ServerType_SERVER_TYPE_FORGE, noryxv1.ServerType_SERVER_TYPE_NEOFORGE:
 		return edit(dir, ForgeProxyFile, joined, func(s map[string]any) error {
 			forwarding := child(s, "forwarding")
 			forwarding["enabled"], forwarding["secret"] = joined, secret

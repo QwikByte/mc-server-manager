@@ -2,7 +2,7 @@
 # The release workflow runs it for tags v*; try it locally with: goreleaser release --snapshot --clean
 version: 2
 
-project_name: mc-server-manager
+project_name: noryx
 
 before:
   hooks:
@@ -12,9 +12,9 @@ before:
 
 builds:
   - &build
-    id: mcsm-master
-    main: ./cmd/mcsm-master
-    binary: mcsm-master
+    id: noryx-master
+    main: ./cmd/noryx-master
+    binary: noryx-master
     tags: [ui]
     goos: [linux]
     goarch: [amd64, arm64]
@@ -22,39 +22,39 @@ builds:
     flags: [-trimpath]
     ldflags: ["-s -w -X github.com/QwikByte/mc-server-manager/internal/buildinfo.Version=v{{ .Version }}"]
   - <<: *build
-    id: mcsm-agent
-    main: ./cmd/mcsm-agent
-    binary: mcsm-agent
+    id: noryx-agent
+    main: ./cmd/noryx-agent
+    binary: noryx-agent
     tags: []
 
 archives:
   - &archive
-    id: mcsm-master
-    ids: [mcsm-master]
+    id: noryx-master
+    ids: [noryx-master]
     name_template: "{{ .Binary }}_{{ .Version }}_linux_{{ .Arch }}"
     files:
       - LICENSE
       - README.md
-      - src: packaging/master/mcsm-master.service
+      - src: packaging/master/noryx-master.service
         strip_parent: true
       - src: packaging/master/master.env
         strip_parent: true
   - <<: *archive
-    id: mcsm-agent
-    ids: [mcsm-agent]
+    id: noryx-agent
+    ids: [noryx-agent]
     files:
       - LICENSE
       - README.md
-      - src: packaging/agent/mcsm-agent.service
+      - src: packaging/agent/noryx-agent.service
         strip_parent: true
       - src: packaging/agent/agent.env
         strip_parent: true
 
 nfpms:
   - &package
-    id: mcsm-master
-    ids: [mcsm-master]
-    package_name: mcsm-master
+    id: noryx-master
+    ids: [noryx-master]
+    package_name: noryx-master
     file_name_template: "{{ .PackageName }}_{{ .Version }}_linux_{{ .Arch }}"
     formats: [deb, rpm, archlinux]
     vendor: QwikByte
@@ -62,24 +62,24 @@ nfpms:
     homepage: https://github.com/QwikByte/mc-server-manager
     license: MIT
     section: admin
-    description: Admin panel and control plane of MC Server Manager, which manages Minecraft servers and networks on any number of nodes.
+    description: Admin panel and control plane of Noryx, which manages Minecraft servers and networks on any number of nodes.
     dependencies: [systemd]
     contents:
-      - src: packaging/master/mcsm-master.service
-        dst: /usr/lib/systemd/system/mcsm-master.service
+      - src: packaging/master/noryx-master.service
+        dst: /usr/lib/systemd/system/noryx-master.service
       - src: packaging/master/sysusers.conf
-        dst: /usr/lib/sysusers.d/mcsm-master.conf
-      - src: packaging/master/mcsm-master-update.service
-        dst: /usr/lib/systemd/system/mcsm-master-update.service
-      - src: packaging/master/mcsm-master-update.path
-        dst: /usr/lib/systemd/system/mcsm-master-update.path
+        dst: /usr/lib/sysusers.d/noryx-master.conf
+      - src: packaging/master/noryx-master-update.service
+        dst: /usr/lib/systemd/system/noryx-master-update.service
+      - src: packaging/master/noryx-master-update.path
+        dst: /usr/lib/systemd/system/noryx-master-update.path
       # Updates from the panel run the installer of the installed release.
       - src: bin/install.sh
-        dst: /usr/lib/mcsm-master/install.sh
+        dst: /usr/lib/noryx-master/install.sh
         file_info:
           mode: 0755
       - src: packaging/master/master.env
-        dst: /etc/mcsm/master.env
+        dst: /etc/noryx/master.env
         type: config|noreplace
     scripts:
       postinstall: packaging/master/postinstall.sh
@@ -89,20 +89,20 @@ nfpms:
       scripts:
         postupgrade: packaging/master/postinstall.sh
   - <<: *package
-    id: mcsm-agent
-    ids: [mcsm-agent]
-    package_name: mcsm-agent
-    description: Node agent of MC Server Manager, which runs the Minecraft servers of a machine in Docker.
+    id: noryx-agent
+    ids: [noryx-agent]
+    package_name: noryx-agent
+    description: Node agent of Noryx, which runs the Minecraft servers of a machine in Docker.
     dependencies: []
     contents:
-      - src: packaging/agent/mcsm-agent.service
-        dst: /usr/lib/systemd/system/mcsm-agent.service
+      - src: packaging/agent/noryx-agent.service
+        dst: /usr/lib/systemd/system/noryx-agent.service
       - src: bin/install.sh
-        dst: /usr/lib/mcsm-agent/install.sh
+        dst: /usr/lib/noryx-agent/install.sh
         file_info:
           mode: 0755
       - src: packaging/agent/agent.env
-        dst: /etc/mcsm/agent.env
+        dst: /etc/noryx/agent.env
         type: config|noreplace
     scripts:
       postinstall: packaging/agent/postinstall.sh

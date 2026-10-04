@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -25,11 +25,11 @@ func (h *Handler) checkLimits(ctx context.Context, nodeID, serverID string, port
 	if err != nil {
 		return err
 	}
-	info, err := mcsmv1.NewNodeServiceClient(conn).GetInfo(ctx, &mcsmv1.GetInfoRequest{})
+	info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
 	if err != nil || info.GetMemoryBytes() == 0 { // 0: the runtime is down, creating fails anyway
 		return err
 	}
-	res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+	res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
 		return err
 	}

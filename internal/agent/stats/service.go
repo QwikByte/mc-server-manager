@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -36,7 +36,7 @@ var (
 
 // Service measures the usage every few seconds and serves the latest measurement.
 type Service struct {
-	mcsmv1.UnimplementedStatsServiceServer
+	noryxv1.UnimplementedStatsServiceServer
 	rt runtime.Runtime
 
 	measuring sync.Mutex // one measurement at a time; guards host and servers
@@ -44,7 +44,7 @@ type Service struct {
 	servers   map[string]*serverState
 
 	mu     sync.Mutex
-	latest *mcsmv1.GetStatsResponse
+	latest *noryxv1.GetStatsResponse
 	disks  map[string]uint64 // size of the data of each server
 }
 
@@ -63,7 +63,7 @@ func NewService(rt runtime.Runtime) *Service {
 
 // GetStats returns the latest measurement, or measures now if there is none of the last
 // few seconds, e.g. while the agent starts.
-func (s *Service) GetStats(ctx context.Context, _ *mcsmv1.GetStatsRequest) (*mcsmv1.GetStatsResponse, error) {
+func (s *Service) GetStats(ctx context.Context, _ *noryxv1.GetStatsRequest) (*noryxv1.GetStatsResponse, error) {
 	if latest, fresh := s.get(); fresh {
 		return latest, nil
 	}
@@ -77,7 +77,7 @@ func (s *Service) GetStats(ctx context.Context, _ *mcsmv1.GetStatsRequest) (*mcs
 }
 
 // get returns the latest measurement and whether it is of the last few seconds.
-func (s *Service) get() (*mcsmv1.GetStatsResponse, bool) {
+func (s *Service) get() (*noryxv1.GetStatsResponse, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.latest, s.latest != nil && time.Since(time.Unix(s.latest.GetTimeUnix(), 0)) <= 2*interval
@@ -118,13 +118,13 @@ func (s *Service) measureLocked(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, interval)
 	defer cancel()
 	now := time.Now()
-	res := &mcsmv1.GetStatsResponse{TimeUnix: now.Unix(), Node: s.measureHost()}
+	res := &noryxv1.GetStatsResponse{TimeUnix: now.Unix(), Node: s.measureHost()}
 	list, err := s.rt.List(ctx)
 	if err != nil {
 		slog.Debug("Can't list the servers to measure them", "err", err)
 	}
 	// In parallel, as the probes wait for the servers; each touches only its own state.
-	res.Servers = make([]*mcsmv1.ServerStats, len(list))
+	res.Servers = make([]*noryxv1.ServerStats, len(list))
 	var wg sync.WaitGroup
 	for i, srv := range list {
 		state := s.servers[srv.ID]
@@ -149,8 +149,8 @@ func (s *Service) measureLocked(ctx context.Context) {
 	s.latest = res
 }
 
-func (s *Service) measureHost() *mcsmv1.NodeStats {
-	node := &mcsmv1.NodeStats{}
+func (s *Service) measureHost() *noryxv1.NodeStats {
+	node := &noryxv1.NodeStats{}
 	if t, err := readCPU(); err == nil {
 		if prev := s.host; prev.total > 0 && t.total > prev.total && t.busy >= prev.busy {
 			node.CpuMillis = uint32((t.busy - prev.busy) * uint64(t.cores) * 1000 / (t.total - prev.total)) //nolint:gosec // at most the cores
@@ -161,9 +161,9 @@ func (s *Service) measureHost() *mcsmv1.NodeStats {
 	return node
 }
 
-func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runtime.Server, now time.Time) *mcsmv1.ServerStats {
-	stats := &mcsmv1.ServerStats{Id: srv.ID}
-	if srv.State == mcsmv1.ServerState_SERVER_STATE_STOPPED {
+func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runtime.Server, now time.Time) *noryxv1.ServerStats {
+	stats := &noryxv1.ServerStats{Id: srv.ID}
+	if srv.State == noryxv1.ServerState_SERVER_STATE_STOPPED {
 		st.reset()
 		return stats
 	}
@@ -181,7 +181,7 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 	}
 	st.usage, st.at = u, now
 	stats.Running, stats.MemoryBytes, stats.MemoryLimitBytes = true, u.MemoryBytes, u.MemoryLimit
-	if srv.State != mcsmv1.ServerState_SERVER_STATE_RUNNING {
+	if srv.State != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		return stats // starting servers don't answer yet
 	}
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
@@ -189,7 +189,7 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 	if !srv.Type.Bungee() { // which logs every status request
 		stats.Players, _ = ping(ctx, srv.Port)
 	}
-	if srv.Type == mcsmv1.ServerType_SERVER_TYPE_PAPER || srv.Type == mcsmv1.ServerType_SERVER_TYPE_PURPUR {
+	if srv.Type == noryxv1.ServerType_SERVER_TYPE_PAPER || srv.Type == noryxv1.ServerType_SERVER_TYPE_PURPUR {
 		stats.Tps = st.tps(ctx, rt, srv.ID, u.Host, now)
 	}
 	return stats

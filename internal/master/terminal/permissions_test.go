@@ -20,8 +20,8 @@ func TestEveryCommandIsChecked(t *testing.T) {
 		commands []*cobra.Command
 		checks   map[string]check
 	}{
-		"mcsm-agent":  {agentcli.Commands(nil), agentChecks("n1", nil)},
-		"mcsm-master": {h.masterCommands(), h.masterChecks()},
+		"noryx-agent":  {agentcli.Commands(nil), agentChecks("n1", nil)},
+		"noryx-master": {h.masterCommands(), h.masterChecks()},
 	} {
 		root := &cobra.Command{Use: name}
 		root.AddCommand(tc.commands...)

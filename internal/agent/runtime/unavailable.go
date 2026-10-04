@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 const probeTimeout = 3 * time.Second
@@ -39,6 +39,6 @@ func explain(ctx context.Context, rt Runtime, err error) error {
 		return err
 	}
 	st, _ := status.New(codes.Unavailable, "Docker isn't running on the node, or the agent can't connect to it.").
-		WithDetails(&errdetails.ErrorInfo{Reason: mcsmv1.ReasonRuntimeUnavailable, Domain: "mcsm.v1"})
+		WithDetails(&errdetails.ErrorInfo{Reason: noryxv1.ReasonRuntimeUnavailable, Domain: "noryx.v1"})
 	return st.Err()
 }

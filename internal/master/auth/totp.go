@@ -17,7 +17,7 @@ import (
 // 6 digits and a new code every 30 seconds.
 const (
 	totpPeriod = 30 // seconds
-	issuer     = "MC Server Manager"
+	issuer     = "Noryx"
 )
 
 var secretEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)

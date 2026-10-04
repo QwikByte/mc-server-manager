@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -64,7 +64,7 @@ permissions:
 var network = runtime.Network{
 	Forwarding: runtime.ForwardingModern, ForwardingSecret: "s3cret",
 	Backends: []runtime.NetworkBackend{
-		{Name: "lobby", Address: "mcsm-a:25565"},
+		{Name: "lobby", Address: "noryx-a:25565"},
 		{Name: "survival", Address: "203.0.113.7:25566", Restricted: true, Motd: "Survival"},
 	},
 	Try:         []string{"lobby", "survival"},
@@ -123,7 +123,7 @@ func TestWriteProxyVelocity(t *testing.T) {
 	for name, files := range map[string]map[string]string{"new proxy": nil, "existing configuration": {"velocity.toml": defaultVelocity}} {
 		t.Run(name, func(t *testing.T) {
 			dir := dataDir(t, files)
-			changed, removed, err := WriteProxy(dir, mcsmv1.ServerType_SERVER_TYPE_VELOCITY, network)
+			changed, removed, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, network)
 			if err != nil || !changed {
 				t.Fatalf("changed = %v, err = %v", changed, err)
 			}
@@ -135,7 +135,7 @@ func TestWriteProxyVelocity(t *testing.T) {
 				"config-version":              "2.9",
 				"player-info-forwarding-mode": "MODERN",
 				"forwarding-secret-file":      "forwarding.secret",
-				"servers":                     map[string]any{"lobby": "mcsm-a:25565", "survival": "203.0.113.7:25566", "try": []any{"lobby", "survival"}},
+				"servers":                     map[string]any{"lobby": "noryx-a:25565", "survival": "203.0.113.7:25566", "try": []any{"lobby", "survival"}},
 				"forced-hosts":                map[string]any{"survival.example.com": []any{"survival", "lobby"}},
 			})
 			if files != nil {
@@ -145,7 +145,7 @@ func TestWriteProxyVelocity(t *testing.T) {
 				t.Errorf("secret = %q", secret)
 			}
 			// Applying the same network again changes nothing, so the proxy doesn't reload.
-			if changed, removed, err := WriteProxy(dir, mcsmv1.ServerType_SERVER_TYPE_VELOCITY, network); changed || removed || err != nil {
+			if changed, removed, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, network); changed || removed || err != nil {
 				t.Fatalf("second run: changed = %v, removed = %v, err = %v", changed, removed, err)
 			}
 		})
@@ -155,7 +155,7 @@ func TestWriteProxyVelocity(t *testing.T) {
 func TestWriteProxyVelocityLegacy(t *testing.T) {
 	dir := dataDir(t, map[string]string{"velocity.toml": defaultVelocity})
 	legacy := runtime.Network{Forwarding: runtime.ForwardingLegacy, Backends: []runtime.NetworkBackend{{Name: "lobby", Address: "127.0.0.1:30066"}}, Try: []string{"lobby"}}
-	if _, _, err := WriteProxy(dir, mcsmv1.ServerType_SERVER_TYPE_VELOCITY, legacy); err != nil {
+	if _, _, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, legacy); err != nil {
 		t.Fatal(err)
 	}
 	want(t, read(t, dir, "velocity.toml"), map[string]any{"player-info-forwarding-mode": "LEGACY", "forced-hosts": map[string]any{}})
@@ -166,7 +166,7 @@ func TestWriteProxyVelocityLegacy(t *testing.T) {
 
 func TestWriteProxyBungee(t *testing.T) {
 	dir := dataDir(t, map[string]string{"config.yml": defaultBungee})
-	changed, removed, err := WriteProxy(dir, mcsmv1.ServerType_SERVER_TYPE_WATERFALL, network)
+	changed, removed, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_WATERFALL, network)
 	if err != nil || !changed || removed {
 		t.Fatalf("changed = %v, removed = %v, err = %v", changed, removed, err)
 	}
@@ -175,7 +175,7 @@ func TestWriteProxyBungee(t *testing.T) {
 		"ip_forward":  true,
 		"online_mode": true,
 		"servers": map[string]any{
-			"lobby":    map[string]any{"address": "mcsm-a:25565", "motd": "&1Another Bungee server", "restricted": false},
+			"lobby":    map[string]any{"address": "noryx-a:25565", "motd": "&1Another Bungee server", "restricted": false},
 			"survival": map[string]any{"address": "203.0.113.7:25566", "motd": "Survival", "restricted": true},
 		},
 	})
@@ -190,12 +190,12 @@ func TestWriteProxyBungee(t *testing.T) {
 	// BungeeCord can't reload without a server it had.
 	smaller := network
 	smaller.Backends, smaller.Try, smaller.ForcedHosts = network.Backends[:1], []string{"lobby"}, nil
-	if _, removed, err := WriteProxy(dir, mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD, smaller); !removed || err != nil {
+	if _, removed, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_BUNGEECORD, smaller); !removed || err != nil {
 		t.Fatalf("removed = %v, err = %v", removed, err)
 	}
 
 	// A proxy that leaves its network keeps its servers, as BungeeCord needs one.
-	if _, _, err := WriteProxy(dir, mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD, runtime.Network{}); err != nil {
+	if _, _, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_BUNGEECORD, runtime.Network{}); err != nil {
 		t.Fatal(err)
 	}
 	got = read(t, dir, "config.yml")
@@ -206,21 +206,21 @@ func TestWriteProxyBungee(t *testing.T) {
 
 func TestProxyBind(t *testing.T) {
 	dir := dataDir(t, map[string]string{"velocity.toml": defaultVelocity})
-	if changed, err := ProxyBind(dir, mcsmv1.ServerType_SERVER_TYPE_VELOCITY, 25577); !changed || err != nil {
+	if changed, err := ProxyBind(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577); !changed || err != nil {
 		t.Fatalf("changed = %v, err = %v", changed, err)
 	}
 	want(t, read(t, dir, "velocity.toml"), map[string]any{"bind": "0.0.0.0:25577", "motd": "<#09add3>My Network"})
-	if changed, _ := ProxyBind(dir, mcsmv1.ServerType_SERVER_TYPE_VELOCITY, 25577); changed {
+	if changed, _ := ProxyBind(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577); changed {
 		t.Fatal("the same bind changed the configuration")
 	}
 
 	// A new Velocity proxy gets a configuration; BungeeCord's image downloads one.
 	dir = dataDir(t, nil)
-	if _, err := ProxyBind(dir, mcsmv1.ServerType_SERVER_TYPE_VELOCITY, 25565); err != nil {
+	if _, err := ProxyBind(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25565); err != nil {
 		t.Fatal(err)
 	}
 	want(t, read(t, dir, "velocity.toml"), map[string]any{"config-version": "2.9", "bind": "0.0.0.0:25565"})
-	if changed, err := ProxyBind(dir, mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD, 25577); changed || err != nil {
+	if changed, err := ProxyBind(dir, noryxv1.ServerType_SERVER_TYPE_BUNGEECORD, 25577); changed || err != nil {
 		t.Fatalf("changed = %v, err = %v", changed, err)
 	}
 }

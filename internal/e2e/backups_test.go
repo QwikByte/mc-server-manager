@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 )
 
@@ -25,7 +25,7 @@ type backupView struct {
 func TestBackups(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	srv := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	srv := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	base := "/api/nodes/" + srv.NodeID + "/servers/" + srv.ServerID
 	data := filepath.Join(a.runtime.dir, srv.ServerID)
@@ -78,7 +78,7 @@ func TestBackups(t *testing.T) {
 	if read("world/region/r.0.0.mca") != "chunks" || read("server.properties") != "motd=hi\nrcon.password=s3cret\n" || read("plugins/Other.jar") != "jar" {
 		t.Fatal("the backup was not restored as selected")
 	}
-	if servers, _ := a.runtime.List(t.Context()); servers[0].State != mcsmv1.ServerState_SERVER_STATE_RUNNING {
+	if servers, _ := a.runtime.List(t.Context()); servers[0].State != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		t.Fatal("the server was not started again after restoring")
 	}
 
@@ -133,8 +133,8 @@ func TestBackups(t *testing.T) {
 func TestPolicies(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	survival := m.createServer(t, a, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	survival := m.createServer(t, a, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	api.do("POST", "/api/nodes/"+lobby.NodeID+"/servers/"+lobby.ServerID+"/start", nil, http.StatusNoContent, nil)
 	policy := func(name string, settings map[string]any) map[string]any {
@@ -152,14 +152,14 @@ func TestPolicies(t *testing.T) {
 		t.Fatalf("next run = %v", task.NextRun)
 	}
 	run(t, api, "/api/policies/"+task.ID)
-	if servers, _ := a.runtime.List(t.Context()); servers[1].ID != survival.ServerID || servers[1].State != mcsmv1.ServerState_SERVER_STATE_RUNNING {
+	if servers, _ := a.runtime.List(t.Context()); servers[1].ID != survival.ServerID || servers[1].State != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		t.Fatal("the stopped server was not started")
 	}
 	api.do("POST", "/api/policies", policy("Closing", map[string]any{"action": "stop"}), http.StatusCreated, &task)
 	run(t, api, "/api/policies/"+task.ID)
 	servers, _ := a.runtime.List(t.Context())
 	for _, s := range servers {
-		if s.State != mcsmv1.ServerState_SERVER_STATE_STOPPED {
+		if s.State != noryxv1.ServerState_SERVER_STATE_STOPPED {
 			t.Fatalf("%s still runs", s.Name)
 		}
 	}

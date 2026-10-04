@@ -11,7 +11,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -83,9 +83,9 @@ var bungee = Proxy{
 }
 
 // ProxyOf returns the configuration of a type of proxy.
-func ProxyOf(typ mcsmv1.ServerType) (Proxy, bool) {
+func ProxyOf(typ noryxv1.ServerType) (Proxy, bool) {
 	switch {
-	case typ == mcsmv1.ServerType_SERVER_TYPE_VELOCITY:
+	case typ == noryxv1.ServerType_SERVER_TYPE_VELOCITY:
 		return velocity, true
 	case typ.Bungee():
 		return bungee, true
@@ -96,7 +96,7 @@ func ProxyOf(typ mcsmv1.ServerType) (Proxy, bool) {
 // WriteProxy writes a network into the configuration of a proxy, with the backends at the
 // addresses the proxy reaches them. It reports whether that changed the configuration, and
 // whether it removed or renamed backends, which BungeeCord can't reload.
-func WriteProxy(dir *datadir.Dir, typ mcsmv1.ServerType, n runtime.Network) (changed, removed bool, err error) {
+func WriteProxy(dir *datadir.Dir, typ noryxv1.ServerType, n runtime.Network) (changed, removed bool, err error) {
 	p, ok := ProxyOf(typ)
 	if !ok {
 		return false, false, runtime.ErrUnsupported
@@ -124,7 +124,7 @@ func WriteProxy(dir *datadir.Dir, typ mcsmv1.ServerType, n runtime.Network) (cha
 // ProxyBind makes a proxy listen on all addresses at port, as the container publishes
 // that port. A proxy without configuration yet gets one, except BungeeCord, whose image
 // downloads a configuration that listens there already. It reports whether it changed.
-func ProxyBind(dir *datadir.Dir, typ mcsmv1.ServerType, port int) (bool, error) {
+func ProxyBind(dir *datadir.Dir, typ noryxv1.ServerType, port int) (bool, error) {
 	p, ok := ProxyOf(typ)
 	if !ok {
 		return false, nil

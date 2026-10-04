@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
@@ -73,7 +73,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	case !s.Valid() || !gameVersion.MatchString(t.gameVersion) || s.Offset < 0 || s.Offset > 10_000:
 		err = httpapi.Errorf(http.StatusBadRequest, "invalid search")
 	case q.Get("type") != "":
-		t, err = h.svc.target(ctx, mcsmv1.ParseServerType(q.Get("type")), t.gameVersion)
+		t, err = h.svc.target(ctx, noryxv1.ParseServerType(q.Get("type")), t.gameVersion)
 	case t.gameVersion == "LATEST":
 		t.gameVersion, err = h.svc.modrinth.LatestRelease(ctx)
 	}
@@ -119,7 +119,7 @@ func (h *Handler) versions(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "invalid Minecraft version"))
 		return
 	}
-	versions, err := h.svc.Versions(ctx, r.PathValue("project"), mcsmv1.ParseServerType(q.Get("type")), q.Get("version"))
+	versions, err := h.svc.Versions(ctx, r.PathValue("project"), noryxv1.ParseServerType(q.Get("type")), q.Get("version"))
 	write(w, r, http.StatusOK, versions, err)
 }
 

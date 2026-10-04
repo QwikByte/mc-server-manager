@@ -9,7 +9,7 @@ const vendors = {
   tanstack: /node_modules[\\/]@tanstack[\\/]/,
 }
 
-// During development the master runs on :8080 and serves the API (`mcsm-master serve`).
+// During development the master runs on :8080 and serves the API (`noryx-master serve`).
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },

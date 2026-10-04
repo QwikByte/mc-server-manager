@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
 
@@ -20,7 +20,7 @@ func TestPlainRemovesFormatting(t *testing.T) {
 }
 
 func TestCheckSettings(t *testing.T) {
-	valid := runtime.Spec{Name: "Lobby", Type: mcsmv1.ServerType_SERVER_TYPE_PAPER, Version: "LATEST", MemoryMB: 2048, Port: 25565}
+	valid := runtime.Spec{Name: "Lobby", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, Version: "LATEST", MemoryMB: 2048, Port: 25565}
 	tests := []struct {
 		name   string
 		change func(*runtime.Spec)
@@ -29,11 +29,11 @@ func TestCheckSettings(t *testing.T) {
 		{"defaults", func(*runtime.Spec) {}, true},
 		{"all settings", func(s *runtime.Spec) {
 			s.Java, s.AikarFlags, s.CPUMillis = "17", true, 2500
-			s.RestartPolicy = mcsmv1.RestartPolicy_RESTART_POLICY_ON_CRASH
+			s.RestartPolicy = noryxv1.RestartPolicy_RESTART_POLICY_ON_CRASH
 			s.JVMOptions = []string{"-Dfile.encoding=UTF-8", "-XX:+UseZGC", "-XX:+HeapDumpOnOutOfMemoryError", "-Dcom.example.agent=x"}
 		}, true},
 		{"unknown Java", func(s *runtime.Spec) { s.Java = "22" }, false},
-		{"Java for a proxy", func(s *runtime.Spec) { s.Type, s.Java = mcsmv1.ServerType_SERVER_TYPE_VELOCITY, "21" }, false},
+		{"Java for a proxy", func(s *runtime.Spec) { s.Type, s.Java = noryxv1.ServerType_SERVER_TYPE_VELOCITY, "21" }, false},
 		{"option with a space", func(s *runtime.Spec) { s.JVMOptions = []string{"-Dx=a b"} }, false},
 		{"shell syntax", func(s *runtime.Spec) { s.JVMOptions = []string{"-Dx=$(id)"} }, false},
 		{"glob", func(s *runtime.Spec) { s.JVMOptions = []string{"-cp*"} }, false},
@@ -66,35 +66,35 @@ func TestCheckSettings(t *testing.T) {
 
 func TestNetworkOf(t *testing.T) {
 	const id, secret = "abcdefghijklmnopqrstuvwxyz", "S3cretS3cretS3cret"
-	backends := []*mcsmv1.NetworkBackend{
-		{Name: "lobby", Target: &mcsmv1.NetworkBackend_ServerId{ServerId: "bcdefghijklmnopqrstuvwxyz2"}},
-		{Name: "survival", Target: &mcsmv1.NetworkBackend_Address{Address: "203.0.113.7:25566"}, Restricted: true, Motd: "&aSurvival"},
+	backends := []*noryxv1.NetworkBackend{
+		{Name: "lobby", Target: &noryxv1.NetworkBackend_ServerId{ServerId: "bcdefghijklmnopqrstuvwxyz2"}},
+		{Name: "survival", Target: &noryxv1.NetworkBackend_Address{Address: "203.0.113.7:25566"}, Restricted: true, Motd: "&aSurvival"},
 	}
-	valid := func() *mcsmv1.ConfigureNetworkRequest {
-		return &mcsmv1.ConfigureNetworkRequest{
-			Id: id, ForwardingSecret: secret, Forwarding: mcsmv1.Forwarding_FORWARDING_MODERN, Backends: backends,
-			Try: []string{"lobby", "survival"}, ForcedHosts: []*mcsmv1.ForcedHost{{Host: "survival.example.com", Servers: []string{"survival"}}},
+	valid := func() *noryxv1.ConfigureNetworkRequest {
+		return &noryxv1.ConfigureNetworkRequest{
+			Id: id, ForwardingSecret: secret, Forwarding: noryxv1.Forwarding_FORWARDING_MODERN, Backends: backends,
+			Try: []string{"lobby", "survival"}, ForcedHosts: []*noryxv1.ForcedHost{{Host: "survival.example.com", Servers: []string{"survival"}}},
 		}
 	}
 	tests := []struct {
 		name   string
-		change func(*mcsmv1.ConfigureNetworkRequest)
+		change func(*noryxv1.ConfigureNetworkRequest)
 		ok     bool
 	}{
-		{"valid", func(*mcsmv1.ConfigureNetworkRequest) {}, true},
-		{"legacy without secret", func(r *mcsmv1.ConfigureNetworkRequest) {
-			r.Forwarding, r.ForwardingSecret = mcsmv1.Forwarding_FORWARDING_LEGACY, ""
+		{"valid", func(*noryxv1.ConfigureNetworkRequest) {}, true},
+		{"legacy without secret", func(r *noryxv1.ConfigureNetworkRequest) {
+			r.Forwarding, r.ForwardingSecret = noryxv1.Forwarding_FORWARDING_LEGACY, ""
 		}, true},
-		{"modern without secret", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForwardingSecret = "" }, false},
-		{"unknown forwarding", func(r *mcsmv1.ConfigureNetworkRequest) { r.Forwarding = 9 }, false},
-		{"try names an unknown server", func(r *mcsmv1.ConfigureNetworkRequest) { r.Try = []string{"nope"} }, false},
-		{"try names a server twice", func(r *mcsmv1.ConfigureNetworkRequest) { r.Try = []string{"lobby", "lobby"} }, false},
-		{"forced host with a port", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Host = "survival.example.com:25565" }, false},
-		{"forced host in capitals", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Host = "Survival.example.com" }, false},
-		{"forced host without servers", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Servers = nil }, false},
-		{"duplicate forced host", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts = append(r.ForcedHosts, r.ForcedHosts[0]) }, false},
-		{"MOTD with control characters", func(r *mcsmv1.ConfigureNetworkRequest) {
-			r.Backends = []*mcsmv1.NetworkBackend{{Name: "lobby", Target: backends[0].Target, Motd: "\x1b[31m"}}
+		{"modern without secret", func(r *noryxv1.ConfigureNetworkRequest) { r.ForwardingSecret = "" }, false},
+		{"unknown forwarding", func(r *noryxv1.ConfigureNetworkRequest) { r.Forwarding = 9 }, false},
+		{"try names an unknown server", func(r *noryxv1.ConfigureNetworkRequest) { r.Try = []string{"nope"} }, false},
+		{"try names a server twice", func(r *noryxv1.ConfigureNetworkRequest) { r.Try = []string{"lobby", "lobby"} }, false},
+		{"forced host with a port", func(r *noryxv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Host = "survival.example.com:25565" }, false},
+		{"forced host in capitals", func(r *noryxv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Host = "Survival.example.com" }, false},
+		{"forced host without servers", func(r *noryxv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Servers = nil }, false},
+		{"duplicate forced host", func(r *noryxv1.ConfigureNetworkRequest) { r.ForcedHosts = append(r.ForcedHosts, r.ForcedHosts[0]) }, false},
+		{"MOTD with control characters", func(r *noryxv1.ConfigureNetworkRequest) {
+			r.Backends = []*noryxv1.NetworkBackend{{Name: "lobby", Target: backends[0].Target, Motd: "\x1b[31m"}}
 			r.Try, r.ForcedHosts = []string{"lobby"}, nil
 		}, false},
 	}
@@ -107,11 +107,11 @@ func TestNetworkOf(t *testing.T) {
 	}
 
 	// Older masters send a secret without forwarding, and let players join the first backend.
-	n, msg := networkOf(&mcsmv1.ConfigureNetworkRequest{Id: id, ForwardingSecret: secret, Backends: backends})
+	n, msg := networkOf(&noryxv1.ConfigureNetworkRequest{Id: id, ForwardingSecret: secret, Backends: backends})
 	if msg != "" || n.Forwarding != runtime.ForwardingModern || len(n.Try) != 1 || n.Try[0] != "lobby" {
 		t.Fatalf("network of an older master = %+v, %q", n, msg)
 	}
-	if n, _ := networkOf(&mcsmv1.ConfigureNetworkRequest{Id: id, ProxyOnNode: true}); n.Forwarding != runtime.ForwardingNone || n.ProxyOnNode {
+	if n, _ := networkOf(&noryxv1.ConfigureNetworkRequest{Id: id, ProxyOnNode: true}); n.Forwarding != runtime.ForwardingNone || n.ProxyOnNode {
 		t.Fatalf("leaving a network = %+v", n)
 	}
 }

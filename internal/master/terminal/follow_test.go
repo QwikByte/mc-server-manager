@@ -24,7 +24,7 @@ func TestFollowLimit(t *testing.T) {
 		{[]string{"logs", "-f"}, errFollowLimit},
 		{[]string{"logs"}, context.DeadlineExceeded},
 	} {
-		root := guarded("mcsm-agent", "", map[string]check{"server logs": allow, "logs": allow})
+		root := guarded("noryx-agent", "", map[string]check{"server logs": allow, "logs": allow})
 		wait := func(cmd *cobra.Command, _ []string) error { <-cmd.Context().Done(); return cmd.Context().Err() }
 		server := &cobra.Command{Use: "server"}
 		server.AddCommand(&cobra.Command{Use: "logs", RunE: wait})

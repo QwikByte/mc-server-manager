@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const tokenPrefix = "mcsm1_"
+const tokenPrefix = "noryx1_"
 
 // Token carries everything an agent needs to enroll securely: where the master is,
 // which CA to trust (pinned by fingerprint) and the single-use secret.

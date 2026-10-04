@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 func TestTerminal(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	url := m.panel(t).URL
 	run := func(target, command string) (string, string) {
 		t.Helper()
@@ -25,7 +25,7 @@ func TestTerminal(t *testing.T) {
 	for command, want := range map[string]string{
 		"server list": "Lobby",
 		"status":      "Cert     valid until",
-		"mcsm-agent server start " + lobby.ServerID:                "",
+		"noryx-agent server start " + lobby.ServerID:               "",
 		`server command ` + lobby.ServerID + ` say "hello  world"`: "ran say hello  world",
 		"server logs " + lobby.ServerID:                            "[INFO]: Starting\n[INFO]: Done\n",
 		"help":                                                     "backup",
@@ -37,7 +37,7 @@ func TestTerminal(t *testing.T) {
 	for command, want := range map[string]string{
 		"server start ../../etc":   "invalid server ID", // without the gRPC prefix
 		"storage add ssd /mnt/ssd": `unknown command "storage"`,
-		"enroll mcsm1_token":       `unknown command "enroll"`,
+		"enroll noryx1_token":      `unknown command "enroll"`,
 		"server list; rm -rf /":    "unknown shorthand flag",
 		"server start":             "accepts 1 arg(s)",
 	} {

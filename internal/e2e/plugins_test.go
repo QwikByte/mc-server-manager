@@ -8,16 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
 )
 
 func TestPlugins(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	survival := m.createServer(t, a, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
-	vanilla := m.createServer(t, a, "Vanilla", mcsmv1.ServerType_SERVER_TYPE_VANILLA, 25567)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	survival := m.createServer(t, a, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	vanilla := m.createServer(t, a, "Vanilla", noryxv1.ServerType_SERVER_TYPE_VANILLA, 25567)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	pluginsOf := func(ref plugin.Ref) plugin.Listing {
 		t.Helper()

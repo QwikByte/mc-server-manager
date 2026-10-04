@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
@@ -21,8 +21,8 @@ import (
 func TestMoveServer(t *testing.T) {
 	m := startMaster(t)
 	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
-	lobby := m.createServer(t, a1, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	m.createServer(t, a2, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	lobby := m.createServer(t, a1, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	m.createServer(t, a2, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	path := func(r network.Ref) string { return "/api/nodes/" + r.NodeID + "/servers/" + r.ServerID }
 	data := filepath.Join(a1.runtime.dir, lobby.ServerID)
@@ -39,7 +39,7 @@ func TestMoveServer(t *testing.T) {
 	api.do("POST", path(lobby)+"/move", map[string]any{"node": a1.node.ID}, http.StatusBadRequest, nil)
 	api.do("POST", path(lobby)+"/move", map[string]any{"node": a2.node.ID, "port": 25566}, http.StatusConflict, nil)
 	api.do("POST", path(lobby)+"/move", map[string]any{"node": a2.node.ID, "storage": "ssd"}, http.StatusBadRequest, nil)
-	if state(t, a1, lobby.ServerID) != mcsmv1.ServerState_SERVER_STATE_RUNNING {
+	if state(t, a1, lobby.ServerID) != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		t.Fatal("the server stopped")
 	}
 
@@ -49,7 +49,7 @@ func TestMoveServer(t *testing.T) {
 		t.Fatalf("move = %+v", mv)
 	}
 	moved := network.Ref{NodeID: a2.node.ID, ServerID: lobby.ServerID}
-	if state(t, a2, lobby.ServerID) != mcsmv1.ServerState_SERVER_STATE_RUNNING || slices.ContainsFunc(must(a1.runtime.List(t.Context())), isServer(lobby.ServerID)) {
+	if state(t, a2, lobby.ServerID) != noryxv1.ServerState_SERVER_STATE_RUNNING || slices.ContainsFunc(must(a1.runtime.List(t.Context())), isServer(lobby.ServerID)) {
 		t.Fatal("the server is not on the new node only, running")
 	}
 	if chunks, err := os.ReadFile(filepath.Join(a2.runtime.dir, lobby.ServerID, "world", "region", "r.0.0.mca")); string(chunks) != "chunks" {
@@ -77,7 +77,7 @@ func TestMoveServer(t *testing.T) {
 	if mv := waitForMove(t, api, lobby.ServerID); mv.Phase != "failed" || mv.Error == "" {
 		t.Fatalf("move = %+v", mv)
 	}
-	if state(t, a2, lobby.ServerID) != mcsmv1.ServerState_SERVER_STATE_RUNNING || slices.ContainsFunc(must(a1.runtime.List(t.Context())), isServer(lobby.ServerID)) {
+	if state(t, a2, lobby.ServerID) != noryxv1.ServerState_SERVER_STATE_RUNNING || slices.ContainsFunc(must(a1.runtime.List(t.Context())), isServer(lobby.ServerID)) {
 		t.Fatal("the failed move left the server elsewhere")
 	}
 }
@@ -86,7 +86,7 @@ func TestMoveServer(t *testing.T) {
 func TestTerminalWhileMoving(t *testing.T) {
 	m := startMaster(t)
 	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
-	lobby := m.createServer(t, a1, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	lobby := m.createServer(t, a1, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	panel := m.panel(t)
 	api := apiClient{t: t, url: panel.URL}
 	hold := make(chan struct{})
@@ -126,12 +126,12 @@ func waitForMove(t *testing.T, api apiClient, serverID string) masterserver.Move
 	return masterserver.Move{}
 }
 
-func state(t *testing.T, a agent, id string) mcsmv1.ServerState {
+func state(t *testing.T, a agent, id string) noryxv1.ServerState {
 	servers := must(a.runtime.List(t.Context()))
 	if i := slices.IndexFunc(servers, isServer(id)); i >= 0 {
 		return servers[i].State
 	}
-	return mcsmv1.ServerState_SERVER_STATE_UNSPECIFIED
+	return noryxv1.ServerState_SERVER_STATE_UNSPECIFIED
 }
 
 func must[T any](v T, err error) T {

@@ -14,7 +14,7 @@ func TestTokenRoundTrip(t *testing.T) {
 }
 
 func TestParseTokenRejectsGarbage(t *testing.T) {
-	for _, s := range []string{"", "mcsm1_", "mcsm1_!!!", Token{Master: "x"}.String()} {
+	for _, s := range []string{"", "noryx1_", "noryx1_!!!", Token{Master: "x"}.String()} {
 		if _, err := ParseToken(s); err == nil {
 			t.Errorf("ParseToken(%q) succeeded", s)
 		}

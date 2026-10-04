@@ -19,7 +19,7 @@ import (
 )
 
 // MasterName is the identity carried by every master certificate.
-const MasterName = "master.mcsm.internal"
+const MasterName = "master.noryx.internal"
 
 const (
 	caValidity = 10 * 365 * 24 * time.Hour
@@ -28,7 +28,7 @@ const (
 )
 
 // NodeName is the identity carried by the certificate of the node with the given ID.
-func NodeName(nodeID string) string { return nodeID + ".node.mcsm.internal" }
+func NodeName(nodeID string) string { return nodeID + ".node.noryx.internal" }
 
 // CA signs the certificates of the master and of all enrolled nodes.
 type CA struct {
@@ -51,7 +51,7 @@ func LoadOrCreateCA(dir string) (*CA, error) {
 func createCA(dir string) (*CA, error) {
 	key := NewKey()
 	tmpl := &x509.Certificate{
-		Subject:               pkix.Name{CommonName: "MC Server Manager CA"},
+		Subject:               pkix.Name{CommonName: "Noryx CA"},
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 		MaxPathLenZero:        true,

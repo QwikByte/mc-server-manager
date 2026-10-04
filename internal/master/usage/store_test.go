@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/database"
 )
 
@@ -24,10 +24,10 @@ func TestHistory(t *testing.T) {
 	step := 5 * time.Minute
 	start := time.Now().Truncate(step).Add(-step)
 	for i, players := range []uint32{3, 7} {
-		stats := &mcsmv1.GetStatsResponse{
-			Node: &mcsmv1.NodeStats{CpuMillis: 2000, MemoryUsedBytes: 4 << 30},
-			Servers: []*mcsmv1.ServerStats{
-				{Id: "lobby", Running: true, CpuMillis: uint32(500 * (i + 1)), MemoryBytes: 1 << 30, DiskBytes: 100, Tps: 19.5, Players: &mcsmv1.Players{Online: players}}, //nolint:gosec // small
+		stats := &noryxv1.GetStatsResponse{
+			Node: &noryxv1.NodeStats{CpuMillis: 2000, MemoryUsedBytes: 4 << 30},
+			Servers: []*noryxv1.ServerStats{
+				{Id: "lobby", Running: true, CpuMillis: uint32(500 * (i + 1)), MemoryBytes: 1 << 30, DiskBytes: 100, Tps: 19.5, Players: &noryxv1.Players{Online: players}}, //nolint:gosec // small
 				{Id: "stopped", DiskBytes: 100},
 			},
 		}

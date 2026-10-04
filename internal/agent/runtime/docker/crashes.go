@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
@@ -39,12 +39,12 @@ func (d *Docker) addCrashes(ctx context.Context, containerID string, srv *runtim
 		return
 	}
 	c := res.Container
-	if srv.State == mcsmv1.ServerState_SERVER_STATE_STOPPED && c.State.ExitCode == 0 {
+	if srv.State == noryxv1.ServerState_SERVER_STATE_STOPPED && c.State.ExitCode == 0 {
 		return // stopped cleanly after it ran again
 	}
 	srv.Crashes, srv.ExitCode = c.RestartCount, c.State.ExitCode
-	if srv.State == mcsmv1.ServerState_SERVER_STATE_STARTING {
-		srv.State = mcsmv1.ServerState_SERVER_STATE_CRASHING
+	if srv.State == noryxv1.ServerState_SERVER_STATE_STARTING {
+		srv.State = noryxv1.ServerState_SERVER_STATE_CRASHING
 	}
 }
 

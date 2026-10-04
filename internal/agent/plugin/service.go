@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -29,19 +29,19 @@ const (
 )
 
 // folders are where the server types load plugins or mods from.
-var folders = map[mcsmv1.ServerType]string{
-	mcsmv1.ServerType_SERVER_TYPE_PAPER:      "plugins",
-	mcsmv1.ServerType_SERVER_TYPE_PURPUR:     "plugins",
-	mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   "plugins",
-	mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: "plugins",
-	mcsmv1.ServerType_SERVER_TYPE_WATERFALL:  "plugins",
-	mcsmv1.ServerType_SERVER_TYPE_FABRIC:     "mods",
-	mcsmv1.ServerType_SERVER_TYPE_FORGE:      "mods",
-	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   "mods",
+var folders = map[noryxv1.ServerType]string{
+	noryxv1.ServerType_SERVER_TYPE_PAPER:      "plugins",
+	noryxv1.ServerType_SERVER_TYPE_PURPUR:     "plugins",
+	noryxv1.ServerType_SERVER_TYPE_VELOCITY:   "plugins",
+	noryxv1.ServerType_SERVER_TYPE_BUNGEECORD: "plugins",
+	noryxv1.ServerType_SERVER_TYPE_WATERFALL:  "plugins",
+	noryxv1.ServerType_SERVER_TYPE_FABRIC:     "mods",
+	noryxv1.ServerType_SERVER_TYPE_FORGE:      "mods",
+	noryxv1.ServerType_SERVER_TYPE_NEOFORGE:   "mods",
 }
 
 // Folder returns the folder that servers of a type load plugins or mods from.
-func Folder(t mcsmv1.ServerType) (string, bool) {
+func Folder(t noryxv1.ServerType) (string, bool) {
 	folder, ok := folders[t]
 	return folder, ok
 }
@@ -50,7 +50,7 @@ func Folder(t mcsmv1.ServerType) (string, bool) {
 var fileName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._+()\[\]-]{0,127}\.jar$`)
 
 type Service struct {
-	mcsmv1.UnimplementedPluginServiceServer
+	noryxv1.UnimplementedPluginServiceServer
 	rt runtime.Runtime
 
 	mu sync.Mutex
@@ -68,13 +68,13 @@ func NewService(rt runtime.Runtime) *Service {
 	return &Service{rt: rt, sums: map[string]map[string]sum{}}
 }
 
-func (s *Service) ListPlugins(ctx context.Context, req *mcsmv1.ListPluginsRequest) (*mcsmv1.ListPluginsResponse, error) {
+func (s *Service) ListPlugins(ctx context.Context, req *noryxv1.ListPluginsRequest) (*noryxv1.ListPluginsResponse, error) {
 	dir, folder, err := s.open(ctx, req.GetServerId())
 	if err != nil {
 		return nil, err
 	}
 	defer dir.Close()
-	res := &mcsmv1.ListPluginsResponse{Folder: folder}
+	res := &noryxv1.ListPluginsResponse{Folder: folder}
 	entries, err := fs.ReadDir(dir.FS(), folder)
 	if errors.Is(err, fs.ErrNotExist) {
 		return res, nil
@@ -100,7 +100,7 @@ func (s *Service) ListPlugins(ctx context.Context, req *mcsmv1.ListPluginsReques
 			cached = sum{info.Size(), info.ModTime(), hash}
 		}
 		current[e.Name()] = cached
-		res.Plugins = append(res.Plugins, &mcsmv1.PluginFile{FileName: e.Name(), Size: info.Size(), Sha512: cached.sha512})
+		res.Plugins = append(res.Plugins, &noryxv1.PluginFile{FileName: e.Name(), Size: info.Size(), Sha512: cached.sha512})
 	}
 	s.mu.Lock()
 	s.sums[req.GetServerId()] = current
@@ -121,7 +121,7 @@ func hashFile(dir *datadir.Dir, name string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func (s *Service) InstallPlugin(stream mcsmv1.PluginService_InstallPluginServer) error {
+func (s *Service) InstallPlugin(stream noryxv1.PluginService_InstallPluginServer) error {
 	first, err := stream.Recv()
 	if err != nil {
 		return err
@@ -170,12 +170,12 @@ func (s *Service) InstallPlugin(stream mcsmv1.PluginService_InstallPluginServer)
 			return toStatus(err)
 		}
 	}
-	return stream.SendAndClose(&mcsmv1.InstallPluginResponse{Plugin: &mcsmv1.PluginFile{
+	return stream.SendAndClose(&noryxv1.InstallPluginResponse{Plugin: &noryxv1.PluginFile{
 		FileName: header.GetFileName(), Size: size, Sha512: hex.EncodeToString(h.Sum(nil)),
 	}})
 }
 
-func (s *Service) RemovePlugin(ctx context.Context, req *mcsmv1.RemovePluginRequest) (*mcsmv1.RemovePluginResponse, error) {
+func (s *Service) RemovePlugin(ctx context.Context, req *noryxv1.RemovePluginRequest) (*noryxv1.RemovePluginResponse, error) {
 	if !fileName.MatchString(req.GetFileName()) {
 		return nil, status.Error(codes.InvalidArgument, "invalid plugin file name")
 	}
@@ -184,7 +184,7 @@ func (s *Service) RemovePlugin(ctx context.Context, req *mcsmv1.RemovePluginRequ
 		return nil, err
 	}
 	defer dir.Close()
-	return &mcsmv1.RemovePluginResponse{}, toStatus(dir.Remove(filepath.Join(folder, req.GetFileName())))
+	return &noryxv1.RemovePluginResponse{}, toStatus(dir.Remove(filepath.Join(folder, req.GetFileName())))
 }
 
 // open opens the data directory of a server and returns its plugin folder.

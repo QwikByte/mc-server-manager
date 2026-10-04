@@ -4,14 +4,14 @@ import (
 	"errors"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
 
 func TestReloaded(t *testing.T) {
-	velocity, _ := mcnet.ProxyOf(mcsmv1.ServerType_SERVER_TYPE_VELOCITY)
-	bungee, _ := mcnet.ProxyOf(mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD)
+	velocity, _ := mcnet.ProxyOf(noryxv1.ServerType_SERVER_TYPE_VELOCITY)
+	bungee, _ := mcnet.ProxyOf(noryxv1.ServerType_SERVER_TYPE_BUNGEECORD)
 	for _, tt := range []struct {
 		name  string
 		proxy mcnet.Proxy

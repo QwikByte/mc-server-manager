@@ -15,13 +15,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 func TestFiles(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	srv := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	srv := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	panel := m.panel(t)
 	api := apiClient{t: t, url: panel.URL}
 	base := "/api/nodes/" + srv.NodeID + "/servers/" + srv.ServerID + "/files"
@@ -93,7 +93,7 @@ func TestFiles(t *testing.T) {
 func TestFileSecrets(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	srv := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	srv := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	base := "/api/nodes/" + srv.NodeID + "/servers/" + srv.ServerID + "/files"
 	q := func(p string) string { return "?path=" + url.QueryEscape(p) }
@@ -158,12 +158,12 @@ func TestFileSecrets(t *testing.T) {
 func TestFreeSpace(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	srv := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	srv := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
 	conn, err := m.nodes.Conn(t.Context(), a.node.ID)
 	check(t, err)
-	upload, err := mcsmv1.NewFileServiceClient(conn).WriteFile(t.Context())
+	upload, err := noryxv1.NewFileServiceClient(conn).WriteFile(t.Context())
 	check(t, err)
-	check(t, upload.Send(&mcsmv1.WriteFileRequest{Content: &mcsmv1.WriteFileRequest_Header{Header: &mcsmv1.WriteFileHeader{
+	check(t, upload.Send(&noryxv1.WriteFileRequest{Content: &noryxv1.WriteFileRequest_Header{Header: &noryxv1.WriteFileHeader{
 		ServerId: srv.ServerID, Path: "world.zip", Size: 1 << 50,
 	}}}))
 	if _, err := upload.CloseAndRecv(); status.Code(err) != codes.ResourceExhausted {

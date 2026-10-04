@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
@@ -18,8 +18,8 @@ import (
 func TestUsersGroupsAndPermissions(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	survival := m.createServer(t, a, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	survival := m.createServer(t, a, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
 	svc := m.services(t)
 	srv := httptest.NewTLSServer(masterapp.Handler(svc)) // HTTPS for the secure session cookie
 	t.Cleanup(srv.Close)

@@ -132,7 +132,7 @@ func (h *Handler) export(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	name := "mcsm-log-" + time.Now().Format("2006-01-02-150405")
+	name := "noryx-log-" + time.Now().Format("2006-01-02-150405")
 	switch r.URL.Query().Get("format") {
 	case "csv":
 		httpapi.Attachment(w, name+".csv")

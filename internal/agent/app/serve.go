@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/local"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/backup"
 	"github.com/QwikByte/mc-server-manager/internal/agent/files"
 	agentlogs "github.com/QwikByte/mc-server-manager/internal/agent/logs"
@@ -44,7 +44,7 @@ func serve(ctx context.Context, cfg config) error {
 	}
 	identity, err := node.LoadIdentity(cfg.pkiDir())
 	if errors.Is(err, fs.ErrNotExist) {
-		return errors.New("this agent is not enrolled yet, run: mcsm-agent enroll <join-token>")
+		return errors.New("this agent is not enrolled yet, run: noryx-agent enroll <join-token>")
 	}
 	if err != nil {
 		return err
@@ -139,15 +139,15 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Server {
 	opts = slices.Concat(runtime.Interceptors(s.rt), agentlogs.Interceptors(origin, s.calls), opts)
 	srv := grpc.NewServer(opts...)
-	mcsmv1.RegisterNodeServiceServer(srv, s.node)
-	mcsmv1.RegisterServerServiceServer(srv, s.server)
-	mcsmv1.RegisterFileServiceServer(srv, s.files)
-	mcsmv1.RegisterPropertiesServiceServer(srv, s.properties)
-	mcsmv1.RegisterProxyServiceServer(srv, s.proxy)
-	mcsmv1.RegisterPluginServiceServer(srv, s.plugin)
-	mcsmv1.RegisterBackupServiceServer(srv, s.backup)
-	mcsmv1.RegisterStatsServiceServer(srv, s.stats)
-	mcsmv1.RegisterLogServiceServer(srv, s.log)
+	noryxv1.RegisterNodeServiceServer(srv, s.node)
+	noryxv1.RegisterServerServiceServer(srv, s.server)
+	noryxv1.RegisterFileServiceServer(srv, s.files)
+	noryxv1.RegisterPropertiesServiceServer(srv, s.properties)
+	noryxv1.RegisterProxyServiceServer(srv, s.proxy)
+	noryxv1.RegisterPluginServiceServer(srv, s.plugin)
+	noryxv1.RegisterBackupServiceServer(srv, s.backup)
+	noryxv1.RegisterStatsServiceServer(srv, s.stats)
+	noryxv1.RegisterLogServiceServer(srv, s.log)
 	return srv
 }
 

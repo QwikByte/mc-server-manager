@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
@@ -67,18 +67,18 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/nodes/{node}/servers", access.SignedIn, h.list)
 	mux.Handle("POST /api/nodes/{node}/servers", access.OnNode(access.ServersCreate, "node"), h.create)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart),
-		h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-			_, err := c.StartServer(ctx, &mcsmv1.StartServerRequest{Id: id})
+		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
+			_, err := c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
 			return err
 		}))
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/stop", access.OnServer(access.ServersStop),
-		h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-			_, err := c.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
+		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
+			_, err := c.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
 			return err
 		}))
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/restart", access.OnServer(access.ServersRestart),
-		h.lifecycle(func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-			_, err := c.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
+		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
+			_, err := c.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
 			return err
 		}))
 	mux.Handle("DELETE /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersDelete), h.delete)
@@ -121,18 +121,18 @@ type settings struct {
 
 // check validates the settings that the agent can't, and converts the restart policy
 // and CPU limit; an empty restart policy means the default.
-func (s settings) check() (mcsmv1.RestartPolicy, uint32, error) {
-	policy := mcsmv1.ParseRestartPolicy(s.RestartPolicy)
+func (s settings) check() (noryxv1.RestartPolicy, uint32, error) {
+	policy := noryxv1.ParseRestartPolicy(s.RestartPolicy)
 	switch {
 	case s.CPULimit < 0 || s.CPULimit > 1024:
 		return policy, 0, httpapi.Errorf(http.StatusBadRequest, "Enter a CPU limit in cores, or 0 for no limit.")
-	case policy == mcsmv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED && s.RestartPolicy != "":
+	case policy == noryxv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED && s.RestartPolicy != "":
 		return policy, 0, httpapi.Errorf(http.StatusBadRequest, "Choose when the server starts on its own.")
 	}
 	return policy, uint32(math.Round(s.CPULimit * 1000)), nil
 }
 
-func toView(s *mcsmv1.Server) view {
+func toView(s *noryxv1.Server) view {
 	return view{
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
 		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(), Crashes: s.GetCrashes(), ExitCode: s.GetExitCode(),
@@ -171,7 +171,7 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return
 			}
-			res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+			res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 			if err != nil {
 				return // offline nodes are left out
 			}
@@ -198,7 +198,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.ListServers(ctx, &mcsmv1.ListServersRequest{})
+	res, err := c.ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -234,7 +234,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout)
 	defer cancel()
 	policy, cpuMillis, err := req.check()
-	var c mcsmv1.ServerServiceClient
+	var c noryxv1.ServerServiceClient
 	if err == nil {
 		c, err = h.client(ctx, r)
 	}
@@ -245,9 +245,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.CreateServer(ctx, &mcsmv1.CreateServerRequest{
+	res, err := c.CreateServer(ctx, &noryxv1.CreateServerRequest{
 		Name:          req.Name,
-		Type:          mcsmv1.ParseServerType(req.Type),
+		Type:          noryxv1.ParseServerType(req.Type),
 		Version:       req.Version,
 		MemoryMb:      req.MemoryMB,
 		Port:          req.Port,
@@ -281,23 +281,23 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // copying worlds takes a while
 	defer cancel()
 	c, err := h.client(ctx, r)
-	var list *mcsmv1.ListServersResponse
+	var list *noryxv1.ListServersResponse
 	if err == nil {
-		list, err = c.ListServers(ctx, &mcsmv1.ListServersRequest{})
+		list, err = c.ListServers(ctx, &noryxv1.ListServersRequest{})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	i := slices.IndexFunc(list.GetServers(), func(s *mcsmv1.Server) bool { return s.GetId() == r.PathValue("id") })
+	i := slices.IndexFunc(list.GetServers(), func(s *noryxv1.Server) bool { return s.GetId() == r.PathValue("id") })
 	if i < 0 {
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusNotFound, "Server not found."))
 		return
 	}
 	err = h.checkLimits(ctx, r.PathValue("node"), "", req.Port, list.GetServers()[i].GetMemoryMb())
-	var res *mcsmv1.DuplicateServerResponse
+	var res *noryxv1.DuplicateServerResponse
 	if err == nil {
-		res, err = c.DuplicateServer(ctx, &mcsmv1.DuplicateServerRequest{Id: r.PathValue("id"), Name: req.Name, Port: req.Port})
+		res, err = c.DuplicateServer(ctx, &noryxv1.DuplicateServerRequest{Id: r.PathValue("id"), Name: req.Name, Port: req.Port})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -322,7 +322,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // a new Java version pulls an image
 	defer cancel()
 	policy, cpuMillis, err := req.check()
-	var c mcsmv1.ServerServiceClient
+	var c noryxv1.ServerServiceClient
 	if err == nil {
 		c, err = h.client(ctx, r)
 	}
@@ -333,7 +333,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.UpdateServer(ctx, &mcsmv1.UpdateServerRequest{
+	res, err := c.UpdateServer(ctx, &noryxv1.UpdateServerRequest{
 		Id: r.PathValue("id"), Name: req.Name, Version: req.Version, MemoryMb: req.MemoryMB, Port: req.Port,
 		Java: req.Java, RestartPolicy: policy, AikarFlags: req.AikarFlags,
 		JvmOptions: req.JVMOptions, CpuMillis: cpuMillis,
@@ -350,9 +350,9 @@ func (h *Handler) updateImage(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), createTimeout)
 	defer cancel()
 	c, err := h.client(ctx, r)
-	var res *mcsmv1.UpdateImageResponse
+	var res *noryxv1.UpdateImageResponse
 	if err == nil {
-		res, err = c.UpdateImage(ctx, &mcsmv1.UpdateImageRequest{Id: r.PathValue("id")})
+		res, err = c.UpdateImage(ctx, &noryxv1.UpdateImageRequest{Id: r.PathValue("id")})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -367,12 +367,12 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), actionTimeout)
 	defer cancel()
 	err := h.networks.CheckRemovable(ctx, nodeID, id)
-	var c mcsmv1.ServerServiceClient
+	var c noryxv1.ServerServiceClient
 	if err == nil {
 		c, err = h.client(ctx, r)
 	}
 	if err == nil {
-		_, err = c.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
+		_, err = c.DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: id})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -391,7 +391,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // lifecycle wraps an operation on a single server that returns no data.
-func (h *Handler) lifecycle(op func(context.Context, mcsmv1.ServerServiceClient, string) error) http.HandlerFunc {
+func (h *Handler) lifecycle(op func(context.Context, noryxv1.ServerServiceClient, string) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), actionTimeout)
 		defer cancel()
@@ -407,10 +407,10 @@ func (h *Handler) lifecycle(op func(context.Context, mcsmv1.ServerServiceClient,
 	}
 }
 
-func (h *Handler) client(ctx context.Context, r *http.Request) (mcsmv1.ServerServiceClient, error) {
+func (h *Handler) client(ctx context.Context, r *http.Request) (noryxv1.ServerServiceClient, error) {
 	conn, err := h.nodes.Conn(ctx, r.PathValue("node"))
 	if err != nil {
 		return nil, err
 	}
-	return mcsmv1.NewServerServiceClient(conn), nil
+	return noryxv1.NewServerServiceClient(conn), nil
 }

@@ -16,7 +16,7 @@ import (
 // pollEvery is how often a followed log is read again, for a store written by another process.
 const pollEvery = time.Second
 
-// Command returns the logs command of mcsm-master and of the panel's terminal. It shows the
+// Command returns the logs command of noryx-master and of the panel's terminal. It shows the
 // entries that the grants of its context allow to see.
 func Command(store func() (*Store, error)) *cobra.Command {
 	var (

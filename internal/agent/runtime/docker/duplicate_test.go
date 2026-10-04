@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
@@ -20,10 +20,10 @@ func TestStandalone(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dir.Close()
-	if _, err := mcnet.WriteBackend(dir, mcsmv1.ServerType_SERVER_TYPE_PAPER, runtime.ForwardingModern, "s3cretS3cretS3cret"); err != nil {
+	if _, err := mcnet.WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_PAPER, runtime.ForwardingModern, "s3cretS3cretS3cret"); err != nil {
 		t.Fatal(err)
 	}
-	if err := standalone(backend, runtime.Spec{Type: mcsmv1.ServerType_SERVER_TYPE_PAPER, BehindProxy: true}); err != nil {
+	if err := standalone(backend, runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_PAPER, BehindProxy: true}); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(backend, "config", "paper-global.yml"))
@@ -36,7 +36,7 @@ func TestStandalone(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(proxy, mcnet.ForwardingSecretFile), []byte("s3cret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	spec := runtime.Spec{Type: mcsmv1.ServerType_SERVER_TYPE_VELOCITY}
+	spec := runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_VELOCITY}
 	if err := standalone(proxy, spec); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestStandalone(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bungee, "config.yml"), []byte("ip_forward: true\nservers:\n  lobby:\n    address: 203.0.113.7:25565\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := standalone(bungee, runtime.Spec{Type: mcsmv1.ServerType_SERVER_TYPE_WATERFALL}); err != nil {
+	if err := standalone(bungee, runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_WATERFALL}); err != nil {
 		t.Fatal(err)
 	}
 	if data, err := os.ReadFile(filepath.Join(bungee, "config.yml")); err != nil || !strings.Contains(string(data), "ip_forward: false") {

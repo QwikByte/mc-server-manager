@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
@@ -68,7 +68,7 @@ var (
 )
 
 type Service struct {
-	mcsmv1.UnimplementedServerServiceServer
+	noryxv1.UnimplementedServerServiceServer
 	rt      runtime.Runtime
 	backups Backups
 }
@@ -82,20 +82,20 @@ func NewService(rt runtime.Runtime, backups Backups) *Service {
 	return &Service{rt: rt, backups: backups}
 }
 
-func (s *Service) ListServers(ctx context.Context, _ *mcsmv1.ListServersRequest) (*mcsmv1.ListServersResponse, error) {
+func (s *Service) ListServers(ctx context.Context, _ *noryxv1.ListServersRequest) (*noryxv1.ListServersResponse, error) {
 	servers, err := s.rt.List(ctx)
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	res := &mcsmv1.ListServersResponse{}
+	res := &noryxv1.ListServersResponse{}
 	for _, srv := range servers {
 		res.Servers = append(res.Servers, toProto(srv))
 	}
 	return res, nil
 }
 
-func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequest) (*mcsmv1.CreateServerResponse, error) {
-	_, knownType := mcsmv1.ServerType_name[int32(req.GetType())]
+func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerRequest) (*noryxv1.CreateServerResponse, error) {
+	_, knownType := noryxv1.ServerType_name[int32(req.GetType())]
 	spec := runtime.Spec{
 		ID:            runtime.NewID(),
 		Name:          req.GetName(),
@@ -113,7 +113,7 @@ func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequ
 	switch {
 	case !req.GetAcceptEula():
 		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a server.")
-	case !knownType || req.GetType() == mcsmv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+	case !knownType || req.GetType() == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return nil, status.Error(codes.InvalidArgument, "Choose a server type.")
 	}
 	if msg := properties.Check(spec, req.GetProperties()); msg != "" {
@@ -130,7 +130,7 @@ func (s *Service) CreateServer(ctx context.Context, req *mcsmv1.CreateServerRequ
 			return nil, toStatus(errors.Join(err, s.rt.Remove(ctx, spec.ID)))
 		}
 	}
-	return &mcsmv1.CreateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})}, nil
+	return &noryxv1.CreateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED})}, nil
 }
 
 func (s *Service) writeProperties(ctx context.Context, id string, changes map[string]string) error {
@@ -141,7 +141,7 @@ func (s *Service) writeProperties(ctx context.Context, id string, changes map[st
 	return errors.Join(properties.Write(dir, changes), dir.Close())
 }
 
-func (s *Service) DuplicateServer(ctx context.Context, req *mcsmv1.DuplicateServerRequest) (*mcsmv1.DuplicateServerResponse, error) {
+func (s *Service) DuplicateServer(ctx context.Context, req *noryxv1.DuplicateServerRequest) (*noryxv1.DuplicateServerResponse, error) {
 	source, err := s.find(ctx, req.GetId())
 	if err != nil {
 		return nil, err
@@ -162,12 +162,12 @@ func (s *Service) DuplicateServer(ctx context.Context, req *mcsmv1.DuplicateServ
 	if err := s.rt.Duplicate(ctx, source.ID, spec); err != nil {
 		return nil, toStatus(err)
 	}
-	return &mcsmv1.DuplicateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})}, nil
+	return &noryxv1.DuplicateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED})}, nil
 }
 
 // ImportServer creates a stopped server with the ID and settings of a server of another
 // node, from the archive of its data. Nothing of it remains if that fails.
-func (s *Service) ImportServer(stream mcsmv1.ServerService_ImportServerServer) error {
+func (s *Service) ImportServer(stream noryxv1.ServerService_ImportServerServer) error {
 	ctx := stream.Context()
 	first, err := stream.Recv()
 	if err != nil {
@@ -182,11 +182,11 @@ func (s *Service) ImportServer(stream mcsmv1.ServerService_ImportServerServer) e
 		Storage: h.GetStorage(), Java: h.GetJava(), RestartPolicy: h.GetRestartPolicy(), AikarFlags: h.GetAikarFlags(),
 		JVMOptions: h.GetJvmOptions(), CPUMillis: h.GetCpuMillis(),
 	}
-	_, knownType := mcsmv1.ServerType_name[int32(spec.Type)]
+	_, knownType := noryxv1.ServerType_name[int32(spec.Type)]
 	switch {
 	case !runtime.ValidID(spec.ID):
 		return status.Error(codes.InvalidArgument, "invalid server ID")
-	case !knownType || spec.Type == mcsmv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+	case !knownType || spec.Type == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return status.Error(codes.InvalidArgument, "Choose a server type.")
 	}
 	if err := s.check(ctx, spec); err != nil {
@@ -201,12 +201,12 @@ func (s *Service) ImportServer(stream mcsmv1.ServerService_ImportServerServer) e
 	if err := s.extract(ctx, spec.ID, stream); err != nil {
 		return toStatus(errors.Join(err, s.rt.Remove(context.WithoutCancel(ctx), spec.ID)))
 	}
-	return stream.SendAndClose(&mcsmv1.ImportServerResponse{Server: toProto(runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})})
+	return stream.SendAndClose(&noryxv1.ImportServerResponse{Server: toProto(runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED})})
 }
 
 // extract receives an archive into a temporary file of a server's data directory, as
 // reading it needs random access, and extracts it there.
-func (s *Service) extract(ctx context.Context, id string, stream mcsmv1.ServerService_ImportServerServer) error {
+func (s *Service) extract(ctx context.Context, id string, stream noryxv1.ServerService_ImportServerServer) error {
 	dir, err := s.rt.Data(ctx, id)
 	if err != nil {
 		return err
@@ -240,7 +240,7 @@ func (s *Service) extract(ctx context.Context, id string, stream mcsmv1.ServerSe
 	return dir.ExtractZip(ctx, zr, ".")
 }
 
-func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequest) (*mcsmv1.UpdateServerResponse, error) {
+func (s *Service) UpdateServer(ctx context.Context, req *noryxv1.UpdateServerRequest) (*noryxv1.UpdateServerResponse, error) {
 	srv, err := s.find(ctx, req.GetId())
 	if err != nil {
 		return nil, err
@@ -254,16 +254,16 @@ func (s *Service) UpdateServer(ctx context.Context, req *mcsmv1.UpdateServerRequ
 	if err := s.rt.Update(ctx, srv.Spec); err != nil {
 		return nil, toStatus(err)
 	}
-	return &mcsmv1.UpdateServerResponse{Server: toProto(srv)}, nil
+	return &noryxv1.UpdateServerResponse{Server: toProto(srv)}, nil
 }
 
-func (s *Service) UpdateImage(ctx context.Context, req *mcsmv1.UpdateImageRequest) (*mcsmv1.UpdateImageResponse, error) {
+func (s *Service) UpdateImage(ctx context.Context, req *noryxv1.UpdateImageRequest) (*noryxv1.UpdateImageResponse, error) {
 	var updated bool
 	err := s.apply(ctx, req.GetId(), func(ctx context.Context, id string) (err error) {
 		updated, err = s.rt.UpdateImage(ctx, id)
 		return err
 	})
-	return &mcsmv1.UpdateImageResponse{Updated: updated}, err
+	return &noryxv1.UpdateImageResponse{Updated: updated}, err
 }
 
 // find returns the server with the given ID.
@@ -294,26 +294,26 @@ func (s *Service) check(ctx context.Context, spec runtime.Spec) error {
 	return nil
 }
 
-func (s *Service) StartServer(ctx context.Context, req *mcsmv1.StartServerRequest) (*mcsmv1.StartServerResponse, error) {
-	return &mcsmv1.StartServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Start)
+func (s *Service) StartServer(ctx context.Context, req *noryxv1.StartServerRequest) (*noryxv1.StartServerResponse, error) {
+	return &noryxv1.StartServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Start)
 }
 
-func (s *Service) StopServer(ctx context.Context, req *mcsmv1.StopServerRequest) (*mcsmv1.StopServerResponse, error) {
-	return &mcsmv1.StopServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Stop)
+func (s *Service) StopServer(ctx context.Context, req *noryxv1.StopServerRequest) (*noryxv1.StopServerResponse, error) {
+	return &noryxv1.StopServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Stop)
 }
 
-func (s *Service) RestartServer(ctx context.Context, req *mcsmv1.RestartServerRequest) (*mcsmv1.RestartServerResponse, error) {
-	return &mcsmv1.RestartServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Restart)
+func (s *Service) RestartServer(ctx context.Context, req *noryxv1.RestartServerRequest) (*noryxv1.RestartServerResponse, error) {
+	return &noryxv1.RestartServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Restart)
 }
 
-func (s *Service) DeleteServer(ctx context.Context, req *mcsmv1.DeleteServerRequest) (*mcsmv1.DeleteServerResponse, error) {
+func (s *Service) DeleteServer(ctx context.Context, req *noryxv1.DeleteServerRequest) (*noryxv1.DeleteServerResponse, error) {
 	if err := s.apply(ctx, req.GetId(), s.rt.Remove); err != nil {
 		return nil, err
 	}
-	return &mcsmv1.DeleteServerResponse{}, toStatus(s.backups.RemoveAll(req.GetId()))
+	return &noryxv1.DeleteServerResponse{}, toStatus(s.backups.RemoveAll(req.GetId()))
 }
 
-func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.ServerService_StreamLogsServer) error {
+func (s *Service) StreamLogs(req *noryxv1.StreamLogsRequest, stream noryxv1.ServerService_StreamLogsServer) error {
 	if !runtime.ValidID(req.GetId()) {
 		return status.Error(codes.InvalidArgument, "invalid server ID")
 	}
@@ -325,7 +325,7 @@ func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.Server
 		if err != nil {
 			return toStatus(err)
 		}
-		res := &mcsmv1.StreamLogsResponse{Line: plain(line.Text)}
+		res := &noryxv1.StreamLogsResponse{Line: plain(line.Text)}
 		if !line.Time.IsZero() {
 			res.TimeUnixNano = line.Time.UnixNano()
 		}
@@ -336,7 +336,7 @@ func (s *Service) StreamLogs(req *mcsmv1.StreamLogsRequest, stream mcsmv1.Server
 	return nil
 }
 
-func (s *Service) SendCommand(ctx context.Context, req *mcsmv1.SendCommandRequest) (*mcsmv1.SendCommandResponse, error) {
+func (s *Service) SendCommand(ctx context.Context, req *noryxv1.SendCommandRequest) (*noryxv1.SendCommandResponse, error) {
 	if !runtime.ValidID(req.GetId()) {
 		return nil, status.Error(codes.InvalidArgument, "invalid server ID")
 	}
@@ -351,10 +351,10 @@ func (s *Service) SendCommand(ctx context.Context, req *mcsmv1.SendCommandReques
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return &mcsmv1.SendCommandResponse{Output: plain(output)}, nil
+	return &noryxv1.SendCommandResponse{Output: plain(output)}, nil
 }
 
-func (s *Service) ConfigureNetwork(ctx context.Context, req *mcsmv1.ConfigureNetworkRequest) (*mcsmv1.ConfigureNetworkResponse, error) {
+func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNetworkRequest) (*noryxv1.ConfigureNetworkResponse, error) {
 	network, msg := networkOf(req)
 	if msg != "" {
 		return nil, status.Error(codes.InvalidArgument, msg)
@@ -368,22 +368,22 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *mcsmv1.ConfigureNet
 	case err != nil:
 		return nil, toStatus(err)
 	}
-	return &mcsmv1.ConfigureNetworkResponse{}, nil
+	return &noryxv1.ConfigureNetworkResponse{}, nil
 }
 
 // networkOf validates a network configuration, which ends up in configuration files.
-func networkOf(req *mcsmv1.ConfigureNetworkRequest) (runtime.Network, string) {
+func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
 	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret(), Try: req.GetTry()}
 	switch req.GetForwarding() {
-	case mcsmv1.Forwarding_FORWARDING_UNSPECIFIED: // sent by older masters
+	case noryxv1.Forwarding_FORWARDING_UNSPECIFIED: // sent by older masters
 		network.Forwarding = runtime.ForwardingNone
 		if network.ForwardingSecret != "" {
 			network.Forwarding = runtime.ForwardingModern
 		}
-	case mcsmv1.Forwarding_FORWARDING_NONE:
-	case mcsmv1.Forwarding_FORWARDING_MODERN:
+	case noryxv1.Forwarding_FORWARDING_NONE:
+	case noryxv1.Forwarding_FORWARDING_MODERN:
 		network.Forwarding = runtime.ForwardingModern
-	case mcsmv1.Forwarding_FORWARDING_LEGACY:
+	case noryxv1.Forwarding_FORWARDING_LEGACY:
 		network.Forwarding = runtime.ForwardingLegacy
 	default:
 		return network, "invalid forwarding"
@@ -414,7 +414,7 @@ func networkOf(req *mcsmv1.ConfigureNetworkRequest) (runtime.Network, string) {
 		names[backend.Name] = true
 		network.Backends = append(network.Backends, backend)
 	}
-	if len(network.Try) == 0 && len(network.Backends) > 0 && req.GetForwarding() == mcsmv1.Forwarding_FORWARDING_UNSPECIFIED {
+	if len(network.Try) == 0 && len(network.Backends) > 0 && req.GetForwarding() == noryxv1.Forwarding_FORWARDING_UNSPECIFIED {
 		network.Try = []string{network.Backends[0].Name} // older masters let players join the first
 	}
 	if msg := checkNames(network.Try, names); msg != "" {
@@ -466,7 +466,7 @@ func (s *Service) apply(ctx context.Context, id string, op func(context.Context,
 // checkSettings returns a message for the operator if a setting is invalid. cpus is
 // the number of CPU cores of the node, or 0 if unknown.
 func checkSettings(spec runtime.Spec, cpus uint32) string {
-	_, knownPolicy := mcsmv1.RestartPolicy_name[int32(spec.RestartPolicy)]
+	_, knownPolicy := noryxv1.RestartPolicy_name[int32(spec.RestartPolicy)]
 	switch {
 	case !namePattern.MatchString(spec.Name):
 		return "Use 1-32 letters, digits, spaces, '.', '_' or '-' for the name."
@@ -502,8 +502,8 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 	return ""
 }
 
-func toProto(s runtime.Server) *mcsmv1.Server {
-	return &mcsmv1.Server{
+func toProto(s runtime.Server) *noryxv1.Server {
+	return &noryxv1.Server{
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
 		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
@@ -521,7 +521,7 @@ func toStatus(err error) error {
 	case errors.Is(err, runtime.ErrUnsupported):
 		return status.Error(codes.FailedPrecondition, "This type of server does not support that.")
 	case errors.Is(err, storage.ErrUnknown):
-		return status.Errorf(codes.InvalidArgument, "%s. Add it on the node with: mcsm-agent storage add", err)
+		return status.Errorf(codes.InvalidArgument, "%s. Add it on the node with: noryx-agent storage add", err)
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()
 	default:

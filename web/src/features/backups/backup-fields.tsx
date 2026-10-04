@@ -97,7 +97,7 @@ export function LocationField({
       <FieldDescription>
         <Trans
           i18nKey="Backups stay on the server's node, out of the server's reach. The node's administrator adds locations, e.g. on another disk, with <command/>."
-          components={{ command: <code className="font-mono text-xs">mcsm-agent storage add</code> }}
+          components={{ command: <code className="font-mono text-xs">noryx-agent storage add</code> }}
         />
       </FieldDescription>
     </Field>

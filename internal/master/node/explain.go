@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 // explained makes calls to the agent of a node fail with messages that name the node if it
@@ -49,7 +49,7 @@ func (s *Service) explain(id string, err error) error {
 		name = n.Name
 	}
 	for _, d := range st.Details() {
-		if info, ok := d.(*errdetails.ErrorInfo); ok && info.GetReason() == mcsmv1.ReasonRuntimeUnavailable {
+		if info, ok := d.(*errdetails.ErrorInfo); ok && info.GetReason() == noryxv1.ReasonRuntimeUnavailable {
 			return status.Errorf(codes.Unavailable, "Docker isn't running on %s, or its agent can't connect to it.", name)
 		}
 	}

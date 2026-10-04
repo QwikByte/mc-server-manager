@@ -1,20 +1,20 @@
-# MC Server Manager
+# Noryx
 
 All-in-one management for Minecraft servers and whole networks. One **master** with an admin panel
 controls **agents** on any number of dedicated servers.
 
 ```
                                    ┌──────────────── node: dedicated server ───────────────┐
- Browser ──HTTPS──▶ mcsm-master ───┼─gRPC + mTLS──▶ mcsm-agent ──▶ Docker: Paper, Velocity…│
+ Browser ──HTTPS──▶ noryx-master ──┼─gRPC + mTLS──▶ noryx-agent ─▶ Docker: Paper, Velocity…│
  (admin panel)      panel, REST API│                  ▲                                     │
                     enrollment     │  local CLI ──Unix socket                               │
                     SQLite, CA     └────────────────────────────────────────────────────────┘
 ```
 
-| Program       | Runs on              | Responsibility                                                                                     |
-| ------------- | -------------------- | -------------------------------------------------------------------------------------------------- |
-| `mcsm-master` | the panel host       | Admin panel (embedded), REST API, node registry, certificate authority, enrollment endpoint        |
-| `mcsm-agent`  | every dedicated host | Runs the Minecraft servers through a runtime (Docker), accepts commands from the master or its CLI |
+| Program        | Runs on              | Responsibility                                                                                     |
+| -------------- | -------------------- | -------------------------------------------------------------------------------------------------- |
+| `noryx-master` | the panel host       | Admin panel (embedded), REST API, node registry, certificate authority, enrollment endpoint        |
+| `noryx-agent`  | every dedicated host | Runs the Minecraft servers through a runtime (Docker), accepts commands from the master or its CLI |
 
 Servers run as containers based on [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server)
 (Vanilla, Paper, Purpur, Fabric, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy)
@@ -90,7 +90,7 @@ curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/latest/downlo
 It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), for the IP address
 and port the panel listens at (`--panel-addr`, `127.0.0.1:8080` by default, `0.0.0.0:<port>` for all interfaces, ports
 from 1024 on), and for the password of the first administrator, `admin` unless `--admin` names another (piped, it
-generates one and writes it to `/etc/mcsm/admin-password`, which only root can read). The password needs at least 12 characters and isn't shown while you type it. These options
+generates one and writes it to `/etc/noryx/admin-password`, which only root can read). The password needs at least 12 characters and isn't shown while you type it. These options
 only apply to a new installation; later, both addresses can be changed in the panel's settings.
 Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
 `cdn.modrinth.com`. Browsers only sign in over HTTPS or at `localhost`. Until the panel serves HTTPS, open it through an
@@ -105,7 +105,7 @@ panel.example.com {
 }
 ```
 
-Then add `--trusted-proxy 127.0.0.1` to `MCSM_MASTER_OPTS` in `/etc/mcsm/master.env`, so that the master takes the
+Then add `--trusted-proxy 127.0.0.1` to `NORYX_MASTER_OPTS` in `/etc/noryx/master.env`, so that the master takes the
 address of each client from the proxy's `X-Forwarded-For` header. Otherwise all clients share the proxy's address, and
 with it the budget of the sign-in rate limit, and the log shows only the proxy's address.
 
@@ -131,36 +131,36 @@ hour, shared with everything behind the same address), the master reads only the
 the panel links to the release notes on GitHub. On the command line, `… | sudo bash -s -- update` updates what is
 installed; update the master first, then the nodes.
 
-| Where                                         | What                                                                                           |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `/etc/mcsm/master.env`, `/etc/mcsm/agent.env` | Options of the services, e.g. listen addresses or a log file; `systemctl restart` applies them |
-| `/var/lib/mcsm-master`, `/var/lib/mcsm-agent` | Database and CA of the master; credentials, server data and backups of the agent               |
-| `journalctl -u mcsm-master`, `-u mcsm-agent`  | What the services log; `--log-format json` in the options suits log collectors                 |
+| Where                                           | What                                                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/etc/noryx/master.env`, `/etc/noryx/agent.env` | Options of the services, e.g. listen addresses or a log file; `systemctl restart` applies them |
+| `/var/lib/noryx-master`, `/var/lib/noryx-agent` | Database and CA of the master; credentials, server data and backups of the agent               |
+| `journalctl -u noryx-master`, `-u noryx-agent`  | What the services log; `--log-format json` in the options suits log collectors                 |
 
-**Commands on the master's host** run as the master's user `mcsm`: `sudo -u mcsm mcsm-master logs` shows the log,
+**Commands on the master's host** run as the master's user `noryx`: `sudo -u noryx noryx-master logs` shows the log,
 `… user add <name>` creates an administrator, e.g. after losing access,
 `… node add <name> <agent-address> --public-enroll-addr <host:port>` adds a node and prints its join token for scripts,
 and `… backup <file>` saves the master's database and CA (see [Backups](#backups)).
 
-**Commands on a node:** `sudo mcsm-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the
+**Commands on a node:** `sudo noryx-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the
 agent's own log. `backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is
-unreachable too. `storage add ssd /mnt/ssd/mcsm` allows another directory for server data, e.g. on a faster disk; new
+unreachable too. `storage add ssd /mnt/ssd/noryx` allows another directory for server data, e.g. on a faster disk; new
 servers can then be created there from the panel, and backup jobs can keep their backups there.
 
-**Removing.** `apt remove`, `dnf remove` or `pacman -R` with `mcsm-master` or `mcsm-agent` stops and removes a program
-but keeps its data. Delete `/var/lib/mcsm-master`, `/var/lib/mcsm-agent` and `/etc/mcsm` to remove that too. The
+**Removing.** `apt remove`, `dnf remove` or `pacman -R` with `noryx-master` or `noryx-agent` stops and removes a program
+but keeps its data. Delete `/var/lib/noryx-master`, `/var/lib/noryx-agent` and `/etc/noryx` to remove that too. The
 Minecraft servers of a node keep running in Docker; delete them in the panel before.
 
 **By hand.** Each release also has `.tar.gz` archives with the static binary, its systemd unit and its options, for
-other distributions: the unit expects the binary in `/usr/bin`, the options in `/etc/mcsm` and, for the master, a system
-user `mcsm`. `checksums.txt` lists the SHA-256 checksums of all files, and
+other distributions: the unit expects the binary in `/usr/bin`, the options in `/etc/noryx` and, for the master, a system
+user `noryx`. `checksums.txt` lists the SHA-256 checksums of all files, and
 `gh attestation verify <file> --repo QwikByte/mc-server-manager` proves that a file was built by the release workflow.
 `checksums.txt.sig` is the signature of the checksums, which the installer checks with the release key. To check files
 by hand, e.g. `install.sh` before the first installation, download `checksums.txt` and `checksums.txt.sig` too:
 
 ```sh
-printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA18ilyBW0qkWpfEqFR+rW5eQeGC3Sif4OiD8RKpEry5s=\n-----END PUBLIC KEY-----\n' > mcsm-release.pem
-openssl pkeyutl -verify -pubin -inkey mcsm-release.pem -rawin -in checksums.txt -sigfile checksums.txt.sig
+printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA18ilyBW0qkWpfEqFR+rW5eQeGC3Sif4OiD8RKpEry5s=\n-----END PUBLIC KEY-----\n' > noryx-release.pem
+openssl pkeyutl -verify -pubin -inkey noryx-release.pem -rawin -in checksums.txt -sigfile checksums.txt.sig
 sha256sum -c --ignore-missing checksums.txt
 ```
 
@@ -203,22 +203,22 @@ its worlds to disk first and pauses saving while they are archived, so players s
 - **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds
   and leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
   stopped while the files are swapped, and started again afterwards.
-- Deleting a server deletes its backups too. Locally, `mcsm-agent backup list|create|restore` works without the
+- Deleting a server deletes its backups too. Locally, `noryx-agent backup list|create|restore` works without the
   master, e.g. to restore a server while the master is unreachable.
 
 **The master** keeps users, nodes, networks, templates, backup jobs, policies, settings and the log in its database, and
 the certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling every node again.
-`sudo -u mcsm mcsm-master backup <file>` saves both in a `.tar.gz` archive, also while the master runs; with `-`
-instead of a file, it writes the archive to stdout, e.g. for `ssh master 'sudo -u mcsm mcsm-master backup -' > master.tar.gz`
+`sudo -u noryx noryx-master backup <file>` saves both in a `.tar.gz` archive, also while the master runs; with `-`
+instead of a file, it writes the archive to stdout, e.g. for `ssh master 'sudo -u noryx noryx-master backup -' > master.tar.gz`
 on another machine. The CA's private key lets anyone control the agents, so keep the archive as safe as the master. To
 restore it, e.g. on a new machine after `install.sh master`:
 
 ```sh
-sudo systemctl stop mcsm-master
-sudo rm -f /var/lib/mcsm-master/master.db-wal /var/lib/mcsm-master/master.db-shm
-sudo tar -xzf master.tar.gz -C /var/lib/mcsm-master
-sudo chown -R mcsm:mcsm /var/lib/mcsm-master
-sudo systemctl start mcsm-master
+sudo systemctl stop noryx-master
+sudo rm -f /var/lib/noryx-master/master.db-wal /var/lib/noryx-master/master.db-shm
+sudo tar -xzf master.tar.gz -C /var/lib/noryx-master
+sudo chown -R noryx:noryx /var/lib/noryx-master
+sudo systemctl start noryx-master
 ```
 
 The nodes keep working with the restored master. If its IP address changed, allow the new one on port 7443 of the nodes.
@@ -320,8 +320,8 @@ The master keeps a log of what happens on it and on its agents, so that it's cle
   of the last 24 hours; selecting an hour shows its entries. The entries are exported as CSV or JSON lines.
 - **Everywhere else.** A bell in the sidebar counts the new warnings and errors, and new ones show up as notifications,
   except those of the user's own actions. Servers have an **Activity** tab and nodes an **Activity** section.
-- **Command line.** `mcsm-master logs` and the terminal's `logs` command show the log with the same filters, also as
-  JSON lines and following new entries with `-f`. `mcsm-agent logs [-f]` shows an agent's own log, also while the master
+- **Command line.** `noryx-master logs` and the terminal's `logs` command show the log with the same filters, also as
+  JSON lines and following new entries with `-f`. `noryx-agent logs [-f]` shows an agent's own log, also while the master
   is unreachable.
 - **Console and files.** Master and agent log to stderr as text or, with `--log-format json`, as JSON; `--log-level`
   chooses the least important level (`info` by default) and `--log-file` also writes JSON lines to a file, which is
@@ -353,7 +353,7 @@ only shows to users with the permission for it.
   range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can also look
   for an update right away.
 - **Agents** lists all nodes with their agent version, certificate and settings, which can be changed there too.
-- **Terminal** runs the commands of `mcsm-agent` (`status`, `server …`, `backup …`) on any node, and the master's own
+- **Terminal** runs the commands of `noryx-agent` (`status`, `server …`, `backup …`) on any node, and the master's own
   commands: `status`, `node list`, `node renew <node>` and `logs`. `help` lists them; output streams in as it happens, e.g.
   for `server logs <id>`, and Ctrl+C stops a command. A node's page opens its terminal directly. Besides the
   permission to use the terminal, every command needs its own, e.g. `server restart <id>` that to restart this server.
@@ -378,7 +378,7 @@ Users get their permissions from groups; a user can be in several groups and has
   because they act on any server.
 - **Administrators.** The built-in Administrators group has every permission, also those that later versions add.
   Only its members see and install updates; no permission allows that to other groups.
-  `mcsm-master user add` creates administrators, e.g. the first one or after losing access. Existing users became
+  `noryx-master user add` creates administrators, e.g. the first one or after losing access. Existing users became
   administrators with this version.
 - **Invitations.** New users get a setup link (valid for three days, usable once) to choose their password; the same
   link resets a forgotten password. The token is in the link's fragment, which browsers don't send to servers, and the
@@ -390,13 +390,13 @@ Users get their permissions from groups; a user can be in several groups and has
   password, and other sessions end. A setup link then only sets the password; signing in still needs a code. Turning
   it off and new recovery codes need the password. Users who may manage a
   user turn it off for them, e.g. after they lost their phone and recovery codes, but not for themselves; without any
-  administrator who can still sign in, `mcsm-master user add` creates a new one.
+  administrator who can still sign in, `noryx-master user add` creates a new one.
 
 ## Security model
 
 - **Own CA.** The master creates an Ed25519 certificate authority on first start. All master ↔ agent traffic is
-  TLS 1.3 with mutual authentication. Identities are names, not IPs (`master.mcsm.internal`,
-  `<node-id>.node.mcsm.internal`), so nodes can change their address without re-enrolling.
+  TLS 1.3 with mutual authentication. Identities are names, not IPs (`master.noryx.internal`,
+  `<node-id>.node.noryx.internal`), so nodes can change their address without re-enrolling.
 - **Short-lived certificates.** Master and node certificates are valid for 90 days and renewed automatically once
   a third of their lifetime is left. For a node, the agent creates the new key and only sends a signing request; it
   installs the signed certificate after checking it, without a restart. The panel can renew a node on demand.
@@ -434,7 +434,7 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Containers.** Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images
   need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`, for proxies also `DAC_READ_SEARCH`.
   Servers of a node can't reach each other: they share a Docker network without communication between containers
-  (`mcsm-servers`), and a Velocity proxy shares another one only with its backends on the node. Containers created by
+  (`noryx-servers`), and a Velocity proxy shares another one only with its backends on the node. Containers created by
   earlier versions move into these networks when the agent starts, and leave the old shared network `mcsm` when the
   agent starts them again, so that no player is disconnected; their capabilities change once they are created again,
   e.g. by changing their settings or with **Apply again** for a network.
@@ -487,7 +487,7 @@ Users get their permissions from groups; a user can be in several groups and has
   `server.properties` and connects to the server's console port inside Docker's network; the password never leaves
   the node.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
-  (`mcsm-agent storage add`). The panel can only choose among these locations, so a compromised master can't
+  (`noryx-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
 - **Installation.** The installer only runs once it is downloaded completely, downloads only over HTTPS from the
   releases and installs a package only if its SHA-256 checksum matches the release's `checksums.txt`, and only if the
@@ -498,19 +498,19 @@ Users get their permissions from groups; a user can be in several groups and has
   unit, and refuses a data directory of another user, so a command run as root can't leave files there that lock the
   master out.
 - **Updates.** The master can't install anything itself. To update, it only creates a file that makes systemd start
-  `mcsm-master-update`, which runs as root but takes no input from the master: it installs the latest release with the
+  `noryx-master-update`, which runs as root but takes no input from the master: it installs the latest release with the
   installer of the installed package, checking the signature and the checksums. Agents only install releases newer than
   themselves, so even a compromised master can't downgrade a node to a vulnerable version, and the version must have the
-  form of a release. `systemctl mask mcsm-master-update.path` forbids updates from the panel.
+  form of a release. `systemctl mask noryx-master-update.path` forbids updates from the panel.
 
 ## Repository layout
 
 The code is organised by feature, not by layer.
 
 ```
-api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, plugins, backups, log, stats) and generated code
-cmd/mcsm-master/        master binary
-cmd/mcsm-agent/         agent binary
+api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, plugins, backups, log, stats) and generated code
+cmd/noryx-master/        master binary
+cmd/noryx-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
 internal/enrollment/    join token format (shared)
 internal/agentcli/      commands that control a running agent, for its local CLI and the panel's terminal (shared)
@@ -569,7 +569,7 @@ Go, Node.js and Docker when missing, builds everything, starts master and agent 
 Requirements: Go 1.27, Node.js 22. Nodes need Docker.
 
 ```sh
-go run ./cmd/mcsm-master --data-dir .data/master user add admin   # once, prompts for a password
+go run ./cmd/noryx-master --data-dir .data/master user add admin   # once, prompts for a password
 make dev-master                                                    # API on :8080, enrollment on :9443
 make dev-web                                                       # panel on http://localhost:5173
 ```
@@ -578,8 +578,8 @@ In the panel, add a node with the agent address `127.0.0.1:7443` and enroll the 
 panel shows under "Installed the agent another way?":
 
 ```sh
-go run ./cmd/mcsm-agent --data-dir .data/agent enroll <join-token>
-go run ./cmd/mcsm-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
+go run ./cmd/noryx-agent --data-dir .data/agent enroll <join-token>
+go run ./cmd/noryx-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 ```
 
 | Command         | Purpose                                                                        |

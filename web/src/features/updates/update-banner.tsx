@@ -53,7 +53,7 @@ export function UpdateBanner() {
 function Available({ status, release }: { status: UpdateStatus; release: Release }) {
   const install = useUpdateAction("master")
   return (
-    <Callout icon={SparkleIcon} title={t("MC Server Manager {{version}} is available", { version: release.version })}>
+    <Callout icon={SparkleIcon} title={t("Noryx {{version}} is available", { version: release.version })}>
       <p>
         {[
           t("You run {{version}}.", { version: status.version }),

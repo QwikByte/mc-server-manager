@@ -19,7 +19,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
@@ -137,7 +137,7 @@ func (p Policies) Run(ctx context.Context, t schedule.Task, servers schedule.Ser
 		}
 		say := "say " + strings.ReplaceAll(s.Message, "{minutes}", strconv.FormatUint(uint64(minutes), 10))
 		for _, srv := range list {
-			if srv.GetState() == mcsmv1.ServerState_SERVER_STATE_RUNNING && !srv.GetType().Proxy() && concerns(s, srv) {
+			if srv.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING && !srv.GetType().Proxy() && concerns(s, srv) {
 				_ = p.call(ctx, srv, command, say) // a server that misses a warning restarts anyway
 			}
 		}
@@ -170,12 +170,12 @@ func (p Policies) Run(ctx context.Context, t schedule.Task, servers schedule.Ser
 // concerns tells whether a policy applies to a server in its current state. Console commands
 // go to game servers only, as proxies don't know theirs, such as say.
 func concerns(s Settings, srv schedule.Server) bool {
-	stopped := srv.GetState() == mcsmv1.ServerState_SERVER_STATE_STOPPED
+	stopped := srv.GetState() == noryxv1.ServerState_SERVER_STATE_STOPPED
 	switch s.Action {
 	case start:
 		return stopped
 	case command:
-		return srv.GetState() == mcsmv1.ServerState_SERVER_STATE_RUNNING && !srv.GetType().Proxy()
+		return srv.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING && !srv.GetType().Proxy()
 	}
 	return !stopped
 }
@@ -187,16 +187,16 @@ func (p Policies) call(ctx context.Context, srv schedule.Server, action, cmd str
 	if err != nil {
 		return err
 	}
-	c, id := mcsmv1.NewServerServiceClient(conn), srv.GetId()
+	c, id := noryxv1.NewServerServiceClient(conn), srv.GetId()
 	switch action {
 	case restart:
-		_, err = c.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
+		_, err = c.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
 	case stop:
-		_, err = c.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
+		_, err = c.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
 	case start:
-		_, err = c.StartServer(ctx, &mcsmv1.StartServerRequest{Id: id})
+		_, err = c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
 	default:
-		_, err = c.SendCommand(ctx, &mcsmv1.SendCommandRequest{Id: id, Command: cmd})
+		_, err = c.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: cmd})
 	}
 	return err
 }

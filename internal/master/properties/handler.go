@@ -9,7 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -43,7 +43,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.GetServerProperties(ctx, &mcsmv1.GetServerPropertiesRequest{ServerId: r.PathValue("id")})
+	res, err := c.GetServerProperties(ctx, &noryxv1.GetServerPropertiesRequest{ServerId: r.PathValue("id")})
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -74,7 +74,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	c, err := h.client(ctx, r)
 	if err == nil {
-		_, err = c.UpdateServerProperties(ctx, &mcsmv1.UpdateServerPropertiesRequest{ServerId: r.PathValue("id"), Properties: req.Properties})
+		_, err = c.UpdateServerProperties(ctx, &noryxv1.UpdateServerPropertiesRequest{ServerId: r.PathValue("id"), Properties: req.Properties})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -83,10 +83,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) client(ctx context.Context, r *http.Request) (mcsmv1.PropertiesServiceClient, error) {
+func (h *Handler) client(ctx context.Context, r *http.Request) (noryxv1.PropertiesServiceClient, error) {
 	conn, err := h.nodes.Conn(ctx, r.PathValue("node"))
 	if err != nil {
 		return nil, err
 	}
-	return mcsmv1.NewPropertiesServiceClient(conn), nil
+	return noryxv1.NewPropertiesServiceClient(conn), nil
 }

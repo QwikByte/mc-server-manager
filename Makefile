@@ -13,10 +13,10 @@ web:
 	cd web && npm ci && npm run build
 
 master:
-	$(GOBUILD) -tags ui -o bin/mcsm-master ./cmd/mcsm-master
+	$(GOBUILD) -tags ui -o bin/noryx-master ./cmd/noryx-master
 
 agent:
-	$(GOBUILD) -o bin/mcsm-agent ./cmd/mcsm-agent
+	$(GOBUILD) -o bin/noryx-agent ./cmd/noryx-agent
 
 ## generate: regenerate the gRPC code from api/**/*.proto
 generate:
@@ -36,7 +36,7 @@ packages:
 
 ## dev-master: run the master with a local data directory (API on :8080, enrollment on :9443)
 dev-master:
-	go run ./cmd/mcsm-master --data-dir .data/master serve --public-enroll-addr 127.0.0.1:9443
+	go run ./cmd/noryx-master --data-dir .data/master serve --public-enroll-addr 127.0.0.1:9443
 
 ## dev-web: run the Vite dev server, proxying /api to the master
 dev-web:

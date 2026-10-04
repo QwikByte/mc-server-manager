@@ -1,0 +1,8 @@
+[Unit]
+Description=Update Noryx when the panel asks for it
+Documentation=https://github.com/QwikByte/mc-server-manager
+
+[Path]
+# The master may not install anything itself; it only creates this file. To forbid
+# updates from the panel: systemctl mask noryx-master-update.path
+PathExists=/var/lib/noryx-master/update-request

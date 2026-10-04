@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
@@ -82,7 +82,7 @@ func (s *Store) read(ctx context.Context, nodes Nodes, nodeID string, limiter *r
 	if err != nil {
 		return err
 	}
-	stream, err := mcsmv1.NewLogServiceClient(conn).ReadLog(ctx, &mcsmv1.ReadLogRequest{Boot: boot, After: seq, Follow: true})
+	stream, err := noryxv1.NewLogServiceClient(conn).ReadLog(ctx, &noryxv1.ReadLogRequest{Boot: boot, After: seq, Follow: true})
 	if err != nil {
 		return err
 	}

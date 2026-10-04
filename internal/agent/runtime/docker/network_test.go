@@ -6,7 +6,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
 
@@ -20,19 +20,19 @@ func TestPlacement(t *testing.T) {
 		}
 		return c
 	}
-	proxy := runtime.Spec{ID: "proxy", Type: mcsmv1.ServerType_SERVER_TYPE_VELOCITY}
-	backend := runtime.Spec{ID: "lobby", Type: mcsmv1.ServerType_SERVER_TYPE_PAPER, BehindProxy: true}
-	standalone := runtime.Spec{ID: "survival", Type: mcsmv1.ServerType_SERVER_TYPE_PAPER}
+	proxy := runtime.Spec{ID: "proxy", Type: noryxv1.ServerType_SERVER_TYPE_VELOCITY}
+	backend := runtime.Spec{ID: "lobby", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, BehindProxy: true}
+	standalone := runtime.Spec{ID: "survival", Type: noryxv1.ServerType_SERVER_TYPE_PAPER}
 	for _, tc := range []struct {
 		name string
 		c    container.InspectResponse
 		spec runtime.Spec
 		want string
 	}{
-		{"proxy", in(sharedNetwork), proxy, "mcsm-proxy-proxy"},
-		{"backend", in("mcsm-proxy-proxy"), backend, "mcsm-proxy-proxy"},
+		{"proxy", in(sharedNetwork), proxy, "noryx-proxy-proxy"},
+		{"backend", in("noryx-proxy-proxy"), backend, "noryx-proxy-proxy"},
 		{"backend of an older agent", in(legacyNetwork), backend, sharedNetwork},
-		{"backend that left its network", in("mcsm-proxy-proxy"), standalone, sharedNetwork},
+		{"backend that left its network", in("noryx-proxy-proxy"), standalone, sharedNetwork},
 		{"standalone", in(sharedNetwork), standalone, sharedNetwork},
 	} {
 		if got := placement(tc.c, tc.spec); got != tc.want {

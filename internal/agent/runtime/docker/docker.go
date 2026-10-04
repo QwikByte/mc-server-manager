@@ -25,15 +25,15 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
 
 const (
-	labelManaged = "io.mcsm.managed"
-	labelSpec    = "io.mcsm.spec"
+	labelManaged = "io.noryx.managed"
+	labelSpec    = "io.noryx.spec"
 
 	serverImage = "itzg/minecraft-server"
 	proxyImage  = "itzg/mc-proxy"
@@ -59,16 +59,16 @@ var capabilities = map[string][]string{
 	proxyImage:  {"CHOWN", "SETUID", "SETGID", "DAC_READ_SEARCH"},
 }
 
-var images = map[mcsmv1.ServerType]image{
-	mcsmv1.ServerType_SERVER_TYPE_VANILLA:    {serverImage, "VANILLA", 25565, "/data"},
-	mcsmv1.ServerType_SERVER_TYPE_PAPER:      {serverImage, "PAPER", 25565, "/data"},
-	mcsmv1.ServerType_SERVER_TYPE_PURPUR:     {serverImage, "PURPUR", 25565, "/data"},
-	mcsmv1.ServerType_SERVER_TYPE_FABRIC:     {serverImage, "FABRIC", 25565, "/data"},
-	mcsmv1.ServerType_SERVER_TYPE_FORGE:      {serverImage, "FORGE", 25565, "/data"},
-	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {serverImage, "NEOFORGE", 25565, "/data"},
-	mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   {proxyImage, "VELOCITY", 25565, "/server"},
-	mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: {proxyImage, "BUNGEECORD", 25577, "/server"},
-	mcsmv1.ServerType_SERVER_TYPE_WATERFALL:  {proxyImage, "WATERFALL", 25577, "/server"},
+var images = map[noryxv1.ServerType]image{
+	noryxv1.ServerType_SERVER_TYPE_VANILLA:    {serverImage, "VANILLA", 25565, "/data"},
+	noryxv1.ServerType_SERVER_TYPE_PAPER:      {serverImage, "PAPER", 25565, "/data"},
+	noryxv1.ServerType_SERVER_TYPE_PURPUR:     {serverImage, "PURPUR", 25565, "/data"},
+	noryxv1.ServerType_SERVER_TYPE_FABRIC:     {serverImage, "FABRIC", 25565, "/data"},
+	noryxv1.ServerType_SERVER_TYPE_FORGE:      {serverImage, "FORGE", 25565, "/data"},
+	noryxv1.ServerType_SERVER_TYPE_NEOFORGE:   {serverImage, "NEOFORGE", 25565, "/data"},
+	noryxv1.ServerType_SERVER_TYPE_VELOCITY:   {proxyImage, "VELOCITY", 25565, "/server"},
+	noryxv1.ServerType_SERVER_TYPE_BUNGEECORD: {proxyImage, "BUNGEECORD", 25577, "/server"},
+	noryxv1.ServerType_SERVER_TYPE_WATERFALL:  {proxyImage, "WATERFALL", 25577, "/server"},
 }
 
 // Docker implements runtime.Runtime. Container labels are the only state:
@@ -124,16 +124,16 @@ func specOf(labels map[string]string) (runtime.Spec, bool) {
 	return spec, json.Unmarshal([]byte(labels[labelSpec]), &spec) == nil
 }
 
-func state(c container.Summary) mcsmv1.ServerState {
+func state(c container.Summary) noryxv1.ServerState {
 	switch {
 	case c.State == container.StateRestarting: // after a crash, until Docker starts it again
-		return mcsmv1.ServerState_SERVER_STATE_CRASHING
+		return noryxv1.ServerState_SERVER_STATE_CRASHING
 	case c.State != container.StateRunning:
-		return mcsmv1.ServerState_SERVER_STATE_STOPPED
+		return noryxv1.ServerState_SERVER_STATE_STOPPED
 	case c.Health != nil && c.Health.Status == container.Starting:
-		return mcsmv1.ServerState_SERVER_STATE_STARTING
+		return noryxv1.ServerState_SERVER_STATE_STARTING
 	default:
-		return mcsmv1.ServerState_SERVER_STATE_RUNNING
+		return noryxv1.ServerState_SERVER_STATE_RUNNING
 	}
 }
 
@@ -195,11 +195,11 @@ func imageRef(spec runtime.Spec) string {
 	return img.ref + ":latest"
 }
 
-var restartPolicies = map[mcsmv1.RestartPolicy]container.RestartPolicyMode{
-	mcsmv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED: container.RestartPolicyUnlessStopped,
-	mcsmv1.RestartPolicy_RESTART_POLICY_ALWAYS:      container.RestartPolicyUnlessStopped,
-	mcsmv1.RestartPolicy_RESTART_POLICY_ON_CRASH:    container.RestartPolicyOnFailure,
-	mcsmv1.RestartPolicy_RESTART_POLICY_NEVER:       container.RestartPolicyDisabled,
+var restartPolicies = map[noryxv1.RestartPolicy]container.RestartPolicyMode{
+	noryxv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED: container.RestartPolicyUnlessStopped,
+	noryxv1.RestartPolicy_RESTART_POLICY_ALWAYS:      container.RestartPolicyUnlessStopped,
+	noryxv1.RestartPolicy_RESTART_POLICY_ON_CRASH:    container.RestartPolicyOnFailure,
+	noryxv1.RestartPolicy_RESTART_POLICY_NEVER:       container.RestartPolicyDisabled,
 }
 
 // createContainer creates the container of a server whose image and data directory exist,
@@ -469,7 +469,7 @@ func (d *Docker) owner(spec runtime.Spec) (string, error) {
 	return fmt.Sprintf("%d:%d", st.Uid, st.Gid), nil
 }
 
-func containerName(id string) string { return "mcsm-" + id }
+func containerName(id string) string { return "noryx-" + id }
 
 func notFound(err error) error {
 	if cerrdefs.IsNotFound(err) {

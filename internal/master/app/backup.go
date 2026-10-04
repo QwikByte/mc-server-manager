@@ -19,7 +19,7 @@ import (
 // The archive holds the CA's private key, so the file is only readable by its owner.
 func backupMaster(ctx context.Context, cfg config, target string) (err error) {
 	if target == "-" && term.IsTerminal(int(os.Stdout.Fd())) {
-		return errors.New("redirect the backup to a file, e.g. mcsm-master backup - > master-backup.tar.gz")
+		return errors.New("redirect the backup to a file, e.g. noryx-master backup - > master-backup.tar.gz")
 	}
 	if _, err := os.Stat(filepath.Join(cfg.dataDir, "master.db")); err != nil {
 		return fmt.Errorf("no master in %s, set its --data-dir: %w", cfg.dataDir, err)
@@ -29,7 +29,7 @@ func backupMaster(ctx context.Context, cfg config, target string) (err error) {
 		return err
 	}
 	defer db.Close()
-	tmp, err := os.MkdirTemp("", "mcsm-master-backup-")
+	tmp, err := os.MkdirTemp("", "noryx-master-backup-")
 	if err != nil {
 		return err
 	}

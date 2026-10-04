@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agentcli"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
@@ -39,7 +39,7 @@ type Nodes interface {
 	List(ctx context.Context) ([]node.Node, error)
 	Get(ctx context.Context, id string) (node.Node, error)
 	Conn(ctx context.Context, id string) (grpc.ClientConnInterface, error)
-	Status(ctx context.Context, id string) (*mcsmv1.GetInfoResponse, *x509.Certificate, error)
+	Status(ctx context.Context, id string) (*noryxv1.GetInfoResponse, *x509.Certificate, error)
 	RenewCertificate(ctx context.Context, id string) (*x509.Certificate, error)
 }
 
@@ -132,7 +132,7 @@ func parse(line string) ([]string, error) {
 // checks the permission it needs before it runs.
 func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, error) {
 	if target == MasterTarget {
-		root := guarded("mcsm-master", "Commands of the master. Choose a node to run the commands of its agent.", h.masterChecks())
+		root := guarded("noryx-master", "Commands of the master. Choose a node to run the commands of its agent.", h.masterChecks())
 		root.AddCommand(h.masterCommands()...)
 		return root, nil
 	}
@@ -143,7 +143,7 @@ func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, erro
 	if err != nil {
 		return nil, err
 	}
-	root := guarded("mcsm-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations can only be changed on the node itself.", n.Name), agentChecks(n.ID, h.moving))
+	root := guarded("noryx-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations can only be changed on the node itself.", n.Name), agentChecks(n.ID, h.moving))
 	root.AddCommand(agentcli.Commands(func(ctx context.Context, fn func(grpc.ClientConnInterface) error) error {
 		conn, err := h.nodes.Conn(ctx, n.ID)
 		if err != nil {

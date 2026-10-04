@@ -32,7 +32,7 @@ func TestHandler(t *testing.T) {
 }
 
 func TestRotatingFile(t *testing.T) {
-	name := filepath.Join(t.TempDir(), "mcsm.log")
+	name := filepath.Join(t.TempDir(), "noryx.log")
 	f, err := openRotating(name)
 	if err != nil {
 		t.Fatal(err)

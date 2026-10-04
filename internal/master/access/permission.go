@@ -57,7 +57,7 @@ const (
 )
 
 // Administrators is no permission but the built-in group, for what only its members may do,
-// e.g. updating MC Server Manager. Groups can't be given it.
+// e.g. updating Noryx. Groups can't be given it.
 const Administrators Permission = "administrators"
 
 // Info describes a permission for the panel.

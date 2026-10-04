@@ -31,7 +31,7 @@ func TestTOTP(t *testing.T) {
 	if _, ok := matchTOTP(secret, totp(key, step), now, step); ok {
 		t.Error("used code accepted again")
 	}
-	if uri := totpURI("alice", secret); uri != "otpauth://totp/MC%20Server%20Manager:alice?issuer=MC%20Server%20Manager&secret="+secret {
+	if uri := totpURI("alice", secret); uri != "otpauth://totp/Noryx:alice?issuer=Noryx&secret="+secret {
 		t.Errorf("uri = %s", uri)
 	}
 }

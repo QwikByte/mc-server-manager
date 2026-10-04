@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -25,19 +25,19 @@ const (
 	Restart = "restart"
 )
 
-type serverCall func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error
+type serverCall func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error
 
 var (
-	start = func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.StartServer(ctx, &mcsmv1.StartServerRequest{Id: id})
+	start = func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
+		_, err := c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
 		return err
 	}
-	stop = func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
+	stop = func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
+		_, err := c.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
 		return err
 	}
-	restart = func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
+	restart = func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
+		_, err := c.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
 		return err
 	}
 )
@@ -65,8 +65,8 @@ func (s *Service) Broadcast(ctx context.Context, n Network, text string) error {
 	if text == "" || len(text) > maxBroadcast || strings.ContainsFunc(text, unicode.IsControl) {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a message of up to %d characters.", maxBroadcast)
 	}
-	return s.each(ctx, n.Backends, func(ctx context.Context, c mcsmv1.ServerServiceClient, id string) error {
-		_, err := c.SendCommand(ctx, &mcsmv1.SendCommandRequest{Id: id, Command: "say " + text})
+	return s.each(ctx, n.Backends, func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
+		_, err := c.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: "say " + text})
 		if status.Code(err) == codes.FailedPrecondition {
 			return nil // a stopped server has no players
 		}
@@ -84,7 +84,7 @@ func (s *Service) each(ctx context.Context, servers []Backend, call serverCall) 
 			defer cancel()
 			conn, err := s.nodes.Conn(ctx, b.NodeID)
 			if err == nil {
-				err = call(ctx, mcsmv1.NewServerServiceClient(conn), b.ServerID)
+				err = call(ctx, noryxv1.NewServerServiceClient(conn), b.ServerID)
 			}
 			if err != nil {
 				errs[i] = fmt.Errorf("%s: %s", b.Name, message(err))
