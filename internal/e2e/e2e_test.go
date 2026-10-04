@@ -48,6 +48,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/schedule"
 	"github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/settings"
+	"github.com/QwikByte/noryx/internal/master/tag"
 	"github.com/QwikByte/noryx/internal/master/template"
 	"github.com/QwikByte/noryx/internal/master/update"
 	"github.com/QwikByte/noryx/internal/master/usage"
@@ -227,7 +228,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
 		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
-		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes),
+		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes), Tags: tag.NewStore(m.db),
 		Moves: moves,
 	}
 }

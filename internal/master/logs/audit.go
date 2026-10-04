@@ -52,6 +52,8 @@ var actions = map[string]action{
 	"POST /api/nodes/{id}/join-token":            {logging.Nodes, "Create join token"},
 	"POST /api/nodes/{id}/certificate":           {logging.Nodes, "Renew node certificate"},
 	"POST /api/nodes/{node}/servers":             {logging.Servers, "Create server"},
+	"POST /api/servers/actions":                  {logging.Servers, "Run action on servers"},
+	"POST /api/servers/tags":                     {logging.Servers, "Change server tags"},
 	"PUT " + routeServer:                         {logging.Servers, "Change server settings"},
 	"POST " + routeServer + "/update-image":      {logging.Servers, "Update server image"},
 	"DELETE " + routeServer:                      {logging.Servers, "Delete server"},

@@ -1,0 +1,211 @@
+package server
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"google.golang.org/grpc/status"
+
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/tag"
+)
+
+const (
+	maxBulk     = 500
+	bulkTimeout = 10 * time.Minute
+	// perNode is how many servers of a node a bulk action handles at a time, so that
+	// starting all its servers doesn't overwhelm a node.
+	perNode = 8
+)
+
+// bulkAction is an action on many servers and the permission it needs on each.
+type bulkAction struct {
+	need access.Permission
+	call func(ctx context.Context, c noryxv1.ServerServiceClient, id, command string) error
+}
+
+var bulkActions = map[string]bulkAction{
+	"start": {access.ServersStart, func(ctx context.Context, c noryxv1.ServerServiceClient, id, _ string) error {
+		_, err := c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
+		return err
+	}},
+	"stop": {access.ServersStop, func(ctx context.Context, c noryxv1.ServerServiceClient, id, _ string) error {
+		_, err := c.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
+		return err
+	}},
+	"restart": {access.ServersRestart, func(ctx context.Context, c noryxv1.ServerServiceClient, id, _ string) error {
+		_, err := c.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
+		return err
+	}},
+	"command": {access.ConsoleCommands, func(ctx context.Context, c noryxv1.ServerServiceClient, id, command string) error {
+		_, err := c.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: command})
+		return err
+	}},
+}
+
+// bulkResult tells how an action ended on one server.
+type bulkResult struct {
+	tag.Server
+	Error string `json:"error,omitempty"`
+}
+
+// bulk starts, stops or restarts servers, or sends them a console command, and tells how it
+// ended on each. It finishes even if the browser goes away.
+func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Action  string       `json:"action"`
+		Command string       `json:"command"`
+		Servers []tag.Server `json:"servers"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	action, ok := bulkActions[req.Action]
+	switch {
+	case !ok:
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose start, stop, restart or command."))
+		return
+	case req.Action == "command" && strings.TrimSpace(req.Command) == "":
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Enter a command."))
+		return
+	}
+	if err := checkServers(r, req.Servers, action.need); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	logging.Note(r.Context(), slog.String("action", req.Action), slog.String("command", req.Command), slog.Int("servers", len(req.Servers)))
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), bulkTimeout)
+	defer cancel()
+	slots := map[string]chan struct{}{}
+	for _, s := range req.Servers {
+		if slots[s.NodeID] == nil {
+			slots[s.NodeID] = make(chan struct{}, perNode)
+		}
+	}
+	results := make([]bulkResult, len(req.Servers))
+	var wg sync.WaitGroup
+	for i, s := range req.Servers {
+		wg.Go(func() {
+			slots[s.NodeID] <- struct{}{}
+			defer func() { <-slots[s.NodeID] }()
+			results[i].Server = s
+			err := h.moves.Check(s.ServerID)
+			if err == nil {
+				var conn noryxv1.ServerServiceClient
+				if conn, err = h.serverClient(ctx, s.NodeID); err == nil {
+					err = action.call(ctx, conn, s.ServerID, req.Command)
+				}
+			}
+			if err != nil {
+				results[i].Error = message(err)
+			}
+		})
+	}
+	wg.Wait()
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// changeTags adds and removes tags of servers, all or none of them.
+func (h *Handler) changeTags(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Servers []tag.Server `json:"servers"`
+		Add     []string     `json:"add"`
+		Remove  []string     `json:"remove"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	if len(req.Add)+len(req.Remove) > 2*tag.MaxPerServer {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "A server can have up to %d tags.", tag.MaxPerServer))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+	err := checkServers(r, req.Servers, access.ServersSettings)
+	if err == nil {
+		err = h.checkExist(ctx, req.Servers)
+	}
+	if err == nil {
+		err = h.tags.Change(ctx, req.Servers, req.Add, req.Remove)
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	logging.Note(r.Context(), slog.Int("servers", len(req.Servers)), slog.Any("add", req.Add), slog.Any("remove", req.Remove))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// checkServers checks that a bulk request names up to maxBulk different servers, on each of
+// which the user has the permission.
+func checkServers(r *http.Request, servers []tag.Server, need access.Permission) error {
+	if len(servers) == 0 || len(servers) > maxBulk {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d servers.", maxBulk)
+	}
+	grants, seen := access.From(r.Context()), map[tag.Server]bool{}
+	for _, s := range servers {
+		if s.NodeID == "" || s.ServerID == "" || seen[s] {
+			return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", maxBulk)
+		}
+		seen[s] = true
+		if !grants.On(need, s.NodeID, s.ServerID) {
+			return access.Denied(need)
+		}
+	}
+	return nil
+}
+
+// checkExist checks that the servers exist and don't move, as what refers to them would be lost.
+func (h *Handler) checkExist(ctx context.Context, servers []tag.Server) error {
+	exist, listed := map[tag.Server]bool{}, map[string]bool{}
+	for _, s := range servers {
+		if err := h.moves.Check(s.ServerID); err != nil {
+			return err
+		}
+		if listed[s.NodeID] {
+			continue
+		}
+		listed[s.NodeID] = true
+		c, err := h.serverClient(ctx, s.NodeID)
+		var res *noryxv1.ListServersResponse
+		if err == nil {
+			res, err = c.ListServers(ctx, &noryxv1.ListServersRequest{})
+		}
+		if err != nil {
+			return err
+		}
+		for _, srv := range res.GetServers() {
+			exist[tag.Server{NodeID: s.NodeID, ServerID: srv.GetId()}] = true
+		}
+	}
+	for _, s := range servers {
+		if !exist[s] {
+			return httpapi.Errorf(http.StatusNotFound, "Server not found.")
+		}
+	}
+	return nil
+}
+
+// message is what the panel shows about a failed action on one server.
+func message(err error) string {
+	var apiErr *httpapi.Error
+	if errors.As(err, &apiErr) {
+		return apiErr.Message
+	}
+	if st, ok := status.FromError(err); ok {
+		return st.Message()
+	}
+	slog.Error("Action on a server failed", logging.Servers, "err", err)
+	return "internal error"
+}

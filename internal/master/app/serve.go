@@ -33,6 +33,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/schedule"
 	"github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/settings"
+	"github.com/QwikByte/noryx/internal/master/tag"
 	"github.com/QwikByte/noryx/internal/master/template"
 	"github.com/QwikByte/noryx/internal/master/terminal"
 	"github.com/QwikByte/noryx/internal/master/update"
@@ -155,7 +156,7 @@ func serve(ctx context.Context, cfg config) error {
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes, plugins),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
-			Usage: usageStore, Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
+			Usage: usageStore, Tags: tag.NewStore(db), Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests themselves have no time limit, as uploads and streams last long.
@@ -220,6 +221,7 @@ type Services struct {
 	Logs      *logs.Store
 	Updates   *update.Service
 	Usage     *usage.Store
+	Tags      *tag.Store
 	Moves     *server.Moves
 	// Restart restarts the master, if its service manager starts it again; otherwise nil.
 	Restart func() error
@@ -251,7 +253,7 @@ func API(s Services) *http.ServeMux {
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Moves, s.Tasks, s.Access, s.Usage).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
 	network.NewHandler(s.Networks).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
