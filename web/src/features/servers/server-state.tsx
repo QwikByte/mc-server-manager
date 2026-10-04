@@ -1,12 +1,38 @@
 import { WarningCircleIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { Callout } from "@/components/callout"
-import { StatusBadge } from "@/components/status"
+import { StatusBadge, StatusDot } from "@/components/status"
+import { toneDots } from "@/components/tone"
+import { cn } from "@/lib/utils"
 import type { Server, ServerState } from "./api"
-import { serverStates } from "./server-types"
+import { serverStates, states } from "./server-types"
 
 export function ServerStateBadge({ state }: { state: ServerState }) {
   return <StatusBadge status={serverStates[state]} />
+}
+
+/** How many servers are in each state, as a bar of coloured parts and their counts. */
+export function StateBar({ servers, className }: { servers: { state: ServerState }[]; className?: string }) {
+  const counts = states.map((state) => ({ state, count: servers.filter((s) => s.state === state).length })).filter((c) => c.count > 0)
+  const summary = counts.map(({ state, count }) => `${count} ${t(serverStates[state].label)}`).join(", ")
+  return (
+    <div className={cn("space-y-2", className)}>
+      <div role="img" aria-label={summary} className="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-muted">
+        {counts.map(({ state, count }) => (
+          <span key={state} className={cn("h-full", toneDots[serverStates[state].tone])} style={{ flexGrow: count }} />
+        ))}
+      </div>
+      <p aria-hidden className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {counts.map(({ state, count }) => (
+          <span key={state} className="inline-flex items-center gap-1.5">
+            <StatusDot status={serverStates[state]} />
+            <span className="font-medium text-foreground tabular-nums">{count}</span>
+            {t(serverStates[state].label)}
+          </span>
+        ))}
+      </p>
+    </div>
+  )
 }
 
 /** Tells that a server crashes, or stopped because it crashed, and where to find out why. */

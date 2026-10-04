@@ -65,6 +65,24 @@ Each node has settings for its servers: the storage location preselected for new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
 the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
 
+The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use,
+the networks, the servers with the most players, and what needs attention: crashing servers, offline nodes, nodes with
+more memory assigned than they can give or almost full storage, and proxies that are stopped while their servers run.
+
+The **Servers** page and the page of each node list servers as cards or as a compact table, the table from 13 servers
+on until one is chosen. They are searched, filtered by state, type, node, network and tag, sorted by name, state,
+players, CPU, memory or node, and grouped by network, node, type or tag, in groups that fold away. The address keeps
+all of it, so that a view can be shared or bookmarked. Selected servers start, restart or stop together, run a console
+command such as `save-all`, or get and lose tags; an action applies to the selected servers in a fitting state on which
+the user may do it, at most 8 at a time on each node, and the panel tells which failed.
+
+Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
+keeps them; they follow a server that moves, copies get them, and they go with a deleted server. Changing them needs the
+permission to change the server's settings, though it doesn't restart the server.
+
+**Ctrl+K** (⌘K) searches servers, also by tag, networks, nodes and pages from anywhere in the panel. A search that starts
+with an action, e.g. `restart lobby`, starts, restarts or stops a server or opens its console.
+
 The panel speaks English and German. It follows the browser until someone chooses a language with the button next to the
 colour theme, which the panel stores for the signed-in user, so that it applies in all their browsers; on the sign-in
 page, the choice applies to the browser. Dates, times and numbers follow the language too. What the master and the
@@ -264,6 +282,8 @@ when it leaves.
   `survival.example.com`, send the players who connect through them to their own servers (`forced-hosts`, for
   BungeeCord one server each). Servers have the name players use with `/server`; BungeeCord's servers also have a MOTD
   for their host names and can be restricted to players with the permission `bungeecord.server.<name>`.
+  Of more than 10 servers, the map shows those players join, fall back to or reach through a host name and those that
+  crash, and folds away the others until it is expanded; the list of servers can be searched.
 - **Changes.** All changes are saved and applied together, and the panel tells beforehand what they do. Servers that
   join or leave restart, all of them when the forwarding changes. The proxy reloads its configuration through its
   console (`velocity reload`, `greload`), which disconnects nobody; BungeeCord can't reload without a server it had, so
@@ -521,6 +541,7 @@ internal/master/
   node/                 node registry, enrollment, agent connections
   update/               looks for new releases, updates the master through systemd and the agents after it
   server/               server API, forwarded to the node's agent
+  tag/                  tags of servers, which the panel finds and groups them by
   network/              networks of servers behind a proxy, applied through the agents; actions on their servers and the
                         settings of proxies
   files/                file manager, streamed between the browser and the agent
@@ -552,9 +573,9 @@ internal/agent/
   runtime/              runtime interface; docker/ implements it
 internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
-  src/features/         auth, nodes, servers, files, properties, networks, plugins, templates, backups, policies,
-                        schedules (shared by backups and policies), settings, terminal, logs, usage,
-                        access (users, groups and the permission checks of the panel), updates
+  src/features/         auth, dashboard, nodes, servers, files, properties, networks, plugins, templates, backups,
+                        policies, schedules (shared by backups and policies), settings, terminal, logs, usage,
+                        access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K)
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

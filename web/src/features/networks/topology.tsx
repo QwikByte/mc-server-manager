@@ -1,22 +1,25 @@
-import { ArrowsSplitIcon, GlobeIcon, UsersIcon, UsersThreeIcon } from "@phosphor-icons/react"
+import { ArrowsSplitIcon, GlobeIcon, StackIcon, UsersIcon, UsersThreeIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { StatusDot } from "@/components/status"
 import type { NodeServer } from "@/features/servers/api"
-import { serverStates, serverType } from "@/features/servers/server-types"
+import { serverStates, serverType, states } from "@/features/servers/server-types"
 import type { ServerUsage } from "@/features/usage/api"
-import type { Network } from "./api"
+import type { Backend, Network } from "./api"
 import type { Draft } from "./draft"
 import { ServerLabel } from "./server-label"
 import { findServer, key } from "./servers"
 
 const row = 56 // height of an entry or a server, in pixels
 const gap = 64 // width of the connections
+const limit = 10 // servers shown until the map is expanded
 
 /**
  * A map of the network: where players connect, the proxy, and the servers it sends them to,
  * with their state and players. It follows the draft, so changes show before they are saved.
+ * Of many servers, it shows those players join, fall back to or reach by host name, and those
+ * that crash, until it is expanded.
  */
 export function Topology({
   network,
@@ -36,7 +39,15 @@ export function Topology({
     { icon: UsersThreeIcon, label: address ?? t("All players") },
     ...draft.forcedHosts.map((h) => ({ icon: GlobeIcon, label: h.host || "…" })),
   ]
-  const height = Math.max(entries.length, draft.backends.length, 2) * row
+  const [expanded, setExpanded] = useState(false)
+  const routed = new Set([...draft.try, ...draft.forcedHosts.flatMap((h) => h.servers)])
+  const wanted = (b: Backend) => routed.has(key(b)) || findServer(servers, b)?.state === "crashing"
+  const picked = new Set([...draft.backends.filter(wanted), ...draft.backends.filter((b) => !wanted(b))].slice(0, limit))
+  const shown = expanded ? draft.backends : draft.backends.filter((b) => picked.has(b))
+  const rest = draft.backends.filter((b) => !shown.includes(b))
+  const foldable = draft.backends.length > limit
+  const rows = shown.length + Number(foldable)
+  const height = Math.max(entries.length, rows, 2) * row
   const center = (count: number, i: number) => (height - count * row) / 2 + row * (i + 0.5)
 
   return (
@@ -63,9 +74,9 @@ export function Topology({
             {draft.forwarding === "modern" ? t("Modern forwarding") : t("Legacy forwarding")}
           </p>
         </div>
-        <Connections height={height} from={[height / 2]} to={draft.backends.map((_, i) => center(draft.backends.length, i))} />
-        <Column height={height} count={draft.backends.length}>
-          {draft.backends.map((b) => {
+        <Connections height={height} from={[height / 2]} to={Array.from({ length: rows }, (_, i) => center(rows, i))} />
+        <Column height={height} count={rows}>
+          {shown.map((b) => {
             const server = findServer(servers, b)
             const position = draft.try.indexOf(key(b))
             const hosts = draft.forcedHosts.filter((h) => h.servers.includes(key(b))).length
@@ -91,6 +102,32 @@ export function Topology({
               </Item>
             )
           })}
+          {foldable && (
+            <Item>
+              <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpanded(!expanded)}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+              >
+                <StackIcon className="size-4 shrink-0" weight="duotone" />
+                {expanded ? t("Show fewer") : t("{{count}} more servers", { count: rest.length, defaultValue_one: "{{count}} more server" })}
+                {!expanded && (
+                  <span className="ml-auto flex items-center gap-2">
+                    {states.map((state) => {
+                      const count = rest.filter((b) => findServer(servers, b)?.state === state).length
+                      return count > 0 ? (
+                        <span key={state} className="flex items-center gap-1 tabular-nums">
+                          <StatusDot status={serverStates[state]} label={t(serverStates[state].label)} />
+                          {count}
+                        </span>
+                      ) : null
+                    })}
+                  </span>
+                )}
+              </button>
+            </Item>
+          )}
         </Column>
       </div>
     </div>

@@ -31,6 +31,7 @@ import { MoveStatus } from "./move-status"
 import { ServerActions } from "./server-actions"
 import { CrashNotice, ServerStateBadge } from "./server-state"
 import { displayVersion, serverLook, serverType } from "./server-types"
+import { TagList } from "./tags"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
 
@@ -125,6 +126,7 @@ export function ServerPage() {
                 </Chip>
                 <Chip icon={MemoryIcon}>{formatMegabytes(server.memoryMb)}</Chip>
                 {node && <Chip icon={HardDrivesIcon}>{node.name}</Chip>}
+                <TagList tags={server.tags} className="items-center" />
               </span>
             }
             actions={

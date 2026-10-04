@@ -7,6 +7,7 @@ import {
   PlayIcon,
   StackIcon,
   StopIcon,
+  TagIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
 import { t } from "i18next"
@@ -19,19 +20,31 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
 import { SaveTemplateDialog } from "@/features/templates/save-template-dialog"
+import { cn } from "@/lib/utils"
 import { type Server, type ServerAction, useMove, useServerAction } from "./api"
 import { DuplicateServerDialog } from "./duplicate-server-dialog"
 import { MoveServerDialog } from "./move-server-dialog"
 import { serverType } from "./server-types"
+import { TagsDialog } from "./tags"
 
 /**
- * Start or stop a server, copy it, move it, save it as a template and delete it after
- * confirmation. While it moves, it can't be changed.
+ * Start or stop a server, copy it, move it, tag it, save it as a template and delete it after
+ * confirmation. While it moves, it can't be changed. Compact actions only have icons, e.g. in a table.
  */
-export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; server: Server; onDeleted?: () => void }) {
+export function ServerActions({
+  nodeId,
+  server,
+  onDeleted,
+  compact,
+}: {
+  nodeId: string
+  server: Server
+  onDeleted?: () => void
+  compact?: boolean
+}) {
   const mutation = useServerAction(nodeId)
   const move = useMove(server.id)
-  const [dialog, setDialog] = useState<"duplicate" | "move" | "template">()
+  const [dialog, setDialog] = useState<"duplicate" | "move" | "template" | "tags">()
   const running = server.state !== "stopped"
   const dialogProps = { nodeId, server, open: true, onOpenChange: (open: boolean) => !open && setDialog(undefined) }
 
@@ -54,7 +67,15 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
   const saveTemplate = can("templates.manage") && (serverType(server.type).proxy || may("properties.edit"))
   // Moving deletes the server here and copies all its files.
   const movable = may("servers.delete") && may("files.read")
-  const power = running ? may("servers.restart") || may("servers.stop") : may("servers.start")
+  const tags = may("servers.settings")
+  const powers = (
+    running
+      ? [
+          { action: "restart", icon: ArrowClockwiseIcon, label: t("Restart"), done: t("Restarted {{name}}", { name: server.name }) },
+          { action: "stop", icon: StopIcon, label: t("Stop"), done: t("Stopped {{name}}", { name: server.name }) },
+        ]
+      : [{ action: "start", icon: PlayIcon, label: t("Start"), done: t("Started {{name}}", { name: server.name }) }]
+  ).filter((p) => may(`servers.${p.action}` as Permission))
   if (move && !move.finishedAt) {
     return (
       <Pill tone="info">
@@ -63,45 +84,27 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
       </Pill>
     )
   }
-  if (!power && !duplicate && !saveTemplate && !may("servers.delete")) return null
+  if (powers.length === 0 && !duplicate && !saveTemplate && !tags && !may("servers.delete")) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {running ? (
-        <>
-          {may("servers.restart") && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={mutation.isPending}
-              onClick={() => run("restart", t("Restarted {{name}}", { name: server.name }))}
-            >
-              <ArrowClockwiseIcon />
-              {t("Restart")}
-            </Button>
-          )}
-          {may("servers.stop") && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={mutation.isPending}
-              onClick={() => run("stop", t("Stopped {{name}}", { name: server.name }))}
-            >
-              <StopIcon />
-              {t("Stop")}
-            </Button>
-          )}
-        </>
-      ) : (
-        may("servers.start") && (
-          <Button size="sm" disabled={mutation.isPending} onClick={() => run("start", t("Started {{name}}", { name: server.name }))}>
-            <PlayIcon />
-            {t("Start")}
-          </Button>
-        )
-      )}
-      <div className="ml-auto flex items-center gap-1">
-        {(duplicate || movable || saveTemplate) && (
+    <div className={cn("flex items-center", compact ? "justify-end gap-0.5" : "flex-wrap gap-2")}>
+      {powers.map(({ action, icon: Icon, label, done }) => (
+        <Button
+          key={action}
+          size={compact ? "icon-sm" : "sm"}
+          variant={compact ? "ghost" : action === "start" ? "default" : "outline"}
+          disabled={mutation.isPending}
+          aria-label={compact ? `${label}: ${server.name}` : undefined}
+          title={compact ? label : undefined}
+          className={cn(compact && "text-muted-foreground", compact && action === "start" && "text-primary")}
+          onClick={() => run(action as ServerAction, done)}
+        >
+          <Icon weight={compact ? "fill" : undefined} />
+          {!compact && label}
+        </Button>
+      ))}
+      <div className={cn("flex items-center gap-1", !compact && "ml-auto")}>
+        {(duplicate || movable || saveTemplate || tags) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -115,6 +118,12 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
+              {tags && (
+                <DropdownMenuItem onSelect={() => setDialog("tags")}>
+                  <TagIcon />
+                  {t("Tags…")}
+                </DropdownMenuItem>
+              )}
               {duplicate && (
                 <DropdownMenuItem onSelect={() => setDialog("duplicate")}>
                   <CopyIcon />
@@ -136,7 +145,7 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {may("servers.delete") && (
+        {may("servers.delete") && !compact && (
           <ConfirmDialog
             trigger={
               <Button
@@ -161,6 +170,7 @@ export function ServerActions({ nodeId, server, onDeleted }: { nodeId: string; s
       {dialog === "duplicate" && <DuplicateServerDialog {...dialogProps} />}
       {dialog === "move" && <MoveServerDialog {...dialogProps} />}
       {dialog === "template" && <SaveTemplateDialog {...dialogProps} />}
+      {dialog === "tags" && <TagsDialog servers={[{ ...server, nodeId }]} onOpenChange={dialogProps.onOpenChange} />}
     </div>
   )
 }

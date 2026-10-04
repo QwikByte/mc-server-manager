@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { useAccess } from "@/features/access/use-access"
 import { meQuery, useLogout, useSetLanguage } from "@/features/auth/api"
 import { LogAlerts } from "@/features/logs/log-alerts"
+import { PaletteButton } from "@/features/palette/command-palette"
 import { UpdateBanner } from "@/features/updates/update-banner"
 import { chooseLanguage, chosenLanguage } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -31,7 +32,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
-      <aside className="sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b bg-sidebar/80 px-3 py-2.5 backdrop-blur-xl md:h-svh md:w-64 md:flex-col md:items-stretch md:gap-8 md:border-r md:border-b-0 md:px-4 md:py-6">
+      <aside className="sticky top-0 z-30 flex shrink-0 items-center gap-1.5 border-b bg-sidebar/80 px-3 py-2.5 backdrop-blur-xl md:h-svh md:w-64 md:flex-col md:items-stretch md:gap-8 md:border-r md:border-b-0 md:px-4 md:py-6">
         <Sheet open={menu} onOpenChange={setMenu}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" aria-label={t("Menu")} className="md:hidden">
@@ -53,14 +54,15 @@ export function AppShell() {
             <span className="block text-xs text-muted-foreground">{t("Admin panel")}</span>
           </span>
         </Link>
+        <PaletteButton className="max-md:size-9 max-md:px-0 max-md:justify-center md:-mb-4" />
         <MainNav className="max-md:hidden" />
-        <div className="ml-auto flex items-center gap-2 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:gap-3">
-          <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:gap-3">
+          <div className="flex items-center gap-1.5 md:gap-2">
             {access.canSomewhere("logs.view") && <LogAlerts />}
             <LanguageMenu value={user?.language ?? chosenLanguage()} onChoose={(language) => setLanguage.mutate(language)} />
             <ThemeToggle className="md:flex-1" />
           </div>
-          <div className="flex items-center gap-2 md:gap-3 md:rounded-xl md:bg-muted/60 md:p-2">
+          <div className="flex items-center gap-1.5 md:gap-3 md:rounded-xl md:bg-muted/60 md:p-2">
             <Link
               to="/account"
               className="group flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -117,6 +119,7 @@ function MainNav({ className, onNavigate }: { className?: string; onNavigate?: (
               <Link
                 key={to}
                 to={to}
+                activeOptions={{ exact: to === "/" }}
                 onClick={onNavigate}
                 className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[status=active]:bg-primary/10 data-[status=active]:text-primary"
               >

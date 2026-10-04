@@ -38,6 +38,8 @@ const route = getRouteApi("/_app/nodes/$nodeId")
 export function NodePage() {
   const { can } = useAccess()
   const { nodeId } = route.useParams()
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
   const { data: node, isPending, error } = useQuery(nodeQuery(nodeId))
 
   return (
@@ -75,7 +77,12 @@ export function NodePage() {
           {node.status === "online" && node.info ? (
             <>
               <NodeFacts node={node} info={node.info} />
-              <ServerList nodeId={node.id} />
+              <ServerList
+                nodeId={node.id}
+                nodeName={node.name}
+                search={search}
+                onSearch={(change) => navigate({ search: (s) => ({ ...s, ...change }), replace: true })}
+              />
               {can("nodes.view", node.id) && (
                 <UsageHistory
                   nodeId={node.id}

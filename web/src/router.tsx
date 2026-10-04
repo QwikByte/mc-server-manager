@@ -10,6 +10,7 @@ import { meQuery } from "@/features/auth/api"
 import { LoginPage } from "@/features/auth/login-page"
 import { validateLogSearch } from "@/features/logs/search"
 import type { Kind } from "@/features/plugins/api"
+import { validateServerSearch } from "@/features/servers/browse"
 import { ApiError } from "@/lib/api"
 
 export const queryClient = new QueryClient({
@@ -78,12 +79,15 @@ const notFoundRoute = createRoute({
   component: NotFound,
 })
 
+// The overview, or else the first section the user may see.
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
   beforeLoad: ({ context }) => {
-    throw redirect({ to: home(accessOf(context.queryClient.getQueryData(accessQuery.queryKey))) })
+    const to = home(accessOf(context.queryClient.getQueryData(accessQuery.queryKey)))
+    if (to !== "/") throw redirect({ to })
   },
+  component: lazyRouteComponent(() => import("@/features/dashboard/dashboard-page"), "DashboardPage"),
 })
 
 // Pages are loaded on demand, which keeps the sign-in page small.
@@ -95,11 +99,14 @@ const nodesRoute = createRoute({
 const nodeRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/nodes/$nodeId",
+  validateSearch: validateServerSearch,
   component: lazyRouteComponent(() => import("@/features/nodes/node-page"), "NodePage"),
 })
+// The search, filters and view of server lists are in the address, so that they can be shared and bookmarked.
 const serversRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/servers",
+  validateSearch: validateServerSearch,
   component: lazyRouteComponent(() => import("@/features/servers/servers-page"), "ServersPage"),
 })
 const serverRoute = createRoute({
