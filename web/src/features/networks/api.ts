@@ -6,24 +6,51 @@ export interface ServerRef {
   serverId: string
 }
 
+/** Velocity's modern forwarding, or BungeeCord's, which Velocity calls legacy. */
+export type Forwarding = "modern" | "legacy"
+
 /** A game server behind the proxy. Players switch to it with /server <name>. */
 export interface Backend extends ServerRef {
   name: string
+  /** BungeeCord: only players with the permission bungeecord.server.<name> may join it. */
+  restricted: boolean
+  /** BungeeCord: the MOTD shown for host names that lead to it; empty uses the proxy's. */
+  motd: string
 }
 
-export interface Network {
-  id: string
+/** Players who connect through the host name join its servers, tried in this order. */
+export interface ForcedHost {
+  host: string
+  servers: string[]
+}
+
+/** What can be changed about a network; its proxy stays. */
+export interface NetworkSettings {
   name: string
-  proxy: ServerRef
-  /** Players join the first backend. */
+  forwarding: Forwarding
+  /** The operator confirmed that only the proxy's node reaches the servers on other nodes. */
+  firewalled: boolean
   backends: Backend[]
+  /** Names of the servers players join and fall back to, in this order. */
+  try: string[]
+  forcedHosts: ForcedHost[]
+}
+
+export interface Network extends NetworkSettings {
+  id: string
+  proxy: ServerRef
+  /** velocity, bungeecord or waterfall. */
+  proxyType: string
   createdAt: string
 }
 
 export interface NewNetwork {
   name: string
   proxy: ServerRef
-  lobby: ServerRef
+  forwarding: Forwarding
+  firewalled: boolean
+  /** Players join the first. */
+  servers: ServerRef[]
 }
 
 export const networksQuery = queryOptions({
@@ -46,32 +73,68 @@ export function useCreateNetwork() {
   })
 }
 
-export type NetworkChange =
-  | { action: "apply" | "delete" }
-  | { action: "add"; server: ServerRef }
-  | { action: "remove" | "default"; serverId: string }
-
-/** Changes a network. The master reconfigures and, if needed, restarts the affected servers. */
-export function useChangeNetwork(id: string) {
+/** Saves the settings of a network; the master configures its servers. */
+export function useUpdateNetwork(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (change: NetworkChange) => {
+    mutationFn: (settings: NetworkSettings) => api<Network>(`/networks/${id}`, { method: "PUT", body: settings }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: networksQuery.queryKey }),
+  })
+}
+
+export type NetworkAction = { action: "apply" | "delete" | "start" | "stop" | "restart" } | { action: "broadcast"; message: string }
+
+/** Acts on a network or on all its servers. */
+export function useNetworkAction(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (a: NetworkAction) => {
       const path = `/networks/${id}`
-      switch (change.action) {
-        case "apply":
-          return api(`${path}/apply`, { method: "POST" })
+      switch (a.action) {
         case "delete":
           return api(path, { method: "DELETE" })
-        case "add":
-          return api(`${path}/backends`, { body: change.server })
-        case "remove":
-          return api(`${path}/backends/${change.serverId}`, { method: "DELETE" })
-        case "default":
-          return api(`${path}/backends/${change.serverId}/default`, { method: "POST" })
+        case "broadcast":
+          return api(`${path}/broadcast`, { body: { message: a.message } })
+        default:
+          return api(`${path}/${a.action}`, { method: "POST" })
       }
     },
     // A deleted network is only refreshed in the list, as its page is left.
-    onSettled: (_data, _error, change) =>
-      queryClient.invalidateQueries({ queryKey: networksQuery.queryKey, exact: change.action === "delete" }),
+    onSettled: (_data, _error, a) => {
+      void queryClient.invalidateQueries({ queryKey: networksQuery.queryKey, exact: a.action === "delete" })
+      if (a.action !== "apply" && a.action !== "delete") void queryClient.invalidateQueries({ queryKey: ["servers"] })
+    },
+  })
+}
+
+/** A value of a proxy's configuration: text, a number, a switch or a list of texts. */
+export type SettingValue = string | number | boolean | string[]
+
+/** The settings of a proxy in its own configuration file, by their path in it. */
+export interface ProxySettings {
+  /** False until the proxy started once and created its configuration. */
+  exists: boolean
+  /** e.g. velocity.toml */
+  file: string
+  settings: Record<string, SettingValue>
+  /** Settings the panel or the network decides, with the reason. */
+  locked: { key: string; reason: string }[]
+}
+
+const proxyPath = ({ nodeId, serverId }: ServerRef) => `/nodes/${nodeId}/servers/${serverId}/proxy`
+
+export const proxySettingsQuery = (proxy: ServerRef) =>
+  queryOptions({
+    queryKey: ["proxy-settings", proxy.nodeId, proxy.serverId],
+    queryFn: () => api<ProxySettings>(proxyPath(proxy)),
+  })
+
+/** Changes settings of a proxy, which reloads its configuration if it runs. */
+export function useUpdateProxySettings(proxy: ServerRef) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (settings: Record<string, SettingValue>) =>
+      api<{ reloaded: boolean }>(proxyPath(proxy), { method: "PUT", body: { settings } }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: proxySettingsQuery(proxy).queryKey }),
   })
 }

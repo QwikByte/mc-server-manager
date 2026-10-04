@@ -52,6 +52,8 @@ var velocity = Proxy{
 		"forced-hosts":                inNetwork,
 		"player-info-forwarding-mode": "The forwarding is chosen in the proxy's network.",
 		"forwarding-secret-file":      "The network keeps its forwarding secret in this file.",
+		// Velocity 1 kept the secret itself in its configuration, which never reaches the panel.
+		"forwarding-secret": "The forwarding secret stays on the node.",
 	},
 	render:   renderVelocity,
 	bind:     func(s map[string]any, address string) { s["bind"] = address },

@@ -1,4 +1,4 @@
-import { PlusIcon } from "@phosphor-icons/react"
+import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -7,7 +7,6 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -17,36 +16,63 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { allServersQuery } from "@/features/servers/api"
-import { networksQuery, type ServerRef, useCreateNetwork } from "./api"
-import { ServerSelect } from "./server-select"
-import { availableServers, backendTypes, proxyTypes } from "./servers"
+import { serverType } from "@/features/servers/server-types"
+import { cn } from "@/lib/utils"
+import { type Forwarding, networksQuery, type ServerRef, useCreateNetwork } from "./api"
+import { FirewallConfirmation, ForwardingChoice } from "./forwarding"
+import { ServerPicker } from "./server-picker"
+import { availableServers, canJoin, findServer, isBungee, key, proxyTypes, refOf } from "./servers"
 
+const steps = ["proxy", "forwarding", "servers"] as const
+type Step = (typeof steps)[number]
+
+/** Creates a network in three steps: its proxy, how the proxy forwards players, and its servers. */
 export function CreateNetworkDialog() {
   const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<Step>("proxy")
   const [name, setName] = useState("")
   const [proxy, setProxy] = useState<ServerRef>()
-  const [lobby, setLobby] = useState<ServerRef>()
+  const [forwarding, setForwarding] = useState<Forwarding>("modern")
+  const [picked, setPicked] = useState<ServerRef[]>([])
+  const [firewalled, setFirewalled] = useState(false)
   const { data: servers } = useQuery({ ...allServersQuery, enabled: open })
   const { data: networks } = useQuery(networksQuery)
   const create = useCreateNetwork()
   const navigate = useNavigate()
+  const proxyServer = proxy && findServer(servers, proxy)
+  const bungee = !!proxyServer && isBungee(proxyServer.type)
+  const proxies = availableServers(servers, networks, (s) => proxyTypes.includes(s.type))
+  const candidates = availableServers(servers, networks, (s) => !proxyTypes.includes(s.type))
+  const selected = picked.filter((r) => canJoin(findServer(servers, r)?.type ?? "", forwarding))
+  const exposed = forwarding === "legacy" && selected.some((r) => r.nodeId !== proxy?.nodeId)
 
   function onOpenChange(next: boolean) {
     setOpen(next)
     if (!next) {
       create.reset()
+      setStep("proxy")
       setName("")
       setProxy(undefined)
-      setLobby(undefined)
+      setForwarding("modern")
+      setPicked([])
+      setFirewalled(false)
     }
+  }
+
+  function chooseProxy(ref: ServerRef) {
+    setProxy(ref)
+    const type = findServer(servers, ref)?.type ?? ""
+    setForwarding(isBungee(type) ? "legacy" : "modern")
   }
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!proxy || !lobby) return
+    if (step !== "servers") return setStep(steps[steps.indexOf(step) + 1])
+    if (!proxy) return
     create.mutate(
-      { name: name.trim(), proxy, lobby },
+      { name: name.trim(), proxy, forwarding, firewalled, servers: selected },
       {
         onSuccess: (network) => {
           toast.success(t("Created {{name}}", { name: network.name }))
@@ -56,6 +82,8 @@ export function CreateNetworkDialog() {
     )
   }
 
+  const ready = { proxy: !!name.trim() && !!proxy, forwarding: true, servers: selected.length > 0 && (!exposed || firewalled) }[step]
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
@@ -64,60 +92,93 @@ export function CreateNetworkDialog() {
           {t("Create network")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
             <DialogTitle>{t("Create network")}</DialogTitle>
-            <DialogDescription>
-              {t("Connect a Velocity proxy with the server players join first. You can add more servers afterwards.")}
-            </DialogDescription>
+            <DialogDescription>{t("The panel sets up the proxy and the servers the way their projects document it.")}</DialogDescription>
           </DialogHeader>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="network-name">{t("Name")}</FieldLabel>
-              <Input
-                id="network-name"
-                placeholder={t("Main network")}
-                required
-                maxLength={64}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="network-proxy">{t("Proxy")}</FieldLabel>
-              <ServerSelect
-                id="network-proxy"
-                servers={availableServers(servers, networks, proxyTypes)}
-                value={proxy}
-                onChange={setProxy}
-                placeholder={t("Choose a Velocity proxy")}
-              />
-              <FieldDescription>
-                {t("Players connect to the proxy. BungeeCord is not supported, as its forwarding can be spoofed.")}
-              </FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="network-lobby">{t("Lobby")}</FieldLabel>
-              <ServerSelect
-                id="network-lobby"
-                servers={availableServers(servers, networks, backendTypes)}
-                value={lobby}
-                onChange={setLobby}
-                placeholder={t("Choose a Paper or Purpur server")}
-              />
-              <FieldDescription>
-                {t("Both servers restart. The lobby then only accepts players who join through the proxy.")}
-              </FieldDescription>
-            </Field>
-            {create.error && <FieldError>{create.error.message}</FieldError>}
-          </FieldGroup>
+          <ol className="grid grid-cols-3 gap-2" aria-label={t("Steps")}>
+            {[t("Proxy"), t("Forwarding"), t("Servers")].map((label, i) => (
+              <li
+                key={label}
+                aria-current={steps[i] === step ? "step" : undefined}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium",
+                  steps.indexOf(step) >= i ? "bg-primary/10 text-foreground" : "bg-muted text-muted-foreground",
+                )}
+              >
+                <span className={cn("grid size-5 place-items-center rounded-full text-[0.6875rem] font-bold", steps.indexOf(step) >= i ? "bg-primary text-primary-foreground" : "bg-card")}>
+                  {i + 1}
+                </span>
+                {label}
+              </li>
+            ))}
+          </ol>
+          {step === "proxy" && (
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="network-name">{t("Name")}</FieldLabel>
+                <Input id="network-name" placeholder={t("Main network")} required maxLength={64} value={name} onChange={(e) => setName(e.target.value)} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="network-proxy">{t("Proxy")}</FieldLabel>
+                <Select
+                  value={proxy ? key(proxy) : ""}
+                  onValueChange={(v) => {
+                    const server = proxies.find((s) => key(refOf(s)) === v)
+                    if (server) chooseProxy(refOf(server))
+                  }}
+                  disabled={proxies.length === 0}
+                >
+                  <SelectTrigger id="network-proxy" className="w-full">
+                    <SelectValue placeholder={proxies.length === 0 ? t("No free proxy; create a Velocity, BungeeCord or Waterfall server first") : t("Choose a proxy")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {proxies.map((s) => (
+                      <SelectItem key={key(refOf(s))} value={key(refOf(s))}>
+                        {s.name}
+                        <span className="text-muted-foreground">
+                          {serverType(s.type).label} · {t("{{node}} · port {{port}}", { node: s.nodeName, port: s.port })}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>{t("Players connect to the proxy, which sends them on to the servers of the network.")}</FieldDescription>
+              </Field>
+            </FieldGroup>
+          )}
+          {step === "forwarding" && (
+            <div className="space-y-3">
+              <ForwardingChoice value={forwarding} bungee={bungee} onChange={setForwarding} />
+              <p className="text-xs text-muted-foreground">
+                {bungee
+                  ? t("BungeeCord and Waterfall only forward the legacy way. Servers on the proxy's node are safe, as only the proxy reaches them.")
+                  : t("You can change this later; the servers then restart.")}
+              </p>
+            </div>
+          )}
+          {step === "servers" && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t("Choose the servers in the order players should try them: they join the first. Fabric, Forge and NeoForge get their forwarding mod from Modrinth.")}
+              </p>
+              <ServerPicker servers={candidates} forwarding={forwarding} selected={selected} onChange={setPicked} />
+              {exposed && <FirewallConfirmation checked={firewalled} onChange={setFirewalled} proxyNode={proxyServer?.nodeName} />}
+              {create.error && <FieldError>{create.error.message}</FieldError>}
+            </div>
+          )}
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">{t("Cancel")}</Button>
-            </DialogClose>
-            <Button type="submit" disabled={create.isPending || !proxy || !lobby}>
-              {create.isPending ? t("Creating…") : t("Create network")}
+            {step !== "proxy" && (
+              <Button type="button" variant="ghost" onClick={() => setStep(steps[steps.indexOf(step) - 1])}>
+                <ArrowLeftIcon />
+                {t("Back")}
+              </Button>
+            )}
+            <Button type="submit" disabled={!ready || create.isPending}>
+              {step === "servers" ? (create.isPending ? t("Creating…") : t("Create network")) : t("Next")}
+              {step !== "servers" && <ArrowRightIcon />}
             </Button>
           </DialogFooter>
         </form>

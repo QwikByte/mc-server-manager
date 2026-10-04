@@ -7,7 +7,7 @@ import (
 )
 
 func TestSettingsVelocity(t *testing.T) {
-	settings, locked, err := velocity.Settings([]byte(defaultVelocity))
+	settings, locked, err := velocity.Settings([]byte("forwarding-secret = \"0ld-s3cret\"\n" + defaultVelocity))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -15,7 +15,7 @@ func TestSettingsVelocity(t *testing.T) {
 	if !reflect.DeepEqual(settings, wantSettings) {
 		t.Errorf("settings = %v, want %v", settings, wantSettings)
 	}
-	for _, key := range []string{"config-version", "bind", "servers", "forced-hosts", "player-info-forwarding-mode", "forwarding-secret-file"} {
+	for _, key := range []string{"config-version", "bind", "servers", "forced-hosts", "player-info-forwarding-mode", "forwarding-secret-file", "forwarding-secret"} {
 		if locked[key] == "" {
 			t.Errorf("%s isn't locked", key)
 		}

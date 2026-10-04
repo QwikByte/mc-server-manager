@@ -167,8 +167,8 @@ func (p Policies) Run(ctx context.Context, t schedule.Task, servers schedule.Ser
 	return errors.Join(errs...)
 }
 
-// concerns tells whether a policy applies to a server in its current state. Proxies don't
-// accept console commands yet.
+// concerns tells whether a policy applies to a server in its current state. Console commands
+// go to game servers only, as proxies don't know theirs, such as say.
 func concerns(s Settings, srv schedule.Server) bool {
 	stopped := srv.GetState() == mcsmv1.ServerState_SERVER_STATE_STOPPED
 	switch s.Action {

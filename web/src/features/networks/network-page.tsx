@@ -1,101 +1,125 @@
-import { ArrowRightIcon, ArrowsSplitIcon, CubeIcon, GraphIcon, type Icon, UsersThreeIcon } from "@phosphor-icons/react"
+import { ArrowsSplitIcon, CubeIcon, GraphIcon, HardDrivesIcon, HashIcon, ShieldCheckIcon, SlidersHorizontalIcon, UsersThreeIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { getRouteApi, Link } from "@tanstack/react-router"
+import { getRouteApi, Link, Outlet } from "@tanstack/react-router"
 import { t } from "i18next"
-import type { ReactNode } from "react"
-import { Trans } from "react-i18next"
-import { Callout, ErrorCallout } from "@/components/callout"
-import { IconTile } from "@/components/icon-tile"
 import { BackLink } from "@/components/back-link"
+import { ErrorCallout } from "@/components/callout"
+import { Chip } from "@/components/chip"
 import { PageHeader } from "@/components/page-header"
-import type { Tone } from "@/components/tone"
+import { StatCard } from "@/components/stat-card"
+import { TabLink } from "@/components/tab-link"
+import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery } from "@/features/servers/api"
+import { serverType } from "@/features/servers/server-types"
 import { networkQuery } from "./api"
-import { BackendList } from "./backend-list"
-import { ApplyNetworkButton, DeleteNetworkButton } from "./network-actions"
+import { NetworkActions } from "./network-actions"
+import { NetworkEditor } from "./network-editor"
+import { ProxySettingsEditor } from "./proxy-settings"
 import { ServerLabel } from "./server-label"
 import { findServer } from "./servers"
+import { playersOnline, useNetworkUsage } from "./usage"
 
 const route = getRouteApi("/_app/networks/$networkId")
 
+/** Header, key figures and tabs of a network; the tabs are child routes. */
 export function NetworkPage() {
-  const manage = useAccess().can("networks.manage")
+  const { can } = useAccess()
   const { networkId } = route.useParams()
   const { data: network, isPending, error } = useQuery(networkQuery(networkId))
   const { data: servers } = useQuery(allServersQuery)
-  const proxy = network && findServer(servers, network.proxy)
+  const usage = useNetworkUsage(network ? [network] : [])
+
+  if (isPending)
+    return (
+      <>
+        <BackLink to="/networks">{t("Networks")}</BackLink>
+        <Skeleton className="h-96 rounded-xl" />
+      </>
+    )
+  if (error)
+    return (
+      <>
+        <BackLink to="/networks">{t("Networks")}</BackLink>
+        <ErrorCallout error={error} />
+      </>
+    )
+  const proxy = findServer(servers, network.proxy)
+  const backends = network.backends.map((b) => findServer(servers, b))
+  const running = backends.filter((s) => s && s.state !== "stopped").length
+  const players = playersOnline(network, usage)
 
   return (
     <>
       <BackLink to="/networks">{t("Networks")}</BackLink>
-      {isPending ? (
-        <Skeleton className="h-64 rounded-xl" />
-      ) : error ? (
-        <ErrorCallout error={error} />
-      ) : (
-        <>
-          <PageHeader
-            icon={GraphIcon}
-            tone="violet"
-            title={network.name}
-            actions={
-              manage && (
-                <>
-                  <ApplyNetworkButton network={network} />
-                  <DeleteNetworkButton network={network} />
-                </>
-              )
-            }
-          />
-          <div className="grid items-center gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr]">
-            <Step icon={UsersThreeIcon} tone="info" label={t("Players")}>
-              {proxy ? t("{{node}}, port {{port}}", { node: proxy.nodeName, port: proxy.port }) : "–"}
-            </Step>
-            <Arrow />
-            <Step icon={ArrowsSplitIcon} tone="violet" label={t("Proxy · Velocity modern forwarding")}>
-              <Link
-                to="/nodes/$nodeId/servers/$serverId"
-                params={{ nodeId: network.proxy.nodeId, serverId: network.proxy.serverId }}
-                className="hover:underline"
-              >
-                <ServerLabel server={proxy} />
-              </Link>
-            </Step>
-            <Arrow />
-            <Step icon={CubeIcon} tone="success" label={t("Players join")}>
-              {network.backends[0]?.name ?? "–"}
-              <span className="font-normal text-muted-foreground">
-                {network.backends.length > 1 && ` ${t("and {{count}} more", { count: network.backends.length - 1 })}`}
-              </span>
-            </Step>
-          </div>
-          <BackendList network={network} servers={servers} />
-          <Callout role="note" title={t("Only players who join through the proxy can play")} className="mt-8">
-            <Trans
-              i18nKey="The servers of this network check the identity the proxy forwards and turn away direct connections. New Minecraft servers start with a whitelist: allow players with <command/> in the console of each server."
-              components={{ command: <code className="font-mono">whitelist add &lt;name&gt;</code> }}
-            />
-          </Callout>
-        </>
-      )}
+      <PageHeader
+        icon={GraphIcon}
+        tone="violet"
+        title={network.name}
+        description={
+          <span className="mt-1 flex flex-wrap gap-2 text-foreground">
+            <Chip icon={ArrowsSplitIcon}>{serverType(network.proxyType).label}</Chip>
+            <Chip icon={ShieldCheckIcon}>{network.forwarding === "modern" ? t("Modern forwarding") : t("Legacy forwarding")}</Chip>
+            {proxy && <Chip icon={HardDrivesIcon}>{proxy.nodeName}</Chip>}
+            {proxy && (
+              <Chip icon={HashIcon}>
+                <span className="font-mono">{proxy.port}</span>
+              </Chip>
+            )}
+          </span>
+        }
+        actions={<NetworkActions network={network} />}
+      />
+      <div className="mb-8 grid gap-3 sm:grid-cols-3">
+        <StatCard icon={UsersThreeIcon} tone="info" label={t("Players online")} value={players ?? "–"} />
+        <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={`${running} / ${network.backends.length}`} />
+        <StatCard icon={ArrowsSplitIcon} tone="violet" label={t("Proxy")} value={<ProxyLink network={network} />} />
+      </div>
+      <Tabs label={t("Network")}>
+        <TabLink to="/networks/$networkId" params={{ networkId }} activeOptions={{ exact: true }}>
+          <GraphIcon className="size-4" weight="duotone" />
+          {t("Overview")}
+        </TabLink>
+        {can("properties.edit", network.proxy.nodeId, network.proxy.serverId) && (
+          <TabLink to="/networks/$networkId/proxy" params={{ networkId }}>
+            <SlidersHorizontalIcon className="size-4" weight="duotone" />
+            {t("Proxy configuration")}
+          </TabLink>
+        )}
+      </Tabs>
+      <Outlet />
     </>
   )
 }
 
-function Step({ icon, tone, label, children }: { icon: Icon; tone: Tone; label: string; children: ReactNode }) {
+function ProxyLink({ network }: { network: { proxy: { nodeId: string; serverId: string } } }) {
+  const { data: servers } = useQuery(allServersQuery)
   return (
-    <div className="surface flex min-w-0 items-center gap-3 rounded-xl p-4">
-      <IconTile icon={icon} tone={tone} />
-      <div className="min-w-0">
-        <p className="truncate text-xs text-muted-foreground">{label}</p>
-        <div className="truncate text-sm font-semibold">{children}</div>
-      </div>
-    </div>
+    <Link
+      to="/nodes/$nodeId/servers/$serverId"
+      params={{ nodeId: network.proxy.nodeId, serverId: network.proxy.serverId }}
+      className="text-base hover:underline"
+    >
+      <ServerLabel server={findServer(servers, network.proxy)} />
+    </Link>
   )
 }
 
-function Arrow() {
-  return <ArrowRightIcon aria-hidden className="mx-auto size-5 text-muted-foreground/60 max-lg:rotate-90" weight="bold" />
+/** The Overview tab: where players go, the servers and the forwarding. */
+export function NetworkOverview() {
+  const { networkId } = route.useParams()
+  const { data: network } = useQuery(networkQuery(networkId))
+  return network ? <NetworkEditor network={network} /> : null
+}
+
+/** The Proxy configuration tab: the settings of the proxy in its own file. */
+export function NetworkProxy() {
+  const { networkId } = route.useParams()
+  const { data: network } = useQuery(networkQuery(networkId))
+  const { data: servers } = useQuery(allServersQuery)
+  if (!network) return null
+  const proxy = findServer(servers, network.proxy)
+  if (proxy === null) return <Skeleton className="h-96 rounded-xl" />
+  return <ProxySettingsEditor proxy={network.proxy} type={network.proxyType} running={!!proxy && proxy.state !== "stopped"} />
 }

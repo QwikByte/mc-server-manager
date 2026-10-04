@@ -128,11 +128,9 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
 
   const disabledReason = !can("console.commands", nodeId, server.id)
     ? t("Your groups don't let you send commands")
-    : proxy
-      ? t("Proxies don't accept console commands yet")
-      : !live
-        ? t("Start the server to send commands")
-        : undefined
+    : !live
+      ? t("Start the server to send commands")
+      : undefined
 
   return (
     <section
@@ -183,7 +181,7 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={browseHistory}
           disabled={disabledReason !== undefined}
-          placeholder={disabledReason ?? t("Type a command, e.g. say Hello")}
+          placeholder={disabledReason ?? (proxy ? t("Type a command, e.g. glist") : t("Type a command, e.g. say Hello"))}
           aria-label={t("Console command")}
           autoComplete="off"
           spellCheck={false}

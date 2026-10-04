@@ -166,7 +166,7 @@ function PolicyForm({
                 onChange={(e) => set({ command: e.target.value })}
               />
               <FieldDescription>
-                {t("A single console command, without a slash. Proxies don't accept console commands yet.")}
+                {t("A single console command, without a slash. It goes to the game servers, not to proxies.")}
               </FieldDescription>
             </Field>
           )}

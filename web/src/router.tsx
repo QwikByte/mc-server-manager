@@ -132,6 +132,11 @@ const serverPropertiesRoute = createRoute({
   path: "properties",
   component: lazyRouteComponent(() => import("@/features/properties/properties-page"), "PropertiesPage"),
 })
+const serverProxyRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "proxy",
+  component: lazyRouteComponent(() => import("@/features/networks/proxy-settings"), "ServerProxySettingsPage"),
+})
 const serverPluginsRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "plugins",
@@ -162,6 +167,16 @@ const networkRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/networks/$networkId",
   component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkPage"),
+})
+const networkOverviewRoute = createRoute({
+  getParentRoute: () => networkRoute,
+  path: "/",
+  component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkOverview"),
+})
+const networkProxyRoute = createRoute({
+  getParentRoute: () => networkRoute,
+  path: "proxy",
+  component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkProxy"),
 })
 
 const templatesRoute = createRoute({
@@ -294,13 +309,14 @@ export const router = createRouter({
         serverUsageRoute,
         serverFilesRoute,
         serverPropertiesRoute,
+        serverProxyRoute,
         serverPluginsRoute,
         serverBackupsRoute,
         serverActivityRoute,
         serverSettingsRoute,
       ]),
       networksRoute,
-      networkRoute,
+      networkRoute.addChildren([networkOverviewRoute, networkProxyRoute]),
       templatesRoute,
       newTemplateRoute,
       templateRoute,

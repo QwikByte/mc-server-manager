@@ -18,10 +18,12 @@ controls **agents** on any number of dedicated servers.
 
 Servers run as containers based on [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server)
 (Vanilla, Paper, Purpur, Fabric, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy)
-(Velocity, BungeeCord). Container labels are the agent's only state, so servers keep running while an agent restarts.
+(Velocity, BungeeCord, Waterfall). Container labels are the agent's only state, so servers keep running while an agent restarts.
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
-through the RCON connection the server image provides.
+through the RCON connection the server image provides, and to proxies through their own console, whose answer follows
+in the output. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
+settings.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
 the master, as long as 1 GB stays free on the node, like for backups), edits configuration files in the browser and downloads files or whole folders as ZIP archives.
@@ -32,7 +34,8 @@ shown, comments in the file are kept, and properties the manager relies on (cont
 
 Secrets such as the RCON password and the forwarding secret of a network never reach the panel. The file manager
 hides files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`) and shows
-`server.properties` and `config/paper-global.yml` with their secrets as `<hidden>`, which saving keeps. Downloads of
+`server.properties`, `config/paper-global.yml` and the configuration of the forwarding mods of networks with their
+secrets as `<hidden>`, which saving keeps. Downloads of
 folders and backups leave them out the same way. Plugins and mods run with the server, though, and can read them.
 
 The settings of a server can be changed after it was created: name, Minecraft version, memory, port, Java
@@ -172,7 +175,7 @@ that come from Modrinth. Worlds and plugin configurations are not part of templa
 
 ## Plugins and mods
 
-Plugins (Paper, Purpur, Velocity, BungeeCord) and mods (Fabric, Forge, NeoForge) are installed from
+Plugins (Paper, Purpur, Velocity, BungeeCord, Waterfall) and mods (Fabric, Forge, NeoForge) are installed from
 [Modrinth](https://modrinth.com), either on any number of servers at once from the **Plugins** page or from the
 **Plugins**/**Mods** tab of a server. The **Plugins** page switches between plugins and mods, so a project made for
 both only shows the software and servers of the chosen kind. The search filters by software, Minecraft version,
@@ -235,23 +238,52 @@ both can be run right away. Deleted servers are removed from them automatically.
 
 ## Networks
 
-A network puts Paper or Purpur servers behind a Velocity proxy, on one node or spread across nodes. The master stores
-the network and configures each server through its agent; changes are applied to all servers of the network.
+A network puts game servers behind a proxy, on one node or spread across nodes. The panel doesn't add a network system
+of its own: it writes the configuration the proxies and game servers document, and shows it as a picture. The master
+stores the network and configures each server through its agent.
 
-- The proxy's `velocity.toml` lists the servers and enables modern player forwarding. Players join the first server
-  and switch with `/server <name>`. Other settings are kept, but comments in the file are not.
-- Backends turn on Velocity forwarding in `config/paper-global.yml` and run with `online-mode=false`, as the proxy
-  authenticates the players. They turn away anyone who doesn't come through the proxy.
-- On its own node, the proxy reaches a server by container name over a Docker network that only the two of them share;
-  such a server's port isn't published at all. A server on another node is reached at that node's host and the
-  server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as ufw, so allow only
-  the proxy's node in Docker's `DOCKER-USER` chain on the server's node, e.g. for port 25566 and the proxy's node
-  203.0.113.10: `iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 25566 --ctdir ORIGINAL ! -s 203.0.113.10 -j DROP`
-  (and save it, e.g. with `netfilter-persistent save`).
-- Servers only restart if their configuration changed. Changing the servers of a network restarts the proxy, which
-  disconnects all players. If a node is offline, the change is saved and **Apply again** configures its servers later.
-- Proxies created by earlier versions are recreated on their first network change, because they used the wrong data
-  directory and port inside the container.
+| Proxy                 | Configuration   | Forwarding                                   |
+| --------------------- | --------------- | -------------------------------------------- |
+| Velocity              | `velocity.toml` | modern (recommended) or legacy               |
+| BungeeCord, Waterfall | `config.yml`    | legacy (`ip_forward`), BungeeCord's only way |
+
+| Game server     | Accepts the players of the proxy through                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Paper, Purpur   | `config/paper-global.yml` (modern) or `spigot.yml` with `bungeecord: true` (legacy)             |
+| Fabric          | [FabricProxy-Lite](https://modrinth.com/mod/fabricproxy-lite) and the Fabric API (modern only)  |
+| Forge, NeoForge | [Proxy-Compatible-Forge](https://modrinth.com/mod/proxy-compatible-forge) (modern or legacy)    |
+
+Vanilla servers can't tell forwarded players apart and can't join. Game servers in a network run with
+`online-mode=false`, as the proxy authenticates the players, and turn away anyone who doesn't come through the proxy.
+The panel installs the forwarding mod of a Fabric, Forge or NeoForge server from Modrinth when it joins, and removes it
+when it leaves.
+
+- **Map and routing.** The network's page shows where players connect, the proxy and its servers with their state and
+  players. Players join the servers of the join order and fall back to the next one when a server is offline, full or
+  kicks them (Velocity's `try`, BungeeCord's `priorities`); servers are dragged into another order. Host names, such as
+  `survival.example.com`, send the players who connect through them to their own servers (`forced-hosts`, for
+  BungeeCord one server each). Servers have the name players use with `/server`; BungeeCord's servers also have a MOTD
+  for their host names and can be restricted to players with the permission `bungeecord.server.<name>`.
+- **Changes.** All changes are saved and applied together, and the panel tells beforehand what they do. Servers that
+  join or leave restart, all of them when the forwarding changes. The proxy reloads its configuration through its
+  console (`velocity reload`, `greload`), which disconnects nobody; BungeeCord can't reload without a server it had, so
+  removing or renaming a server restarts it. If a node is offline, the change is saved and **Apply again** configures
+  its servers later. Proxies created by earlier versions are created again once, to read console commands.
+- **Proxy configuration.** The proxy's tab of the network, and the **Configuration** tab of every proxy, edit the other
+  settings of its file as a form: MOTD, the shown maximum of players, online mode, ping passthrough, compression,
+  timeouts, rate limits, the HAProxy protocol, query, BungeeCord's permissions and more. Settings that aren't known
+  appear under Advanced. Those the network decides, such as the servers, are locked. Saving reloads a running proxy.
+- **Actions.** **Servers** starts all servers of the network before the proxy, so that players find them, and stops the
+  proxy first, so that all players leave at once. **Message** sends a chat message to all running game servers.
+- **Reaching the servers.** On its own node, the proxy reaches a server by container name over a Docker network that only
+  the two of them share; such a server's port isn't published at all. A server on another node is reached at that
+  node's host and the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as
+  ufw, so allow only the proxy's node in Docker's `DOCKER-USER` chain on the server's node, e.g. for port 25566 and the
+  proxy's node 203.0.113.10: `iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 25566 --ctdir ORIGINAL ! -s 203.0.113.10 -j DROP`
+  (and save it, e.g. with `netfilter-persistent save`). The panel shows this command with each such server.
+- **Legacy forwarding** doesn't prove that players come through the proxy: anyone who reaches such a server can join as
+  any player. A network with legacy forwarding and servers on other nodes therefore needs the confirmation that a
+  firewall protects them, and no server of it moves to another node without.
 - New Minecraft servers start with a whitelist: add players with `whitelist add <name>` in each server's console.
 
 ## Usage
@@ -261,8 +293,8 @@ The panel shows what nodes and servers use, now and during the last week.
 - **Now.** Every agent measures every 5 seconds: CPU and memory of the node and of each server (without the page
   cache, like `docker stats`), the network traffic of each server, the size of its data (every 5 minutes), the players
   online and the ticks per second of Paper and Purpur servers. Players come from the status request that the server
-  list in the game sends too, which game servers and Velocity answer; BungeeCord is left out, as it logs every such
-  request. The ticks per second come through the server's console port over a connection that stays open, because
+  list in the game sends too, which game servers and Velocity answer; BungeeCord and Waterfall are left out, as they log
+  every such request. The ticks per second come through the server's console port over a connection that stays open, because
   servers log every new one. Server cards show CPU, memory and players; the **Usage** tab of a server and the node page
   show the rest.
 - **History.** The master records the latest measurement of every agent each minute and keeps it for a week. Charts
@@ -392,9 +424,13 @@ Users get their permissions from groups; a user can be in several groups and has
   only (HSTS, one year), but not with a self-signed one, which would lock browsers out once it changes; behind a
   reverse proxy, set it there. The master may listen at ports below 1024 (`CAP_NET_BIND_SERVICE`), e.g. 443 and 80,
   and has no other privileges.
-- **Networks.** Only Velocity's modern forwarding is supported: it signs the forwarded player data with a random
-  secret per network. BungeeCord's forwarding can be spoofed by anyone who reaches a backend. The secret is stored in
-  the master's database and on the network's servers; the API never returns it.
+- **Networks.** Velocity's modern forwarding signs the forwarded player data with a random secret per network, which
+  is stored in the master's database and on the network's servers; the API never returns it, and the file manager hides
+  it in every file that holds it. Legacy forwarding (BungeeCord's) can be spoofed by anyone who reaches a server, so the
+  servers of such a network are only reachable by the proxy on its node, and those on other nodes need the operator's
+  confirmation that a firewall protects them. The forwarding mods come from Modrinth like other mods, checked against
+  their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent writes to through
+  Docker; no RCON plugin is added.
 - **Containers.** Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images
   need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`, for proxies also `DAC_READ_SEARCH`.
   Servers of a node can't reach each other: they share a Docker network without communication between containers
@@ -416,8 +452,9 @@ Users get their permissions from groups; a user can be in several groups and has
   `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth and the
   Content Security Policy stays unchanged.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
-  directory. A copied proxy loses its forwarding secret and a copied backend stops trusting the proxy, so a copy
-  can't impersonate a server of a network.
+  directory. A copied Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a
+  copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. A copied Fabric server
+  keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab.
 - **Backups.** The agent keeps backups outside of the servers' folders, accessible to itself only (mode `0700`), so a
   compromised server can't read or tamper with them. The master can only choose among the storage locations the
   node's administrator allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry
@@ -471,7 +508,7 @@ Users get their permissions from groups; a user can be in several groups and has
 The code is organised by feature, not by layer.
 
 ```
-api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, plugins, backups, log, stats) and generated code
+api/mcsm/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, plugins, backups, log, stats) and generated code
 cmd/mcsm-master/        master binary
 cmd/mcsm-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -487,7 +524,8 @@ internal/master/
   node/                 node registry, enrollment, agent connections
   update/               looks for new releases, updates the master through systemd and the agents after it
   server/               server API, forwarded to the node's agent
-  network/              networks of servers behind a proxy, applied through the agents
+  network/              networks of servers behind a proxy, applied through the agents; actions on their servers and the
+                        settings of proxies
   files/                file manager, streamed between the browser and the agent
   properties/           server.properties editor
   plugin/               installs, lists and removes plugins and mods of servers
@@ -507,7 +545,7 @@ internal/agent/
   server/               server lifecycle and input validation
   storage/              storage locations allowed for server data
   datadir/              confined access to a server's data, owned by the server's user
-  network/              proxy and backend configuration for networks
+  network/              configuration of proxies and game servers for networks, and the settings of proxies
   files/                file access for the file manager
   properties/           reads and updates server.properties, keeping comments
   plugin/               plugin and mod files of servers
@@ -578,5 +616,4 @@ has it in `RELEASE_KEY` is still signed with the old one.
 
 ## Roadmap
 
-- Console commands for proxies, so that network changes reload the proxy instead of restarting it
 - More runtimes (plain processes)
