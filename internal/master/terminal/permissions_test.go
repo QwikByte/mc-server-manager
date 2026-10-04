@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QwikByte/mc-server-manager/internal/agentcli"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
+	"github.com/QwikByte/noryx/internal/agentcli"
+	"github.com/QwikByte/noryx/internal/master/access"
 )
 
 // Commands without a check can't run, so every command needs one, and every check a command.

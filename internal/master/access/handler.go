@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/QwikByte/mc-server-manager/internal/logging"
-	"github.com/QwikByte/mc-server-manager/internal/master/auth"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/auth"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
 var (

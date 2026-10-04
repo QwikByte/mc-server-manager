@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/database"
 )
 
 // The test vectors of RFC 6238 for SHA-1, cut to 6 digits.

@@ -9,7 +9,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 func (d *Docker) Usage(ctx context.Context, id string) (runtime.Usage, error) {

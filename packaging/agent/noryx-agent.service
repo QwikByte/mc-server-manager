@@ -1,6 +1,6 @@
 [Unit]
 Description=Noryx agent
-Documentation=https://github.com/QwikByte/mc-server-manager
+Documentation=https://github.com/QwikByte/noryx
 After=network-online.target docker.service
 Wants=network-online.target docker.service
 

@@ -1,5 +1,5 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/QwikByte/mc-server-manager/internal/buildinfo.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/QwikByte/noryx/internal/buildinfo.Version=$(VERSION)
 GOBUILD := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 BUF     := go run github.com/bufbuild/buf/cmd/buf@v1.73.0
 GORELEASER := go run github.com/goreleaser/goreleaser/v2@v2.18.2

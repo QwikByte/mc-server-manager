@@ -21,12 +21,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
-	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
-	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
-	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	mcnet "github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/properties"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/agent/storage"
 )
 
 const (

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package noryx.v1;
 
-option go_package = "github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1";
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 
 // StatsService tells what the node and its servers use. The agent measures it every few
 // seconds, so a call returns the latest measurement right away.

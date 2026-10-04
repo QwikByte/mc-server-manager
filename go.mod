@@ -1,4 +1,4 @@
-module github.com/QwikByte/mc-server-manager
+module github.com/QwikByte/noryx
 
 go 1.27
 

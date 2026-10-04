@@ -487,7 +487,7 @@ const file_noryx_v1_plugin_proto_rawDesc = "" +
 	"\rPluginService\x12J\n" +
 	"\vListPlugins\x12\x1c.noryx.v1.ListPluginsRequest\x1a\x1d.noryx.v1.ListPluginsResponse\x12R\n" +
 	"\rInstallPlugin\x12\x1e.noryx.v1.InstallPluginRequest\x1a\x1f.noryx.v1.InstallPluginResponse(\x01\x12M\n" +
-	"\fRemovePlugin\x12\x1d.noryx.v1.RemovePluginRequest\x1a\x1e.noryx.v1.RemovePluginResponseB<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\fRemovePlugin\x12\x1d.noryx.v1.RemovePluginRequest\x1a\x1e.noryx.v1.RemovePluginResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_plugin_proto_rawDescOnce sync.Once

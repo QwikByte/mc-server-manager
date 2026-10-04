@@ -20,10 +20,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
-	"github.com/QwikByte/mc-server-manager/internal/master/https"
-	"github.com/QwikByte/mc-server-manager/internal/master/node"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/https"
+	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 const (

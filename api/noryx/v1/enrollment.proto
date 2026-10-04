@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package noryx.v1;
 
-option go_package = "github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1";
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 
 // EnrollmentService is served by the master. A freshly installed agent calls it
 // exactly once, using a single-use join token, to obtain its node certificate.

@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/access"
 )
 
 // check returns why a command with its arguments may not run, e.g. the permission the

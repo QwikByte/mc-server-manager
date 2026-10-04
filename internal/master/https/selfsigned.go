@@ -13,7 +13,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 // Browsers of Apple refuse certificates valid for longer, even ones the user trusts.

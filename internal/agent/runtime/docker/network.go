@@ -13,9 +13,9 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
-	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	mcnet "github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 // Configure writes the network configuration into the server's data directory. Game

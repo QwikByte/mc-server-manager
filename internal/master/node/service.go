@@ -24,13 +24,13 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
-	"github.com/QwikByte/mc-server-manager/internal/enrollment"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
-	"github.com/QwikByte/mc-server-manager/internal/master/ratelimit"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/buildinfo"
+	"github.com/QwikByte/noryx/internal/enrollment"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/ratelimit"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 // reconnect caps the retry delay, so a node shows up soon after its agent (re)starts.

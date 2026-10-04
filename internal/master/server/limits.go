@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
 // checkLimits enforces the port range and the memory limit of a node for a server that

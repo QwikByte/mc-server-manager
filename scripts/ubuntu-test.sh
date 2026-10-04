@@ -9,7 +9,7 @@
 #   scripts/ubuntu-test.sh reset     stop everything and delete all test data and servers
 set -Eeuo pipefail
 
-REPO_URL=https://github.com/QwikByte/mc-server-manager.git
+REPO_URL=https://github.com/QwikByte/noryx.git
 BRANCH=main
 GO_MINOR=27
 NODE_MAJOR=22
@@ -66,7 +66,7 @@ install_packages() {
 # Windows drive: the agent needs Unix sockets and file permissions, which /mnt/c lacks.
 relocate() {
   if [ -f "$REPO_DIR/go.mod" ] && ! { is_wsl && [[ "$REPO_DIR" == /mnt/* ]]; }; then return; fi
-  local target=$HOME/mc-server-manager
+  local target=$HOME/noryx
   log "Using a clone in $target"
   if [ -d "$target/.git" ]; then
     git -C "$target" fetch -q origin "$BRANCH"

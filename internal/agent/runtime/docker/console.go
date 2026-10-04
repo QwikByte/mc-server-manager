@@ -14,8 +14,8 @@ import (
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
 
-	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	mcnet "github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 // reloadTimeout is how long a proxy may take to answer its reload command.

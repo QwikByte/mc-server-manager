@@ -298,7 +298,7 @@ const file_noryx_v1_properties_proto_rawDesc = "" +
 	"\x1eUpdateServerPropertiesResponse2\xe4\x01\n" +
 	"\x11PropertiesService\x12b\n" +
 	"\x13GetServerProperties\x12$.noryx.v1.GetServerPropertiesRequest\x1a%.noryx.v1.GetServerPropertiesResponse\x12k\n" +
-	"\x16UpdateServerProperties\x12'.noryx.v1.UpdateServerPropertiesRequest\x1a(.noryx.v1.UpdateServerPropertiesResponseB<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\x16UpdateServerProperties\x12'.noryx.v1.UpdateServerPropertiesRequest\x1a(.noryx.v1.UpdateServerPropertiesResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_properties_proto_rawDescOnce sync.Once

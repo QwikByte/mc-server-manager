@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/database"
-	"github.com/QwikByte/mc-server-manager/internal/master/ratelimit"
+	"github.com/QwikByte/noryx/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/ratelimit"
 )
 
 // Behind a trusted proxy, clients have budgets of their own, and guessing the password of

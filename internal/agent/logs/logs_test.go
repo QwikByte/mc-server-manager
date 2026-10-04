@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
 func TestBuffer(t *testing.T) {

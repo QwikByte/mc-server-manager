@@ -7,8 +7,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	"github.com/QwikByte/noryx/internal/agent/enroll"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 // Identity is the certificate the agent presents to the master. The master renews it

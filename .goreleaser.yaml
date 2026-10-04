@@ -20,7 +20,7 @@ builds:
     goarch: [amd64, arm64]
     env: [CGO_ENABLED=0]
     flags: [-trimpath]
-    ldflags: ["-s -w -X github.com/QwikByte/mc-server-manager/internal/buildinfo.Version=v{{ .Version }}"]
+    ldflags: ["-s -w -X github.com/QwikByte/noryx/internal/buildinfo.Version=v{{ .Version }}"]
   - <<: *build
     id: noryx-agent
     main: ./cmd/noryx-agent
@@ -59,7 +59,7 @@ nfpms:
     formats: [deb, rpm, archlinux]
     vendor: QwikByte
     maintainer: QwikByte
-    homepage: https://github.com/QwikByte/mc-server-manager
+    homepage: https://github.com/QwikByte/noryx
     license: MIT
     section: admin
     description: Admin panel and control plane of Noryx, which manages Minecraft servers and networks on any number of nodes.

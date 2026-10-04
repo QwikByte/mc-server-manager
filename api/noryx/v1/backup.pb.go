@@ -952,7 +952,7 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\rRestoreBackup\x12\x1e.noryx.v1.RestoreBackupRequest\x1a\x1f.noryx.v1.RestoreBackupResponse\x12M\n" +
 	"\fDeleteBackup\x12\x1d.noryx.v1.DeleteBackupRequest\x1a\x1e.noryx.v1.DeleteBackupResponse\x12U\n" +
 	"\x0eDownloadBackup\x12\x1f.noryx.v1.DownloadBackupRequest\x1a .noryx.v1.DownloadBackupResponse0\x01\x12O\n" +
-	"\fImportBackup\x12\x1d.noryx.v1.ImportBackupRequest\x1a\x1e.noryx.v1.ImportBackupResponse(\x01B<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\fImportBackup\x12\x1d.noryx.v1.ImportBackupRequest\x1a\x1e.noryx.v1.ImportBackupResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_backup_proto_rawDescOnce sync.Once

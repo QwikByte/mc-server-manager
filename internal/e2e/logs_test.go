@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
-	"github.com/QwikByte/mc-server-manager/internal/master/auth"
-	"github.com/QwikByte/mc-server-manager/internal/master/logs"
-	"github.com/QwikByte/mc-server-manager/internal/master/network"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/access"
+	masterapp "github.com/QwikByte/noryx/internal/master/app"
+	"github.com/QwikByte/noryx/internal/master/auth"
+	"github.com/QwikByte/noryx/internal/master/logs"
+	"github.com/QwikByte/noryx/internal/master/network"
 )
 
 // logEntry is an entry as the panel gets it.

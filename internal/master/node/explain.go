@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
 // explained makes calls to the agent of a node fail with messages that name the node if it

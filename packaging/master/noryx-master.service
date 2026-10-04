@@ -1,6 +1,6 @@
 [Unit]
 Description=Noryx master
-Documentation=https://github.com/QwikByte/mc-server-manager
+Documentation=https://github.com/QwikByte/noryx
 After=network-online.target
 Wants=network-online.target noryx-master-update.path
 

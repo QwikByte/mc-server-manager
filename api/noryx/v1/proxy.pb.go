@@ -261,7 +261,7 @@ const file_noryx_v1_proxy_proto_rawDesc = "" +
 	"\breloaded\x18\x01 \x01(\bR\breloaded2\xcd\x01\n" +
 	"\fProxyService\x12Y\n" +
 	"\x10GetProxySettings\x12!.noryx.v1.GetProxySettingsRequest\x1a\".noryx.v1.GetProxySettingsResponse\x12b\n" +
-	"\x13UpdateProxySettings\x12$.noryx.v1.UpdateProxySettingsRequest\x1a%.noryx.v1.UpdateProxySettingsResponseB<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\x13UpdateProxySettings\x12$.noryx.v1.UpdateProxySettingsRequest\x1a%.noryx.v1.UpdateProxySettingsResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_proxy_proto_rawDescOnce sync.Once

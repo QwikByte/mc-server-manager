@@ -3,9 +3,9 @@ package network
 import (
 	"errors"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 // Files of game servers that hold the forwarding secret of their network.

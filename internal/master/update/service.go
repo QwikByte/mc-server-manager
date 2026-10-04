@@ -21,16 +21,16 @@ import (
 	"golang.org/x/mod/semver"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
-	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/buildinfo"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/node"
 )
 
 const (
 	// DefaultAPI describes the latest release; GitHub leaves pre-releases out.
-	DefaultAPI = "https://api.github.com/repos/QwikByte/mc-server-manager/releases/latest"
+	DefaultAPI = "https://api.github.com/repos/QwikByte/noryx/releases/latest"
 	// DefaultPage redirects to the latest release. It only tells its version, but GitHub
 	// doesn't limit how often an IP address asks for it, unlike the API.
 	DefaultPage = buildinfo.Repository + "/releases/latest"

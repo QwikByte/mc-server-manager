@@ -407,7 +407,7 @@ const file_noryx_v1_stats_proto_rawDesc = "" +
 	"\x03max\x18\x02 \x01(\rR\x03max\x12\x14\n" +
 	"\x05names\x18\x03 \x03(\tR\x05names2Q\n" +
 	"\fStatsService\x12A\n" +
-	"\bGetStats\x12\x19.noryx.v1.GetStatsRequest\x1a\x1a.noryx.v1.GetStatsResponseB<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\bGetStats\x12\x19.noryx.v1.GetStatsRequest\x1a\x1a.noryx.v1.GetStatsResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_stats_proto_rawDescOnce sync.Once

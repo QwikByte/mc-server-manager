@@ -18,7 +18,7 @@ set -Eeuo pipefail
 
 # The release workflow replaces "latest" with the version of the release.
 version=latest
-readonly REPO=https://github.com/QwikByte/mc-server-manager
+readonly REPO=https://github.com/QwikByte/noryx
 # The release workflow signs checksums.txt with this Ed25519 key, so a release is only installed if it was
 # published by Noryx's release workflow, not just by someone who can change its releases.
 readonly RELEASE_KEY=MCowBQYDK2VwAyEA18ilyBW0qkWpfEqFR+rW5eQeGC3Sif4OiD8RKpEry5s=
