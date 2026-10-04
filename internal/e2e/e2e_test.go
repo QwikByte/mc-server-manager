@@ -226,7 +226,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	check(t, tasks.Start(t.Context()))
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
-		Networks: network.NewService(m.db, nodes), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes),
 		Moves: moves,
 	}
@@ -350,6 +350,7 @@ type fakeRuntime struct {
 	servers  []runtime.Server
 	networks map[string]runtime.Network
 	commands []string
+	reloads  []string // proxies that reloaded their configuration
 	// createErr makes creating servers fail, e.g. on a node that is full.
 	createErr error
 	// hold, if set, holds up creating servers until it is closed, e.g. to act while a server
@@ -516,6 +517,19 @@ func (f *fakeRuntime) Configure(_ context.Context, id string, network runtime.Ne
 	}
 	f.networks[id] = network
 	return nil
+}
+
+func (f *fakeRuntime) Reload(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reloads = append(f.reloads, id)
+	return nil
+}
+
+func (f *fakeRuntime) reloaded() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.reloads)
 }
 
 func (f *fakeRuntime) network(id string) runtime.Network {

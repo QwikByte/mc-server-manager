@@ -23,8 +23,9 @@ import (
 )
 
 // Configure writes the network configuration into the server's data directory. Game
-// servers are recreated when they join or leave a network, because the online mode
-// is part of the container's environment. Running servers restart to apply it.
+// servers are recreated when they join or leave a network, because the online mode is part
+// of the container's environment, and running ones restart to apply a changed
+// configuration. Running proxies reload theirs.
 func (d *Docker) Configure(ctx context.Context, id string, network runtime.Network) error {
 	c, spec, err := d.inspect(ctx, id)
 	if err != nil {
@@ -39,39 +40,17 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 		return err
 	}
 	defer data.Close()
+	if spec.Type.Proxy() {
+		return d.configureProxy(ctx, c, spec, data, network)
+	}
+	changed, err := mcnet.WriteBackend(data, spec.Type, network.Forwarding, network.ForwardingSecret)
+	if err != nil {
+		return err
+	}
 	running := c.State.Running
-	var changed bool
-
-	switch spec.Type {
-	case mcsmv1.ServerType_SERVER_TYPE_VELOCITY:
-		if network.ForwardingSecret == "" {
-			return errors.New("a proxy needs a forwarding secret")
-		}
-		if err := d.move(ctx, c, proxyNetwork(id)); err != nil { // proxies of older agents shared a network
-			return err
-		}
-		changed, err = d.writeProxyConfig(ctx, id, data, network)
-		if err != nil {
-			return err
-		}
-		if err := d.release(ctx, id, network.Backends); err != nil {
-			return err
-		}
-		if !mounted(c, images[spec.Type].data) {
-			// Created by an older agent that mounted the data and published the port wrongly.
-			return d.recreate(ctx, spec, running, proxyNetwork(id))
-		}
-	case mcsmv1.ServerType_SERVER_TYPE_PAPER, mcsmv1.ServerType_SERVER_TYPE_PURPUR:
-		changed, err = writeBackendConfig(data, network.ForwardingSecret)
-		if err != nil {
-			return err
-		}
-		if behind := network.ForwardingSecret != ""; behind != spec.BehindProxy || network.ProxyOnNode != spec.ProxyOnNode {
-			spec.BehindProxy, spec.ProxyOnNode = behind, network.ProxyOnNode
-			return d.recreate(ctx, spec, running, placement(c, spec))
-		}
-	default:
-		return runtime.ErrUnsupported
+	if behind := network.Forwarding != runtime.ForwardingNone; behind != spec.BehindProxy || network.ProxyOnNode != spec.ProxyOnNode {
+		spec.BehindProxy, spec.ProxyOnNode = behind, network.ProxyOnNode
+		return d.recreate(ctx, spec, running, placement(c, spec))
 	}
 	if !running || !changed {
 		return nil // applying the same configuration again must not kick players
@@ -79,52 +58,41 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 	return d.Restart(ctx, id)
 }
 
-// writeProxyConfig writes velocity.toml and the forwarding secret of a proxy. It reports
-// whether the network configuration changed.
-func (d *Docker) writeProxyConfig(ctx context.Context, proxyID string, data *datadir.Dir, network runtime.Network) (bool, error) {
-	backends := make([]mcnet.Backend, 0, len(network.Backends))
-	for _, b := range network.Backends {
-		address, err := d.address(ctx, proxyID, b)
+// configureProxy writes a network into the configuration of a proxy, with the backends of
+// this node in the proxy's Docker network, and makes a running proxy reload it.
+func (d *Docker) configureProxy(ctx context.Context, c container.InspectResponse, spec runtime.Spec, data *datadir.Dir, network runtime.Network) error {
+	if err := d.move(ctx, c, proxyNetwork(spec.ID)); err != nil { // proxies of older agents shared a network
+		return err
+	}
+	local := network.Backends
+	network.Backends = make([]runtime.NetworkBackend, len(local))
+	for i, b := range local {
+		address, err := d.address(ctx, spec.ID, b)
 		if err != nil {
-			return false, err
+			return err
 		}
-		backends = append(backends, mcnet.Backend{Name: b.Name, Address: address})
+		b.ServerID, b.Address = "", address
+		network.Backends[i] = b
 	}
-	current, err := data.ReadOptional("velocity.toml")
+	changed, removed, err := mcnet.WriteProxy(data, spec.Type, network)
 	if err != nil {
-		return false, err
+		return err
 	}
-	config, changed, err := mcnet.VelocityConfig(current, backends)
-	if err != nil {
-		return false, err
+	if err := d.release(ctx, spec.ID, local); err != nil {
+		return err
 	}
-	oldSecret, err := data.ReadOptional(mcnet.ForwardingSecretFile)
-	if err != nil {
-		return false, err
+	running := c.State.Running
+	switch {
+	case !mounted(c, images[spec.Type].data) || !c.Config.OpenStdin:
+		// Created by an older agent that mounted the data and published the port wrongly,
+		// or that didn't let the proxy read console commands.
+		return d.recreate(ctx, spec, running, proxyNetwork(spec.ID))
+	case !running || !changed:
+		return nil
+	case removed && spec.Type.Bungee():
+		return d.Restart(ctx, spec.ID) // BungeeCord can't reload without a server it had
 	}
-	changed = changed || string(oldSecret) != network.ForwardingSecret
-	if err := data.WriteFile(mcnet.ForwardingSecretFile, []byte(network.ForwardingSecret)); err != nil {
-		return false, err
-	}
-	return changed, data.WriteFile("velocity.toml", config)
-}
-
-// writeBackendConfig writes the forwarding settings of paper-global.yml. It reports
-// whether they changed.
-func writeBackendConfig(data *datadir.Dir, secret string) (bool, error) {
-	const file = "config/paper-global.yml"
-	current, err := data.ReadOptional(file)
-	if err != nil {
-		return false, err
-	}
-	config, changed, err := mcnet.PaperGlobal(current, secret)
-	if err != nil {
-		return false, err
-	}
-	if err := data.MkdirAll("config"); err != nil {
-		return false, err
-	}
-	return changed, data.WriteFile(file, config)
+	return d.Reload(ctx, spec.ID)
 }
 
 // address returns where a proxy reaches a backend: by container name over the network of
@@ -160,10 +128,10 @@ const (
 
 func proxyNetwork(proxyID string) string { return proxyNetworkPrefix + proxyID }
 
-// home returns the network of a new server: a Velocity proxy gets its own, any other
-// server the shared one. Backends move to the network of their proxy when it is configured.
+// home returns the network of a new server: a proxy gets its own, any other server the
+// shared one. Backends move to the network of their proxy when it is configured.
 func home(spec runtime.Spec) string {
-	if spec.Type == mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
+	if spec.Type.Proxy() {
 		return proxyNetwork(spec.ID)
 	}
 	return sharedNetwork
@@ -242,10 +210,10 @@ func (d *Docker) prepare(ctx context.Context, id string) error {
 	return d.leaveLegacy(ctx, c)
 }
 
-// listen makes a Velocity proxy listen on the port its container publishes, as the default
-// configuration of the image listens on another one.
+// listen makes a proxy listen on the port its container publishes, as the default
+// configuration of the Velocity image listens on another one.
 func (d *Docker) listen(spec runtime.Spec) error {
-	if spec.Type != mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
+	if !spec.Type.Proxy() {
 		return nil
 	}
 	path, err := d.dataPath(spec)
@@ -257,15 +225,8 @@ func (d *Docker) listen(spec runtime.Spec) error {
 		return err
 	}
 	defer data.Close()
-	current, err := data.ReadOptional("velocity.toml")
-	if err != nil {
-		return err
-	}
-	config, changed, err := mcnet.VelocityBind(current, images[spec.Type].port)
-	if err != nil || !changed {
-		return err
-	}
-	return data.WriteFile("velocity.toml", config)
+	_, err = mcnet.ProxyBind(data, spec.Type, images[spec.Type].port)
+	return err
 }
 
 // leaveLegacy takes a container out of the network of older agents, once it is in one

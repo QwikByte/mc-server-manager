@@ -68,6 +68,7 @@ var images = map[mcsmv1.ServerType]image{
 	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {serverImage, "NEOFORGE", 25565, "/data"},
 	mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   {proxyImage, "VELOCITY", 25565, "/server"},
 	mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: {proxyImage, "BUNGEECORD", 25577, "/server"},
+	mcsmv1.ServerType_SERVER_TYPE_WATERFALL:  {proxyImage, "WATERFALL", 25577, "/server"},
 }
 
 // Docker implements runtime.Runtime. Container labels are the only state:
@@ -239,6 +240,8 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 			Env:          env,
 			Labels:       map[string]string{labelManaged: "true", labelSpec: string(specJSON)},
 			ExposedPorts: network.PortSet{port: {}},
+			// Proxies read console commands from their standard input, as they have no RCON.
+			OpenStdin: spec.Type.Proxy(),
 		},
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{netName: {}}},
 		HostConfig: &container.HostConfig{
@@ -327,7 +330,7 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 	if _, err := d.cli.ContainerRemove(ctx, containerName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
 		return notFound(err)
 	}
-	if spec.Type == mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
+	if spec.Type.Proxy() {
 		if _, err := d.cli.NetworkRemove(ctx, proxyNetwork(id), client.NetworkRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
 			return err
 		}
@@ -391,18 +394,20 @@ func logLine(text string) runtime.LogLine {
 	return runtime.LogLine{Time: t, Text: rest}
 }
 
-// SendCommand runs the command through rcon-cli, which the itzg server image ships
-// together with a preconfigured RCON connection. Proxies have no RCON.
+// SendCommand runs the command of a game server through rcon-cli, which the itzg server
+// image ships together with a preconfigured RCON connection. Proxies have no RCON and get
+// the command on their console instead, whose output follows in the logs.
 func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, error) {
 	c, spec, err := d.inspect(ctx, id)
-	if err != nil {
+	switch {
+	case err != nil:
 		return "", err
-	}
-	if images[spec.Type].ref != serverImage {
-		return "", runtime.ErrUnsupported
-	}
-	if !c.State.Running {
+	case !c.State.Running:
 		return "", runtime.ErrNotRunning
+	case spec.Type.Proxy() && !c.Config.OpenStdin:
+		return "", runtime.ErrUnsupported // created by an older agent, until it is created again
+	case spec.Type.Proxy():
+		return "", d.console(ctx, id, command, nil)
 	}
 	// As the server's user: root in the container may not read its data.
 	user, err := d.owner(spec)

@@ -198,6 +198,9 @@ func (h *Handler) checkMove(ctx context.Context, from, id string, req *moveReque
 	if err != nil {
 		return err
 	}
+	if err := h.networks.CheckMove(ctx, id, from, req.Node); err != nil {
+		return err
+	}
 	*src = source
 	to, err := h.nodes.Get(ctx, req.Node)
 	if err != nil {

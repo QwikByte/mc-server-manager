@@ -34,6 +34,7 @@ const (
 	// Proxies connect several servers to one network.
 	ServerType_SERVER_TYPE_VELOCITY   ServerType = 7
 	ServerType_SERVER_TYPE_BUNGEECORD ServerType = 8
+	ServerType_SERVER_TYPE_WATERFALL  ServerType = 9
 )
 
 // Enum value maps for ServerType.
@@ -48,6 +49,7 @@ var (
 		6: "SERVER_TYPE_NEOFORGE",
 		7: "SERVER_TYPE_VELOCITY",
 		8: "SERVER_TYPE_BUNGEECORD",
+		9: "SERVER_TYPE_WATERFALL",
 	}
 	ServerType_value = map[string]int32{
 		"SERVER_TYPE_UNSPECIFIED": 0,
@@ -59,6 +61,7 @@ var (
 		"SERVER_TYPE_NEOFORGE":    6,
 		"SERVER_TYPE_VELOCITY":    7,
 		"SERVER_TYPE_BUNGEECORD":  8,
+		"SERVER_TYPE_WATERFALL":   9,
 	}
 )
 
@@ -201,6 +204,62 @@ func (x ServerState) Number() protoreflect.EnumNumber {
 // Deprecated: Use ServerState.Descriptor instead.
 func (ServerState) EnumDescriptor() ([]byte, []int) {
 	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{2}
+}
+
+type Forwarding int32
+
+const (
+	Forwarding_FORWARDING_UNSPECIFIED Forwarding = 0
+	// Not part of a network: a game server accepts players directly.
+	Forwarding_FORWARDING_NONE Forwarding = 1
+	// Velocity's modern forwarding, signed with the forwarding secret.
+	Forwarding_FORWARDING_MODERN Forwarding = 2
+	// BungeeCord's forwarding (ip_forward), which Velocity calls legacy. It doesn't prove that
+	// players come through the proxy, so only the proxy may reach the backends.
+	Forwarding_FORWARDING_LEGACY Forwarding = 3
+)
+
+// Enum value maps for Forwarding.
+var (
+	Forwarding_name = map[int32]string{
+		0: "FORWARDING_UNSPECIFIED",
+		1: "FORWARDING_NONE",
+		2: "FORWARDING_MODERN",
+		3: "FORWARDING_LEGACY",
+	}
+	Forwarding_value = map[string]int32{
+		"FORWARDING_UNSPECIFIED": 0,
+		"FORWARDING_NONE":        1,
+		"FORWARDING_MODERN":      2,
+		"FORWARDING_LEGACY":      3,
+	}
+)
+
+func (x Forwarding) Enum() *Forwarding {
+	p := new(Forwarding)
+	*p = x
+	return p
+}
+
+func (x Forwarding) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Forwarding) Descriptor() protoreflect.EnumDescriptor {
+	return file_mcsm_v1_server_proto_enumTypes[3].Descriptor()
+}
+
+func (Forwarding) Type() protoreflect.EnumType {
+	return &file_mcsm_v1_server_proto_enumTypes[3]
+}
+
+func (x Forwarding) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Forwarding.Descriptor instead.
+func (Forwarding) EnumDescriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{3}
 }
 
 type Server struct {
@@ -1421,13 +1480,21 @@ func (x *SendCommandResponse) GetOutput() string {
 type ConfigureNetworkRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Shared secret of Velocity's modern forwarding. Required for proxies.
+	// Shared secret of Velocity's modern forwarding.
 	ForwardingSecret string `protobuf:"bytes,2,opt,name=forwarding_secret,json=forwardingSecret,proto3" json:"forwarding_secret,omitempty"`
-	// Backends of a proxy, in the order players are sent to them.
+	// Backends of a proxy.
 	Backends []*NetworkBackend `protobuf:"bytes,3,rep,name=backends,proto3" json:"backends,omitempty"`
 	// For a backend: its proxy runs on the same node and reaches it over a Docker network,
 	// so its port isn't published.
-	ProxyOnNode   bool `protobuf:"varint,4,opt,name=proxy_on_node,json=proxyOnNode,proto3" json:"proxy_on_node,omitempty"`
+	ProxyOnNode bool `protobuf:"varint,4,opt,name=proxy_on_node,json=proxyOnNode,proto3" json:"proxy_on_node,omitempty"`
+	// How the proxy forwards players to its backends. Unspecified means modern forwarding
+	// if a secret is set, and otherwise FORWARDING_NONE, as older masters sent it.
+	Forwarding Forwarding `protobuf:"varint,5,opt,name=forwarding,proto3,enum=mcsm.v1.Forwarding" json:"forwarding,omitempty"`
+	// For a proxy: the backends players join and fall back to, in this order. Empty means
+	// the first backend, as older masters sent it.
+	Try []string `protobuf:"bytes,6,rep,name=try,proto3" json:"try,omitempty"`
+	// For a proxy: the backends players join when they connect through a host name.
+	ForcedHosts   []*ForcedHost `protobuf:"bytes,7,rep,name=forced_hosts,json=forcedHosts,proto3" json:"forced_hosts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1490,6 +1557,27 @@ func (x *ConfigureNetworkRequest) GetProxyOnNode() bool {
 	return false
 }
 
+func (x *ConfigureNetworkRequest) GetForwarding() Forwarding {
+	if x != nil {
+		return x.Forwarding
+	}
+	return Forwarding_FORWARDING_UNSPECIFIED
+}
+
+func (x *ConfigureNetworkRequest) GetTry() []string {
+	if x != nil {
+		return x.Try
+	}
+	return nil
+}
+
+func (x *ConfigureNetworkRequest) GetForcedHosts() []*ForcedHost {
+	if x != nil {
+		return x.ForcedHosts
+	}
+	return nil
+}
+
 type NetworkBackend struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Name players use, e.g. in /server lobby.
@@ -1498,7 +1586,11 @@ type NetworkBackend struct {
 	//
 	//	*NetworkBackend_ServerId
 	//	*NetworkBackend_Address
-	Target        isNetworkBackend_Target `protobuf_oneof:"target"`
+	Target isNetworkBackend_Target `protobuf_oneof:"target"`
+	// BungeeCord: only players with the permission bungeecord.server.<name> may join it.
+	Restricted bool `protobuf:"varint,4,opt,name=restricted,proto3" json:"restricted,omitempty"`
+	// BungeeCord: the MOTD shown for host names that lead to it.
+	Motd          string `protobuf:"bytes,5,opt,name=motd,proto3" json:"motd,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1565,6 +1657,20 @@ func (x *NetworkBackend) GetAddress() string {
 	return ""
 }
 
+func (x *NetworkBackend) GetRestricted() bool {
+	if x != nil {
+		return x.Restricted
+	}
+	return false
+}
+
+func (x *NetworkBackend) GetMotd() string {
+	if x != nil {
+		return x.Motd
+	}
+	return ""
+}
+
 type isNetworkBackend_Target interface {
 	isNetworkBackend_Target()
 }
@@ -1583,6 +1689,61 @@ func (*NetworkBackend_ServerId) isNetworkBackend_Target() {}
 
 func (*NetworkBackend_Address) isNetworkBackend_Target() {}
 
+// ForcedHost sends players who connect through a host name to certain backends.
+type ForcedHost struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// e.g. survival.example.com
+	Host string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	// Names of the backends, tried in this order. BungeeCord takes only one.
+	Servers       []string `protobuf:"bytes,2,rep,name=servers,proto3" json:"servers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForcedHost) Reset() {
+	*x = ForcedHost{}
+	mi := &file_mcsm_v1_server_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForcedHost) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForcedHost) ProtoMessage() {}
+
+func (x *ForcedHost) ProtoReflect() protoreflect.Message {
+	mi := &file_mcsm_v1_server_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForcedHost.ProtoReflect.Descriptor instead.
+func (*ForcedHost) Descriptor() ([]byte, []int) {
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ForcedHost) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *ForcedHost) GetServers() []string {
+	if x != nil {
+		return x.Servers
+	}
+	return nil
+}
+
 type ConfigureNetworkResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1591,7 +1752,7 @@ type ConfigureNetworkResponse struct {
 
 func (x *ConfigureNetworkResponse) Reset() {
 	*x = ConfigureNetworkResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[23]
+	mi := &file_mcsm_v1_server_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1603,7 +1764,7 @@ func (x *ConfigureNetworkResponse) String() string {
 func (*ConfigureNetworkResponse) ProtoMessage() {}
 
 func (x *ConfigureNetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[23]
+	mi := &file_mcsm_v1_server_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1616,7 +1777,7 @@ func (x *ConfigureNetworkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureNetworkResponse.ProtoReflect.Descriptor instead.
 func (*ConfigureNetworkResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{23}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{24}
 }
 
 type DuplicateServerRequest struct {
@@ -1631,7 +1792,7 @@ type DuplicateServerRequest struct {
 
 func (x *DuplicateServerRequest) Reset() {
 	*x = DuplicateServerRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[24]
+	mi := &file_mcsm_v1_server_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1643,7 +1804,7 @@ func (x *DuplicateServerRequest) String() string {
 func (*DuplicateServerRequest) ProtoMessage() {}
 
 func (x *DuplicateServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[24]
+	mi := &file_mcsm_v1_server_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1656,7 +1817,7 @@ func (x *DuplicateServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DuplicateServerRequest.ProtoReflect.Descriptor instead.
 func (*DuplicateServerRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{24}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DuplicateServerRequest) GetId() string {
@@ -1689,7 +1850,7 @@ type DuplicateServerResponse struct {
 
 func (x *DuplicateServerResponse) Reset() {
 	*x = DuplicateServerResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[25]
+	mi := &file_mcsm_v1_server_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1701,7 +1862,7 @@ func (x *DuplicateServerResponse) String() string {
 func (*DuplicateServerResponse) ProtoMessage() {}
 
 func (x *DuplicateServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[25]
+	mi := &file_mcsm_v1_server_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1714,7 +1875,7 @@ func (x *DuplicateServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DuplicateServerResponse.ProtoReflect.Descriptor instead.
 func (*DuplicateServerResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{25}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DuplicateServerResponse) GetServer() *Server {
@@ -1737,7 +1898,7 @@ type ImportServerRequest struct {
 
 func (x *ImportServerRequest) Reset() {
 	*x = ImportServerRequest{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[26]
+	mi := &file_mcsm_v1_server_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1749,7 +1910,7 @@ func (x *ImportServerRequest) String() string {
 func (*ImportServerRequest) ProtoMessage() {}
 
 func (x *ImportServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[26]
+	mi := &file_mcsm_v1_server_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1762,7 +1923,7 @@ func (x *ImportServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportServerRequest.ProtoReflect.Descriptor instead.
 func (*ImportServerRequest) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{26}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ImportServerRequest) GetContent() isImportServerRequest_Content {
@@ -1815,7 +1976,7 @@ type ImportServerResponse struct {
 
 func (x *ImportServerResponse) Reset() {
 	*x = ImportServerResponse{}
-	mi := &file_mcsm_v1_server_proto_msgTypes[27]
+	mi := &file_mcsm_v1_server_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1827,7 +1988,7 @@ func (x *ImportServerResponse) String() string {
 func (*ImportServerResponse) ProtoMessage() {}
 
 func (x *ImportServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_mcsm_v1_server_proto_msgTypes[27]
+	mi := &file_mcsm_v1_server_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1840,7 +2001,7 @@ func (x *ImportServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportServerResponse.ProtoReflect.Descriptor instead.
 func (*ImportServerResponse) Descriptor() ([]byte, []int) {
-	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{27}
+	return file_mcsm_v1_server_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ImportServerResponse) GetServer() *Server {
@@ -1948,17 +2109,30 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\"-\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\"\xaf\x01\n" +
+	"\x06output\x18\x01 \x01(\tR\x06output\"\xae\x02\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x123\n" +
 	"\bbackends\x18\x03 \x03(\v2\x17.mcsm.v1.NetworkBackendR\bbackends\x12\"\n" +
-	"\rproxy_on_node\x18\x04 \x01(\bR\vproxyOnNode\"i\n" +
+	"\rproxy_on_node\x18\x04 \x01(\bR\vproxyOnNode\x123\n" +
+	"\n" +
+	"forwarding\x18\x05 \x01(\x0e2\x13.mcsm.v1.ForwardingR\n" +
+	"forwarding\x12\x10\n" +
+	"\x03try\x18\x06 \x03(\tR\x03try\x126\n" +
+	"\fforced_hosts\x18\a \x03(\v2\x13.mcsm.v1.ForcedHostR\vforcedHosts\"\x9d\x01\n" +
 	"\x0eNetworkBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\tserver_id\x18\x02 \x01(\tH\x00R\bserverId\x12\x1a\n" +
-	"\aaddress\x18\x03 \x01(\tH\x00R\aaddressB\b\n" +
-	"\x06target\"\x1a\n" +
+	"\aaddress\x18\x03 \x01(\tH\x00R\aaddress\x12\x1e\n" +
+	"\n" +
+	"restricted\x18\x04 \x01(\bR\n" +
+	"restricted\x12\x12\n" +
+	"\x04motd\x18\x05 \x01(\tR\x04motdB\b\n" +
+	"\x06target\":\n" +
+	"\n" +
+	"ForcedHost\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x18\n" +
+	"\aservers\x18\x02 \x03(\tR\aservers\"\x1a\n" +
 	"\x18ConfigureNetworkResponse\"P\n" +
 	"\x16DuplicateServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -1971,7 +2145,7 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
 	"\acontent\"?\n" +
 	"\x14ImportServerResponse\x12'\n" +
-	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server*\xf0\x01\n" +
+	"\x06server\x18\x01 \x01(\v2\x0f.mcsm.v1.ServerR\x06server*\x8b\x02\n" +
 	"\n" +
 	"ServerType\x12\x1b\n" +
 	"\x17SERVER_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -1982,7 +2156,8 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x11SERVER_TYPE_FORGE\x10\x05\x12\x18\n" +
 	"\x14SERVER_TYPE_NEOFORGE\x10\x06\x12\x18\n" +
 	"\x14SERVER_TYPE_VELOCITY\x10\a\x12\x1a\n" +
-	"\x16SERVER_TYPE_BUNGEECORD\x10\b*\x81\x01\n" +
+	"\x16SERVER_TYPE_BUNGEECORD\x10\b\x12\x19\n" +
+	"\x15SERVER_TYPE_WATERFALL\x10\t*\x81\x01\n" +
 	"\rRestartPolicy\x12\x1e\n" +
 	"\x1aRESTART_POLICY_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15RESTART_POLICY_ALWAYS\x10\x01\x12\x1b\n" +
@@ -1993,7 +2168,13 @@ const file_mcsm_v1_server_proto_rawDesc = "" +
 	"\x14SERVER_STATE_STOPPED\x10\x01\x12\x19\n" +
 	"\x15SERVER_STATE_STARTING\x10\x02\x12\x18\n" +
 	"\x14SERVER_STATE_RUNNING\x10\x03\x12\x19\n" +
-	"\x15SERVER_STATE_CRASHING\x10\x042\xfc\a\n" +
+	"\x15SERVER_STATE_CRASHING\x10\x04*k\n" +
+	"\n" +
+	"Forwarding\x12\x1a\n" +
+	"\x16FORWARDING_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fFORWARDING_NONE\x10\x01\x12\x15\n" +
+	"\x11FORWARDING_MODERN\x10\x02\x12\x15\n" +
+	"\x11FORWARDING_LEGACY\x10\x032\xfc\a\n" +
 	"\rServerService\x12H\n" +
 	"\vListServers\x12\x1b.mcsm.v1.ListServersRequest\x1a\x1c.mcsm.v1.ListServersResponse\x12K\n" +
 	"\fCreateServer\x12\x1c.mcsm.v1.CreateServerRequest\x1a\x1d.mcsm.v1.CreateServerResponse\x12H\n" +
@@ -2023,88 +2204,92 @@ func file_mcsm_v1_server_proto_rawDescGZIP() []byte {
 	return file_mcsm_v1_server_proto_rawDescData
 }
 
-var file_mcsm_v1_server_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_mcsm_v1_server_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_mcsm_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_mcsm_v1_server_proto_goTypes = []any{
 	(ServerType)(0),                  // 0: mcsm.v1.ServerType
 	(RestartPolicy)(0),               // 1: mcsm.v1.RestartPolicy
 	(ServerState)(0),                 // 2: mcsm.v1.ServerState
-	(*Server)(nil),                   // 3: mcsm.v1.Server
-	(*ListServersRequest)(nil),       // 4: mcsm.v1.ListServersRequest
-	(*ListServersResponse)(nil),      // 5: mcsm.v1.ListServersResponse
-	(*CreateServerRequest)(nil),      // 6: mcsm.v1.CreateServerRequest
-	(*CreateServerResponse)(nil),     // 7: mcsm.v1.CreateServerResponse
-	(*StartServerRequest)(nil),       // 8: mcsm.v1.StartServerRequest
-	(*StartServerResponse)(nil),      // 9: mcsm.v1.StartServerResponse
-	(*StopServerRequest)(nil),        // 10: mcsm.v1.StopServerRequest
-	(*StopServerResponse)(nil),       // 11: mcsm.v1.StopServerResponse
-	(*RestartServerRequest)(nil),     // 12: mcsm.v1.RestartServerRequest
-	(*RestartServerResponse)(nil),    // 13: mcsm.v1.RestartServerResponse
-	(*UpdateServerRequest)(nil),      // 14: mcsm.v1.UpdateServerRequest
-	(*UpdateServerResponse)(nil),     // 15: mcsm.v1.UpdateServerResponse
-	(*UpdateImageRequest)(nil),       // 16: mcsm.v1.UpdateImageRequest
-	(*UpdateImageResponse)(nil),      // 17: mcsm.v1.UpdateImageResponse
-	(*DeleteServerRequest)(nil),      // 18: mcsm.v1.DeleteServerRequest
-	(*DeleteServerResponse)(nil),     // 19: mcsm.v1.DeleteServerResponse
-	(*StreamLogsRequest)(nil),        // 20: mcsm.v1.StreamLogsRequest
-	(*StreamLogsResponse)(nil),       // 21: mcsm.v1.StreamLogsResponse
-	(*SendCommandRequest)(nil),       // 22: mcsm.v1.SendCommandRequest
-	(*SendCommandResponse)(nil),      // 23: mcsm.v1.SendCommandResponse
-	(*ConfigureNetworkRequest)(nil),  // 24: mcsm.v1.ConfigureNetworkRequest
-	(*NetworkBackend)(nil),           // 25: mcsm.v1.NetworkBackend
-	(*ConfigureNetworkResponse)(nil), // 26: mcsm.v1.ConfigureNetworkResponse
-	(*DuplicateServerRequest)(nil),   // 27: mcsm.v1.DuplicateServerRequest
-	(*DuplicateServerResponse)(nil),  // 28: mcsm.v1.DuplicateServerResponse
-	(*ImportServerRequest)(nil),      // 29: mcsm.v1.ImportServerRequest
-	(*ImportServerResponse)(nil),     // 30: mcsm.v1.ImportServerResponse
-	nil,                              // 31: mcsm.v1.CreateServerRequest.PropertiesEntry
+	(Forwarding)(0),                  // 3: mcsm.v1.Forwarding
+	(*Server)(nil),                   // 4: mcsm.v1.Server
+	(*ListServersRequest)(nil),       // 5: mcsm.v1.ListServersRequest
+	(*ListServersResponse)(nil),      // 6: mcsm.v1.ListServersResponse
+	(*CreateServerRequest)(nil),      // 7: mcsm.v1.CreateServerRequest
+	(*CreateServerResponse)(nil),     // 8: mcsm.v1.CreateServerResponse
+	(*StartServerRequest)(nil),       // 9: mcsm.v1.StartServerRequest
+	(*StartServerResponse)(nil),      // 10: mcsm.v1.StartServerResponse
+	(*StopServerRequest)(nil),        // 11: mcsm.v1.StopServerRequest
+	(*StopServerResponse)(nil),       // 12: mcsm.v1.StopServerResponse
+	(*RestartServerRequest)(nil),     // 13: mcsm.v1.RestartServerRequest
+	(*RestartServerResponse)(nil),    // 14: mcsm.v1.RestartServerResponse
+	(*UpdateServerRequest)(nil),      // 15: mcsm.v1.UpdateServerRequest
+	(*UpdateServerResponse)(nil),     // 16: mcsm.v1.UpdateServerResponse
+	(*UpdateImageRequest)(nil),       // 17: mcsm.v1.UpdateImageRequest
+	(*UpdateImageResponse)(nil),      // 18: mcsm.v1.UpdateImageResponse
+	(*DeleteServerRequest)(nil),      // 19: mcsm.v1.DeleteServerRequest
+	(*DeleteServerResponse)(nil),     // 20: mcsm.v1.DeleteServerResponse
+	(*StreamLogsRequest)(nil),        // 21: mcsm.v1.StreamLogsRequest
+	(*StreamLogsResponse)(nil),       // 22: mcsm.v1.StreamLogsResponse
+	(*SendCommandRequest)(nil),       // 23: mcsm.v1.SendCommandRequest
+	(*SendCommandResponse)(nil),      // 24: mcsm.v1.SendCommandResponse
+	(*ConfigureNetworkRequest)(nil),  // 25: mcsm.v1.ConfigureNetworkRequest
+	(*NetworkBackend)(nil),           // 26: mcsm.v1.NetworkBackend
+	(*ForcedHost)(nil),               // 27: mcsm.v1.ForcedHost
+	(*ConfigureNetworkResponse)(nil), // 28: mcsm.v1.ConfigureNetworkResponse
+	(*DuplicateServerRequest)(nil),   // 29: mcsm.v1.DuplicateServerRequest
+	(*DuplicateServerResponse)(nil),  // 30: mcsm.v1.DuplicateServerResponse
+	(*ImportServerRequest)(nil),      // 31: mcsm.v1.ImportServerRequest
+	(*ImportServerResponse)(nil),     // 32: mcsm.v1.ImportServerResponse
+	nil,                              // 33: mcsm.v1.CreateServerRequest.PropertiesEntry
 }
 var file_mcsm_v1_server_proto_depIdxs = []int32{
 	0,  // 0: mcsm.v1.Server.type:type_name -> mcsm.v1.ServerType
 	2,  // 1: mcsm.v1.Server.state:type_name -> mcsm.v1.ServerState
 	1,  // 2: mcsm.v1.Server.restart_policy:type_name -> mcsm.v1.RestartPolicy
-	3,  // 3: mcsm.v1.ListServersResponse.servers:type_name -> mcsm.v1.Server
+	4,  // 3: mcsm.v1.ListServersResponse.servers:type_name -> mcsm.v1.Server
 	0,  // 4: mcsm.v1.CreateServerRequest.type:type_name -> mcsm.v1.ServerType
 	1,  // 5: mcsm.v1.CreateServerRequest.restart_policy:type_name -> mcsm.v1.RestartPolicy
-	31, // 6: mcsm.v1.CreateServerRequest.properties:type_name -> mcsm.v1.CreateServerRequest.PropertiesEntry
-	3,  // 7: mcsm.v1.CreateServerResponse.server:type_name -> mcsm.v1.Server
+	33, // 6: mcsm.v1.CreateServerRequest.properties:type_name -> mcsm.v1.CreateServerRequest.PropertiesEntry
+	4,  // 7: mcsm.v1.CreateServerResponse.server:type_name -> mcsm.v1.Server
 	1,  // 8: mcsm.v1.UpdateServerRequest.restart_policy:type_name -> mcsm.v1.RestartPolicy
-	3,  // 9: mcsm.v1.UpdateServerResponse.server:type_name -> mcsm.v1.Server
-	25, // 10: mcsm.v1.ConfigureNetworkRequest.backends:type_name -> mcsm.v1.NetworkBackend
-	3,  // 11: mcsm.v1.DuplicateServerResponse.server:type_name -> mcsm.v1.Server
-	3,  // 12: mcsm.v1.ImportServerRequest.header:type_name -> mcsm.v1.Server
-	3,  // 13: mcsm.v1.ImportServerResponse.server:type_name -> mcsm.v1.Server
-	4,  // 14: mcsm.v1.ServerService.ListServers:input_type -> mcsm.v1.ListServersRequest
-	6,  // 15: mcsm.v1.ServerService.CreateServer:input_type -> mcsm.v1.CreateServerRequest
-	8,  // 16: mcsm.v1.ServerService.StartServer:input_type -> mcsm.v1.StartServerRequest
-	10, // 17: mcsm.v1.ServerService.StopServer:input_type -> mcsm.v1.StopServerRequest
-	12, // 18: mcsm.v1.ServerService.RestartServer:input_type -> mcsm.v1.RestartServerRequest
-	18, // 19: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
-	14, // 20: mcsm.v1.ServerService.UpdateServer:input_type -> mcsm.v1.UpdateServerRequest
-	16, // 21: mcsm.v1.ServerService.UpdateImage:input_type -> mcsm.v1.UpdateImageRequest
-	20, // 22: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
-	22, // 23: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
-	24, // 24: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
-	27, // 25: mcsm.v1.ServerService.DuplicateServer:input_type -> mcsm.v1.DuplicateServerRequest
-	29, // 26: mcsm.v1.ServerService.ImportServer:input_type -> mcsm.v1.ImportServerRequest
-	5,  // 27: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
-	7,  // 28: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
-	9,  // 29: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
-	11, // 30: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
-	13, // 31: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
-	19, // 32: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
-	15, // 33: mcsm.v1.ServerService.UpdateServer:output_type -> mcsm.v1.UpdateServerResponse
-	17, // 34: mcsm.v1.ServerService.UpdateImage:output_type -> mcsm.v1.UpdateImageResponse
-	21, // 35: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
-	23, // 36: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
-	26, // 37: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
-	28, // 38: mcsm.v1.ServerService.DuplicateServer:output_type -> mcsm.v1.DuplicateServerResponse
-	30, // 39: mcsm.v1.ServerService.ImportServer:output_type -> mcsm.v1.ImportServerResponse
-	27, // [27:40] is the sub-list for method output_type
-	14, // [14:27] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	4,  // 9: mcsm.v1.UpdateServerResponse.server:type_name -> mcsm.v1.Server
+	26, // 10: mcsm.v1.ConfigureNetworkRequest.backends:type_name -> mcsm.v1.NetworkBackend
+	3,  // 11: mcsm.v1.ConfigureNetworkRequest.forwarding:type_name -> mcsm.v1.Forwarding
+	27, // 12: mcsm.v1.ConfigureNetworkRequest.forced_hosts:type_name -> mcsm.v1.ForcedHost
+	4,  // 13: mcsm.v1.DuplicateServerResponse.server:type_name -> mcsm.v1.Server
+	4,  // 14: mcsm.v1.ImportServerRequest.header:type_name -> mcsm.v1.Server
+	4,  // 15: mcsm.v1.ImportServerResponse.server:type_name -> mcsm.v1.Server
+	5,  // 16: mcsm.v1.ServerService.ListServers:input_type -> mcsm.v1.ListServersRequest
+	7,  // 17: mcsm.v1.ServerService.CreateServer:input_type -> mcsm.v1.CreateServerRequest
+	9,  // 18: mcsm.v1.ServerService.StartServer:input_type -> mcsm.v1.StartServerRequest
+	11, // 19: mcsm.v1.ServerService.StopServer:input_type -> mcsm.v1.StopServerRequest
+	13, // 20: mcsm.v1.ServerService.RestartServer:input_type -> mcsm.v1.RestartServerRequest
+	19, // 21: mcsm.v1.ServerService.DeleteServer:input_type -> mcsm.v1.DeleteServerRequest
+	15, // 22: mcsm.v1.ServerService.UpdateServer:input_type -> mcsm.v1.UpdateServerRequest
+	17, // 23: mcsm.v1.ServerService.UpdateImage:input_type -> mcsm.v1.UpdateImageRequest
+	21, // 24: mcsm.v1.ServerService.StreamLogs:input_type -> mcsm.v1.StreamLogsRequest
+	23, // 25: mcsm.v1.ServerService.SendCommand:input_type -> mcsm.v1.SendCommandRequest
+	25, // 26: mcsm.v1.ServerService.ConfigureNetwork:input_type -> mcsm.v1.ConfigureNetworkRequest
+	29, // 27: mcsm.v1.ServerService.DuplicateServer:input_type -> mcsm.v1.DuplicateServerRequest
+	31, // 28: mcsm.v1.ServerService.ImportServer:input_type -> mcsm.v1.ImportServerRequest
+	6,  // 29: mcsm.v1.ServerService.ListServers:output_type -> mcsm.v1.ListServersResponse
+	8,  // 30: mcsm.v1.ServerService.CreateServer:output_type -> mcsm.v1.CreateServerResponse
+	10, // 31: mcsm.v1.ServerService.StartServer:output_type -> mcsm.v1.StartServerResponse
+	12, // 32: mcsm.v1.ServerService.StopServer:output_type -> mcsm.v1.StopServerResponse
+	14, // 33: mcsm.v1.ServerService.RestartServer:output_type -> mcsm.v1.RestartServerResponse
+	20, // 34: mcsm.v1.ServerService.DeleteServer:output_type -> mcsm.v1.DeleteServerResponse
+	16, // 35: mcsm.v1.ServerService.UpdateServer:output_type -> mcsm.v1.UpdateServerResponse
+	18, // 36: mcsm.v1.ServerService.UpdateImage:output_type -> mcsm.v1.UpdateImageResponse
+	22, // 37: mcsm.v1.ServerService.StreamLogs:output_type -> mcsm.v1.StreamLogsResponse
+	24, // 38: mcsm.v1.ServerService.SendCommand:output_type -> mcsm.v1.SendCommandResponse
+	28, // 39: mcsm.v1.ServerService.ConfigureNetwork:output_type -> mcsm.v1.ConfigureNetworkResponse
+	30, // 40: mcsm.v1.ServerService.DuplicateServer:output_type -> mcsm.v1.DuplicateServerResponse
+	32, // 41: mcsm.v1.ServerService.ImportServer:output_type -> mcsm.v1.ImportServerResponse
+	29, // [29:42] is the sub-list for method output_type
+	16, // [16:29] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_mcsm_v1_server_proto_init() }
@@ -2116,7 +2301,7 @@ func file_mcsm_v1_server_proto_init() {
 		(*NetworkBackend_ServerId)(nil),
 		(*NetworkBackend_Address)(nil),
 	}
-	file_mcsm_v1_server_proto_msgTypes[26].OneofWrappers = []any{
+	file_mcsm_v1_server_proto_msgTypes[27].OneofWrappers = []any{
 		(*ImportServerRequest_Header)(nil),
 		(*ImportServerRequest_Data)(nil),
 	}
@@ -2125,8 +2310,8 @@ func file_mcsm_v1_server_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcsm_v1_server_proto_rawDesc), len(file_mcsm_v1_server_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   29,
+			NumEnums:      4,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

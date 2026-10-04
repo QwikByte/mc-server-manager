@@ -21,6 +21,7 @@ import (
 //   - luckperms: a Paper plugin with the releases 1.0 and 2.0; 2.0 requires vault
 //   - vault: a Paper plugin
 //   - fabricapi: a Fabric mod
+//   - 8dI2tmqs: FabricProxy-Lite, a Fabric mod that requires fabricapi
 //   - broken: a Paper plugin whose download doesn't match its hash
 type fakeModrinth struct {
 	*httptest.Server
@@ -48,6 +49,8 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	f.version("vault", "1.7", paper)
 	f.project("fabricapi", "Fabric API", []string{"fabric"})
 	f.version("fabricapi", "0.119", []string{"fabric"})
+	f.project("8dI2tmqs", "FabricProxy-Lite", []string{"quilt", "fabric"}) // not found by searches for Fabric
+	f.version("8dI2tmqs", "2.10", []string{"fabric"}, "fabricapi")
 	f.project("broken", "Broken", paper)
 	f.version("broken", "1.0", paper)
 	f.files["/cdn/data/broken/broken-1.0.jar"] = []byte("tampered")

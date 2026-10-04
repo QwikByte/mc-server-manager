@@ -27,8 +27,12 @@ var hidden = []string{".rcon-cli.env", ".rcon-cli.yaml", network.ForwardingSecre
 // redacted are the files with secrets among other settings, with the pattern of a line with
 // a secret: the key with its separator, the key, and the value.
 var redacted = map[string]*regexp.Regexp{
-	"server.properties":       lines(slices.Collect(maps.Keys(properties.Secret))),
-	"config/paper-global.yml": lines([]string{"secret"}), // of Velocity's forwarding
+	"server.properties": lines(slices.Collect(maps.Keys(properties.Secret))),
+	// The forwarding secret of a network on game servers: in Paper's configuration or in
+	// that of the forwarding mod of Fabric, Forge or NeoForge.
+	network.PaperGlobalFile: lines([]string{"secret"}),
+	network.FabricProxyFile: lines([]string{"secret"}),
+	network.ForgeProxyFile:  lines([]string{"secret"}),
 }
 
 func lines(keys []string) *regexp.Regexp {

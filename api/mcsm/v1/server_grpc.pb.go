@@ -59,9 +59,10 @@ type ServerServiceClient interface {
 	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
 	// SendCommand runs a console command and returns its output.
 	SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error)
-	// ConfigureNetwork gives a server its role in a network behind a Velocity proxy and
-	// restarts it if it runs: a proxy gets its backends, a backend accepts only players
-	// forwarded by the proxy, and an empty secret makes a game server standalone again.
+	// ConfigureNetwork gives a server its role in a network behind a proxy, in the
+	// configuration files of the proxy or game server: a proxy gets its backends and reloads
+	// its configuration if it runs, a game server accepts only players forwarded by the proxy
+	// and restarts if it runs, and FORWARDING_NONE makes a game server standalone again.
 	ConfigureNetwork(ctx context.Context, in *ConfigureNetworkRequest, opts ...grpc.CallOption) (*ConfigureNetworkResponse, error)
 	// DuplicateServer creates a server on the same node with a copy of the data and the
 	// settings of another one. A running game server saves its worlds first. The copy is
@@ -248,9 +249,10 @@ type ServerServiceServer interface {
 	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
 	// SendCommand runs a console command and returns its output.
 	SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error)
-	// ConfigureNetwork gives a server its role in a network behind a Velocity proxy and
-	// restarts it if it runs: a proxy gets its backends, a backend accepts only players
-	// forwarded by the proxy, and an empty secret makes a game server standalone again.
+	// ConfigureNetwork gives a server its role in a network behind a proxy, in the
+	// configuration files of the proxy or game server: a proxy gets its backends and reloads
+	// its configuration if it runs, a game server accepts only players forwarded by the proxy
+	// and restarts if it runs, and FORWARDING_NONE makes a game server standalone again.
 	ConfigureNetwork(context.Context, *ConfigureNetworkRequest) (*ConfigureNetworkResponse, error)
 	// DuplicateServer creates a server on the same node with a copy of the data and the
 	// settings of another one. A running game server saves its worlds first. The copy is

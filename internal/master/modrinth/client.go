@@ -44,6 +44,7 @@ var (
 		mcsmv1.ServerType_SERVER_TYPE_PURPUR:     {"purpur", "paper", "spigot", "bukkit"},
 		mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   {"velocity"},
 		mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: {"bungeecord", "waterfall"},
+		mcsmv1.ServerType_SERVER_TYPE_WATERFALL:  {"waterfall", "bungeecord"},
 		mcsmv1.ServerType_SERVER_TYPE_FABRIC:     {"fabric"},
 		mcsmv1.ServerType_SERVER_TYPE_FORGE:      {"forge"},
 		mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {"neoforge"},

@@ -25,9 +25,10 @@ service ServerService {
   rpc StreamLogs(StreamLogsRequest) returns (stream StreamLogsResponse);
   // SendCommand runs a console command and returns its output.
   rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
-  // ConfigureNetwork gives a server its role in a network behind a Velocity proxy and
-  // restarts it if it runs: a proxy gets its backends, a backend accepts only players
-  // forwarded by the proxy, and an empty secret makes a game server standalone again.
+  // ConfigureNetwork gives a server its role in a network behind a proxy, in the
+  // configuration files of the proxy or game server: a proxy gets its backends and reloads
+  // its configuration if it runs, a game server accepts only players forwarded by the proxy
+  // and restarts if it runs, and FORWARDING_NONE makes a game server standalone again.
   rpc ConfigureNetwork(ConfigureNetworkRequest) returns (ConfigureNetworkResponse);
   // DuplicateServer creates a server on the same node with a copy of the data and the
   // settings of another one. A running game server saves its worlds first. The copy is
@@ -50,6 +51,7 @@ enum ServerType {
   // Proxies connect several servers to one network.
   SERVER_TYPE_VELOCITY = 7;
   SERVER_TYPE_BUNGEECORD = 8;
+  SERVER_TYPE_WATERFALL = 9;
 }
 
 // RestartPolicy decides when the node starts a server on its own.
@@ -208,13 +210,32 @@ message SendCommandResponse {
 
 message ConfigureNetworkRequest {
   string id = 1;
-  // Shared secret of Velocity's modern forwarding. Required for proxies.
+  // Shared secret of Velocity's modern forwarding.
   string forwarding_secret = 2;
-  // Backends of a proxy, in the order players are sent to them.
+  // Backends of a proxy.
   repeated NetworkBackend backends = 3;
   // For a backend: its proxy runs on the same node and reaches it over a Docker network,
   // so its port isn't published.
   bool proxy_on_node = 4;
+  // How the proxy forwards players to its backends. Unspecified means modern forwarding
+  // if a secret is set, and otherwise FORWARDING_NONE, as older masters sent it.
+  Forwarding forwarding = 5;
+  // For a proxy: the backends players join and fall back to, in this order. Empty means
+  // the first backend, as older masters sent it.
+  repeated string try = 6;
+  // For a proxy: the backends players join when they connect through a host name.
+  repeated ForcedHost forced_hosts = 7;
+}
+
+enum Forwarding {
+  FORWARDING_UNSPECIFIED = 0;
+  // Not part of a network: a game server accepts players directly.
+  FORWARDING_NONE = 1;
+  // Velocity's modern forwarding, signed with the forwarding secret.
+  FORWARDING_MODERN = 2;
+  // BungeeCord's forwarding (ip_forward), which Velocity calls legacy. It doesn't prove that
+  // players come through the proxy, so only the proxy may reach the backends.
+  FORWARDING_LEGACY = 3;
 }
 
 message NetworkBackend {
@@ -226,6 +247,18 @@ message NetworkBackend {
     // host:port of a server on another node.
     string address = 3;
   }
+  // BungeeCord: only players with the permission bungeecord.server.<name> may join it.
+  bool restricted = 4;
+  // BungeeCord: the MOTD shown for host names that lead to it.
+  string motd = 5;
+}
+
+// ForcedHost sends players who connect through a host name to certain backends.
+message ForcedHost {
+  // e.g. survival.example.com
+  string host = 1;
+  // Names of the backends, tried in this order. BungeeCord takes only one.
+  repeated string servers = 2;
 }
 
 message ConfigureNetworkResponse {}
