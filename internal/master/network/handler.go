@@ -14,68 +14,105 @@ type Handler struct{ svc *Service }
 
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
+// powers are the permissions the actions on all servers of a network need on each of them.
+var powers = map[string]access.Permission{Start: access.ServersStart, Stop: access.ServersStop, Restart: access.ServersRestart}
+
 func (h *Handler) Register(mux access.Mux) {
 	view, manage := access.Everywhere(access.NetworksView), access.Everywhere(access.NetworksManage)
 	mux.Handle("GET /api/networks", view, func(w http.ResponseWriter, r *http.Request) {
 		networks, err := h.svc.List(r.Context())
 		write(w, r, http.StatusOK, networks, err)
 	})
-	mux.Handle("POST /api/networks", manage, h.create)
-	mux.Handle("GET /api/networks/{id}", view, withNetwork(h.svc.Get))
+	mux.Handle("POST /api/networks", manage, func(w http.ResponseWriter, r *http.Request) {
+		var d Draft
+		if read(w, r, &d) {
+			logging.Note(r.Context(), slog.String("name", d.Name))
+			n, err := h.svc.Create(r.Context(), d)
+			write(w, r, http.StatusCreated, n, err)
+		}
+	})
+	mux.Handle("GET /api/networks/{id}", view, func(w http.ResponseWriter, r *http.Request) {
+		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+		write(w, r, http.StatusOK, n, err)
+	})
+	mux.Handle("PUT /api/networks/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
+		var c Change
+		if read(w, r, &c) {
+			logging.Note(r.Context(), slog.String("name", c.Name))
+			n, err := h.svc.Update(r.Context(), r.PathValue("id"), c)
+			write(w, r, http.StatusOK, n, err)
+		}
+	})
 	mux.Handle("DELETE /api/networks/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
 		write(w, r, http.StatusNoContent, nil, h.svc.Delete(r.Context(), r.PathValue("id")))
 	})
-	mux.Handle("POST /api/networks/{id}/apply", manage, withNetwork(h.svc.Apply))
-	mux.Handle("POST /api/networks/{id}/backends", manage, h.addBackend)
-	mux.Handle("DELETE /api/networks/{id}/backends/{server}", manage, withBackend(h.svc.RemoveBackend))
-	mux.Handle("POST /api/networks/{id}/backends/{server}/default", manage, withBackend(h.svc.MakeDefault))
-}
-
-func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name  string `json:"name"`
-		Proxy Ref    `json:"proxy"`
-		Lobby Ref    `json:"lobby"`
-	}
-	if err := httpapi.ReadJSON(w, r, &req); err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	logging.Note(r.Context(), slog.String("name", req.Name))
-	n, err := h.svc.Create(r.Context(), req.Name, req.Proxy, req.Lobby)
-	write(w, r, http.StatusCreated, n, err)
-}
-
-func (h *Handler) addBackend(w http.ResponseWriter, r *http.Request) {
-	var ref Ref
-	if err := httpapi.ReadJSON(w, r, &ref); err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	n, err := h.svc.AddBackend(r.Context(), r.PathValue("id"), ref)
-	write(w, r, http.StatusOK, n, err)
-}
-
-// withNetwork wraps an operation on a network that returns it.
-func withNetwork(op func(ctx context.Context, id string) (Network, error)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		n, err := op(r.Context(), r.PathValue("id"))
+	mux.Handle("POST /api/networks/{id}/apply", manage, func(w http.ResponseWriter, r *http.Request) {
+		n, err := h.svc.Apply(r.Context(), r.PathValue("id"))
 		write(w, r, http.StatusOK, n, err)
+	})
+	// Actions on all servers need the permission for each server, which they check.
+	for action, p := range powers {
+		mux.Handle("POST /api/networks/{id}/"+action, view, h.onServers(p, func(ctx context.Context, n Network, _ http.ResponseWriter, _ *http.Request) error {
+			return h.svc.Power(ctx, n, action)
+		}))
+	}
+	mux.Handle("POST /api/networks/{id}/broadcast", view, h.onServers(access.ConsoleCommands, func(ctx context.Context, n Network, w http.ResponseWriter, r *http.Request) error {
+		var req struct {
+			Message string `json:"message"`
+		}
+		if err := httpapi.ReadJSON(w, r, &req); err != nil {
+			return err
+		}
+		return h.svc.Broadcast(ctx, n, req.Message)
+	}))
+	mux.Handle("GET /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.proxySettings)
+	mux.Handle("PUT /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.updateProxySettings)
+}
+
+// onServers wraps an action on the servers of a network, which needs p on each of them.
+func (h *Handler) onServers(p access.Permission, action func(context.Context, Network, http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+		if err == nil {
+			logging.Note(r.Context(), slog.String("name", n.Name))
+			grants := access.From(r.Context())
+			for _, ref := range append([]Ref{n.Proxy}, refs(n.Backends)...) {
+				if !grants.On(p, ref.NodeID, ref.ServerID) {
+					err = access.Denied(p)
+				}
+			}
+		}
+		if err == nil {
+			err = action(r.Context(), n, w, r)
+		}
+		write(w, r, http.StatusNoContent, nil, err)
 	}
 }
 
-// withBackend wraps an operation on a backend of a network that returns the network.
-func withBackend(op func(ctx context.Context, id, serverID string) (Network, error)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		n, err := op(r.Context(), r.PathValue("id"), r.PathValue("server"))
-		write(w, r, http.StatusOK, n, err)
+func refs(backends []Backend) []Ref {
+	out := make([]Ref, len(backends))
+	for i, b := range backends {
+		out[i] = b.Ref
 	}
+	return out
+}
+
+// read reads the JSON body of a request into v, or answers with the error.
+func read(w http.ResponseWriter, r *http.Request, v any) bool {
+	if err := httpapi.ReadJSON(w, r, v); err != nil {
+		httpapi.WriteError(w, r, err)
+		return false
+	}
+	return true
 }
 
 func write(w http.ResponseWriter, r *http.Request, status int, v any, err error) {
-	if err != nil {
+	switch {
+	case err != nil:
 		httpapi.WriteError(w, r, err)
-		return
+	case v == nil:
+		w.WriteHeader(status)
+	default:
+		httpapi.WriteJSON(w, status, v)
 	}
-	httpapi.WriteJSON(w, status, v)
 }

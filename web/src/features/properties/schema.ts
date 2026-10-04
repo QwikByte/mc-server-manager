@@ -7,6 +7,8 @@ export type Kind =
   | { type: "select"; options: [value: string, label: string][] }
   | { type: "text"; mono?: boolean }
   | { type: "motd" }
+  /** A list of texts, one per line. */
+  | { type: "list" }
 
 export const groups = [
   msg("Gameplay"),
@@ -401,7 +403,11 @@ export function definition(key: string, value?: string): Definition {
 
 /** Returns an error message if the value doesn't fit the property. */
 export function check(key: string, value: string): string | undefined {
-  const kind = definition(key).kind
+  return checkValue(definition(key).kind, value)
+}
+
+/** Returns an error message if the value doesn't fit a setting of the kind. */
+export function checkValue(kind: Kind, value: string): string | undefined {
   if (kind.type !== "number") return undefined
   const n = Number(value)
   if (value.trim() === "" || !Number.isInteger(n)) return t("Enter a whole number.")

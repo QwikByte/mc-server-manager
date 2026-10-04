@@ -35,9 +35,10 @@ type Nodes interface {
 }
 
 // Networks keep servers in networks: one can't be deleted while it is in a network, and a
-// network follows a server that moves.
+// network follows a server that moves, if it may.
 type Networks interface {
 	CheckRemovable(ctx context.Context, nodeID, serverID string) error
+	CheckMove(ctx context.Context, serverID, from, to string) error
 	Move(ctx context.Context, serverID, from, to string) error
 }
 

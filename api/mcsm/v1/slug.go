@@ -6,8 +6,11 @@ import "strings"
 func (t ServerType) Slug() string { return slug(t.String(), "SERVER_TYPE_") }
 
 // Proxy reports whether the type is a proxy, which connects servers to a network.
-func (t ServerType) Proxy() bool {
-	return t == ServerType_SERVER_TYPE_VELOCITY || t == ServerType_SERVER_TYPE_BUNGEECORD
+func (t ServerType) Proxy() bool { return t == ServerType_SERVER_TYPE_VELOCITY || t.Bungee() }
+
+// Bungee reports whether the type is BungeeCord or a fork of it with the same configuration.
+func (t ServerType) Bungee() bool {
+	return t == ServerType_SERVER_TYPE_BUNGEECORD || t == ServerType_SERVER_TYPE_WATERFALL
 }
 
 // Slug returns the short lower-case name, e.g. "running" for SERVER_STATE_RUNNING.

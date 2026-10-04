@@ -41,8 +41,8 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 }
 
 // standalone resets the network role in the copy of a server's data. A backend stops
-// trusting the proxy of the original, and a proxy loses the forwarding secret, which
-// Velocity creates anew.
+// trusting the proxy of the original, a Velocity proxy loses the forwarding secret, which
+// Velocity creates anew, and BungeeCord stops forwarding.
 func standalone(path string, original runtime.Spec) error {
 	data, err := datadir.Open(path)
 	if err != nil {
@@ -51,7 +51,9 @@ func standalone(path string, original runtime.Spec) error {
 	defer data.Close()
 	switch {
 	case original.BehindProxy:
-		_, err = writeBackendConfig(data, "")
+		_, err = mcnet.WriteBackend(data, original.Type, runtime.ForwardingNone, "")
+	case original.Type.Bungee():
+		_, _, err = mcnet.WriteProxy(data, original.Type, runtime.Network{})
 	case original.Type == mcsmv1.ServerType_SERVER_TYPE_VELOCITY:
 		if err = data.Remove(mcnet.ForwardingSecretFile); errors.Is(err, fs.ErrNotExist) {
 			err = nil

@@ -1,4 +1,4 @@
-import { ArrowRightIcon, GraphIcon, HashIcon } from "@phosphor-icons/react"
+import { ArrowRightIcon, GraphIcon, ShieldCheckIcon, ShieldWarningIcon, UsersThreeIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -7,18 +7,23 @@ import { Chip } from "@/components/chip"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
+import { StatusDot } from "@/components/status"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
-import { type Network, networksQuery } from "./api"
+import { serverStates, serverType } from "@/features/servers/server-types"
+import type { ServerUsage } from "@/features/usage/api"
+import { type Network, networksQuery, type ServerRef } from "./api"
 import { CreateNetworkDialog } from "./create-network-dialog"
 import { ServerLabel } from "./server-label"
-import { findServer } from "./servers"
+import { findServer, key } from "./servers"
+import { playersOnline, useNetworkUsage } from "./usage"
 
 export function NetworksPage() {
   const manage = useAccess().can("networks.manage")
   const { data: networks, isPending, error } = useQuery(networksQuery)
   const { data: servers } = useQuery(allServersQuery)
+  const usage = useNetworkUsage(networks)
 
   return (
     <>
@@ -36,7 +41,7 @@ export function NetworksPage() {
           icon={GraphIcon}
           tone="violet"
           title={t("No networks yet")}
-          description={t("Create a Velocity proxy and a Paper or Purpur server on your nodes, then connect them to a network.")}
+          description={t("Create a Velocity, BungeeCord or Waterfall proxy and game servers on your nodes, then connect them to a network.")}
         >
           {manage && <CreateNetworkDialog />}
         </EmptyState>
@@ -44,7 +49,7 @@ export function NetworksPage() {
         <ul className="grid gap-4 md:grid-cols-2">
           {networks.map((network) => (
             <li key={network.id}>
-              <NetworkCard network={network} servers={servers} />
+              <NetworkCard network={network} servers={servers} usage={usage} />
             </li>
           ))}
         </ul>
@@ -53,8 +58,9 @@ export function NetworksPage() {
   )
 }
 
-function NetworkCard({ network, servers }: { network: Network; servers?: NodeServer[] }) {
+function NetworkCard({ network, servers, usage }: { network: Network; servers?: NodeServer[]; usage: (ref: ServerRef) => ServerUsage | undefined }) {
   const proxy = findServer(servers, network.proxy)
+  const players = playersOnline(network, usage)
   return (
     <Link
       to="/networks/$networkId"
@@ -66,29 +72,33 @@ function NetworkCard({ network, servers }: { network: Network; servers?: NodeSer
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{network.name}</p>
           <p className="text-xs text-muted-foreground">
-            {t("{{count}} servers behind the proxy", {
-              count: network.backends.length,
-              defaultValue_one: "{{count}} server behind the proxy",
-            })}
+            {t("{{count}} servers behind the proxy", { count: network.backends.length, defaultValue_one: "{{count}} server behind the proxy" })}
           </p>
         </div>
-        {proxy && (
-          <Chip icon={HashIcon}>
-            <span className="font-mono">{proxy.port}</span>
-          </Chip>
+        {players !== undefined && (
+          <Chip icon={UsersThreeIcon}>{t("{{count}} online", { count: players })}</Chip>
         )}
       </div>
-      <div className="rounded-lg bg-muted/70 px-3 py-2.5 text-sm">
-        <p className="mb-1 text-xs text-muted-foreground">{t("Proxy")}</p>
-        <ServerLabel server={proxy} />
+      <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/70 px-3 py-2.5 text-sm">
+        <div className="min-w-0">
+          <p className="mb-1 text-xs text-muted-foreground">{serverType(network.proxyType).label}</p>
+          <ServerLabel server={proxy} />
+        </div>
+        <Chip icon={network.forwarding === "modern" ? ShieldCheckIcon : ShieldWarningIcon}>
+          {network.forwarding === "modern" ? t("Modern") : t("Legacy")}
+        </Chip>
       </div>
       <div className="mt-auto flex items-end justify-between gap-3">
         <div className="flex min-w-0 flex-wrap gap-1.5">
-          {network.backends.map((b) => (
-            <Chip key={b.serverId} className="font-mono font-normal">
-              {b.name}
-            </Chip>
-          ))}
+          {network.backends.map((b) => {
+            const server = findServer(servers, b)
+            return (
+              <Chip key={key(b)} className="font-mono font-normal">
+                {server && <StatusDot status={serverStates[server.state]} />}
+                {b.name}
+              </Chip>
+            )
+          })}
         </div>
         <ArrowRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
       </div>

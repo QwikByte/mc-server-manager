@@ -50,6 +50,13 @@ const tabs = [
     permission: "properties.edit",
   },
   {
+    to: "/nodes/$nodeId/servers/$serverId/proxy",
+    label: (type: string) => (serverType(type).proxy ? t("Configuration") : undefined),
+    icon: SlidersHorizontalIcon,
+    exact: false,
+    permission: "properties.edit",
+  },
+  {
     to: "/nodes/$nodeId/servers/$serverId/plugins",
     label: (type: string) => {
       const kind = serverType(type).addons?.kind

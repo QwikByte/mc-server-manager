@@ -4,10 +4,11 @@ import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { MotdField } from "./motd"
-import { definition } from "./schema"
+import { type Definition, definition } from "./schema"
 
-/** A property with a control that fits its type. */
+/** A setting with a control that fits its kind: by default a property of server.properties. */
 export function PropertyField({
   name,
   value,
@@ -15,6 +16,8 @@ export function PropertyField({
   error,
   changed,
   onChange,
+  setting = definition(name, value),
+  note,
 }: {
   name: string
   value: string
@@ -22,9 +25,12 @@ export function PropertyField({
   error?: string
   changed: boolean
   onChange: (value: string) => void
+  setting?: Pick<Definition, "label" | "description" | "kind">
+  /** Shown below the description, e.g. when a change applies. */
+  note?: string
 }) {
-  const { label, description, kind } = definition(name, value)
-  const id = `property-${name}`
+  const { label, description, kind } = setting
+  const id = `property-${name.replaceAll(".", "-")}`
   const title = (
     <FieldLabel htmlFor={id} className="flex-wrap gap-x-2">
       {t(label)}
@@ -33,7 +39,12 @@ export function PropertyField({
       {locked && <LockSimpleIcon className="size-3.5 text-muted-foreground" aria-label={t("Managed by the panel")} />}
     </FieldLabel>
   )
-  const hint = (locked || description) && <FieldDescription>{locked ?? t(description)}</FieldDescription>
+  const hint = (locked || description || note) && (
+    <FieldDescription>
+      {locked ?? t(description)}
+      {!locked && note && <span className="mt-1 block text-warning">{note}</span>}
+    </FieldDescription>
+  )
 
   if (kind.type === "boolean")
     return (
@@ -48,7 +59,7 @@ export function PropertyField({
 
   const unknownOption = kind.type === "select" && !kind.options.some(([v]) => v === value)
   return (
-    <Field data-invalid={!!error} data-disabled={!!locked} className={kind.type === "motd" ? "md:col-span-2" : undefined}>
+    <Field data-invalid={!!error} data-disabled={!!locked} className={kind.type === "motd" || kind.type === "list" ? "md:col-span-2" : undefined}>
       {title}
       {kind.type === "select" ? (
         <Select value={value} onValueChange={onChange} disabled={!!locked}>
@@ -66,6 +77,15 @@ export function PropertyField({
         </Select>
       ) : kind.type === "motd" ? (
         <MotdField id={id} value={value} onChange={onChange} disabled={!!locked} />
+      ) : kind.type === "list" ? (
+        <Textarea
+          id={id}
+          rows={Math.min(8, Math.max(3, value.split("\n").length))}
+          className="font-mono text-xs"
+          value={value}
+          disabled={!!locked}
+          onChange={(e) => onChange(e.target.value)}
+        />
       ) : (
         <Input
           id={id}

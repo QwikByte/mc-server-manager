@@ -37,6 +37,8 @@ var (
 	ErrUnsupported = errors.New("not supported for this server type")
 	// ErrNotReady is returned when a server that is starting can't save its worlds yet.
 	ErrNotReady = errors.New("the server is starting")
+	// ErrReload is returned when a proxy answers that it couldn't reload its configuration.
+	ErrReload = errors.New("the proxy couldn't reload its configuration")
 )
 
 // Spec describes a server.
@@ -74,15 +76,32 @@ type Server struct {
 	ExitCode int
 }
 
-// Network is the role of a server in a network behind a Velocity proxy.
+// Forwarding is how a proxy forwards its players to the game servers of its network.
+type Forwarding int
+
+const (
+	// ForwardingNone means that a game server isn't part of a network.
+	ForwardingNone Forwarding = iota
+	// ForwardingModern is Velocity's modern forwarding, signed with the forwarding secret.
+	ForwardingModern
+	// ForwardingLegacy is BungeeCord's forwarding, which doesn't prove that players come
+	// through the proxy, so only the proxy may reach the game servers.
+	ForwardingLegacy
+)
+
+// Network is the role of a server in a network behind a proxy.
 type Network struct {
-	// ForwardingSecret lets backends verify the players the proxy forwards. An empty
-	// secret makes a game server standalone again; a proxy always needs one.
+	Forwarding Forwarding
+	// ForwardingSecret lets backends verify the players of modern forwarding.
 	ForwardingSecret string
 	// ProxyOnNode is set for a backend whose proxy runs on the same node.
 	ProxyOnNode bool
-	// Backends is set for the proxy, in the order players are sent to them.
-	Backends []NetworkBackend
+	// Backends, Try and ForcedHosts are set for the proxy. Players join the backends of
+	// Try and fall back to them in this order, or to those of a forced host if they
+	// connect through its host name.
+	Backends    []NetworkBackend
+	Try         []string
+	ForcedHosts []ForcedHost
 }
 
 // NetworkBackend is a server behind the proxy, either on the same node (ServerID) or
@@ -91,6 +110,17 @@ type NetworkBackend struct {
 	Name     string
 	ServerID string
 	Address  string
+	// Restricted and Motd are settings of BungeeCord: only players with the permission
+	// bungeecord.server.<name> may join a restricted server, and the MOTD is shown for host
+	// names that lead to it.
+	Restricted bool
+	Motd       string
+}
+
+// ForcedHost sends players who connect through a host name to certain backends.
+type ForcedHost struct {
+	Host    string
+	Servers []string
 }
 
 // Usage is what a running server uses. CPU time and network traffic count up from the
@@ -132,8 +162,11 @@ type Runtime interface {
 	// Logs yields the last tail console lines written after the time after, if it isn't
 	// zero, then follows the console until the server stops or ctx is cancelled.
 	Logs(ctx context.Context, id string, tail int, after time.Time) iter.Seq2[LogLine, error]
-	// SendCommand runs a console command and returns its output.
+	// SendCommand runs a console command and returns its output. Proxies read commands
+	// from their console, whose output follows in the logs.
 	SendCommand(ctx context.Context, id, command string) (string, error)
+	// Reload makes a running proxy read its configuration again, through its console.
+	Reload(ctx context.Context, id string) error
 	// Usage returns what a running server uses, or ErrNotRunning.
 	Usage(ctx context.Context, id string) (Usage, error)
 	// Update replaces the settings of a server, keeping its type, data and network role.
@@ -144,7 +177,8 @@ type Runtime interface {
 	UpdateImage(ctx context.Context, id string) (bool, error)
 	// Restart stops a server gracefully and starts it again.
 	Restart(ctx context.Context, id string) error
-	// Configure gives a server its role in a network and restarts it if it runs.
+	// Configure gives a server its role in a network. A running game server restarts if
+	// that changed it, a running proxy reloads its configuration.
 	Configure(ctx context.Context, id string, network Network) error
 	// Data opens the data directory of a server; the caller closes it.
 	Data(ctx context.Context, id string) (*datadir.Dir, error)

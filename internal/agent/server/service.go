@@ -23,6 +23,7 @@ import (
 
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
+	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
@@ -35,6 +36,10 @@ const (
 	maxPort     = 65535
 	maxTail     = 1000
 	maxCommand  = 1000
+	// Limits of the configuration of a network.
+	maxBackends    = 256
+	maxForcedHosts = 256
+	maxMotd        = 256
 	// Limits of the JVM options and the CPU limit.
 	maxJVMOptions = 32
 	minCPUMillis  = 100
@@ -47,6 +52,8 @@ var (
 	// Names of backends a proxy sends players to; "try" is the list of these names.
 	backendPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 	hostPattern    = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
+	// Host names that players connect through, e.g. survival.example.com.
+	forcedHostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 	// JVM options end up in a shell variable that the image splits at spaces, so they
 	// have no spaces, quotes or glob characters.
 	jvmOptionPattern = regexp.MustCompile(`^-[A-Za-z0-9:._+=,/@%-]{1,200}$`)
@@ -339,7 +346,7 @@ func (s *Service) SendCommand(ctx context.Context, req *mcsmv1.SendCommandReques
 	}
 	output, err := s.rt.SendCommand(ctx, req.GetId(), command)
 	if errors.Is(err, runtime.ErrUnsupported) {
-		return nil, status.Error(codes.FailedPrecondition, "Proxies don't accept console commands yet.")
+		return nil, status.Error(codes.FailedPrecondition, "This proxy was created by an older agent. It accepts console commands once its settings were saved or its network applied again.")
 	}
 	if err != nil {
 		return nil, toStatus(err)
@@ -353,10 +360,12 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *mcsmv1.ConfigureNet
 		return nil, status.Error(codes.InvalidArgument, msg)
 	}
 	err := s.rt.Configure(ctx, req.GetId(), network)
-	if errors.Is(err, runtime.ErrUnsupported) {
-		return nil, status.Error(codes.FailedPrecondition, "Only Velocity proxies and Paper or Purpur servers can be part of a network.")
-	}
-	if err != nil {
+	switch {
+	case errors.Is(err, runtime.ErrUnsupported):
+		return nil, status.Error(codes.FailedPrecondition, "Vanilla servers can't be part of a network, as they can't verify the players a proxy forwards.")
+	case errors.Is(err, mcnet.ErrModernOnly), errors.Is(err, runtime.ErrReload):
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	case err != nil:
 		return nil, toStatus(err)
 	}
 	return &mcsmv1.ConfigureNetworkResponse{}, nil
@@ -364,28 +373,78 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *mcsmv1.ConfigureNet
 
 // networkOf validates a network configuration, which ends up in configuration files.
 func networkOf(req *mcsmv1.ConfigureNetworkRequest) (runtime.Network, string) {
-	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret(), ProxyOnNode: req.GetProxyOnNode() && req.GetForwardingSecret() != ""}
-	if !runtime.ValidID(req.GetId()) {
+	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret(), Try: req.GetTry()}
+	switch req.GetForwarding() {
+	case mcsmv1.Forwarding_FORWARDING_UNSPECIFIED: // sent by older masters
+		network.Forwarding = runtime.ForwardingNone
+		if network.ForwardingSecret != "" {
+			network.Forwarding = runtime.ForwardingModern
+		}
+	case mcsmv1.Forwarding_FORWARDING_NONE:
+	case mcsmv1.Forwarding_FORWARDING_MODERN:
+		network.Forwarding = runtime.ForwardingModern
+	case mcsmv1.Forwarding_FORWARDING_LEGACY:
+		network.Forwarding = runtime.ForwardingLegacy
+	default:
+		return network, "invalid forwarding"
+	}
+	network.ProxyOnNode = req.GetProxyOnNode() && network.Forwarding != runtime.ForwardingNone
+	switch {
+	case !runtime.ValidID(req.GetId()):
 		return network, "invalid server ID"
-	}
-	if network.ForwardingSecret != "" && !secretPattern.MatchString(network.ForwardingSecret) {
+	case network.ForwardingSecret != "" && !secretPattern.MatchString(network.ForwardingSecret),
+		network.Forwarding == runtime.ForwardingModern && network.ForwardingSecret == "":
 		return network, "invalid forwarding secret"
+	case len(req.GetBackends()) > maxBackends || len(req.GetForcedHosts()) > maxForcedHosts:
+		return network, "too many backends or forced hosts"
 	}
-	seen := map[string]bool{}
+	names := map[string]bool{}
 	for _, b := range req.GetBackends() {
-		backend := runtime.NetworkBackend{Name: b.GetName(), ServerID: b.GetServerId(), Address: b.GetAddress()}
+		backend := runtime.NetworkBackend{Name: b.GetName(), ServerID: b.GetServerId(), Address: b.GetAddress(), Restricted: b.GetRestricted(), Motd: b.GetMotd()}
 		switch {
-		case !backendPattern.MatchString(backend.Name) || backend.Name == "try" || seen[backend.Name]:
+		case !backendPattern.MatchString(backend.Name) || backend.Name == "try" || names[backend.Name]:
 			return network, fmt.Sprintf("invalid or duplicate backend name %q", backend.Name)
 		case backend.ServerID != "" && !runtime.ValidID(backend.ServerID):
 			return network, "invalid backend server ID"
 		case backend.ServerID == "" && !validAddress(backend.Address):
 			return network, fmt.Sprintf("invalid backend address %q", backend.Address)
+		case len(backend.Motd) > maxMotd || strings.ContainsFunc(backend.Motd, func(r rune) bool { return r != '\n' && unicode.IsControl(r) }):
+			return network, fmt.Sprintf("invalid MOTD of %s", backend.Name)
 		}
-		seen[backend.Name] = true
+		names[backend.Name] = true
 		network.Backends = append(network.Backends, backend)
 	}
+	if len(network.Try) == 0 && len(network.Backends) > 0 && req.GetForwarding() == mcsmv1.Forwarding_FORWARDING_UNSPECIFIED {
+		network.Try = []string{network.Backends[0].Name} // older masters let players join the first
+	}
+	if msg := checkNames(network.Try, names); msg != "" {
+		return network, "invalid list of servers to try: " + msg
+	}
+	hosts := map[string]bool{}
+	for _, h := range req.GetForcedHosts() {
+		host := runtime.ForcedHost{Host: h.GetHost(), Servers: h.GetServers()}
+		if !forcedHostPattern.MatchString(host.Host) || len(host.Host) > 253 || hosts[host.Host] {
+			return network, fmt.Sprintf("invalid or duplicate forced host %q", host.Host)
+		}
+		if msg := checkNames(host.Servers, names); msg != "" || len(host.Servers) == 0 {
+			return network, fmt.Sprintf("invalid servers of the forced host %s: %s", host.Host, cmp.Or(msg, "none"))
+		}
+		hosts[host.Host] = true
+		network.ForcedHosts = append(network.ForcedHosts, host)
+	}
 	return network, ""
+}
+
+// checkNames returns a message if the list names a backend twice or one that doesn't exist.
+func checkNames(list []string, backends map[string]bool) string {
+	seen := map[string]bool{}
+	for _, name := range list {
+		if !backends[name] || seen[name] {
+			return fmt.Sprintf("unknown or duplicate server %q", name)
+		}
+		seen[name] = true
+	}
+	return ""
 }
 
 func validAddress(address string) bool {

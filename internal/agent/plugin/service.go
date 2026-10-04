@@ -34,6 +34,7 @@ var folders = map[mcsmv1.ServerType]string{
 	mcsmv1.ServerType_SERVER_TYPE_PURPUR:     "plugins",
 	mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   "plugins",
 	mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: "plugins",
+	mcsmv1.ServerType_SERVER_TYPE_WATERFALL:  "plugins",
 	mcsmv1.ServerType_SERVER_TYPE_FABRIC:     "mods",
 	mcsmv1.ServerType_SERVER_TYPE_FORGE:      "mods",
 	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   "mods",

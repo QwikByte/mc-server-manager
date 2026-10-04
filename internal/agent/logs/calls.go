@@ -32,6 +32,7 @@ var detailFields = []protoreflect.Name{"name", "version", "command", "path", "fr
 var categories = map[string]slog.Attr{
 	"NodeService": logging.Nodes, "ServerService": logging.Servers, "FileService": logging.Files,
 	"PropertiesService": logging.Files, "PluginService": logging.Plugins, "BackupService": logging.Backups,
+	"ProxyService": logging.Files,
 }
 
 var wordStart = regexp.MustCompile(`([a-z])([A-Z])`)

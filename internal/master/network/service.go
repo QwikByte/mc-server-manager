@@ -1,6 +1,6 @@
-// Package network groups servers into networks: players join through a Velocity proxy,
-// which forwards their verified identity to the game servers behind it. The master
-// stores the networks and configures their servers through the node agents.
+// Package network groups servers into networks behind a proxy: Velocity, BungeeCord or
+// Waterfall. The master stores the networks and configures their servers through the node
+// agents, in the configuration files and the way the proxies and game servers document it.
 package network
 
 import (
@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -26,22 +28,41 @@ import (
 	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
 )
 
 const (
 	queryTimeout = 10 * time.Second
 	// configureTimeout covers recreating a running backend: a graceful stop and a start.
 	configureTimeout = 3 * time.Minute
+
+	// Forwarding modes: Velocity's modern forwarding, or BungeeCord's, which Velocity calls legacy.
+	Modern = "modern"
+	Legacy = "legacy"
+
+	maxBackends    = 256
+	maxForcedHosts = 256
+	maxMotd        = 256
 )
 
 var (
-	errNotFound        = httpapi.Errorf(http.StatusNotFound, "Network not found.")
-	errBackendNotFound = httpapi.Errorf(http.StatusNotFound, "This server is not part of the network.")
-	errProxyType       = httpapi.Errorf(http.StatusBadRequest, "Choose a Velocity proxy. BungeeCord is not supported because its player forwarding can be spoofed.")
-	errBackendType     = httpapi.Errorf(http.StatusBadRequest, "Only Paper and Purpur servers can join a network, because they verify the players the proxy forwards.")
+	errNotFound   = httpapi.Errorf(http.StatusNotFound, "Network not found.")
+	errProxyType  = httpapi.Errorf(http.StatusBadRequest, "Choose a Velocity, BungeeCord or Waterfall proxy.")
+	errExposed    = httpapi.Errorf(http.StatusConflict, "With legacy forwarding, anyone who reaches a server can join it as any player. Confirm that a firewall lets only the proxy's node reach the servers on other nodes.")
+	errFabricMode = httpapi.Errorf(http.StatusBadRequest, "Fabric servers only support Velocity's modern forwarding.")
 
-	nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
+	nonSlug     = regexp.MustCompile(`[^a-z0-9]+`)
+	namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+	hostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 )
+
+// mods are the Modrinth projects with which game servers that can't verify forwarded
+// players themselves learn it: FabricProxy-Lite and Proxy-Compatible-Forge.
+var mods = map[mcsmv1.ServerType]string{
+	mcsmv1.ServerType_SERVER_TYPE_FABRIC:   "8dI2tmqs",
+	mcsmv1.ServerType_SERVER_TYPE_FORGE:    "vDyrHl8l",
+	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE: "vDyrHl8l",
+}
 
 // Ref points to a server on a node.
 type Ref struct {
@@ -53,15 +74,55 @@ type Ref struct {
 type Backend struct {
 	Ref
 	Name string `json:"name"` // what players use, e.g. /server lobby
+	// Restricted and Motd are settings of BungeeCord: only players with the permission
+	// bungeecord.server.<name> may join a restricted server, and the MOTD is shown for host
+	// names that lead to it; empty uses the proxy's.
+	Restricted bool   `json:"restricted"`
+	Motd       string `json:"motd"`
+}
+
+// ForcedHost sends players who connect through a host name to certain backends, tried in
+// this order. BungeeCord sends them to one.
+type ForcedHost struct {
+	Host    string   `json:"host"`
+	Servers []string `json:"servers"`
 }
 
 type Network struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Proxy     Ref       `json:"proxy"`
-	Backends  []Backend `json:"backends"` // players join the first one
-	CreatedAt time.Time `json:"createdAt"`
-	secret    string
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Proxy Ref    `json:"proxy"`
+	// ProxyType is the type of the proxy, e.g. velocity.
+	ProxyType  string `json:"proxyType"`
+	Forwarding string `json:"forwarding"`
+	// Firewalled confirms that only the proxy's node reaches the backends on other nodes,
+	// which legacy forwarding needs.
+	Firewalled bool      `json:"firewalled"`
+	Backends   []Backend `json:"backends"`
+	// Try names the backends players join and fall back to, in this order.
+	Try         []string     `json:"try"`
+	ForcedHosts []ForcedHost `json:"forcedHosts"`
+	CreatedAt   time.Time    `json:"createdAt"`
+	secret      string
+}
+
+// Draft is a new network: its proxy and the servers behind it; players join the first.
+type Draft struct {
+	Name       string `json:"name"`
+	Proxy      Ref    `json:"proxy"`
+	Forwarding string `json:"forwarding"` // empty is modern for Velocity, legacy otherwise
+	Firewalled bool   `json:"firewalled"`
+	Servers    []Ref  `json:"servers"`
+}
+
+// Change replaces the settings of a network; its proxy stays.
+type Change struct {
+	Name        string       `json:"name"`
+	Forwarding  string       `json:"forwarding"`
+	Firewalled  bool         `json:"firewalled"`
+	Backends    []Backend    `json:"backends"`
+	Try         []string     `json:"try"`
+	ForcedHosts []ForcedHost `json:"forcedHosts"`
 }
 
 // Nodes gives access to the nodes the servers of a network run on.
@@ -70,13 +131,22 @@ type Nodes interface {
 	Conn(ctx context.Context, id string) (grpc.ClientConnInterface, error)
 }
 
+// Mods installs and removes the forwarding mods of Fabric, Forge and NeoForge servers.
+type Mods interface {
+	Ensure(ctx context.Context, ref plugin.Ref, project string) error
+	Uninstall(ctx context.Context, ref plugin.Ref, project string) error
+}
+
 type Service struct {
 	db    *sql.DB
 	nodes Nodes
+	mods  Mods
 	mu    sync.Mutex // one change at a time, as changes reconfigure servers
 }
 
-func NewService(db *sql.DB, nodes Nodes) *Service { return &Service{db: db, nodes: nodes} }
+func NewService(db *sql.DB, nodes Nodes, mods Mods) *Service {
+	return &Service{db: db, nodes: nodes, mods: mods}
+}
 
 func (s *Service) List(ctx context.Context) ([]Network, error) { return s.load(ctx, "") }
 
@@ -91,106 +161,95 @@ func (s *Service) Get(ctx context.Context, id string) (Network, error) {
 	return networks[0], nil
 }
 
-// Create sets up a network with its proxy and the server players join first.
-func (s *Service) Create(ctx context.Context, name string, proxy, lobby Ref) (Network, error) {
+// Create sets up a network with its proxy and servers.
+func (s *Service) Create(ctx context.Context, d Draft) (Network, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	name = strings.TrimSpace(name)
-	if name == "" || len(name) > 64 {
-		return Network{}, httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
+	proxy, err := s.server(ctx, d.Proxy)
+	if err == nil && !proxy.GetType().Proxy() {
+		err = errProxyType
 	}
-	if srv, err := s.server(ctx, proxy); err != nil || srv.GetType() != mcsmv1.ServerType_SERVER_TYPE_VELOCITY {
-		return Network{}, cmp.Or(err, errProxyType)
-	}
-	backend, err := s.backend(ctx, lobby, nil)
 	if err != nil {
 		return Network{}, err
 	}
+	forwarding := cmp.Or(d.Forwarding, Modern)
+	if proxy.GetType().Bungee() {
+		forwarding = cmp.Or(d.Forwarding, Legacy)
+	}
 	n := Network{
-		ID: strings.ToLower(rand.Text()), Name: name, Proxy: proxy, Backends: []Backend{backend},
+		ID: strings.ToLower(rand.Text()), Name: d.Name, Proxy: d.Proxy, ProxyType: proxy.GetType().Slug(),
+		Forwarding: forwarding, Firewalled: d.Firewalled, Backends: []Backend{}, ForcedHosts: []ForcedHost{},
 		CreatedAt: time.Now(), secret: rand.Text(),
+	}
+	for _, ref := range d.Servers {
+		srv, err := s.backend(ctx, ref, n.Forwarding)
+		if err != nil {
+			return n, err
+		}
+		n.Backends = append(n.Backends, Backend{Ref: ref, Name: backendName(srv.GetName(), n.Backends)})
+	}
+	if len(n.Backends) > 0 {
+		n.Try = []string{n.Backends[0].Name}
+	}
+	if err := n.validate(); err != nil {
+		return n, err
 	}
 	err = s.inTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO networks (id, name, proxy_node_id, proxy_server_id, forwarding_secret, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-			n.ID, n.Name, proxy.NodeID, proxy.ServerID, n.secret, n.CreatedAt.Unix()); err != nil {
+			INSERT INTO networks (id, name, proxy_node_id, proxy_server_id, proxy_type, forwarding_secret, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			n.ID, n.Name, n.Proxy.NodeID, n.Proxy.ServerID, n.ProxyType, n.secret, n.CreatedAt.Unix()); err != nil {
 			return err
 		}
-		return insertBackend(ctx, tx, n.ID, backend)
+		return save(ctx, tx, n)
 	})
 	if err != nil {
-		return Network{}, conflict(err, n.Name)
-	}
-	return n, s.apply(ctx, n)
-}
-
-// AddBackend adds a game server to a network.
-func (s *Service) AddBackend(ctx context.Context, id string, ref Ref) (Network, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n, err := s.Get(ctx, id)
-	if err != nil {
-		return n, err
-	}
-	backend, err := s.backend(ctx, ref, n.Backends)
-	if err != nil {
-		return n, err
-	}
-	if err := insertBackend(ctx, s.db, n.ID, backend); err != nil {
 		return n, conflict(err, n.Name)
 	}
-	n.Backends = append(n.Backends, backend)
 	return n, s.apply(ctx, n)
 }
 
-// RemoveBackend makes a server standalone again and removes it from the network.
-func (s *Service) RemoveBackend(ctx context.Context, id, serverID string) (Network, error) {
+// Update replaces the settings of a network and configures its servers: servers that
+// left accept players directly again, the others and the proxy get the new settings.
+func (s *Service) Update(ctx context.Context, id string, c Change) (Network, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n, i, err := s.getBackend(ctx, id, serverID)
+	current, err := s.Get(ctx, id)
 	if err != nil {
-		return n, err
+		return current, err
 	}
-	if len(n.Backends) == 1 {
-		return n, httpapi.Errorf(http.StatusConflict, "A network needs at least one server. Delete the network instead.")
+	n := current
+	n.Name, n.Forwarding, n.Firewalled = c.Name, c.Forwarding, c.Firewalled
+	n.Backends, n.Try, n.ForcedHosts = c.Backends, c.Try, c.ForcedHosts
+	if err := n.validate(); err != nil {
+		return current, err
 	}
-	// The server is reset first: one that still trusts the proxy must not be forgotten.
-	if err := s.reset(ctx, n.Backends[i].Ref); err != nil {
-		return n, httpapi.Errorf(http.StatusBadGateway, "%s could not be made standalone again: %s", n.Backends[i].Name, status.Convert(err).Message())
-	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM network_backends WHERE network_id = ? AND server_id = ?`, n.ID, serverID); err != nil {
-		return n, err
-	}
-	n.Backends = slices.Delete(n.Backends, i, i+1)
-	return n, s.configureProxy(context.WithoutCancel(ctx), n)
-}
-
-// MakeDefault makes the given backend the server players join first.
-func (s *Service) MakeDefault(ctx context.Context, id, serverID string) (Network, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n, i, err := s.getBackend(ctx, id, serverID)
-	if err != nil {
-		return n, err
-	}
-	n.Backends = append([]Backend{n.Backends[i]}, slices.Delete(slices.Clone(n.Backends), i, i+1)...)
-	err = s.inTx(ctx, func(tx *sql.Tx) error {
-		for position, b := range n.Backends {
-			if _, err := tx.ExecContext(ctx, `UPDATE network_backends SET position = ? WHERE network_id = ? AND server_id = ?`,
-				position, n.ID, b.ServerID); err != nil {
-				return err
+	// Servers that join, or all if the forwarding changed, must support it.
+	for _, b := range n.Backends {
+		if n.Forwarding != current.Forwarding || !slices.ContainsFunc(current.Backends, b.same) {
+			if _, err := s.backend(ctx, b.Ref, n.Forwarding); err != nil {
+				return current, fmt.Errorf("%s: %w", b.Name, err)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return n, err
 	}
-	return n, s.configureProxy(context.WithoutCancel(ctx), n)
+	// Servers that leave are made standalone first: one that still trusts the proxy must
+	// not be forgotten.
+	ctx = context.WithoutCancel(ctx)
+	for _, b := range current.Backends {
+		if !slices.ContainsFunc(n.Backends, b.same) {
+			if err := s.leave(ctx, b); err != nil {
+				return current, httpapi.Errorf(http.StatusBadGateway, "%s could not be made standalone again: %s", b.Name, message(err))
+			}
+		}
+	}
+	if err := s.inTx(ctx, func(tx *sql.Tx) error { return save(ctx, tx, n) }); err != nil {
+		return current, conflict(err, n.Name)
+	}
+	return n, s.apply(ctx, n)
 }
 
 // Delete makes all servers standalone again and removes the network. The proxy keeps
-// running without backends.
+// running without forwarding.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -200,12 +259,13 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	ctx = context.WithoutCancel(ctx)
 	for _, b := range n.Backends {
-		if err := s.reset(ctx, b.Ref); err != nil {
-			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, status.Convert(err).Message())
+		if err := s.leave(ctx, b); err != nil {
+			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
 		}
 	}
-	if err := ignoreMissing(s.configure(ctx, n.Proxy, n.secret, nil, false)); err != nil {
-		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because its proxy could not be updated: %s", status.Convert(err).Message())
+	detach := &mcsmv1.ConfigureNetworkRequest{Id: n.Proxy.ServerID, Forwarding: mcsmv1.Forwarding_FORWARDING_NONE}
+	if err := ignoreMissing(s.configure(ctx, n.Proxy, detach)); err != nil {
+		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because its proxy could not be updated: %s", message(err))
 	}
 	_, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID)
 	return err
@@ -213,18 +273,25 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 // CheckRemovable fails if a server is part of a network, which would break without it.
 func (s *Service) CheckRemovable(ctx context.Context, nodeID, serverID string) error {
-	var name string
-	err := s.db.QueryRowContext(ctx, `
-		SELECT name FROM networks WHERE proxy_node_id = ?1 AND proxy_server_id = ?2
-		UNION SELECT n.name FROM network_backends b JOIN networks n ON n.id = b.network_id
-		WHERE b.node_id = ?1 AND b.server_id = ?2`, nodeID, serverID).Scan(&name)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
+	n, err := s.find(ctx, serverID)
+	if err != nil || n == nil || !n.has(Ref{nodeID, serverID}) {
 		return err
 	}
-	return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q. Remove it from the network first.", name)
+	return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q. Remove it from the network first.", n.Name)
+}
+
+// CheckMove fails if a server can't move to another node because its network forwards the
+// legacy way and the operator didn't confirm that the servers on other nodes are protected.
+func (s *Service) CheckMove(ctx context.Context, serverID, from, to string) error {
+	n, err := s.find(ctx, serverID)
+	if err != nil || n == nil {
+		return err
+	}
+	n.moved(serverID, from, to)
+	if n.exposed() {
+		return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q, which forwards the legacy way. Confirm in the network that a firewall protects its servers on other nodes first.", n.Name)
+	}
+	return nil
 }
 
 // Move points the network of a server that moved to another node at its new place, and
@@ -266,19 +333,115 @@ func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
 	return n, s.apply(ctx, n)
 }
 
+// validate checks the settings of a network and puts them into their canonical form.
+func (n *Network) validate() error {
+	bungee := mcsmv1.ParseServerType(n.ProxyType).Bungee()
+	n.Name = strings.TrimSpace(n.Name)
+	switch {
+	case n.Name == "" || len(n.Name) > 64:
+		return httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
+	case n.Forwarding != Modern && n.Forwarding != Legacy:
+		return httpapi.Errorf(http.StatusBadRequest, "Choose modern or legacy forwarding.")
+	case bungee && n.Forwarding != Legacy:
+		return httpapi.Errorf(http.StatusBadRequest, "BungeeCord and Waterfall only forward the legacy way.")
+	case len(n.Backends) == 0:
+		return httpapi.Errorf(http.StatusBadRequest, "A network needs at least one server. Delete the network instead.")
+	case len(n.Backends) > maxBackends || len(n.ForcedHosts) > maxForcedHosts:
+		return httpapi.Errorf(http.StatusBadRequest, "A network can have up to %d servers and %d host names.", maxBackends, maxForcedHosts)
+	case len(n.Try) == 0:
+		return httpapi.Errorf(http.StatusBadRequest, "Choose at least one server that players join.")
+	case n.exposed():
+		return errExposed
+	}
+	names := map[string]bool{}
+	for i, b := range n.Backends {
+		switch {
+		case !namePattern.MatchString(b.Name) || b.Name == "try":
+			return httpapi.Errorf(http.StatusBadRequest, "%q can't name a server: use up to 32 lower-case letters, digits, - and _.", b.Name)
+		case names[b.Name]:
+			return httpapi.Errorf(http.StatusBadRequest, "Two servers are named %q.", b.Name)
+		case slices.ContainsFunc(n.Backends[:i], b.same) || b.Ref == n.Proxy:
+			return httpapi.Errorf(http.StatusBadRequest, "A server can only be part of the network once.")
+		case len(b.Motd) > maxMotd || strings.ContainsFunc(b.Motd, unicode.IsControl):
+			return httpapi.Errorf(http.StatusBadRequest, "The MOTD of %s may have up to %d characters, without line breaks.", b.Name, maxMotd)
+		}
+		names[b.Name] = true
+		if !bungee {
+			n.Backends[i].Restricted, n.Backends[i].Motd = false, ""
+		}
+	}
+	if err := checkNames(n.Try, names, "players join"); err != nil {
+		return err
+	}
+	hosts := map[string]bool{}
+	for i, h := range n.ForcedHosts {
+		h.Host = strings.ToLower(strings.TrimSpace(h.Host))
+		switch {
+		case !hostPattern.MatchString(h.Host) || len(h.Host) > 253:
+			return httpapi.Errorf(http.StatusBadRequest, "%q is no host name, such as survival.example.com.", h.Host)
+		case hosts[h.Host]:
+			return httpapi.Errorf(http.StatusBadRequest, "The host name %s is there twice.", h.Host)
+		case len(h.Servers) == 0 || bungee && len(h.Servers) > 1:
+			return httpapi.Errorf(http.StatusBadRequest, "Choose %s for the host name %s.", map[bool]string{true: "one server", false: "at least one server"}[bungee], h.Host)
+		}
+		if err := checkNames(h.Servers, names, h.Host); err != nil {
+			return err
+		}
+		hosts[h.Host], n.ForcedHosts[i].Host = true, h.Host
+	}
+	if n.ForcedHosts == nil {
+		n.ForcedHosts = []ForcedHost{}
+	}
+	return nil
+}
+
+// exposed reports whether backends on other nodes than the proxy's can be reached by others
+// than the proxy, which legacy forwarding can't tell apart from it.
+func (n *Network) exposed() bool {
+	return n.Forwarding == Legacy && !n.Firewalled &&
+		slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.NodeID != n.Proxy.NodeID })
+}
+
+// checkNames fails if a list of backends names one that doesn't exist, or one twice.
+func checkNames(list []string, names map[string]bool, what string) error {
+	seen := map[string]bool{}
+	for _, name := range list {
+		if !names[name] || seen[name] {
+			return httpapi.Errorf(http.StatusBadRequest, "The servers for %s name %q, which isn't a server of the network or is there twice.", what, name)
+		}
+		seen[name] = true
+	}
+	return nil
+}
+
+func (b Backend) same(o Backend) bool { return b.Ref == o.Ref }
+
+func (n *Network) has(ref Ref) bool {
+	return n.Proxy == ref || slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.Ref == ref })
+}
+
+// moved changes the node of a server of the network.
+func (n *Network) moved(serverID, from, to string) {
+	if n.Proxy == (Ref{from, serverID}) {
+		n.Proxy.NodeID = to
+	}
+	for i, b := range n.Backends {
+		if b.Ref == (Ref{from, serverID}) {
+			n.Backends[i].NodeID = to
+		}
+	}
+}
+
 // apply configures the backends first, so that they accept the proxy before it sends
-// players to them, then the proxy. Servers only restart if their configuration changed.
+// players to them, then the proxy. Game servers only restart if their configuration
+// changed, the proxy reloads its configuration.
 func (s *Service) apply(ctx context.Context, n Network) error {
 	ctx = context.WithoutCancel(ctx) // finish even if the client goes away
 	for _, b := range n.Backends {
-		if err := s.configure(ctx, b.Ref, n.secret, nil, b.NodeID == n.Proxy.NodeID); err != nil {
+		if err := s.join(ctx, n, b); err != nil {
 			return applyFailed(b.Name, err)
 		}
 	}
-	return s.configureProxy(ctx, n)
-}
-
-func (s *Service) configureProxy(ctx context.Context, n Network) error {
 	backends := make([]*mcsmv1.NetworkBackend, 0, len(n.Backends))
 	for _, b := range n.Backends {
 		target, err := s.target(ctx, n.Proxy, b)
@@ -287,17 +450,68 @@ func (s *Service) configureProxy(ctx context.Context, n Network) error {
 		}
 		backends = append(backends, target)
 	}
-	if err := s.configure(ctx, n.Proxy, n.secret, backends, false); err != nil {
+	hosts := make([]*mcsmv1.ForcedHost, 0, len(n.ForcedHosts))
+	for _, h := range n.ForcedHosts {
+		hosts = append(hosts, &mcsmv1.ForcedHost{Host: h.Host, Servers: h.Servers})
+	}
+	req := n.request(n.Proxy)
+	req.Backends, req.Try, req.ForcedHosts = backends, n.Try, hosts
+	if err := s.configure(ctx, n.Proxy, req); err != nil {
 		return applyFailed("the proxy", err)
 	}
 	return nil
 }
 
+// request returns the configuration of a server of the network.
+func (n *Network) request(ref Ref) *mcsmv1.ConfigureNetworkRequest {
+	req := &mcsmv1.ConfigureNetworkRequest{Id: ref.ServerID, Forwarding: mcsmv1.Forwarding_FORWARDING_MODERN, ForwardingSecret: n.secret}
+	if n.Forwarding == Legacy {
+		req.Forwarding, req.ForwardingSecret = mcsmv1.Forwarding_FORWARDING_LEGACY, ""
+	}
+	req.ProxyOnNode = ref != n.Proxy && ref.NodeID == n.Proxy.NodeID
+	return req
+}
+
+// join gives a backend its role in the network, after installing the forwarding mod it
+// needs.
+func (s *Service) join(ctx context.Context, n Network, b Backend) error {
+	srv, err := s.server(ctx, b.Ref)
+	if err != nil {
+		return err
+	}
+	if project, ok := mods[srv.GetType()]; ok {
+		if err := s.mods.Ensure(ctx, plugin.Ref(b.Ref), project); err != nil {
+			return fmt.Errorf("its forwarding mod could not be installed: %w", err)
+		}
+	}
+	return s.configure(ctx, b.Ref, n.request(b.Ref))
+}
+
+// leave makes a backend standalone again and removes its forwarding mod. A deleted server
+// needs nothing.
+func (s *Service) leave(ctx context.Context, b Backend) error {
+	srv, err := s.server(ctx, b.Ref)
+	if status.Code(err) == codes.NotFound || errors.Is(err, errServerNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if project, ok := mods[srv.GetType()]; ok {
+		if err := s.mods.Uninstall(ctx, plugin.Ref(b.Ref), project); err != nil {
+			return fmt.Errorf("its forwarding mod could not be removed: %w", err)
+		}
+	}
+	return ignoreMissing(s.configure(ctx, b.Ref, &mcsmv1.ConfigureNetworkRequest{Id: b.ServerID, Forwarding: mcsmv1.Forwarding_FORWARDING_NONE}))
+}
+
 // target tells the proxy how to reach a backend: on its own node by server ID, as the
 // agent knows the local route, otherwise at the node's address and the server's port.
 func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*mcsmv1.NetworkBackend, error) {
+	target := &mcsmv1.NetworkBackend{Name: b.Name, Restricted: b.Restricted, Motd: b.Motd}
 	if b.NodeID == proxy.NodeID {
-		return &mcsmv1.NetworkBackend{Name: b.Name, Target: &mcsmv1.NetworkBackend_ServerId{ServerId: b.ServerID}}, nil
+		target.Target = &mcsmv1.NetworkBackend_ServerId{ServerId: b.ServerID}
+		return target, nil
 	}
 	n, err := s.nodes.Get(ctx, b.NodeID)
 	if err != nil {
@@ -311,29 +525,22 @@ func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*mcsmv1.Net
 	if err != nil {
 		return nil, err
 	}
-	address := net.JoinHostPort(host, strconv.Itoa(int(srv.GetPort())))
-	return &mcsmv1.NetworkBackend{Name: b.Name, Target: &mcsmv1.NetworkBackend_Address{Address: address}}, nil
+	target.Target = &mcsmv1.NetworkBackend_Address{Address: net.JoinHostPort(host, strconv.Itoa(int(srv.GetPort())))}
+	return target, nil
 }
 
-// configure gives a server its role in a network; proxyOnNode tells a backend that its
-// proxy runs on the same node.
-func (s *Service) configure(ctx context.Context, ref Ref, secret string, backends []*mcsmv1.NetworkBackend, proxyOnNode bool) error {
+func (s *Service) configure(ctx context.Context, ref Ref, req *mcsmv1.ConfigureNetworkRequest) error {
 	ctx, cancel := context.WithTimeout(ctx, configureTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)
 	if err != nil {
 		return err
 	}
-	_, err = mcsmv1.NewServerServiceClient(conn).ConfigureNetwork(ctx, &mcsmv1.ConfigureNetworkRequest{
-		Id: ref.ServerID, ForwardingSecret: secret, Backends: backends, ProxyOnNode: proxyOnNode,
-	})
+	_, err = mcsmv1.NewServerServiceClient(conn).ConfigureNetwork(ctx, req)
 	return err
 }
 
-// reset makes a game server standalone again. A deleted server needs no reset.
-func (s *Service) reset(ctx context.Context, ref Ref) error {
-	return ignoreMissing(s.configure(ctx, ref, "", nil, false))
-}
+var errServerNotFound = httpapi.Errorf(http.StatusNotFound, "Server not found.")
 
 // server looks up a server on its node.
 func (s *Service) server(ctx context.Context, ref Ref) (*mcsmv1.Server, error) {
@@ -349,39 +556,47 @@ func (s *Service) server(ctx context.Context, ref Ref) (*mcsmv1.Server, error) {
 	}
 	i := slices.IndexFunc(res.GetServers(), func(srv *mcsmv1.Server) bool { return srv.GetId() == ref.ServerID })
 	if i < 0 {
-		return nil, httpapi.Errorf(http.StatusNotFound, "Server not found.")
+		return nil, errServerNotFound
 	}
 	return res.GetServers()[i], nil
 }
 
-// backend checks that a server can join a network and names it uniquely.
-func (s *Service) backend(ctx context.Context, ref Ref, existing []Backend) (Backend, error) {
+// backend checks that a server can join a network with the given forwarding.
+func (s *Service) backend(ctx context.Context, ref Ref, forwarding string) (*mcsmv1.Server, error) {
 	srv, err := s.server(ctx, ref)
 	if err != nil {
-		return Backend{}, err
+		return nil, err
 	}
-	if !slices.Contains([]mcsmv1.ServerType{mcsmv1.ServerType_SERVER_TYPE_PAPER, mcsmv1.ServerType_SERVER_TYPE_PURPUR}, srv.GetType()) {
-		return Backend{}, errBackendType
+	switch typ := srv.GetType(); {
+	case typ.Proxy() || typ == mcsmv1.ServerType_SERVER_TYPE_VANILLA:
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Only Paper, Purpur, Fabric, Forge and NeoForge servers can verify the players a proxy forwards.")
+	case typ == mcsmv1.ServerType_SERVER_TYPE_FABRIC && forwarding != Modern:
+		return nil, errFabricMode
 	}
-	return Backend{Ref: ref, Name: backendName(srv.GetName(), existing)}, nil
+	return srv, nil
 }
 
-func (s *Service) getBackend(ctx context.Context, id, serverID string) (Network, int, error) {
-	n, err := s.Get(ctx, id)
+// find returns the network a server is part of, or nil.
+func (s *Service) find(ctx context.Context, serverID string) (*Network, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id FROM networks WHERE proxy_server_id = ?1
+		UNION SELECT network_id FROM network_backends WHERE server_id = ?1`, serverID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
-		return n, -1, err
+		return nil, err
 	}
-	i := slices.IndexFunc(n.Backends, func(b Backend) bool { return b.ServerID == serverID })
-	if i < 0 {
-		return n, -1, errBackendNotFound
-	}
-	return n, i, nil
+	n, err := s.Get(ctx, id)
+	return &n, err
 }
 
 // load reads one network, or all networks when id is empty.
 func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, proxy_node_id, proxy_server_id, forwarding_secret, created_at
+		SELECT id, name, proxy_node_id, proxy_server_id, proxy_type, forwarding, firewalled, try, forced_hosts,
+		       forwarding_secret, created_at
 		FROM networks WHERE ? IN ('', id) ORDER BY name`, id)
 	if err != nil {
 		return nil, err
@@ -391,8 +606,13 @@ func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 	index := map[string]int{}
 	for rows.Next() {
 		n := Network{Backends: []Backend{}}
+		var try, hosts string
 		var createdAt int64
-		if err := rows.Scan(&n.ID, &n.Name, &n.Proxy.NodeID, &n.Proxy.ServerID, &n.secret, &createdAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Proxy.NodeID, &n.Proxy.ServerID, &n.ProxyType, &n.Forwarding, &n.Firewalled,
+			&try, &hosts, &n.secret, &createdAt); err != nil {
+			return nil, err
+		}
+		if err := errors.Join(json.Unmarshal([]byte(try), &n.Try), json.Unmarshal([]byte(hosts), &n.ForcedHosts)); err != nil {
 			return nil, err
 		}
 		n.CreatedAt = time.Unix(createdAt, 0)
@@ -403,7 +623,7 @@ func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 		return nil, err
 	}
 	backends, err := s.db.QueryContext(ctx, `
-		SELECT network_id, node_id, server_id, name FROM network_backends
+		SELECT network_id, node_id, server_id, name, restricted, motd FROM network_backends
 		WHERE ? IN ('', network_id) ORDER BY position`, id)
 	if err != nil {
 		return nil, err
@@ -412,7 +632,7 @@ func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 	for backends.Next() {
 		var networkID string
 		var b Backend
-		if err := backends.Scan(&networkID, &b.NodeID, &b.ServerID, &b.Name); err != nil {
+		if err := backends.Scan(&networkID, &b.NodeID, &b.ServerID, &b.Name, &b.Restricted, &b.Motd); err != nil {
 			return nil, err
 		}
 		if i, ok := index[networkID]; ok {
@@ -420,6 +640,33 @@ func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 		}
 	}
 	return networks, backends.Err()
+}
+
+// save stores the settings and backends of a network that exists.
+func save(ctx context.Context, tx *sql.Tx, n Network) error {
+	try, err := json.Marshal(n.Try)
+	if err != nil {
+		return err
+	}
+	hosts, err := json.Marshal(n.ForcedHosts)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE networks SET name = ?, forwarding = ?, firewalled = ?, try = ?, forced_hosts = ? WHERE id = ?`,
+		n.Name, n.Forwarding, n.Firewalled, try, hosts, n.ID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM network_backends WHERE network_id = ?`, n.ID); err != nil {
+		return err
+	}
+	for position, b := range n.Backends {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO network_backends (network_id, node_id, server_id, name, position, restricted, motd) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			n.ID, b.NodeID, b.ServerID, b.Name, position, b.Restricted, b.Motd); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // inTx runs fn in a transaction that is committed if fn succeeds.
@@ -432,18 +679,6 @@ func (s *Service) inTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 		return errors.Join(err, tx.Rollback())
 	}
 	return tx.Commit()
-}
-
-type execer interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-}
-
-func insertBackend(ctx context.Context, db execer, networkID string, b Backend) error {
-	_, err := db.ExecContext(ctx, `
-		INSERT INTO network_backends (network_id, node_id, server_id, name, position)
-		VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM network_backends WHERE network_id = ?))`,
-		networkID, b.NodeID, b.ServerID, b.Name, networkID)
-	return err
 }
 
 // backendName derives the name players use for a server, e.g. "Survival 2" becomes
@@ -468,14 +703,22 @@ func conflict(err error, name string) error {
 	case strings.Contains(msg, "proxy_server_id"):
 		return httpapi.Errorf(http.StatusConflict, "This proxy already serves a network.")
 	case strings.Contains(msg, "network_backends.server_id"):
-		return httpapi.Errorf(http.StatusConflict, "This server already belongs to a network.")
+		return httpapi.Errorf(http.StatusConflict, "A server already belongs to another network.")
 	}
 	return err
 }
 
 func applyFailed(what string, err error) error {
 	return httpapi.Errorf(http.StatusBadGateway, "The change was saved, but %s could not be configured: %s Apply the network again once all nodes are online.",
-		what, strings.TrimSuffix(status.Convert(err).Message(), ".")+".")
+		what, strings.TrimSuffix(message(err), ".")+".")
+}
+
+// message returns the message of an error of an agent or of the master.
+func message(err error) string {
+	if st, ok := status.FromError(err); ok {
+		return st.Message()
+	}
+	return err.Error()
 }
 
 // ignoreMissing ignores that the agent does not know a server, e.g. as it was deleted.

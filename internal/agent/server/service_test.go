@@ -63,3 +63,55 @@ func TestCheckSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestNetworkOf(t *testing.T) {
+	const id, secret = "abcdefghijklmnopqrstuvwxyz", "S3cretS3cretS3cret"
+	backends := []*mcsmv1.NetworkBackend{
+		{Name: "lobby", Target: &mcsmv1.NetworkBackend_ServerId{ServerId: "bcdefghijklmnopqrstuvwxyz2"}},
+		{Name: "survival", Target: &mcsmv1.NetworkBackend_Address{Address: "203.0.113.7:25566"}, Restricted: true, Motd: "&aSurvival"},
+	}
+	valid := func() *mcsmv1.ConfigureNetworkRequest {
+		return &mcsmv1.ConfigureNetworkRequest{
+			Id: id, ForwardingSecret: secret, Forwarding: mcsmv1.Forwarding_FORWARDING_MODERN, Backends: backends,
+			Try: []string{"lobby", "survival"}, ForcedHosts: []*mcsmv1.ForcedHost{{Host: "survival.example.com", Servers: []string{"survival"}}},
+		}
+	}
+	tests := []struct {
+		name   string
+		change func(*mcsmv1.ConfigureNetworkRequest)
+		ok     bool
+	}{
+		{"valid", func(*mcsmv1.ConfigureNetworkRequest) {}, true},
+		{"legacy without secret", func(r *mcsmv1.ConfigureNetworkRequest) {
+			r.Forwarding, r.ForwardingSecret = mcsmv1.Forwarding_FORWARDING_LEGACY, ""
+		}, true},
+		{"modern without secret", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForwardingSecret = "" }, false},
+		{"unknown forwarding", func(r *mcsmv1.ConfigureNetworkRequest) { r.Forwarding = 9 }, false},
+		{"try names an unknown server", func(r *mcsmv1.ConfigureNetworkRequest) { r.Try = []string{"nope"} }, false},
+		{"try names a server twice", func(r *mcsmv1.ConfigureNetworkRequest) { r.Try = []string{"lobby", "lobby"} }, false},
+		{"forced host with a port", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Host = "survival.example.com:25565" }, false},
+		{"forced host in capitals", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Host = "Survival.example.com" }, false},
+		{"forced host without servers", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts[0].Servers = nil }, false},
+		{"duplicate forced host", func(r *mcsmv1.ConfigureNetworkRequest) { r.ForcedHosts = append(r.ForcedHosts, r.ForcedHosts[0]) }, false},
+		{"MOTD with control characters", func(r *mcsmv1.ConfigureNetworkRequest) {
+			r.Backends = []*mcsmv1.NetworkBackend{{Name: "lobby", Target: backends[0].Target, Motd: "\x1b[31m"}}
+			r.Try, r.ForcedHosts = []string{"lobby"}, nil
+		}, false},
+	}
+	for _, tt := range tests {
+		req := valid()
+		tt.change(req)
+		if _, msg := networkOf(req); (msg == "") != tt.ok {
+			t.Errorf("%s: networkOf() = %q, want ok = %v", tt.name, msg, tt.ok)
+		}
+	}
+
+	// Older masters send a secret without forwarding, and let players join the first backend.
+	n, msg := networkOf(&mcsmv1.ConfigureNetworkRequest{Id: id, ForwardingSecret: secret, Backends: backends})
+	if msg != "" || n.Forwarding != runtime.ForwardingModern || len(n.Try) != 1 || n.Try[0] != "lobby" {
+		t.Fatalf("network of an older master = %+v, %q", n, msg)
+	}
+	if n, _ := networkOf(&mcsmv1.ConfigureNetworkRequest{Id: id, ProxyOnNode: true}); n.Forwarding != runtime.ForwardingNone || n.ProxyOnNode {
+		t.Fatalf("leaving a network = %+v", n)
+	}
+}

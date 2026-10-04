@@ -18,6 +18,7 @@ import (
 	"github.com/QwikByte/mc-server-manager/internal/agent/backup"
 	"github.com/QwikByte/mc-server-manager/internal/agent/files"
 	agentlogs "github.com/QwikByte/mc-server-manager/internal/agent/logs"
+	"github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/node"
 	"github.com/QwikByte/mc-server-manager/internal/agent/plugin"
 	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
@@ -107,6 +108,7 @@ type services struct {
 	server     *server.Service
 	files      *files.Service
 	properties *properties.Service
+	proxy      *network.Service
 	plugin     *plugin.Service
 	backup     *backup.Service
 	stats      *stats.Service
@@ -123,6 +125,7 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 		server:     server.NewService(rt, backups),
 		files:      files.NewService(rt),
 		properties: properties.NewService(rt),
+		proxy:      network.NewService(rt),
 		plugin:     plugin.NewService(rt),
 		backup:     backups,
 		stats:      stats.NewService(rt),
@@ -140,6 +143,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 	mcsmv1.RegisterServerServiceServer(srv, s.server)
 	mcsmv1.RegisterFileServiceServer(srv, s.files)
 	mcsmv1.RegisterPropertiesServiceServer(srv, s.properties)
+	mcsmv1.RegisterProxyServiceServer(srv, s.proxy)
 	mcsmv1.RegisterPluginServiceServer(srv, s.plugin)
 	mcsmv1.RegisterBackupServiceServer(srv, s.backup)
 	mcsmv1.RegisterStatsServiceServer(srv, s.stats)

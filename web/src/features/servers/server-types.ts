@@ -23,6 +23,7 @@ export const serverTypes: ServerType[] = [
   { value: "neoforge", label: "NeoForge", proxy: false, addons: { kind: "mods", loaders: ["neoforge"] } },
   { value: "velocity", label: "Velocity", proxy: true, addons: { kind: "plugins", loaders: ["velocity"] } },
   { value: "bungeecord", label: "BungeeCord", proxy: true, addons: { kind: "plugins", loaders: ["bungeecord", "waterfall"] } },
+  { value: "waterfall", label: "Waterfall", proxy: true, addons: { kind: "plugins", loaders: ["waterfall", "bungeecord"] } },
 ]
 
 export const memoryOptionsMb = [512, 1024, 2048, 4096, 6144, 8192, 12288, 16384]

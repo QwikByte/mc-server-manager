@@ -186,7 +186,7 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 	}
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
-	if srv.Type != mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD { // which logs every status request
+	if !srv.Type.Bungee() { // which logs every status request
 		stats.Players, _ = ping(ctx, srv.Port)
 	}
 	if srv.Type == mcsmv1.ServerType_SERVER_TYPE_PAPER || srv.Type == mcsmv1.ServerType_SERVER_TYPE_PURPUR {

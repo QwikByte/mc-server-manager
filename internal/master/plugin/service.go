@@ -378,6 +378,35 @@ func (s *Service) target(ctx context.Context, typ mcsmv1.ServerType, gameVersion
 	return t, nil
 }
 
+// Ensure installs the newest suitable release of a project on a server, together with the
+// projects it requires, unless the project is installed already.
+func (s *Service) Ensure(ctx context.Context, ref Ref, project string) error {
+	conn, _, err := s.server(ctx, ref)
+	if err != nil {
+		return err
+	}
+	run := &installation{Service: s}
+	present, err := run.present(ctx, mcsmv1.NewPluginServiceClient(conn), ref.ServerID)
+	if _, ok := present[project]; ok || err != nil {
+		return err
+	}
+	_, err = run.install(ctx, ref, []string{project})
+	return err
+}
+
+// Uninstall removes the file of a project from a server, if it has one.
+func (s *Service) Uninstall(ctx context.Context, ref Ref, project string) error {
+	conn, _, err := s.server(ctx, ref)
+	if err != nil {
+		return err
+	}
+	present, err := (&installation{Service: s}).present(ctx, mcsmv1.NewPluginServiceClient(conn), ref.ServerID)
+	if file, ok := present[project]; ok && err == nil {
+		return s.Remove(ctx, ref, file)
+	}
+	return err
+}
+
 // Remove deletes a plugin file from a server.
 func (s *Service) Remove(ctx context.Context, ref Ref, fileName string) error {
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)

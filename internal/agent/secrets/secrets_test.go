@@ -12,6 +12,8 @@ func TestRedactAndRestore(t *testing.T) {
 		{"server.properties", "rcon.password=\n", "rcon.password=\n"}, // nothing to hide
 		{"config/paper-global.yml", "proxies:\n  velocity:\n    enabled: true\n    secret: 'F0rward1ngS3cret'\n",
 			"proxies:\n  velocity:\n    enabled: true\n    secret: <hidden>\n"},
+		{"config/FabricProxy-Lite.toml", "hackOnlineMode = true\nsecret = 'F0rward1ngS3cret'\n", "hackOnlineMode = true\nsecret = <hidden>\n"},
+		{"config/proxy-compatible-forge.toml", "[forwarding]\nenabled = true\nsecret = 'F0rward1ngS3cret'\n", "[forwarding]\nenabled = true\nsecret = <hidden>\n"},
 		{"plugins/Example/config.yml", "secret: kept\n", "secret: kept\n"},
 	} {
 		if got := string(Redact(tc.name, []byte(tc.data))); got != tc.redacted {
@@ -43,7 +45,7 @@ func TestFiles(t *testing.T) {
 			t.Errorf("%s: hidden, redacted, holds secrets = %v, want %v", name, got, want)
 		}
 	}
-	if got := Under("config"); !slices.Equal(got, []string{"config/paper-global.yml"}) {
+	if got := slices.Sorted(slices.Values(Under("config"))); !slices.Equal(got, []string{"config/FabricProxy-Lite.toml", "config/paper-global.yml", "config/proxy-compatible-forge.toml"}) {
 		t.Errorf("Under(config) = %q", got)
 	}
 }
