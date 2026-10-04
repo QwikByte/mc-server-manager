@@ -11,9 +11,9 @@ import (
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 const (

@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/access"
 )
 
 // Commands that follow output end after maxFollow; others run until they are done.

@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QwikByte/mc-server-manager/internal/logging"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 // pollEvery is how often a followed log is read again, for a store written by another process.

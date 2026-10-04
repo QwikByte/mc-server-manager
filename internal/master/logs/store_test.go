@@ -11,10 +11,10 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/QwikByte/mc-server-manager/internal/logging"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	"github.com/QwikByte/mc-server-manager/internal/master/database"
-	"github.com/QwikByte/mc-server-manager/internal/master/node"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/node"
 )
 
 type fakeNodes struct{}

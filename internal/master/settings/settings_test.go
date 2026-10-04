@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/database"
-	"github.com/QwikByte/mc-server-manager/internal/master/https"
+	"github.com/QwikByte/noryx/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/https"
 )
 
 func TestPanelAddr(t *testing.T) {

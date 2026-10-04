@@ -148,7 +148,7 @@ const file_noryx_v1_enrollment_proto_rawDesc = "" +
 	"\x0fcertificate_der\x18\x01 \x01(\fR\x0ecertificateDer\x12,\n" +
 	"\x12ca_certificate_der\x18\x02 \x01(\fR\x10caCertificateDer2P\n" +
 	"\x11EnrollmentService\x12;\n" +
-	"\x06Enroll\x12\x17.noryx.v1.EnrollRequest\x1a\x18.noryx.v1.EnrollResponseB<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\x06Enroll\x12\x17.noryx.v1.EnrollRequest\x1a\x18.noryx.v1.EnrollResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_enrollment_proto_rawDescOnce sync.Once

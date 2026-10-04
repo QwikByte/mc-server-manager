@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
 // timeout limits commands that answer right away. Following logs, backing up and

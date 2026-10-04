@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
-	"github.com/QwikByte/mc-server-manager/internal/agentcli"
-	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
+	"github.com/QwikByte/noryx/internal/agent/enroll"
+	"github.com/QwikByte/noryx/internal/agentcli"
+	"github.com/QwikByte/noryx/internal/buildinfo"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 type config struct {

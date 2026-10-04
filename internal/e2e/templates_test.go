@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/master/template"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/template"
 )
 
 func TestTemplates(t *testing.T) {

@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/buildinfo"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
 const (
@@ -366,7 +366,7 @@ func (c *Client) do(ctx context.Context, method, target string, body io.Reader) 
 		return nil, err
 	}
 	// Modrinth asks clients to identify themselves.
-	req.Header.Set("User-Agent", "QwikByte/noryx/"+buildinfo.Version+" (github.com/QwikByte/mc-server-manager)")
+	req.Header.Set("User-Agent", "QwikByte/noryx/"+buildinfo.Version+" (github.com/QwikByte/noryx)")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

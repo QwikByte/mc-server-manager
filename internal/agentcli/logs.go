@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 // logs shows the agent's own log: the calls it received, with their origin, and what failed.

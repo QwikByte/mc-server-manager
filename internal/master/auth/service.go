@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
 const (

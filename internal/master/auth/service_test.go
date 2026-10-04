@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/database"
 )
 
 func TestPasswordHash(t *testing.T) {

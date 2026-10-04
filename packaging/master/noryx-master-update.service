@@ -1,6 +1,6 @@
 [Unit]
 Description=Update Noryx to its latest release
-Documentation=https://github.com/QwikByte/mc-server-manager
+Documentation=https://github.com/QwikByte/noryx
 After=network-online.target
 Wants=network-online.target
 

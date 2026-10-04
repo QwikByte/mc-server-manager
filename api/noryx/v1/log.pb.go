@@ -256,7 +256,7 @@ const file_noryx_v1_log_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012N\n" +
 	"\n" +
 	"LogService\x12@\n" +
-	"\aReadLog\x12\x18.noryx.v1.ReadLogRequest\x1a\x19.noryx.v1.ReadLogResponse0\x01B<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\aReadLog\x12\x18.noryx.v1.ReadLogRequest\x1a\x19.noryx.v1.ReadLogResponse0\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_log_proto_rawDescOnce sync.Once

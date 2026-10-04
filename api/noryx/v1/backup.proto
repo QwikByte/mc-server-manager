@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package noryx.v1;
 
-option go_package = "github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1";
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 
 // BackupService is served by every agent and keeps backups of its servers on the node, in
 // the backups folder of a storage location, where containers can't reach them. A backup is

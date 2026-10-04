@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/app"
+	"github.com/QwikByte/noryx/internal/agent/app"
 )
 
 func main() {

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	"github.com/QwikByte/mc-server-manager/internal/master/network"
-	masterserver "github.com/QwikByte/mc-server-manager/internal/master/server"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/network"
+	masterserver "github.com/QwikByte/noryx/internal/master/server"
 )
 
 func TestMoveServer(t *testing.T) {

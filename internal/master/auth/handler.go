@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/logging"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
-	"github.com/QwikByte/mc-server-manager/internal/master/ratelimit"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/ratelimit"
 )
 
 // The __Host- prefix makes browsers enforce Secure, Path=/ and no Domain attribute.

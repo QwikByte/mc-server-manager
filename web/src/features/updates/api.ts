@@ -39,7 +39,7 @@ export interface UpdateStatus {
 }
 
 /** Updates the master on its host, for masters that weren't installed from a package. */
-export const updateCommand = "curl -fsSL https://github.com/QwikByte/mc-server-manager/releases/latest/download/install.sh | sudo bash -s -- update"
+export const updateCommand = "curl -fsSL https://github.com/QwikByte/noryx/releases/latest/download/install.sh | sudo bash -s -- update"
 
 export const updateQuery = queryOptions({
   queryKey: ["update"],

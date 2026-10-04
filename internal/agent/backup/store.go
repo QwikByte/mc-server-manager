@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
-	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/storage"
 )
 
 // A backup of a server is kept as <backups of the location>/<server ID>/<ID>.zip, with its

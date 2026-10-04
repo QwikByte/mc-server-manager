@@ -12,9 +12,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
-	"github.com/QwikByte/mc-server-manager/internal/agent/network"
-	"github.com/QwikByte/mc-server-manager/internal/agent/properties"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/properties"
 )
 
 // Placeholder replaces the secrets in the files the panel shows.

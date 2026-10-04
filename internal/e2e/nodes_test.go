@@ -10,9 +10,9 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	agentenroll "github.com/QwikByte/mc-server-manager/internal/agent/enroll"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	agentenroll "github.com/QwikByte/noryx/internal/agent/enroll"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 // Errors that mean a node can't be used name it, instead of passing on those of Docker or gRPC.

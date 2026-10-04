@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
-	"github.com/QwikByte/mc-server-manager/internal/master/network"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/master/network"
 )
 
 func TestNetwork(t *testing.T) {

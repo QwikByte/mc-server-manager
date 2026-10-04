@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/auth"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	"github.com/QwikByte/noryx/internal/master/auth"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 // A backup of a running master restores its users and certificate authority.

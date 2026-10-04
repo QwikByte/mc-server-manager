@@ -506,7 +506,7 @@ const file_noryx_v1_node_proto_rawDesc = "" +
 	"\aGetInfo\x12\x18.noryx.v1.GetInfoRequest\x1a\x19.noryx.v1.GetInfoResponse\x12D\n" +
 	"\tCreateCSR\x12\x1a.noryx.v1.CreateCSRRequest\x1a\x1b.noryx.v1.CreateCSRResponse\x12_\n" +
 	"\x12InstallCertificate\x12#.noryx.v1.InstallCertificateRequest\x1a$.noryx.v1.InstallCertificateResponse\x12;\n" +
-	"\x06Update\x12\x17.noryx.v1.UpdateRequest\x1a\x18.noryx.v1.UpdateResponseB<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\x06Update\x12\x17.noryx.v1.UpdateRequest\x1a\x18.noryx.v1.UpdateResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_node_proto_rawDescOnce sync.Once

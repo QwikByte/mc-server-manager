@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package noryx.v1;
 
-option go_package = "github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1";
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 
 // NodeService is served by every agent and describes the machine it runs on.
 service NodeService {

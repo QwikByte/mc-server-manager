@@ -933,7 +933,7 @@ const file_noryx_v1_file_proto_rawDesc = "" +
 	"\x0fCreateDirectory\x12 .noryx.v1.CreateDirectoryRequest\x1a!.noryx.v1.CreateDirectoryResponse\x12A\n" +
 	"\bMoveFile\x12\x19.noryx.v1.MoveFileRequest\x1a\x1a.noryx.v1.MoveFileResponse\x12G\n" +
 	"\n" +
-	"DeleteFile\x12\x1b.noryx.v1.DeleteFileRequest\x1a\x1c.noryx.v1.DeleteFileResponseB<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"DeleteFile\x12\x1b.noryx.v1.DeleteFileRequest\x1a\x1c.noryx.v1.DeleteFileResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_file_proto_rawDescOnce sync.Once

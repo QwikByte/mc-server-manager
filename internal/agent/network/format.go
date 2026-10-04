@@ -11,7 +11,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
 )
 
 // format reads and writes a configuration file as nested maps; comments are not kept.

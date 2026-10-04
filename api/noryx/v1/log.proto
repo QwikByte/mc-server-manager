@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package noryx.v1;
 
-option go_package = "github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1";
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 
 // LogService is served by every agent and reads its log: what it did, for whom, and what
 // went wrong. The agent keeps the latest entries in memory; the master collects them.

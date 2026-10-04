@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
-	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	mcnet "github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 func TestStandalone(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
 )
 
 // stage extracts a backup into a temporary folder of the data directory, which the caller

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 const paperGlobal = "chunk-system:\n  io-threads: 4\nproxies:\n  velocity:\n    enabled: true\n    online-mode: true\n    secret: old\n"

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/enrollment"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
-	"github.com/QwikByte/mc-server-manager/internal/master/auth"
-	"github.com/QwikByte/mc-server-manager/internal/master/settings"
+	"github.com/QwikByte/noryx/internal/enrollment"
+	"github.com/QwikByte/noryx/internal/master/access"
+	masterapp "github.com/QwikByte/noryx/internal/master/app"
+	"github.com/QwikByte/noryx/internal/master/auth"
+	"github.com/QwikByte/noryx/internal/master/settings"
 )
 
 func TestMasterSettings(t *testing.T) {

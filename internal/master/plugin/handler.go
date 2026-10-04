@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
-	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/modrinth"
 )
 
 const (

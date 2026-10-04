@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 const (

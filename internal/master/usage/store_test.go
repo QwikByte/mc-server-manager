@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/master/database"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/database"
 )
 
 func TestHistory(t *testing.T) {

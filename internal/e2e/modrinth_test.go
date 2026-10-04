@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/modrinth"
 )
 
 // fakeModrinth serves the parts of Modrinth's API (/v2) and CDN (/cdn) the master uses:

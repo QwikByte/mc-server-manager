@@ -19,15 +19,15 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	"github.com/QwikByte/mc-server-manager/internal/master/auth"
-	"github.com/QwikByte/mc-server-manager/internal/master/database"
-	"github.com/QwikByte/mc-server-manager/internal/master/logs"
-	"github.com/QwikByte/mc-server-manager/internal/master/node"
-	"github.com/QwikByte/mc-server-manager/internal/master/settings"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	"github.com/QwikByte/noryx/internal/buildinfo"
+	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/auth"
+	"github.com/QwikByte/noryx/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/logs"
+	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/settings"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 type config struct {

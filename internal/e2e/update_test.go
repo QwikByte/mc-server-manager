@@ -13,11 +13,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
-	"github.com/QwikByte/mc-server-manager/internal/master/update"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/buildinfo"
+	"github.com/QwikByte/noryx/internal/master/access"
+	masterapp "github.com/QwikByte/noryx/internal/master/app"
+	"github.com/QwikByte/noryx/internal/master/update"
 )
 
 func TestUpdates(t *testing.T) {

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
-	"github.com/QwikByte/mc-server-manager/internal/master/auth"
+	masterapp "github.com/QwikByte/noryx/internal/master/app"
+	"github.com/QwikByte/noryx/internal/master/auth"
 )
 
 func TestTwoFactorAuthentication(t *testing.T) {

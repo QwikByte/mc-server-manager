@@ -10,9 +10,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/enrollment"
-	"github.com/QwikByte/mc-server-manager/internal/pki"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/enrollment"
+	"github.com/QwikByte/noryx/internal/pki"
 )
 
 // Names of the credential files inside the agent's PKI directory.

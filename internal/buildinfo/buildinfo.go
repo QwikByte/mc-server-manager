@@ -4,9 +4,9 @@ package buildinfo
 import "regexp"
 
 // Repository publishes the releases.
-const Repository = "https://github.com/QwikByte/mc-server-manager"
+const Repository = "https://github.com/QwikByte/noryx"
 
-// Version is set via -ldflags "-X github.com/QwikByte/mc-server-manager/internal/buildinfo.Version=v1.0.0".
+// Version is set via -ldflags "-X github.com/QwikByte/noryx/internal/buildinfo.Version=v1.0.0".
 var Version = "dev"
 
 // release matches the versions of releases, like the installer does.

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
-	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
-	"github.com/QwikByte/mc-server-manager/internal/logging"
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 // idPattern matches server IDs, which also name directories and containers.

@@ -84,7 +84,7 @@ releases, doesn't pass on what is typed then.
 **Master**, the panel:
 
 ```sh
-curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/latest/download/install.sh && sudo bash install.sh master
+curl -fsSLO https://github.com/QwikByte/noryx/releases/latest/download/install.sh && sudo bash install.sh master
 ```
 
 It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), for the IP address
@@ -114,7 +114,7 @@ offers to install Docker if it's missing (`--install-docker` doesn't ask), conne
 starts it:
 
 ```sh
-curl -fsSLO https://github.com/QwikByte/mc-server-manager/releases/download/<version>/install.sh && sudo bash install.sh agent --join <join-token>
+curl -fsSLO https://github.com/QwikByte/noryx/releases/download/<version>/install.sh && sudo bash install.sh agent --join <join-token>
 ```
 
 Allow port 7443 only from the master's IP address.
@@ -154,7 +154,7 @@ Minecraft servers of a node keep running in Docker; delete them in the panel bef
 **By hand.** Each release also has `.tar.gz` archives with the static binary, its systemd unit and its options, for
 other distributions: the unit expects the binary in `/usr/bin`, the options in `/etc/noryx` and, for the master, a system
 user `noryx`. `checksums.txt` lists the SHA-256 checksums of all files, and
-`gh attestation verify <file> --repo QwikByte/mc-server-manager` proves that a file was built by the release workflow.
+`gh attestation verify <file> --repo QwikByte/noryx` proves that a file was built by the release workflow.
 `checksums.txt.sig` is the signature of the checksums, which the installer checks with the release key. To check files
 by hand, e.g. `install.sh` before the first installation, download `checksums.txt` and `checksums.txt.sig` too:
 

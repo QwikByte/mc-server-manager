@@ -2190,7 +2190,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\vSendCommand\x12\x1c.noryx.v1.SendCommandRequest\x1a\x1d.noryx.v1.SendCommandResponse\x12Y\n" +
 	"\x10ConfigureNetwork\x12!.noryx.v1.ConfigureNetworkRequest\x1a\".noryx.v1.ConfigureNetworkResponse\x12V\n" +
 	"\x0fDuplicateServer\x12 .noryx.v1.DuplicateServerRequest\x1a!.noryx.v1.DuplicateServerResponse\x12O\n" +
-	"\fImportServer\x12\x1d.noryx.v1.ImportServerRequest\x1a\x1e.noryx.v1.ImportServerResponse(\x01B<Z:github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1b\x06proto3"
+	"\fImportServer\x12\x1d.noryx.v1.ImportServerRequest\x1a\x1e.noryx.v1.ImportServerResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_server_proto_rawDescOnce sync.Once

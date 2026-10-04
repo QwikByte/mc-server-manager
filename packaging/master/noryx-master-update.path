@@ -1,6 +1,6 @@
 [Unit]
 Description=Update Noryx when the panel asks for it
-Documentation=https://github.com/QwikByte/mc-server-manager
+Documentation=https://github.com/QwikByte/noryx
 
 [Path]
 # The master may not install anything itself; it only creates this file. To forbid

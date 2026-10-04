@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/QwikByte/mc-server-manager/internal/master/access"
-	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
 type Handler struct {
