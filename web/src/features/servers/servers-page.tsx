@@ -9,9 +9,11 @@ import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { nodesQuery } from "@/features/nodes/api"
 import { usageQuery } from "@/features/usage/api"
 import { allServersQuery } from "./api"
+import { CreateServerDialog } from "./create-server-dialog"
 import { ServerCard } from "./server-list"
 import { displayVersion, serverType } from "./server-types"
 
@@ -22,6 +24,8 @@ export function ServersPage() {
   const usages = useQueries({ queries: [...new Set(servers?.map((s) => s.nodeId))].map(usageQuery) })
   const usage = new Map(usages.flatMap((u) => u.data?.servers ?? []).map((u) => [u.id, u]))
   const [search, setSearch] = useState("")
+  const { canSomewhere } = useAccess()
+  const create = canSomewhere("servers.create") && <CreateServerDialog />
 
   const words = search.toLowerCase().split(/\s+/).filter(Boolean)
   const found = servers
@@ -34,7 +38,7 @@ export function ServersPage() {
 
   return (
     <>
-      <PageHeader icon={CubeIcon} title={t("Servers")} />
+      <PageHeader icon={CubeIcon} title={t("Servers")} actions={servers && servers.length > 0 && create} />
       {offline.length > 0 && (
         <Callout tone="warning" icon={WifiSlashIcon} title={t("Some nodes are offline")} className="mb-6">
           {t("The servers on {{nodes}} aren't listed until they are back.", {
@@ -49,15 +53,21 @@ export function ServersPage() {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : servers.length === 0 ? (
-        // Servers on offline nodes may exist; the notice above tells about them.
+        // Servers on offline nodes may exist; the notice above tells about them. Without a node, servers
+        // can't be created yet.
         nodes &&
-        offline.length === 0 && (
+        offline.length === 0 &&
+        (nodes.length > 0 && create ? (
+          <EmptyState icon={CubeIcon} title={t("No servers yet")}>
+            {create}
+          </EmptyState>
+        ) : (
           <EmptyState icon={CubeIcon} title={t("No servers yet")} description={t("Open a node to create a game server or a proxy on it.")}>
             <Button asChild>
               <Link to="/nodes">{t("Go to the nodes")}</Link>
             </Button>
           </EmptyState>
-        )
+        ))
       ) : (
         <>
           <InputGroup className="mb-6 w-full sm:max-w-xs">
