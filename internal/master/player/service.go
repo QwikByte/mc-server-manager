@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
@@ -220,10 +222,13 @@ func (s *Service) call(ctx context.Context, nodeID string, fn func(ctx context.C
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, nodeID)
-	if err != nil {
-		return err
+	if err == nil {
+		err = fn(ctx, conn)
 	}
-	return fn(ctx, conn)
+	if status.Code(err) == codes.Unimplemented {
+		err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of this node to manage players.")
+	}
+	return err
 }
 
 func nodesOf(servers []network.Ref) []string {

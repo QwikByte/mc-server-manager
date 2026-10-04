@@ -1,9 +1,20 @@
-import { ArrowClockwiseIcon, ArrowsClockwiseIcon, CaretDownIcon, MegaphoneIcon, PlayIcon, PowerIcon, StopIcon, TrashIcon } from "@phosphor-icons/react"
+import {
+  ArrowClockwiseIcon,
+  ArrowsClockwiseIcon,
+  ArrowsCounterClockwiseIcon,
+  CaretDownIcon,
+  MegaphoneIcon,
+  PlayIcon,
+  PowerIcon,
+  StopIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
 import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
+import { Segmented } from "@/components/segmented"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -22,7 +33,7 @@ import { useAccess } from "@/features/access/use-access"
 import { useOperation } from "@/features/operations/use-operation"
 import { type Network, type NetworkAction, useNetworkAction } from "./api"
 
-type Power = "start" | "stop" | "restart"
+type Power = "start" | "stop" | "restart" | "rolling"
 
 /** Acts on all servers of a network, and applies or deletes it. */
 export function NetworkActions({ network }: { network: Network }) {
@@ -32,7 +43,7 @@ export function NetworkActions({ network }: { network: Network }) {
   const navigate = useNavigate()
   const [dialog, setDialog] = useState<Power | "broadcast">()
   const onAll = (p: Permission) => [network.proxy, ...network.backends].every((s) => can(p, s.nodeId, s.serverId))
-  const powers = (["start", "restart", "stop"] as const).filter((p) => onAll(`servers.${p}`))
+  const powers = (["start", "restart", "rolling", "stop"] as const).filter((p) => onAll(`servers.${p === "rolling" ? "restart" : p}`))
 
   function run(a: NetworkAction, loading: string, success: string, then?: () => void) {
     operation.run((onStart) => action.mutateAsync({ ...a, onStart }), { title: loading, notify: true, done: () => ({ message: success }), then })
@@ -49,6 +60,11 @@ export function NetworkActions({ network }: { network: Network }) {
       label: t("Restart all…"),
       confirm: t("The proxy stops first, so that all players leave at once, then the servers restart and the proxy starts last."),
       run: () => run({ action: "restart" }, t("Restarting {{name}}…", { name: network.name }), t("Restarted {{name}}", { name: network.name })),
+    },
+    rolling: {
+      icon: ArrowsCounterClockwiseIcon,
+      label: t("Restart server by server…"),
+      run: () => setDialog("rolling"),
     },
     stop: {
       icon: StopIcon,
@@ -129,6 +145,19 @@ export function NetworkActions({ network }: { network: Network }) {
           onConfirm={power[dialog].run}
         />
       )}
+      {dialog === "rolling" && (
+        <RollingRestartDialog
+          network={network}
+          onClose={() => setDialog(undefined)}
+          onStart={(batch) =>
+            run(
+              { action: "rolling-restart", batch },
+              t("Restarting {{name}} server by server…", { name: network.name }),
+              t("Restarted {{name}} server by server", { name: network.name }),
+            )
+          }
+        />
+      )}
       {dialog === "broadcast" && (
         <BroadcastDialog
           network={network}
@@ -137,6 +166,50 @@ export function NetworkActions({ network }: { network: Network }) {
         />
       )}
     </>
+  )
+}
+
+const batches = ["1", "2", "5", "10"] as const
+
+/** Restarts the running game servers of a network a few at a time, so that it stays open. */
+function RollingRestartDialog({ network, onClose, onStart }: { network: Network; onClose: () => void; onStart: (batch: number) => void }) {
+  const [batch, setBatch] = useState<(typeof batches)[number]>("1")
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("Restart {{name}} server by server", { name: network.name })}</DialogTitle>
+          <DialogDescription>
+            {t(
+              "The running game servers restart a few at a time, and the network stays open: their players move to another server first, and the next servers restart once these run again. The servers players join first restart last, one at a time. The proxy keeps running.",
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span>{t("Servers at a time")}</span>
+          <Segmented
+            label={t("Servers at a time")}
+            value={batch}
+            onChange={setBatch}
+            options={batches.map((b) => ({ value: b, label: b }))}
+          />
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">{t("Cancel")}</Button>
+          </DialogClose>
+          <Button
+            onClick={() => {
+              onStart(Number(batch))
+              onClose()
+            }}
+          >
+            <ArrowsCounterClockwiseIcon />
+            {t("Restart")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

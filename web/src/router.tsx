@@ -9,6 +9,7 @@ import { accessOf } from "@/features/access/use-access"
 import { meQuery } from "@/features/auth/api"
 import { LoginPage } from "@/features/auth/login-page"
 import { validateLogSearch } from "@/features/logs/search"
+import { validatePlayerSearch } from "@/features/players/search"
 import type { Kind } from "@/features/plugins/api"
 import { validateServerSearch } from "@/features/servers/browse"
 import { ApiError } from "@/lib/api"
@@ -108,6 +109,12 @@ const serversRoute = createRoute({
   path: "/servers",
   validateSearch: validateServerSearch,
   component: lazyRouteComponent(() => import("@/features/servers/servers-page"), "ServersPage"),
+})
+const playersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/players",
+  validateSearch: validatePlayerSearch,
+  component: lazyRouteComponent(() => import("@/features/players/players-page"), "PlayersPage"),
 })
 const serverRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -323,6 +330,7 @@ export const router = createRouter({
         serverSettingsRoute,
       ]),
       networksRoute,
+      playersRoute,
       networkRoute.addChildren([networkOverviewRoute, networkProxyRoute]),
       templatesRoute,
       newTemplateRoute,

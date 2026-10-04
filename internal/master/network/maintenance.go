@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/operation"
@@ -116,10 +119,13 @@ func (s *Service) proxy(ctx context.Context, n Network, call func(ctx context.Co
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout+maintenanceWait)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, n.Proxy.NodeID)
-	if err != nil {
-		return err
+	if err == nil {
+		err = call(ctx, noryxv1.NewProxyServiceClient(conn))
 	}
-	return call(ctx, noryxv1.NewProxyServiceClient(conn))
+	if status.Code(err) == codes.Unimplemented {
+		err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the proxy's node for maintenance.")
+	}
+	return err
 }
 
 func maintenanceOf(m *noryxv1.Maintenance, proxyRunning bool) Maintenance {

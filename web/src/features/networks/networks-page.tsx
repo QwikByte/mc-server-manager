@@ -1,4 +1,4 @@
-import { ArrowRightIcon, GraphIcon, ShieldCheckIcon, ShieldWarningIcon, UsersThreeIcon } from "@phosphor-icons/react"
+import { ArrowRightIcon, GraphIcon, ShieldCheckIcon, ShieldWarningIcon, UsersThreeIcon, WrenchIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -7,14 +7,14 @@ import { Chip } from "@/components/chip"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
-import { StatusDot } from "@/components/status"
+import { Pill, StatusDot } from "@/components/status"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { StateBar } from "@/features/servers/server-state"
 import { serverStates, serverType } from "@/features/servers/server-types"
 import type { ServerUsage } from "@/features/usage/api"
-import { type Network, networksQuery, type ServerRef } from "./api"
+import { maintenanceQuery, type Network, networksQuery, type ServerRef } from "./api"
 import { CreateNetworkDialog } from "./create-network-dialog"
 import { ServerLabel } from "./server-label"
 import { findServer, key } from "./servers"
@@ -64,6 +64,7 @@ const maxChips = 8
 function NetworkCard({ network, servers, usage }: { network: Network; servers?: NodeServer[]; usage: (ref: ServerRef) => ServerUsage | undefined }) {
   const proxy = findServer(servers, network.proxy)
   const players = playersOnline(network, usage)
+  const { data: maintenance } = useQuery(maintenanceQuery(network.id))
   const backends = network.backends.map((b) => findServer(servers, b))
   // A few servers by name; those that crash come first.
   const crashing = (i: number) => Number(backends[i]?.state !== "crashing")
@@ -81,7 +82,15 @@ function NetworkCard({ network, servers, usage }: { network: Network; servers?: 
       <div className="flex items-start gap-3">
         <IconTile icon={GraphIcon} tone="violet" />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{network.name}</p>
+          <p className="flex items-center gap-2 font-semibold">
+            <span className="truncate">{network.name}</span>
+            {maintenance?.enabled && (
+              <Pill tone="warning" className="px-2">
+                <WrenchIcon weight="bold" />
+                {t("Maintenance")}
+              </Pill>
+            )}
+          </p>
           <p className="text-xs text-muted-foreground">
             {t("{{count}} servers behind the proxy", { count: network.backends.length, defaultValue_one: "{{count}} server behind the proxy" })}
           </p>

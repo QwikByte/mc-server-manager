@@ -306,6 +306,16 @@ when it leaves.
   appear under Advanced. Those the network decides, such as the servers, are locked. Saving reloads a running proxy.
 - **Actions.** **Servers** starts all servers of the network before the proxy, so that players find them, and stops the
   proxy first, so that all players leave at once. **Message** sends a chat message to all running game servers.
+- **Restart server by server.** The running game servers restart a few at a time (1, 2, 5 or 10) while the network
+  stays open: the proxy first sends their players to another running server with `send`, and the next servers restart
+  once these run again. The servers players join first restart last and one at a time; the proxy keeps running, and a
+  server that doesn't start again stops the restart.
+- **Maintenance.** The network's overview turns maintenance on and off with the
+  [Maintenance](https://modrinth.com/plugin/maintenance) plugin on the proxy: the server list shows the network in
+  maintenance, and only the team may join. The first time, the panel installs the plugin from Modrinth and restarts the
+  proxy to load it, which disconnects all players once. The team is edited in the panel (the plugin's `maintenance add`
+  and `remove`), the texts in the plugin's `config.yml`, which the panel links to. The panel reads the state from the
+  plugin's files, so it also shows maintenance turned on in the game.
 - **Reaching the servers.** On its own node, the proxy reaches a server by container name over a Docker network that only
   the two of them share; such a server's port isn't published at all. A server on another node is reached at that
   node's host and the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as
@@ -315,7 +325,25 @@ when it leaves.
 - **Legacy forwarding** doesn't prove that players come through the proxy: anyone who reaches such a server can join as
   any player. A network with legacy forwarding and servers on other nodes therefore needs the confirmation that a
   firewall protects them, and no server of it moves to another node without.
-- New Minecraft servers start with a whitelist: add players with `whitelist add <name>` in each server's console.
+- New Minecraft servers start with a whitelist: add players on the **Players** page, for one server or the network.
+
+## Players
+
+The **Players** page lists the players online on all game servers, with their server and network, to search and act on;
+`Ctrl+K` finds them too. Its other tabs join the ban list, whitelist and operators of all servers or of a network, with
+how many servers have each player, and the changes that wait for stopped servers.
+
+- **Actions.** Kick, ban (with a reason), pardon, add to and remove from the whitelist, make operator and take it away,
+  and turn the whitelist on or off. A change goes to the player's server, the network or all servers, as chosen; bans
+  go to the network first. Kicks leave the server: Velocity sends kicked players to another server of the network,
+  BungeeCord disconnects them. **Send to another server** moves a player within the network through the proxy (`send`).
+- **Stopped servers** get a change once they run again, so that a ban also reaches the servers of a network that are
+  stopped. The agent keeps the waiting changes in `noryx-pending-players.json` in the server's data.
+- **How.** The agents run Minecraft's own commands (`minecraft:ban` and so on) through the server's console port, so the
+  lists stay in the server's files, also where plugins replace the commands, and read the lists from those files.
+  Names are checked before they become part of a command: 16 letters, digits and underscores, or Floodgate's dot before.
+- **Permissions.** Acting on players needs the permission to manage players on each server; making operators also needs
+  the permission to send console commands, as operators may run any command in the game.
 
 ## Usage
 
@@ -323,10 +351,10 @@ The panel shows what nodes and servers use, now and during the last week.
 
 - **Now.** Every agent measures every 5 seconds: CPU and memory of the node and of each server (without the page
   cache, like `docker stats`), the network traffic of each server, the size of its data (every 5 minutes), the players
-  online and the ticks per second of Paper and Purpur servers. Players come from the status request that the server
-  list in the game sends too, which game servers and Velocity answer; BungeeCord and Waterfall are left out, as they log
-  every such request. The ticks per second come through the server's console port over a connection that stays open, because
-  servers log every new one. Server cards show CPU, memory and players; the **Usage** tab of a server and the node page
+  online and the ticks per second of Paper and Purpur servers. The number of players comes from the status request that
+  the server list in the game sends too, which game servers and Velocity answer; BungeeCord and Waterfall are left out,
+  as they log every such request. The names of all players and the ticks per second come through the server's console
+  port (`list`, `tps`) over a connection that stays open, because servers log every new one. Server cards show CPU, memory and players; the **Usage** tab of a server and the node page
   show the rest.
 - **History.** The master records the latest measurement of every agent each minute and keeps it for a week. Charts
   show the last 24 hours (averages of 5 minutes) or 7 days (averages of 30 minutes), with the most players of each
@@ -398,7 +426,8 @@ Users get their permissions from groups; a user can be in several groups and has
 
 - **Fine-grained permissions.** There are permissions for every action, by area: nodes (see, change, renew
   certificates, remove, add), servers (see, create, start, stop, restart, change settings, delete), console (read, send
-  commands), files and configuration (browse and download, change files, `server.properties`, plugins and mods),
+  commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download, change
+  files, `server.properties`, plugins and mods),
   backups (see and download, back up, restore, delete), the log, networks, templates, backup jobs, policies, the
   master's settings, the terminal, users and groups. Choosing a permission also chooses what it needs, e.g. seeing the servers
   one may restart.
@@ -536,7 +565,7 @@ Users get their permissions from groups; a user can be in several groups and has
 The code is organised by feature, not by layer.
 
 ```
-api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, plugins, backups, log, stats, progress) and generated code
+api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, players, plugins, backups, log, stats, progress) and generated code
 cmd/noryx-master/        master binary
 cmd/noryx-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -554,8 +583,10 @@ internal/master/
   server/               server API, forwarded to the node's agent
   tag/                  tags of servers, which the panel finds and groups them by
   operation/            long actions run in the background, with their steps and progress, and the API that follows them
-  network/              networks of servers behind a proxy, applied through the agents; actions on their servers and the
-                        settings of proxies
+  network/              networks of servers behind a proxy, applied through the agents; actions on their servers,
+                        rolling restarts, maintenance and the settings of proxies
+  player/               kicks, bans, whitelists and operators on many servers at once, their joined lists, and sending
+                        players to another server of a network
   files/                file manager, streamed between the browser and the agent
   properties/           server.properties editor
   plugin/               installs, lists and removes plugins and mods of servers
@@ -575,21 +606,23 @@ internal/agent/
   server/               server lifecycle and input validation
   storage/              storage locations allowed for server data
   datadir/              confined access to a server's data, owned by the server's user
-  network/              configuration of proxies and game servers for networks, and the settings of proxies
+  network/              configuration of proxies and game servers for networks, the settings of proxies, and the
+                        Maintenance plugin
+  player/               kicks, bans, whitelists and operators with Minecraft's commands; changes for stopped servers
   files/                file access for the file manager
   properties/           reads and updates server.properties, keeping comments
   plugin/               plugin and mod files of servers
   backup/               backups of servers: selection, archives, restoring
   logs/                 latest log entries in memory, log service, logging of every call
   progress/             tells the master the progress of calls, e.g. downloading an image, through ProgressService
-  stats/                measures what the node and its servers use: CPU, memory, network, data, players, TPS
+  stats/                measures what the node and its servers use: CPU, memory, network, data, players with names, TPS
   runtime/              runtime interface; docker/ implements it
 internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, dashboard, nodes, servers, files, properties, networks, plugins, templates, backups,
                         policies, schedules (shared by backups and policies), settings, terminal, logs, usage,
                         access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K),
-                        operations (progress, notifications and the list of operations)
+                        operations (progress, notifications and the list of operations), players
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

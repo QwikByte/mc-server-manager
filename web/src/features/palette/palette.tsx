@@ -21,6 +21,7 @@ import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
 import { networksQuery } from "@/features/networks/api"
 import { nodesQuery } from "@/features/nodes/api"
+import { useOnlinePlayers } from "@/features/players/online"
 import { allServersQuery, type NodeServer, serverKey, useBulkAction } from "@/features/servers/api"
 import { serverLook, serverStates, serverType } from "@/features/servers/server-types"
 import { msg } from "@/lib/i18n"
@@ -39,7 +40,7 @@ const actions = [
   { kind: "stop", icon: StopIcon, label: () => t("Stop"), permission: "servers.stop", when: (s: NodeServer) => s.state !== "stopped" },
 ] as const satisfies readonly { permission: Permission; [key: string]: unknown }[]
 
-/** Searches servers, networks, nodes and pages, and acts on servers. */
+/** Searches servers, players, networks, nodes and pages, and acts on servers. */
 export function Palette({ onClose }: { onClose: () => void }) {
   const access = useAccess()
   const navigate = useNavigate()
@@ -51,6 +52,9 @@ export function Palette({ onClose }: { onClose: () => void }) {
     ...nodesQuery,
     enabled: access.canSomewhere("nodes.view") || access.canSomewhere("servers.view"),
   })
+  const { players } = useOnlinePlayers(access.canSomewhere("servers.view"))
+  const needle = query.trim().toLowerCase()
+  const found = needle.length >= 2 ? players.filter((p) => p.name.toLowerCase().includes(needle)).slice(0, 8) : []
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   // "neustart" names "Neu starten" too.
   const named = actions.filter((a) => words.some((w) => w.length >= 3 && a.label().toLowerCase().replace(/\s/g, "").startsWith(w)))
@@ -85,11 +89,11 @@ export function Palette({ onClose }: { onClose: () => void }) {
       open
       onOpenChange={(open) => !open && onClose()}
       title={t("Search")}
-      description={t("Search servers, networks, nodes and pages")}
+      description={t("Search servers, players, networks, nodes and pages")}
       className="sm:max-w-xl"
     >
       <Command loop>
-        <CommandInput value={query} onValueChange={setQuery} placeholder={t("Search servers, networks, nodes and pages…")} />
+        <CommandInput value={query} onValueChange={setQuery} placeholder={t("Search servers, players, networks, nodes and pages…")} />
         <CommandList className="max-h-[min(28rem,60svh)]">
           <CommandEmpty>{t("Nothing found.")}</CommandEmpty>
           {named.length > 0 && (
@@ -131,6 +135,22 @@ export function Palette({ onClose }: { onClose: () => void }) {
                   <CommandShortcut className="truncate tracking-normal">
                     {[...s.tags.map((tag) => `#${tag}`), s.nodeName].join(" · ")}
                   </CommandShortcut>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {found.length > 0 && (
+            <CommandGroup heading={t("Players")}>
+              {found.map((p) => (
+                <CommandItem
+                  key={`player/${p.name}@${serverKey(p.server)}`}
+                  value={`player/${p.name}@${serverKey(p.server)}`}
+                  keywords={[p.name]}
+                  onSelect={() => go(() => navigate({ to: "/players", search: { q: p.name } }))}
+                >
+                  <UserIcon weight="duotone" className="text-info" />
+                  <span className="truncate font-mono font-medium">{p.name}</span>
+                  <CommandShortcut className="truncate tracking-normal">{p.server.name}</CommandShortcut>
                 </CommandItem>
               ))}
             </CommandGroup>
