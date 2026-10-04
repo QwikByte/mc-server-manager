@@ -54,6 +54,8 @@ func TestPing(t *testing.T) {
 }
 
 func TestRCONAndTPS(t *testing.T) {
+	// Like Minecraft, the server splits long answers into packets of 4096 bytes.
+	long := strings.Repeat("x", rconChunk+100)
 	addr := serve(t, func(conn net.Conn) {
 		for {
 			var header [12]byte
@@ -64,16 +66,22 @@ func TestRCONAndTPS(t *testing.T) {
 			if _, err := io.ReadFull(conn, body); err != nil {
 				return
 			}
-			id, answer := header[4:8], ""
-			switch string(body[:len(body)-2]) {
-			case "wrong":
+			id, answers := header[4:8], []string{""}
+			switch typ := binary.LittleEndian.Uint32(header[8:12]); {
+			case typ == rconResponse:
+				answers = []string{"Unknown request 0"}
+			case string(body[:len(body)-2]) == "wrong":
 				id = []byte{0xff, 0xff, 0xff, 0xff}
-			case "tps":
-				answer = "§6TPS from last 1m, 5m, 15m: §a*20.01, §a19.5, §a19.8"
+			case string(body[:len(body)-2]) == "tps":
+				answers = []string{"§6TPS from last 1m, 5m, 15m: §a*20.01, §a19.5, §a19.8"}
+			case string(body[:len(body)-2]) == "long":
+				answers = []string{long[:rconChunk], long[rconChunk:]}
 			}
-			res := binary.LittleEndian.AppendUint32(nil, uint32(10+len(answer))) //nolint:gosec // short
-			res = append(append(append(res, id...), 0, 0, 0, 0), answer...)
-			_, _ = conn.Write(append(res, 0, 0))
+			for _, answer := range answers {
+				res := binary.LittleEndian.AppendUint32(nil, uint32(10+len(answer))) //nolint:gosec // short
+				res = append(append(append(res, id...), 0, 0, 0, 0), answer...)
+				_, _ = conn.Write(append(res, 0, 0))
+			}
 		}
 	})
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
@@ -92,6 +100,28 @@ func TestRCONAndTPS(t *testing.T) {
 	}
 	if m := tpsPattern.FindStringSubmatch(plain(out)); m == nil || m[1] != "20.01" {
 		t.Fatalf("tps output %q, match %v", out, m)
+	}
+	// The packets of a long answer are joined, and the connection stays usable.
+	for _, command := range []string{"long", "tps"} {
+		if out, err := r.call(ctx, rconCommand, command); err != nil || command == "long" && out != long {
+			t.Fatalf("%s: %d bytes, %v", command, len(out), err)
+		}
+	}
+}
+
+func TestListed(t *testing.T) {
+	for out, want := range map[string]string{
+		"There are 3 of a max of 20 players online: Alex, Steve, .Bedrock_1": "Alex,Steve,.Bedrock_1",
+		"There are 0 of a max of 20 players online: ":                        "",
+		"There are 2/20 players online:\nAlex, [Admin] Steve":                "Alex,Steve",
+		"There are 2 of a max of 20 players online: @a, Alex":                "Alex",
+	} {
+		if names, ok := listed(out); !ok || strings.Join(names, ",") != want {
+			t.Errorf("listed(%q) = %q, %v; want %q", out, names, ok, want)
+		}
+	}
+	if _, ok := listed("Unknown or incomplete command, see below for error"); ok {
+		t.Error("an unknown command lists players")
 	}
 }
 

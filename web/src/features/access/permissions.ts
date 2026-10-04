@@ -14,6 +14,7 @@ export const permissionIds = [
   "servers.delete",
   "console.view",
   "console.commands",
+  "players.manage",
   "files.read",
   "files.write",
   "properties.edit",

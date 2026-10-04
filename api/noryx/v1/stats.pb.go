@@ -315,7 +315,8 @@ type Players struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Online uint32                 `protobuf:"varint,1,opt,name=online,proto3" json:"online,omitempty"`
 	Max    uint32                 `protobuf:"varint,2,opt,name=max,proto3" json:"max,omitempty"`
-	// Names of some of the players online, as the server lists them.
+	// Names of the players online: of all, up to 1000, if the console of a game server
+	// answers, otherwise of some, as the server lists them.
 	Names         []string `protobuf:"bytes,3,rep,name=names,proto3" json:"names,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

@@ -12,8 +12,10 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/properties"
@@ -27,6 +29,8 @@ const (
 	// rconRetry is how long the agent waits before it connects to a console again that
 	// failed, as the server logs every attempt.
 	rconRetry = time.Minute
+	// maxListed is the most players listed of a server.
+	maxListed = 1000
 )
 
 var (
@@ -189,16 +193,31 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 	if !srv.Type.Bungee() { // which logs every status request
 		stats.Players, _ = ping(ctx, srv.Port)
 	}
+	if srv.Type.Proxy() {
+		return stats
+	}
+	// The ping lists only some players, the console all of them.
+	if out, ok := st.command(ctx, rt, srv.ID, u.Host, now, "minecraft:list"); ok && stats.Players != nil {
+		if names, ok := listed(out); ok {
+			stats.Players.Names = names
+		}
+	}
 	if srv.Type == noryxv1.ServerType_SERVER_TYPE_PAPER || srv.Type == noryxv1.ServerType_SERVER_TYPE_PURPUR {
-		stats.Tps = st.tps(ctx, rt, srv.ID, u.Host, now)
+		if out, ok := st.command(ctx, rt, srv.ID, u.Host, now, "tps"); ok {
+			if m := tpsPattern.FindStringSubmatch(out); m != nil {
+				tps, _ := strconv.ParseFloat(m[1], 64)
+				stats.Tps = min(tps, 20)
+			}
+		}
 	}
 	return stats
 }
 
 func perSecond(bytes uint64, d time.Duration) uint64 { return uint64(float64(bytes) / d.Seconds()) }
 
-// tps asks a Paper or Purpur server for its ticks per second over the last minute.
-func (st *serverState) tps(ctx context.Context, rt runtime.Runtime, id, host string, now time.Time) float64 {
+// command runs a console command of a game server over RCON and returns its output without
+// formatting, or false if the console can't be reached.
+func (st *serverState) command(ctx context.Context, rt runtime.Runtime, id, host string, now time.Time, command string) (string, bool) {
 	if st.rconHost != host {
 		st.closeRCON()
 	}
@@ -207,24 +226,35 @@ func (st *serverState) tps(ctx context.Context, rt runtime.Runtime, id, host str
 		if err != nil {
 			slog.Debug("Can't connect to the console of a server", "server", id, "err", err)
 			st.rconRetry = now.Add(rconRetry)
-			return 0
+			return "", false
 		}
 		st.rcon, st.rconHost = r, host
 	}
 	if st.rcon == nil {
-		return 0
+		return "", false
 	}
-	out, err := st.rcon.call(ctx, rconCommand, "tps")
+	out, err := st.rcon.call(ctx, rconCommand, command)
 	if err != nil {
 		st.closeRCON()
-		return 0
+		return "", false
 	}
-	m := tpsPattern.FindStringSubmatch(plain(out))
-	if m == nil {
-		return 0
+	return plain(out), true
+}
+
+// listed returns the players in the output of the list command: "There are 2 of a max of
+// 20 players online: Alex, Steve", or before Minecraft 1.13 with the names on a new line.
+func listed(out string) ([]string, bool) {
+	_, names, ok := strings.Cut(out, ":")
+	if !ok {
+		return nil, false // e.g. an unknown command
 	}
-	tps, _ := strconv.ParseFloat(m[1], 64)
-	return min(tps, 20)
+	list := []string{}
+	for _, name := range strings.FieldsFunc(names, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+		if noryxv1.ValidPlayerName(name) && len(list) < maxListed {
+			list = append(list, name)
+		}
+	}
+	return list, true
 }
 
 // openRCON connects to the console of a server with the port and password in its

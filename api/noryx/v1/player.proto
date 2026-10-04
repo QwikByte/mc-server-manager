@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package noryx.v1;
+
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
+
+// PlayerService manages the players of game servers with the commands and lists of
+// Minecraft: kicks, bans, the whitelist and operators.
+service PlayerService {
+  // GetPlayerLists returns who is banned, whitelisted and operator on a game server, as its
+  // files tell, and the changes that wait for it to run.
+  rpc GetPlayerLists(GetPlayerListsRequest) returns (GetPlayerListsResponse);
+  // ChangePlayer runs the command of a change on a running game server. A server that
+  // doesn't run runs it once it does; only a kick fails then.
+  rpc ChangePlayer(ChangePlayerRequest) returns (ChangePlayerResponse);
+}
+
+enum PlayerAction {
+  PLAYER_ACTION_UNSPECIFIED = 0;
+  PLAYER_ACTION_KICK = 1;
+  PLAYER_ACTION_BAN = 2;
+  PLAYER_ACTION_PARDON = 3;
+  PLAYER_ACTION_WHITELIST_ADD = 4;
+  PLAYER_ACTION_WHITELIST_REMOVE = 5;
+  PLAYER_ACTION_OP = 6;
+  PLAYER_ACTION_DEOP = 7;
+  // Turning the whitelist on or off takes no player.
+  PLAYER_ACTION_WHITELIST_ON = 8;
+  PLAYER_ACTION_WHITELIST_OFF = 9;
+}
+
+message GetPlayerListsRequest {
+  string server_id = 1;
+}
+
+message GetPlayerListsResponse {
+  repeated ListedPlayer banned = 1;
+  repeated ListedPlayer whitelisted = 2;
+  repeated ListedPlayer operators = 3;
+  bool whitelist_enabled = 4;
+  // Changes that wait for the server to run, in their order.
+  repeated PlayerChange pending = 5;
+}
+
+message ListedPlayer {
+  string name = 1;
+  string uuid = 2;
+  // Why, since when and by whom a player is banned; empty in the other lists.
+  string reason = 3;
+  int64 created_unix = 4;
+  string source = 5;
+}
+
+message PlayerChange {
+  PlayerAction action = 1;
+  string name = 2;
+  // Shown to a player who is kicked or banned.
+  string reason = 3;
+}
+
+message ChangePlayerRequest {
+  string server_id = 1;
+  PlayerChange change = 2;
+}
+
+message ChangePlayerResponse {
+  // The server doesn't run and runs the command once it does.
+  bool pending = 1;
+  // What the server answered, without formatting.
+  string output = 2;
+}

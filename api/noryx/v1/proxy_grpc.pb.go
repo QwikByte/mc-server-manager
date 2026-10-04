@@ -21,6 +21,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ProxyService_GetProxySettings_FullMethodName    = "/noryx.v1.ProxyService/GetProxySettings"
 	ProxyService_UpdateProxySettings_FullMethodName = "/noryx.v1.ProxyService/UpdateProxySettings"
+	ProxyService_GetMaintenance_FullMethodName      = "/noryx.v1.ProxyService/GetMaintenance"
+	ProxyService_ChangeMaintenance_FullMethodName   = "/noryx.v1.ProxyService/ChangeMaintenance"
 )
 
 // ProxyServiceClient is the client API for ProxyService service.
@@ -34,6 +36,12 @@ type ProxyServiceClient interface {
 	// UpdateProxySettings changes settings that the file has and keeps the others. A running
 	// proxy reloads its configuration.
 	UpdateProxySettings(ctx context.Context, in *UpdateProxySettingsRequest, opts ...grpc.CallOption) (*UpdateProxySettingsResponse, error)
+	// GetMaintenance tells what the Maintenance plugin of a proxy keeps in its files: whether
+	// maintenance is on, and which players may join meanwhile.
+	GetMaintenance(ctx context.Context, in *GetMaintenanceRequest, opts ...grpc.CallOption) (*GetMaintenanceResponse, error)
+	// ChangeMaintenance runs a command of the Maintenance plugin on the console of a running
+	// proxy, and returns once the plugin saved the change.
+	ChangeMaintenance(ctx context.Context, in *ChangeMaintenanceRequest, opts ...grpc.CallOption) (*ChangeMaintenanceResponse, error)
 }
 
 type proxyServiceClient struct {
@@ -64,6 +72,26 @@ func (c *proxyServiceClient) UpdateProxySettings(ctx context.Context, in *Update
 	return out, nil
 }
 
+func (c *proxyServiceClient) GetMaintenance(ctx context.Context, in *GetMaintenanceRequest, opts ...grpc.CallOption) (*GetMaintenanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMaintenanceResponse)
+	err := c.cc.Invoke(ctx, ProxyService_GetMaintenance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *proxyServiceClient) ChangeMaintenance(ctx context.Context, in *ChangeMaintenanceRequest, opts ...grpc.CallOption) (*ChangeMaintenanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ChangeMaintenanceResponse)
+	err := c.cc.Invoke(ctx, ProxyService_ChangeMaintenance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProxyServiceServer is the server API for ProxyService service.
 // All implementations must embed UnimplementedProxyServiceServer
 // for forward compatibility.
@@ -75,6 +103,12 @@ type ProxyServiceServer interface {
 	// UpdateProxySettings changes settings that the file has and keeps the others. A running
 	// proxy reloads its configuration.
 	UpdateProxySettings(context.Context, *UpdateProxySettingsRequest) (*UpdateProxySettingsResponse, error)
+	// GetMaintenance tells what the Maintenance plugin of a proxy keeps in its files: whether
+	// maintenance is on, and which players may join meanwhile.
+	GetMaintenance(context.Context, *GetMaintenanceRequest) (*GetMaintenanceResponse, error)
+	// ChangeMaintenance runs a command of the Maintenance plugin on the console of a running
+	// proxy, and returns once the plugin saved the change.
+	ChangeMaintenance(context.Context, *ChangeMaintenanceRequest) (*ChangeMaintenanceResponse, error)
 	mustEmbedUnimplementedProxyServiceServer()
 }
 
@@ -90,6 +124,12 @@ func (UnimplementedProxyServiceServer) GetProxySettings(context.Context, *GetPro
 }
 func (UnimplementedProxyServiceServer) UpdateProxySettings(context.Context, *UpdateProxySettingsRequest) (*UpdateProxySettingsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateProxySettings not implemented")
+}
+func (UnimplementedProxyServiceServer) GetMaintenance(context.Context, *GetMaintenanceRequest) (*GetMaintenanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetMaintenance not implemented")
+}
+func (UnimplementedProxyServiceServer) ChangeMaintenance(context.Context, *ChangeMaintenanceRequest) (*ChangeMaintenanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ChangeMaintenance not implemented")
 }
 func (UnimplementedProxyServiceServer) mustEmbedUnimplementedProxyServiceServer() {}
 func (UnimplementedProxyServiceServer) testEmbeddedByValue()                      {}
@@ -148,6 +188,42 @@ func _ProxyService_UpdateProxySettings_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProxyService_GetMaintenance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMaintenanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProxyServiceServer).GetMaintenance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProxyService_GetMaintenance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProxyServiceServer).GetMaintenance(ctx, req.(*GetMaintenanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ProxyService_ChangeMaintenance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChangeMaintenanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProxyServiceServer).ChangeMaintenance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProxyService_ChangeMaintenance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProxyServiceServer).ChangeMaintenance(ctx, req.(*ChangeMaintenanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProxyService_ServiceDesc is the grpc.ServiceDesc for ProxyService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -162,6 +238,14 @@ var ProxyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateProxySettings",
 			Handler:    _ProxyService_UpdateProxySettings_Handler,
+		},
+		{
+			MethodName: "GetMaintenance",
+			Handler:    _ProxyService_GetMaintenance_Handler,
+		},
+		{
+			MethodName: "ChangeMaintenance",
+			Handler:    _ProxyService_ChangeMaintenance_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
