@@ -1,4 +1,4 @@
-import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query"
+import { keepPreviousData, queryOptions, useQueries, useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { msg } from "@/lib/i18n"
 
@@ -41,6 +41,18 @@ export const usageQuery = (nodeId: string) =>
     queryFn: () => api<Usage>(`/nodes/${nodeId}/usage`),
     refetchInterval: 5_000,
   })
+
+/** The latest usage of the given nodes and their servers. */
+export function useUsages(nodeIds: string[]) {
+  const nodes = [...new Set(nodeIds)]
+  const usages = useQueries({ queries: nodes.map(usageQuery) })
+  const servers = new Map<string, ServerUsage>()
+  nodes.forEach((nodeId, i) => usages[i].data?.servers.forEach((u) => servers.set(`${nodeId}/${u.id}`, u)))
+  return {
+    server: (nodeId: string, serverId: string) => servers.get(`${nodeId}/${serverId}`),
+    node: (nodeId: string) => usages[nodes.indexOf(nodeId)]?.data?.node,
+  }
+}
 
 export function useServerUsage(nodeId: string, serverId: string) {
   const query = useQuery(usageQuery(nodeId))

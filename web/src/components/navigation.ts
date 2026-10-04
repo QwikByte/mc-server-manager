@@ -7,6 +7,7 @@ import {
   HardDrivesIcon,
   PuzzlePieceIcon,
   ScrollIcon,
+  SquaresFourIcon,
   StackIcon,
 } from "@phosphor-icons/react"
 import type { Access } from "@/features/access/use-access"
@@ -18,6 +19,12 @@ export const navigation = [
   {
     title: msg("Manage"),
     links: [
+      {
+        to: "/",
+        label: msg("Overview"),
+        icon: SquaresFourIcon,
+        visible: (a: Access) => a.canSomewhere("servers.view") || a.canSomewhere("nodes.view"),
+      },
       {
         to: "/nodes",
         label: msg("Nodes"),

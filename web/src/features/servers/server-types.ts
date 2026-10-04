@@ -67,6 +67,9 @@ export const serverStates: Record<ServerState, Status> = {
   stopped: { tone: "neutral", label: msg("Stopped") },
 }
 
+/** The states in the order lists show them. */
+export const states = Object.keys(serverStates) as ServerState[]
+
 /** Game servers are emerald blocks, proxies violet forks. */
 export function serverLook(type: string) {
   return serverType(type).proxy ? ({ icon: ArrowsSplitIcon, tone: "violet" } as const) : ({ icon: CubeIcon, tone: "success" } as const)

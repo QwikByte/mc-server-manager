@@ -11,6 +11,7 @@ import { StatusDot } from "@/components/status"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
+import { StateBar } from "@/features/servers/server-state"
 import { serverStates, serverType } from "@/features/servers/server-types"
 import type { ServerUsage } from "@/features/usage/api"
 import { type Network, networksQuery, type ServerRef } from "./api"
@@ -58,9 +59,19 @@ export function NetworksPage() {
   )
 }
 
+const maxChips = 8
+
 function NetworkCard({ network, servers, usage }: { network: Network; servers?: NodeServer[]; usage: (ref: ServerRef) => ServerUsage | undefined }) {
   const proxy = findServer(servers, network.proxy)
   const players = playersOnline(network, usage)
+  const backends = network.backends.map((b) => findServer(servers, b))
+  // A few servers by name; those that crash come first.
+  const crashing = (i: number) => Number(backends[i]?.state !== "crashing")
+  const shown = network.backends
+    .map((b, i) => ({ b, i }))
+    .sort((x, y) => crashing(x.i) - crashing(y.i))
+    .slice(0, maxChips)
+    .map(({ b }) => b)
   return (
     <Link
       to="/networks/$networkId"
@@ -88,19 +99,25 @@ function NetworkCard({ network, servers, usage }: { network: Network; servers?: 
           {network.forwarding === "modern" ? t("Modern") : t("Legacy")}
         </Chip>
       </div>
-      <div className="mt-auto flex items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap gap-1.5">
-          {network.backends.map((b) => {
-            const server = findServer(servers, b)
-            return (
-              <Chip key={key(b)} className="font-mono font-normal">
-                {server && <StatusDot status={serverStates[server.state]} />}
-                {b.name}
-              </Chip>
-            )
-          })}
+      <div className="mt-auto space-y-3">
+        {backends.some(Boolean) && <StateBar servers={backends.filter((b) => !!b)} />}
+        <div className="flex items-end justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            {shown.map((b) => {
+              const server = findServer(servers, b)
+              return (
+                <Chip key={key(b)} className="font-mono font-normal">
+                  {server && <StatusDot status={serverStates[server.state]} />}
+                  {b.name}
+                </Chip>
+              )
+            })}
+            {network.backends.length > shown.length && (
+              <Chip className="text-muted-foreground">{t("+{{count}} more", { count: network.backends.length - shown.length })}</Chip>
+            )}
+          </div>
+          <ArrowRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
         </div>
-        <ArrowRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
       </div>
     </Link>
   )

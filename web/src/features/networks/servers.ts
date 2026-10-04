@@ -1,5 +1,7 @@
+import { useQuery } from "@tanstack/react-query"
+import { useAccess } from "@/features/access/use-access"
 import type { NodeServer } from "@/features/servers/api"
-import type { Forwarding, Network, ServerRef } from "./api"
+import { type Forwarding, type Network, networksQuery, type ServerRef } from "./api"
 
 export const proxyTypes = ["velocity", "bungeecord", "waterfall"]
 /** BungeeCord and its fork Waterfall share their configuration. */
@@ -53,4 +55,11 @@ export function hostOf(address?: string) {
   if (!address) return undefined
   const host = address.slice(0, address.lastIndexOf(":"))
   return host.replace(/^\[|\]$/g, "")
+}
+
+/** The network each server is in, as its proxy or behind it; none without the permission to see networks. */
+export function useNetworkOf() {
+  const { data: networks } = useQuery({ ...networksQuery, enabled: useAccess().can("networks.view") })
+  const byKey = new Map(networks?.flatMap((n) => [n.proxy, ...n.backends].map((ref) => [key(ref), n] as const)))
+  return (ref: ServerRef) => byKey.get(key(ref))
 }

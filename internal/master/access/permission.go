@@ -101,7 +101,7 @@ var Catalog = []Area{
 		scoped(ServersStart, "Start servers", "", ServersView),
 		scoped(ServersStop, "Stop servers", "", ServersView),
 		scoped(ServersRestart, "Restart servers", "", ServersView),
-		scoped(ServersSettings, "Change server settings", "Name, version, memory, port, Java and CPU limit. The server restarts.", ServersView),
+		scoped(ServersSettings, "Change server settings", "Name, tags, version, memory, port, Java and CPU limit. Changes other than tags restart the server.", ServersView),
 		scoped(ServersDelete, "Delete servers", "With all their data and backups.", ServersView),
 	}},
 	{"Console", []Info{

@@ -83,6 +83,11 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 		mod.do(denied.method, denied.path, map[string]any{}, http.StatusForbidden, nil)
 	}
 	mod.do("POST", "/api/terminal", map[string]string{"target": a.node.ID, "command": "status"}, http.StatusForbidden, nil)
+	// Bulk requests need the permission on every server they name.
+	mod.do("POST", "/api/servers/actions", map[string]any{"action": "restart", "servers": []network.Ref{lobby}}, http.StatusOK, nil)
+	mod.do("POST", "/api/servers/actions", map[string]any{"action": "restart", "servers": []network.Ref{lobby, survival}}, http.StatusForbidden, nil)
+	mod.do("POST", "/api/servers/actions", map[string]any{"action": "stop", "servers": []network.Ref{lobby}}, http.StatusForbidden, nil)
+	mod.do("POST", "/api/servers/tags", map[string]any{"servers": []network.Ref{lobby}, "add": []string{"lobby"}}, http.StatusForbidden, nil)
 
 	// Nor the details of the node, which only those who may see the node get.
 	type nodeView struct {

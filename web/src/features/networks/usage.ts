@@ -1,16 +1,10 @@
-import { useQueries } from "@tanstack/react-query"
-import { type ServerUsage, usageQuery } from "@/features/usage/api"
+import { type ServerUsage, useUsages } from "@/features/usage/api"
 import type { Network, ServerRef } from "./api"
-import { key } from "./servers"
 
-/** The latest usage of the servers of networks, by key. */
+/** The latest usage of the servers of networks. */
 export function useNetworkUsage(networks: Network[] = []) {
-  const refs: ServerRef[] = networks.flatMap((n) => [n.proxy, ...n.backends])
-  const usages = useQueries({ queries: [...new Set(refs.map((r) => r.nodeId))].map(usageQuery) })
-  const byKey = new Map<string, ServerUsage>()
-  for (const [i, nodeId] of [...new Set(refs.map((r) => r.nodeId))].entries())
-    for (const usage of usages[i]?.data?.servers ?? []) byKey.set(key({ nodeId, serverId: usage.id }), usage)
-  return (ref: ServerRef) => byKey.get(key(ref))
+  const usages = useUsages(networks.flatMap((n) => [n.proxy, ...n.backends]).map((r) => r.nodeId))
+  return (ref: ServerRef) => usages.server(ref.nodeId, ref.serverId)
 }
 
 /**

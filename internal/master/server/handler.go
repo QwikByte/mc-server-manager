@@ -18,6 +18,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 const (
@@ -42,6 +43,13 @@ type Networks interface {
 	Move(ctx context.Context, serverID, from, to string) error
 }
 
+// Tags label servers, e.g. lobby, so that the panel finds and groups them.
+type Tags interface {
+	All(ctx context.Context) (map[tag.Server][]string, error)
+	Change(ctx context.Context, servers []tag.Server, add, remove []string) error
+	Copy(ctx context.Context, from, to tag.Server) error
+}
+
 // References refer to servers, e.g. the targets of backup jobs and the scopes of groups.
 type References interface {
 	// Forget forgets a deleted server.
@@ -53,18 +61,22 @@ type References interface {
 type Handler struct {
 	nodes    Nodes
 	networks Networks
+	tags     Tags
 	moves    *Moves
 	refs     []References
 }
 
-func NewHandler(nodes Nodes, networks Networks, moves *Moves, refs ...References) *Handler {
-	return &Handler{nodes: nodes, networks: networks, moves: moves, refs: refs}
+func NewHandler(nodes Nodes, networks Networks, tags Tags, moves *Moves, refs ...References) *Handler {
+	return &Handler{nodes: nodes, networks: networks, tags: tags, moves: moves, refs: refs}
 }
 
 // Register adds the routes. The lists only contain the servers the user may see.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/servers", access.SignedIn, h.listAll)
 	mux.Handle("GET /api/nodes/{node}/servers", access.SignedIn, h.list)
+	// Bulk requests check the permission for each server they name.
+	mux.Handle("POST /api/servers/actions", access.SignedIn, h.bulk)
+	mux.Handle("POST /api/servers/tags", access.SignedIn, h.changeTags)
 	mux.Handle("POST /api/nodes/{node}/servers", access.OnNode(access.ServersCreate, "node"), h.create)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart),
 		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
@@ -143,16 +155,38 @@ func toView(s *noryxv1.Server) view {
 	}
 }
 
+// listed is a server in a list, with its tags.
+type listed struct {
+	view
+	Tags []string `json:"tags"`
+}
+
 // nodeServer is a server with the node it runs on.
 type nodeServer struct {
-	view
+	listed
 	NodeID   string `json:"nodeId"`
 	NodeName string `json:"nodeName"`
+}
+
+// visible returns the servers of a node the user may see, with their tags.
+func visible(r *http.Request, nodeID string, servers []*noryxv1.Server, tags map[tag.Server][]string) []listed {
+	grants := access.From(r.Context())
+	views := []listed{}
+	for _, s := range servers {
+		if grants.On(access.ServersView, nodeID, s.GetId()) {
+			views = append(views, listed{toView(s), append([]string{}, tags[tag.Server{NodeID: nodeID, ServerID: s.GetId()}]...)})
+		}
+	}
+	return views
 }
 
 // listAll returns the servers of all reachable nodes, e.g. to choose the servers of a network.
 func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 	nodes, err := h.nodes.List(r.Context())
+	var tags map[tag.Server][]string
+	if err == nil {
+		tags, err = h.tags.All(r.Context())
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -175,10 +209,8 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return // offline nodes are left out
 			}
-			for _, s := range res.GetServers() {
-				if grants.On(access.ServersView, n.ID, s.GetId()) {
-					perNode[i] = append(perNode[i], nodeServer{toView(s), n.ID, n.Name})
-				}
+			for _, s := range visible(r, n.ID, res.GetServers(), tags) {
+				perNode[i] = append(perNode[i], nodeServer{s, n.ID, n.Name})
 			}
 		})
 	}
@@ -194,23 +226,19 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	c, err := h.client(ctx, r)
+	var res *noryxv1.ListServersResponse
+	if err == nil {
+		res, err = c.ListServers(ctx, &noryxv1.ListServersRequest{})
+	}
+	var tags map[tag.Server][]string
+	if err == nil {
+		tags, err = h.tags.All(ctx)
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.ListServers(ctx, &noryxv1.ListServersRequest{})
-	if err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	grants, nodeID := access.From(r.Context()), r.PathValue("node")
-	views := make([]view, 0, len(res.GetServers()))
-	for _, s := range res.GetServers() {
-		if grants.On(access.ServersView, nodeID, s.GetId()) {
-			views = append(views, toView(s))
-		}
-	}
-	httpapi.WriteJSON(w, http.StatusOK, views)
+	httpapi.WriteJSON(w, http.StatusOK, visible(r, r.PathValue("node"), res.GetServers(), tags))
 }
 
 // create creates a server. Besides the basics, it takes the settings and server.properties
@@ -304,6 +332,10 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logging.Note(r.Context(), slog.String("copy", res.GetServer().GetName()), slog.String("copy_id", res.GetServer().GetId()))
+	nodeID := r.PathValue("node")
+	if err := h.tags.Copy(ctx, tag.Server{NodeID: nodeID, ServerID: r.PathValue("id")}, tag.Server{NodeID: nodeID, ServerID: res.GetServer().GetId()}); err != nil {
+		slog.Warn("The copy of a server didn't get its tags", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, res.GetServer().GetId(), "err", err)
+	}
 	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetServer()))
 }
 
@@ -407,8 +439,13 @@ func (h *Handler) lifecycle(op func(context.Context, noryxv1.ServerServiceClient
 	}
 }
 
+// client returns a client of the agent of the node in the path.
 func (h *Handler) client(ctx context.Context, r *http.Request) (noryxv1.ServerServiceClient, error) {
-	conn, err := h.nodes.Conn(ctx, r.PathValue("node"))
+	return h.serverClient(ctx, r.PathValue("node"))
+}
+
+func (h *Handler) serverClient(ctx context.Context, nodeID string) (noryxv1.ServerServiceClient, error) {
+	conn, err := h.nodes.Conn(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}

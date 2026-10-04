@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { installPlugins } from "@/features/plugins/api"
 import { api } from "@/lib/api"
 
@@ -23,6 +23,8 @@ export interface Server {
   jvmOptions: string[]
   /** CPU cores the server may use; 0 means no limit. */
   cpuLimit: number
+  /** Labels such as lobby, sorted; only in lists of servers. */
+  tags: string[]
 }
 
 export type RestartPolicy = "always" | "on_crash" | "never"
@@ -38,6 +40,9 @@ export interface NodeServer extends Server {
   nodeId: string
   nodeName: string
 }
+
+/** Identifies a server across nodes, e.g. to select it. */
+export const serverKey = (s: { nodeId: string; id: string }) => `${s.nodeId}/${s.id}`
 
 export interface NewServer extends Partial<Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit">> {
   name: string
@@ -149,6 +154,43 @@ export function useMoveServer(nodeId: string, serverId: string) {
 }
 
 export type ServerAction = "start" | "stop" | "restart" | "delete"
+
+export type BulkAction = { action: "start" | "stop" | "restart" } | { action: "command"; command: string }
+
+/** How an action ended on each server; failed ones have an error. */
+export interface BulkResult {
+  nodeId: string
+  serverId: string
+  error?: string
+}
+
+const refsOf = (servers: Pick<NodeServer, "nodeId" | "id">[]) => servers.map((s) => ({ nodeId: s.nodeId, serverId: s.id }))
+
+/** Refreshes the lists of servers of all nodes, after a change to servers on any of them. */
+const refreshServers = (queryClient: QueryClient) =>
+  queryClient.invalidateQueries({
+    predicate: ({ queryKey }) => queryKey[0] === "servers" || (queryKey[0] === "nodes" && queryKey[2] === "servers"),
+  })
+
+/** Starts, stops or restarts servers on any nodes, or sends them a console command. */
+export function useBulkAction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ servers, ...action }: BulkAction & { servers: NodeServer[] }) =>
+      api<{ results: BulkResult[] }>("/servers/actions", { body: { ...action, servers: refsOf(servers) } }).then((r) => r.results),
+    onSettled: () => refreshServers(queryClient),
+  })
+}
+
+/** Adds and removes tags of servers. */
+export function useChangeTags() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ servers, add = [], remove = [] }: { servers: Pick<NodeServer, "nodeId" | "id">[]; add?: string[]; remove?: string[] }) =>
+      api("/servers/tags", { body: { servers: refsOf(servers), add, remove } }),
+    onSettled: () => refreshServers(queryClient),
+  })
+}
 
 export function useServerAction(nodeId: string) {
   const queryClient = useQueryClient()
