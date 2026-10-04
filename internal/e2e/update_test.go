@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
@@ -39,7 +39,7 @@ func TestUpdates(t *testing.T) {
 		fmt.Fprint(w, `{"tag_name": "v99.0.0", "body": "Faster backups", "published_at": "2026-10-01T12:00:00Z", "html_url": "https://example.com"}`)
 	}))
 	t.Cleanup(github.Close)
-	m.update.API, m.update.Page, m.update.Unit = github.URL, github.URL+"/page", filepath.Join(t.TempDir(), "mcsm-master-update.path")
+	m.update.API, m.update.Page, m.update.Unit = github.URL, github.URL+"/page", filepath.Join(t.TempDir(), "noryx-master-update.path")
 	api := apiClient{t: t, url: m.panel(t).URL}
 	post := func(path string) (st update.Status) {
 		api.do("POST", path, nil, http.StatusOK, &st)
@@ -113,7 +113,7 @@ func TestUpdates(t *testing.T) {
 		"v99.0.0 --reboot": codes.InvalidArgument,
 		"v99.0.0":          codes.FailedPrecondition,
 	} {
-		_, err := mcsmv1.NewNodeServiceClient(conn).Update(t.Context(), &mcsmv1.UpdateRequest{Version: version})
+		_, err := noryxv1.NewNodeServiceClient(conn).Update(t.Context(), &noryxv1.UpdateRequest{Version: version})
 		if got := status.Code(err); got != want {
 			t.Errorf("update to %q: got %v, want %v", version, got, want)
 		}

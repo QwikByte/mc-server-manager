@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
@@ -40,7 +40,7 @@ func Run(ctx context.Context, joinToken, dir string) error {
 		return err
 	}
 	defer conn.Close()
-	res, err := mcsmv1.NewEnrollmentServiceClient(conn).Enroll(ctx, &mcsmv1.EnrollRequest{
+	res, err := noryxv1.NewEnrollmentServiceClient(conn).Enroll(ctx, &noryxv1.EnrollRequest{
 		NodeId: token.NodeID,
 		Secret: token.Secret,
 		CsrDer: csr,

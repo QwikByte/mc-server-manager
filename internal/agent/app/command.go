@@ -27,12 +27,12 @@ type config struct {
 func (c config) pkiDir() string { return filepath.Join(c.dataDir, "pki") }
 func (c config) socket() string { return cmp.Or(c.socketPath, filepath.Join(c.dataDir, "agent.sock")) }
 
-// Command returns the root command of mcsm-agent.
+// Command returns the root command of noryx-agent.
 func Command() *cobra.Command {
 	var cfg config
 	root := &cobra.Command{
-		Use:          "mcsm-agent",
-		Short:        "Node agent of MC Server Manager: runs the Minecraft servers of this machine",
+		Use:          "noryx-agent",
+		Short:        "Node agent of Noryx: runs the Minecraft servers of this machine",
 		Version:      buildinfo.Version,
 		SilenceUsage: true,
 		PersistentPreRunE: func(*cobra.Command, []string) (err error) {
@@ -43,7 +43,7 @@ func Command() *cobra.Command {
 			return err
 		},
 	}
-	root.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "/var/lib/mcsm-agent", "directory for credentials and server data")
+	root.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "/var/lib/noryx-agent", "directory for credentials and server data")
 	root.PersistentFlags().StringVar(&cfg.socketPath, "socket", "", "Unix socket for the local CLI, at most 107 bytes long (default <data-dir>/agent.sock)")
 
 	serve := &cobra.Command{
@@ -66,7 +66,7 @@ func Command() *cobra.Command {
 			if err := enroll.Run(cmd.Context(), args[0], cfg.pkiDir()); err != nil {
 				return err
 			}
-			fmt.Println("Enrolled. Start the agent, or restart it if it runs: systemctl restart mcsm-agent (or mcsm-agent serve)")
+			fmt.Println("Enrolled. Start the agent, or restart it if it runs: systemctl restart noryx-agent (or noryx-agent serve)")
 			return nil
 		},
 	}

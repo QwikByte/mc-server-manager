@@ -12,18 +12,18 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
 // installer is the installer that the agent's package ships.
-const installer = "/usr/lib/mcsm-agent/install.sh"
+const installer = "/usr/lib/noryx-agent/install.sh"
 
-// Update implements mcsmv1.NodeServiceServer. Only releases newer than the agent are
+// Update implements noryxv1.NodeServiceServer. Only releases newer than the agent are
 // installed, so even a compromised master can't downgrade a node to a vulnerable version.
 // The installer runs in a unit of its own, which outlives the restart of the agent.
-func (s *Service) Update(ctx context.Context, req *mcsmv1.UpdateRequest) (*mcsmv1.UpdateResponse, error) {
+func (s *Service) Update(ctx context.Context, req *noryxv1.UpdateRequest) (*noryxv1.UpdateResponse, error) {
 	v := req.GetVersion()
 	if !buildinfo.IsRelease(v) || semver.Compare(v, buildinfo.Version) <= 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "%q is no release newer than the agent's version %s", v, buildinfo.Version)
@@ -32,11 +32,11 @@ func (s *Service) Update(ctx context.Context, req *mcsmv1.UpdateRequest) (*mcsmv
 		return nil, status.Error(codes.FailedPrecondition, "The agent wasn't installed from a package. Update it on the node with install.sh.")
 	}
 	//nolint:gosec // v is a release version, passed as an argument without a shell
-	out, err := exec.CommandContext(ctx, "systemd-run", "--unit=mcsm-agent-update", "--collect", "--quiet",
+	out, err := exec.CommandContext(ctx, "systemd-run", "--unit=noryx-agent-update", "--collect", "--quiet",
 		"--", installer, "update", "--only", "agent", "--version", v).CombinedOutput()
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "Can't start the update: %s", cmp.Or(string(bytes.TrimSpace(out)), err.Error()))
 	}
 	slog.Info("Update the node", logging.Nodes, "version", v)
-	return &mcsmv1.UpdateResponse{}, nil
+	return &noryxv1.UpdateResponse{}, nil
 }

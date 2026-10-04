@@ -42,18 +42,18 @@ type config struct {
 	log            logging.Options
 }
 
-// Command returns the root command of mcsm-master.
+// Command returns the root command of noryx-master.
 func Command() *cobra.Command {
 	var cfg config
 	root := &cobra.Command{
-		Use:          "mcsm-master",
-		Short:        "Admin panel and control plane of MC Server Manager",
+		Use:          "noryx-master",
+		Short:        "Admin panel and control plane of Noryx",
 		Version:      buildinfo.Version,
 		SilenceUsage: true,
 		// main prints errors, except a restart.
 		SilenceErrors: true,
 	}
-	root.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "/var/lib/mcsm-master", "directory for the database and the certificate authority")
+	root.PersistentFlags().StringVar(&cfg.dataDir, "data-dir", "/var/lib/noryx-master", "directory for the database and the certificate authority")
 
 	serve := &cobra.Command{
 		Use:   "serve",
@@ -127,7 +127,7 @@ func openDB(dataDir string) (*sql.DB, error) {
 			if u, err := user.LookupId(owner); err == nil {
 				owner = u.Username
 			}
-			return nil, fmt.Errorf("%s belongs to another user, run this as %s, e.g. with: sudo -u %s mcsm-master …", dataDir, owner, owner)
+			return nil, fmt.Errorf("%s belongs to another user, run this as %s, e.g. with: sudo -u %s noryx-master …", dataDir, owner, owner)
 		}
 	}
 	return database.Open(filepath.Join(dataDir, "master.db"))
@@ -155,7 +155,7 @@ func addNode(ctx context.Context, cfg config, name, address, enrollAddr string) 
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Added node %s. Its agent enrolls once until %s with: mcsm-agent enroll <join-token>\n",
+	fmt.Fprintf(os.Stderr, "Added node %s. Its agent enrolls once until %s with: noryx-agent enroll <join-token>\n",
 		n.Name, token.ExpiresAt.Local().Format(time.DateTime))
 	fmt.Println(token)
 	return nil

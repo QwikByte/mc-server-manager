@@ -230,7 +230,7 @@ export function RecoveryCodesDialog({ codes, onClose }: { codes?: string[]; onCl
 
   function download() {
     const url = URL.createObjectURL(new Blob([`${text}\n`], { type: "text/plain" }))
-    Object.assign(document.createElement("a"), { href: url, download: "mcsm-recovery-codes.txt" }).click()
+    Object.assign(document.createElement("a"), { href: url, download: "noryx-recovery-codes.txt" }).click()
     setTimeout(() => URL.revokeObjectURL(url))
   }
 

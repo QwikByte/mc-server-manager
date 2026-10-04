@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 func TestServerProperties(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	proxy := m.createServer(t, a, "Proxy", mcsmv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	proxy := m.createServer(t, a, "Proxy", noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	path := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID + "/properties"
 	change := func(props map[string]string, status int) {

@@ -41,7 +41,7 @@ export function AppShell() {
           <SheetContent side="left" aria-describedby={undefined} className="w-72 gap-8 overflow-y-auto bg-sidebar px-4 py-6">
             <SheetTitle className="flex items-center gap-3 px-2 text-sm font-bold tracking-tight">
               <Logo />
-              {t("MC Server Manager")}
+              {t("Noryx")}
             </SheetTitle>
             <MainNav onNavigate={() => setMenu(false)} />
           </SheetContent>
@@ -49,7 +49,7 @@ export function AppShell() {
         <Link to="/" className="flex items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring md:px-2">
           <Logo />
           <span className="leading-tight max-md:sr-only">
-            <span className="block text-sm font-bold tracking-tight">{t("MC Server Manager")}</span>
+            <span className="block text-sm font-bold tracking-tight">{t("Noryx")}</span>
             <span className="block text-xs text-muted-foreground">{t("Admin panel")}</span>
           </span>
         </Link>

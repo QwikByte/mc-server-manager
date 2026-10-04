@@ -12,7 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -57,8 +57,8 @@ func (s *Selection) check() string {
 	return ""
 }
 
-func (s Selection) proto() *mcsmv1.BackupSelection {
-	return &mcsmv1.BackupSelection{Everything: s.Everything, Worlds: s.Worlds, Plugins: s.Plugins, Config: s.Config, Paths: s.Paths}
+func (s Selection) proto() *noryxv1.BackupSelection {
+	return &noryxv1.BackupSelection{Everything: s.Everything, Worlds: s.Worlds, Plugins: s.Plugins, Config: s.Config, Paths: s.Paths}
 }
 
 type view struct {
@@ -71,7 +71,7 @@ type view struct {
 	JobID     string    `json:"jobId,omitempty"`
 }
 
-func toView(b *mcsmv1.Backup) view {
+func toView(b *noryxv1.Backup) view {
 	return view{b.GetId(), b.GetLabel(), time.Unix(b.GetCreatedUnix(), 0), b.GetSize(), b.GetLocation(), append([]string{}, b.GetPaths()...), b.GetJobId()}
 }
 
@@ -92,9 +92,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	c, err := h.client(ctx, r)
-	var res *mcsmv1.ListBackupsResponse
+	var res *noryxv1.ListBackupsResponse
 	if err == nil {
-		res, err = c.ListBackups(ctx, &mcsmv1.ListBackupsRequest{ServerId: r.PathValue("id")})
+		res, err = c.ListBackups(ctx, &noryxv1.ListBackupsRequest{ServerId: r.PathValue("id")})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -125,9 +125,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), backupTimeout)
 	defer cancel()
 	c, err := h.client(ctx, r)
-	var res *mcsmv1.CreateBackupResponse
+	var res *noryxv1.CreateBackupResponse
 	if err == nil {
-		res, err = c.CreateBackup(ctx, &mcsmv1.CreateBackupRequest{
+		res, err = c.CreateBackup(ctx, &noryxv1.CreateBackupRequest{
 			ServerId: r.PathValue("id"), Label: req.Label, Selection: req.Selection.proto(), Location: req.Location,
 		})
 	}
@@ -145,7 +145,7 @@ func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	c, err := h.client(ctx, r)
 	if err == nil {
-		_, err = c.RestoreBackup(ctx, &mcsmv1.RestoreBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup")})
+		_, err = c.RestoreBackup(ctx, &noryxv1.RestoreBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup")})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -159,7 +159,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	c, err := h.client(ctx, r)
 	if err == nil {
-		_, err = c.DeleteBackup(ctx, &mcsmv1.DeleteBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup")})
+		_, err = c.DeleteBackup(ctx, &noryxv1.DeleteBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup")})
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -170,11 +170,11 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 	c, err := h.client(r.Context(), r)
-	var stream grpc.ServerStreamingClient[mcsmv1.DownloadBackupResponse]
+	var stream grpc.ServerStreamingClient[noryxv1.DownloadBackupResponse]
 	if err == nil {
-		stream, err = c.DownloadBackup(r.Context(), &mcsmv1.DownloadBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup"), HideSecrets: true})
+		stream, err = c.DownloadBackup(r.Context(), &noryxv1.DownloadBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup"), HideSecrets: true})
 	}
-	var first *mcsmv1.DownloadBackupResponse
+	var first *noryxv1.DownloadBackupResponse
 	if err == nil {
 		first, err = stream.Recv() // errors such as an unknown backup arrive here
 	}
@@ -189,10 +189,10 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 	httpapi.Relay(w, first, stream)
 }
 
-func (h *Handler) client(ctx context.Context, r *http.Request) (mcsmv1.BackupServiceClient, error) {
+func (h *Handler) client(ctx context.Context, r *http.Request) (noryxv1.BackupServiceClient, error) {
 	conn, err := h.nodes.Conn(ctx, r.PathValue("node"))
 	if err != nil {
 		return nil, err
 	}
-	return mcsmv1.NewBackupServiceClient(conn), nil
+	return noryxv1.NewBackupServiceClient(conn), nil
 }

@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
@@ -111,7 +111,7 @@ func serve(ctx context.Context, cfg config) error {
 	go masterCert.Maintain(ctx, time.Hour, ca.MasterCertificate)
 	go nodes.MaintainCertificates(ctx, 6*time.Hour)
 	if ok, err := users.HasUsers(ctx); err == nil && !ok {
-		slog.Warn("No administrator account exists yet, create one with: mcsm-master user add <username>", logging.Auth)
+		slog.Warn("No administrator account exists yet, create one with: noryx-master user add <username>", logging.Auth)
 	}
 	if m := conf.Master(); m.PanelAddrError != "" {
 		slog.Warn("The panel can't listen at the address from the settings, so it listens at the one from the command line",
@@ -123,7 +123,7 @@ func serve(ctx context.Context, cfg config) error {
 		return err
 	}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
-	mcsmv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
+	noryxv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	plugins := plugin.NewService(nodes, modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN))
 	moves := server.NewMoves()
 	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)

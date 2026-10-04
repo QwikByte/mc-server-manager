@@ -15,7 +15,7 @@ import (
 )
 
 // The __Host- prefix makes browsers enforce Secure, Path=/ and no Domain attribute.
-const cookieName = "__Host-mcsm_session"
+const cookieName = "__Host-noryx_session"
 
 type userKey struct{}
 

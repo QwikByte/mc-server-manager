@@ -17,7 +17,7 @@ export function languageName(code: string) {
 
 // The language chosen in this browser, so that the panel shows it before anyone signs in. The
 // panel also stores the choice of the signed-in user, which then applies in every browser.
-const storageKey = "mcsm-language"
+const storageKey = "noryx-language"
 
 /** The language chosen in this browser, or "" to follow the browser's languages. */
 export function chosenLanguage() {

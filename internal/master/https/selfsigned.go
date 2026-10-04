@@ -38,7 +38,7 @@ func selfSigned(dir string, names []string) (*tls.Certificate, error) {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: "MC Server Manager"},
+		Subject:      pkix.Name{CommonName: "Noryx"},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		NotBefore:    time.Now().Add(-time.Hour),

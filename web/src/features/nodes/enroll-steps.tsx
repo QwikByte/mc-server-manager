@@ -34,13 +34,13 @@ export function EnrollSteps({ token: { joinToken, joinTokenExpiresAt, installCom
               components={{
                 command: (
                   <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">
-                    sudo systemctl restart mcsm-agent
+                    sudo systemctl restart noryx-agent
                   </code>
                 ),
               }}
             />
           </p>
-          <CopyField label={t("Enroll command")} prefix="$" value={`sudo mcsm-agent enroll ${joinToken}`} />
+          <CopyField label={t("Enroll command")} prefix="$" value={`sudo noryx-agent enroll ${joinToken}`} />
         </div>
       </details>
     </div>

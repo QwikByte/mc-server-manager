@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 // ping asks the server at the port of the node for its players with the status request of
 // the Minecraft protocol, which the server list in the game sends too. Game servers since
 // 1.7 and proxies answer it.
-func ping(ctx context.Context, port uint32) (*mcsmv1.Players, error) {
+func ping(ctx context.Context, port uint32) (*noryxv1.Players, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(port), 10)))
 	if err != nil {
@@ -67,7 +67,7 @@ func ping(ctx context.Context, port uint32) (*mcsmv1.Players, error) {
 	if err := json.Unmarshal(body, &status); err != nil {
 		return nil, err
 	}
-	players := &mcsmv1.Players{Online: status.Players.Online, Max: status.Players.Max}
+	players := &noryxv1.Players{Online: status.Players.Online, Max: status.Players.Max}
 	for _, p := range status.Players.Sample[:min(len(status.Players.Sample), maxNames)] {
 		name := plain(p.Name)
 		players.Names = append(players.Names, strings.ToValidUTF8(name[:min(len(name), maxNameLen)], ""))

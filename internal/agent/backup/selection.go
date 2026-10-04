@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/plugin"
 )
@@ -20,7 +20,7 @@ var notConfig = []string{".jar", ".zip", ".gz", ".log"}
 
 // selected returns the files and folders of a server's data that a selection covers, or "."
 // for all of it. Data the server doesn't have, e.g. a missing custom path, is left out.
-func selected(dir *datadir.Dir, typ mcsmv1.ServerType, sel *mcsmv1.BackupSelection) ([]string, error) {
+func selected(dir *datadir.Dir, typ noryxv1.ServerType, sel *noryxv1.BackupSelection) ([]string, error) {
 	var paths []string
 	if sel.GetEverything() {
 		paths = append(paths, ".")

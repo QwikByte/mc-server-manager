@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/secrets"
@@ -41,7 +41,7 @@ const (
 var jobPattern = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
 
 type Service struct {
-	mcsmv1.UnimplementedBackupServiceServer
+	noryxv1.UnimplementedBackupServiceServer
 	rt    runtime.Runtime
 	store store
 
@@ -53,7 +53,7 @@ func NewService(rt runtime.Runtime, locations *storage.Locations) *Service {
 	return &Service{rt: rt, store: store{locations}, busy: map[string]bool{}}
 }
 
-func (s *Service) ListBackups(ctx context.Context, req *mcsmv1.ListBackupsRequest) (*mcsmv1.ListBackupsResponse, error) {
+func (s *Service) ListBackups(ctx context.Context, req *noryxv1.ListBackupsRequest) (*noryxv1.ListBackupsResponse, error) {
 	if _, err := s.find(ctx, req.GetServerId()); err != nil {
 		return nil, err
 	}
@@ -61,14 +61,14 @@ func (s *Service) ListBackups(ctx context.Context, req *mcsmv1.ListBackupsReques
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	res := &mcsmv1.ListBackupsResponse{}
+	res := &noryxv1.ListBackupsResponse{}
 	for _, b := range backups {
 		res.Backups = append(res.Backups, b.proto())
 	}
 	return res, nil
 }
 
-func (s *Service) CreateBackup(ctx context.Context, req *mcsmv1.CreateBackupRequest) (*mcsmv1.CreateBackupResponse, error) {
+func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupRequest) (*noryxv1.CreateBackupResponse, error) {
 	label := strings.TrimSpace(req.GetLabel())
 	switch {
 	case utf8.RuneCountInString(label) > maxLabel || strings.ContainsFunc(label, unicode.IsControl):
@@ -113,12 +113,12 @@ func (s *Service) CreateBackup(ctx context.Context, req *mcsmv1.CreateBackupRequ
 			slog.Warn("Can't delete old backups", logging.Backups, logging.KeyServer, srv.ID, "job", req.GetJobId(), "err", err)
 		}
 	}
-	return &mcsmv1.CreateBackupResponse{Backup: b.proto()}, nil
+	return &noryxv1.CreateBackupResponse{Backup: b.proto()}, nil
 }
 
 // RestoreBackup extracts the backup before it stops the server, so the server is only
 // down while the files are swapped.
-func (s *Service) RestoreBackup(ctx context.Context, req *mcsmv1.RestoreBackupRequest) (*mcsmv1.RestoreBackupResponse, error) {
+func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupRequest) (*noryxv1.RestoreBackupResponse, error) {
 	srv, release, err := s.lock(ctx, req.GetServerId())
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (s *Service) RestoreBackup(ctx context.Context, req *mcsmv1.RestoreBackupRe
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	running := srv.State != mcsmv1.ServerState_SERVER_STATE_STOPPED
+	running := srv.State != noryxv1.ServerState_SERVER_STATE_STOPPED
 	if running {
 		if err := s.rt.Stop(ctx, srv.ID); err != nil {
 			return nil, toStatus(err)
@@ -150,10 +150,10 @@ func (s *Service) RestoreBackup(ctx context.Context, req *mcsmv1.RestoreBackupRe
 	if running { // also after a failure, which leaves the server as it was or partly restored
 		err = errors.Join(err, s.rt.Start(context.WithoutCancel(ctx), srv.ID))
 	}
-	return &mcsmv1.RestoreBackupResponse{}, toStatus(err)
+	return &noryxv1.RestoreBackupResponse{}, toStatus(err)
 }
 
-func (s *Service) DeleteBackup(ctx context.Context, req *mcsmv1.DeleteBackupRequest) (*mcsmv1.DeleteBackupResponse, error) {
+func (s *Service) DeleteBackup(ctx context.Context, req *noryxv1.DeleteBackupRequest) (*noryxv1.DeleteBackupResponse, error) {
 	srv, release, err := s.lock(ctx, req.GetServerId())
 	if err != nil {
 		return nil, err
@@ -163,10 +163,10 @@ func (s *Service) DeleteBackup(ctx context.Context, req *mcsmv1.DeleteBackupRequ
 	if err == nil {
 		err = s.store.remove(b)
 	}
-	return &mcsmv1.DeleteBackupResponse{}, toStatus(err)
+	return &noryxv1.DeleteBackupResponse{}, toStatus(err)
 }
 
-func (s *Service) DownloadBackup(req *mcsmv1.DownloadBackupRequest, stream mcsmv1.BackupService_DownloadBackupServer) error {
+func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream noryxv1.BackupService_DownloadBackupServer) error {
 	srv, err := s.find(stream.Context(), req.GetServerId())
 	if err != nil {
 		return err
@@ -191,7 +191,7 @@ func (s *Service) DownloadBackup(req *mcsmv1.DownloadBackupRequest, stream mcsmv
 		go func() { pw.CloseWithError(datadir.CopyZip(pw, zr, secrets.Censor("."))) }()
 		r, size = pr, 0
 	}
-	res := &mcsmv1.DownloadBackupResponse{Size: size}
+	res := &noryxv1.DownloadBackupResponse{Size: size}
 	buf := make([]byte, chunkSize)
 	for first := true; ; first = false {
 		n, err := io.ReadFull(r, buf)
@@ -200,7 +200,7 @@ func (s *Service) DownloadBackup(req *mcsmv1.DownloadBackupRequest, stream mcsmv
 			if err := stream.Send(res); err != nil {
 				return err
 			}
-			res = &mcsmv1.DownloadBackupResponse{}
+			res = &noryxv1.DownloadBackupResponse{}
 		}
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			return nil
@@ -212,7 +212,7 @@ func (s *Service) DownloadBackup(req *mcsmv1.DownloadBackupRequest, stream mcsmv
 }
 
 // ImportBackup adds a backup that a server had on another node, with its ID and details.
-func (s *Service) ImportBackup(stream mcsmv1.BackupService_ImportBackupServer) error {
+func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) error {
 	first, err := stream.Recv()
 	if err != nil {
 		return err
@@ -248,11 +248,11 @@ func (s *Service) ImportBackup(stream mcsmv1.BackupService_ImportBackupServer) e
 	if err != nil {
 		return toStatus(err)
 	}
-	return stream.SendAndClose(&mcsmv1.ImportBackupResponse{Backup: imported.proto()})
+	return stream.SendAndClose(&noryxv1.ImportBackupResponse{Backup: imported.proto()})
 }
 
 // importedDetails validates a backup from another node like those made here.
-func importedDetails(b *mcsmv1.Backup) (details, error) {
+func importedDetails(b *noryxv1.Backup) (details, error) {
 	d := details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId()}
 	for _, p := range b.GetPaths() {
 		name, ok := datadir.Name(p)
@@ -322,7 +322,7 @@ func toStatus(err error) error {
 	case errors.Is(err, fs.ErrExist):
 		return status.Error(codes.AlreadyExists, "The backup exists already.")
 	case errors.Is(err, storage.ErrUnknown):
-		return status.Errorf(codes.InvalidArgument, "%s. Add it on the node with: mcsm-agent storage add", err)
+		return status.Errorf(codes.InvalidArgument, "%s. Add it on the node with: noryx-agent storage add", err)
 	case errors.As(err, new(storage.FullError)):
 		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):

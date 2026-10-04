@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
@@ -24,13 +24,13 @@ const (
 
 // Status asks the agent for its machine info. It also returns the certificate the
 // agent presented, whose expiry drives the automatic renewal.
-func (s *Service) Status(ctx context.Context, id string) (*mcsmv1.GetInfoResponse, *x509.Certificate, error) {
+func (s *Service) Status(ctx context.Context, id string) (*noryxv1.GetInfoResponse, *x509.Certificate, error) {
 	conn, err := s.Conn(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
 	var p peer.Peer
-	info, err := mcsmv1.NewNodeServiceClient(conn).GetInfo(ctx, &mcsmv1.GetInfoRequest{}, grpc.Peer(&p))
+	info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{}, grpc.Peer(&p))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -50,8 +50,8 @@ func (s *Service) RenewCertificate(ctx context.Context, id string) (*x509.Certif
 	if err != nil {
 		return nil, err
 	}
-	client := mcsmv1.NewNodeServiceClient(conn)
-	csr, err := client.CreateCSR(ctx, &mcsmv1.CreateCSRRequest{})
+	client := noryxv1.NewNodeServiceClient(conn)
+	csr, err := client.CreateCSR(ctx, &noryxv1.CreateCSRRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (s *Service) RenewCertificate(ctx context.Context, id string) (*x509.Certif
 	if err != nil {
 		return nil, err
 	}
-	if _, err := client.InstallCertificate(ctx, &mcsmv1.InstallCertificateRequest{CertificateDer: der}); err != nil {
+	if _, err := client.InstallCertificate(ctx, &noryxv1.InstallCertificateRequest{CertificateDer: der}); err != nil {
 		return nil, err
 	}
 	// TLS checks certificates only when connecting, so a fresh connection is needed

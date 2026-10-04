@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
@@ -58,10 +58,10 @@ var (
 
 // mods are the Modrinth projects with which game servers that can't verify forwarded
 // players themselves learn it: FabricProxy-Lite and Proxy-Compatible-Forge.
-var mods = map[mcsmv1.ServerType]string{
-	mcsmv1.ServerType_SERVER_TYPE_FABRIC:   "8dI2tmqs",
-	mcsmv1.ServerType_SERVER_TYPE_FORGE:    "vDyrHl8l",
-	mcsmv1.ServerType_SERVER_TYPE_NEOFORGE: "vDyrHl8l",
+var mods = map[noryxv1.ServerType]string{
+	noryxv1.ServerType_SERVER_TYPE_FABRIC:   "8dI2tmqs",
+	noryxv1.ServerType_SERVER_TYPE_FORGE:    "vDyrHl8l",
+	noryxv1.ServerType_SERVER_TYPE_NEOFORGE: "vDyrHl8l",
 }
 
 // Ref points to a server on a node.
@@ -263,7 +263,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
 		}
 	}
-	detach := &mcsmv1.ConfigureNetworkRequest{Id: n.Proxy.ServerID, Forwarding: mcsmv1.Forwarding_FORWARDING_NONE}
+	detach := &noryxv1.ConfigureNetworkRequest{Id: n.Proxy.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE}
 	if err := ignoreMissing(s.configure(ctx, n.Proxy, detach)); err != nil {
 		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because its proxy could not be updated: %s", message(err))
 	}
@@ -335,7 +335,7 @@ func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
 
 // validate checks the settings of a network and puts them into their canonical form.
 func (n *Network) validate() error {
-	bungee := mcsmv1.ParseServerType(n.ProxyType).Bungee()
+	bungee := noryxv1.ParseServerType(n.ProxyType).Bungee()
 	n.Name = strings.TrimSpace(n.Name)
 	switch {
 	case n.Name == "" || len(n.Name) > 64:
@@ -442,7 +442,7 @@ func (s *Service) apply(ctx context.Context, n Network) error {
 			return applyFailed(b.Name, err)
 		}
 	}
-	backends := make([]*mcsmv1.NetworkBackend, 0, len(n.Backends))
+	backends := make([]*noryxv1.NetworkBackend, 0, len(n.Backends))
 	for _, b := range n.Backends {
 		target, err := s.target(ctx, n.Proxy, b)
 		if err != nil {
@@ -450,9 +450,9 @@ func (s *Service) apply(ctx context.Context, n Network) error {
 		}
 		backends = append(backends, target)
 	}
-	hosts := make([]*mcsmv1.ForcedHost, 0, len(n.ForcedHosts))
+	hosts := make([]*noryxv1.ForcedHost, 0, len(n.ForcedHosts))
 	for _, h := range n.ForcedHosts {
-		hosts = append(hosts, &mcsmv1.ForcedHost{Host: h.Host, Servers: h.Servers})
+		hosts = append(hosts, &noryxv1.ForcedHost{Host: h.Host, Servers: h.Servers})
 	}
 	req := n.request(n.Proxy)
 	req.Backends, req.Try, req.ForcedHosts = backends, n.Try, hosts
@@ -463,10 +463,10 @@ func (s *Service) apply(ctx context.Context, n Network) error {
 }
 
 // request returns the configuration of a server of the network.
-func (n *Network) request(ref Ref) *mcsmv1.ConfigureNetworkRequest {
-	req := &mcsmv1.ConfigureNetworkRequest{Id: ref.ServerID, Forwarding: mcsmv1.Forwarding_FORWARDING_MODERN, ForwardingSecret: n.secret}
+func (n *Network) request(ref Ref) *noryxv1.ConfigureNetworkRequest {
+	req := &noryxv1.ConfigureNetworkRequest{Id: ref.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_MODERN, ForwardingSecret: n.secret}
 	if n.Forwarding == Legacy {
-		req.Forwarding, req.ForwardingSecret = mcsmv1.Forwarding_FORWARDING_LEGACY, ""
+		req.Forwarding, req.ForwardingSecret = noryxv1.Forwarding_FORWARDING_LEGACY, ""
 	}
 	req.ProxyOnNode = ref != n.Proxy && ref.NodeID == n.Proxy.NodeID
 	return req
@@ -502,15 +502,15 @@ func (s *Service) leave(ctx context.Context, b Backend) error {
 			return fmt.Errorf("its forwarding mod could not be removed: %w", err)
 		}
 	}
-	return ignoreMissing(s.configure(ctx, b.Ref, &mcsmv1.ConfigureNetworkRequest{Id: b.ServerID, Forwarding: mcsmv1.Forwarding_FORWARDING_NONE}))
+	return ignoreMissing(s.configure(ctx, b.Ref, &noryxv1.ConfigureNetworkRequest{Id: b.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE}))
 }
 
 // target tells the proxy how to reach a backend: on its own node by server ID, as the
 // agent knows the local route, otherwise at the node's address and the server's port.
-func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*mcsmv1.NetworkBackend, error) {
-	target := &mcsmv1.NetworkBackend{Name: b.Name, Restricted: b.Restricted, Motd: b.Motd}
+func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*noryxv1.NetworkBackend, error) {
+	target := &noryxv1.NetworkBackend{Name: b.Name, Restricted: b.Restricted, Motd: b.Motd}
 	if b.NodeID == proxy.NodeID {
-		target.Target = &mcsmv1.NetworkBackend_ServerId{ServerId: b.ServerID}
+		target.Target = &noryxv1.NetworkBackend_ServerId{ServerId: b.ServerID}
 		return target, nil
 	}
 	n, err := s.nodes.Get(ctx, b.NodeID)
@@ -525,36 +525,36 @@ func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*mcsmv1.Net
 	if err != nil {
 		return nil, err
 	}
-	target.Target = &mcsmv1.NetworkBackend_Address{Address: net.JoinHostPort(host, strconv.Itoa(int(srv.GetPort())))}
+	target.Target = &noryxv1.NetworkBackend_Address{Address: net.JoinHostPort(host, strconv.Itoa(int(srv.GetPort())))}
 	return target, nil
 }
 
-func (s *Service) configure(ctx context.Context, ref Ref, req *mcsmv1.ConfigureNetworkRequest) error {
+func (s *Service) configure(ctx context.Context, ref Ref, req *noryxv1.ConfigureNetworkRequest) error {
 	ctx, cancel := context.WithTimeout(ctx, configureTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)
 	if err != nil {
 		return err
 	}
-	_, err = mcsmv1.NewServerServiceClient(conn).ConfigureNetwork(ctx, req)
+	_, err = noryxv1.NewServerServiceClient(conn).ConfigureNetwork(ctx, req)
 	return err
 }
 
 var errServerNotFound = httpapi.Errorf(http.StatusNotFound, "Server not found.")
 
 // server looks up a server on its node.
-func (s *Service) server(ctx context.Context, ref Ref) (*mcsmv1.Server, error) {
+func (s *Service) server(ctx context.Context, ref Ref) (*noryxv1.Server, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)
 	if err != nil {
 		return nil, err
 	}
-	res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+	res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
 		return nil, err
 	}
-	i := slices.IndexFunc(res.GetServers(), func(srv *mcsmv1.Server) bool { return srv.GetId() == ref.ServerID })
+	i := slices.IndexFunc(res.GetServers(), func(srv *noryxv1.Server) bool { return srv.GetId() == ref.ServerID })
 	if i < 0 {
 		return nil, errServerNotFound
 	}
@@ -562,15 +562,15 @@ func (s *Service) server(ctx context.Context, ref Ref) (*mcsmv1.Server, error) {
 }
 
 // backend checks that a server can join a network with the given forwarding.
-func (s *Service) backend(ctx context.Context, ref Ref, forwarding string) (*mcsmv1.Server, error) {
+func (s *Service) backend(ctx context.Context, ref Ref, forwarding string) (*noryxv1.Server, error) {
 	srv, err := s.server(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 	switch typ := srv.GetType(); {
-	case typ.Proxy() || typ == mcsmv1.ServerType_SERVER_TYPE_VANILLA:
+	case typ.Proxy() || typ == noryxv1.ServerType_SERVER_TYPE_VANILLA:
 		return nil, httpapi.Errorf(http.StatusBadRequest, "Only Paper, Purpur, Fabric, Forge and NeoForge servers can verify the players a proxy forwards.")
-	case typ == mcsmv1.ServerType_SERVER_TYPE_FABRIC && forwarding != Modern:
+	case typ == noryxv1.ServerType_SERVER_TYPE_FABRIC && forwarding != Modern:
 		return nil, errFabricMode
 	}
 	return srv, nil

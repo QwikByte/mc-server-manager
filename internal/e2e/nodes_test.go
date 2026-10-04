@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	agentenroll "github.com/QwikByte/mc-server-manager/internal/agent/enroll"
 	"github.com/QwikByte/mc-server-manager/internal/pki"
 )
@@ -89,7 +89,7 @@ func TestEnrollmentChecks(t *testing.T) {
 	check(t, err)
 	guesser := peer.NewContext(t.Context(), &peer.Peer{Addr: &net.TCPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 1234}})
 	enroll := func(secret string, csr []byte) codes.Code {
-		_, err := m.nodes.Enroll(guesser, &mcsmv1.EnrollRequest{NodeId: n.ID, Secret: secret, CsrDer: csr})
+		_, err := m.nodes.Enroll(guesser, &noryxv1.EnrollRequest{NodeId: n.ID, Secret: secret, CsrDer: csr})
 		return status.Code(err)
 	}
 

@@ -22,7 +22,7 @@ import { locale } from "@/lib/i18n"
 
 const problems: LogFilter = { level: "warn" }
 const shown = 8
-const seenKey = "mcsm.logs.seen"
+const seenKey = "noryx.logs.seen"
 
 const problemsQuery = queryOptions({
   queryKey: ["logs", "problems"],

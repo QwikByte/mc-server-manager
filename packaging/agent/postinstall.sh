@@ -3,5 +3,5 @@
 set -e
 if [ -d /run/systemd/system ]; then
 	systemctl daemon-reload
-	systemctl try-restart mcsm-agent.service
+	systemctl try-restart noryx-agent.service
 fi

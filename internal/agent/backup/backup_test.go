@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
@@ -49,27 +49,27 @@ func TestSelected(t *testing.T) {
 	if err := os.Symlink(t.TempDir(), filepath.Join(path, "outside")); err != nil {
 		t.Fatal(err)
 	}
-	paper := mcsmv1.ServerType_SERVER_TYPE_PAPER
+	paper := noryxv1.ServerType_SERVER_TYPE_PAPER
 	for _, tc := range []struct {
 		name string
-		typ  mcsmv1.ServerType
-		sel  *mcsmv1.BackupSelection
+		typ  noryxv1.ServerType
+		sel  *noryxv1.BackupSelection
 		want []string
 	}{
-		{"worlds", paper, &mcsmv1.BackupSelection{Worlds: true}, []string{"world", "world_nether"}},
-		{"plugins", paper, &mcsmv1.BackupSelection{Plugins: true}, []string{"plugins"}},
-		{"mods keep their settings in config", mcsmv1.ServerType_SERVER_TYPE_FABRIC, &mcsmv1.BackupSelection{Plugins: true}, []string{"config"}},
-		{"config", paper, &mcsmv1.BackupSelection{Config: true}, []string{"bukkit.yml", "config", "server.properties"}},
-		{"paths inside others", paper, &mcsmv1.BackupSelection{Worlds: true, Paths: []string{"world/region", "/logs/", "missing", "outside"}}, []string{"logs", "world", "world_nether"}},
-		{"everything", paper, &mcsmv1.BackupSelection{Everything: true, Worlds: true}, []string{"."}},
-		{"root as a path", paper, &mcsmv1.BackupSelection{Paths: []string{"/"}}, []string{"."}},
+		{"worlds", paper, &noryxv1.BackupSelection{Worlds: true}, []string{"world", "world_nether"}},
+		{"plugins", paper, &noryxv1.BackupSelection{Plugins: true}, []string{"plugins"}},
+		{"mods keep their settings in config", noryxv1.ServerType_SERVER_TYPE_FABRIC, &noryxv1.BackupSelection{Plugins: true}, []string{"config"}},
+		{"config", paper, &noryxv1.BackupSelection{Config: true}, []string{"bukkit.yml", "config", "server.properties"}},
+		{"paths inside others", paper, &noryxv1.BackupSelection{Worlds: true, Paths: []string{"world/region", "/logs/", "missing", "outside"}}, []string{"logs", "world", "world_nether"}},
+		{"everything", paper, &noryxv1.BackupSelection{Everything: true, Worlds: true}, []string{"."}},
+		{"root as a path", paper, &noryxv1.BackupSelection{Paths: []string{"/"}}, []string{"."}},
 	} {
 		got, err := selected(dir, tc.typ, tc.sel)
 		if err != nil || !slices.Equal(got, tc.want) {
 			t.Errorf("%s: got %q, %v; want %q", tc.name, got, err, tc.want)
 		}
 	}
-	if _, err := selected(dir, paper, &mcsmv1.BackupSelection{Paths: []string{"../other"}}); err == nil {
+	if _, err := selected(dir, paper, &noryxv1.BackupSelection{Paths: []string{"../other"}}); err == nil {
 		t.Error("a path outside of the data directory was accepted")
 	}
 }

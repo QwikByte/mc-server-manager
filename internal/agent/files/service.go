@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/agent/secrets"
@@ -37,13 +37,13 @@ const (
 var errSecret = status.Error(codes.PermissionDenied, "This file holds secrets of the server, such as the RCON password, which the panel doesn't show.")
 
 type Service struct {
-	mcsmv1.UnimplementedFileServiceServer
+	noryxv1.UnimplementedFileServiceServer
 	rt runtime.Runtime
 }
 
 func NewService(rt runtime.Runtime) *Service { return &Service{rt: rt} }
 
-func (s *Service) ListFiles(ctx context.Context, req *mcsmv1.ListFilesRequest) (*mcsmv1.ListFilesResponse, error) {
+func (s *Service) ListFiles(ctx context.Context, req *noryxv1.ListFilesRequest) (*noryxv1.ListFilesResponse, error) {
 	dir, name, err := s.open(ctx, req.GetServerId(), req.GetPath())
 	if err != nil {
 		return nil, err
@@ -58,13 +58,13 @@ func (s *Service) ListFiles(ctx context.Context, req *mcsmv1.ListFilesRequest) (
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, toStatus(err)
 	}
-	res := &mcsmv1.ListFilesResponse{Truncated: len(entries) > maxEntries}
+	res := &noryxv1.ListFilesResponse{Truncated: len(entries) > maxEntries}
 	for _, e := range entries[:min(len(entries), maxEntries)] {
 		if info, err := e.Info(); err == nil && !secrets.Hidden(path.Join(name, e.Name())) { // also skips entries deleted in the meantime
 			res.Files = append(res.Files, fileInfo(info))
 		}
 	}
-	slices.SortFunc(res.Files, func(a, b *mcsmv1.FileInfo) int {
+	slices.SortFunc(res.Files, func(a, b *noryxv1.FileInfo) int {
 		if a.GetDirectory() != b.GetDirectory() {
 			return map[bool]int{true: -1, false: 1}[a.GetDirectory()]
 		}
@@ -73,7 +73,7 @@ func (s *Service) ListFiles(ctx context.Context, req *mcsmv1.ListFilesRequest) (
 	return res, nil
 }
 
-func (s *Service) ReadFile(req *mcsmv1.ReadFileRequest, stream mcsmv1.FileService_ReadFileServer) error {
+func (s *Service) ReadFile(req *noryxv1.ReadFileRequest, stream noryxv1.FileService_ReadFileServer) error {
 	dir, name, err := s.open(stream.Context(), req.GetServerId(), req.GetPath())
 	if err != nil {
 		return err
@@ -103,16 +103,16 @@ func (s *Service) ReadFile(req *mcsmv1.ReadFileRequest, stream mcsmv1.FileServic
 		data = secrets.Redact(name, data)
 		r, size = bytes.NewReader(data), int64(len(data))
 	}
-	res := &mcsmv1.ReadFileResponse{Size: size}
+	res := &noryxv1.ReadFileResponse{Size: size}
 	return sendChunks(r, func(data []byte) error {
 		res.Data = data
 		err := stream.Send(res)
-		res = &mcsmv1.ReadFileResponse{}
+		res = &noryxv1.ReadFileResponse{}
 		return err
 	})
 }
 
-func (s *Service) WriteFile(stream mcsmv1.FileService_WriteFileServer) error {
+func (s *Service) WriteFile(stream noryxv1.FileService_WriteFileServer) error {
 	first, err := stream.Recv()
 	if err != nil {
 		return err
@@ -162,10 +162,10 @@ func (s *Service) WriteFile(stream mcsmv1.FileService_WriteFileServer) error {
 	if err != nil {
 		return toStatus(err)
 	}
-	return stream.SendAndClose(&mcsmv1.WriteFileResponse{File: fileInfo(info)})
+	return stream.SendAndClose(&noryxv1.WriteFileResponse{File: fileInfo(info)})
 }
 
-func (s *Service) ArchiveDirectory(req *mcsmv1.ArchiveDirectoryRequest, stream mcsmv1.FileService_ArchiveDirectoryServer) error {
+func (s *Service) ArchiveDirectory(req *noryxv1.ArchiveDirectoryRequest, stream noryxv1.FileService_ArchiveDirectoryServer) error {
 	dir, name, err := s.open(stream.Context(), req.GetServerId(), req.GetPath())
 	if err != nil {
 		return err
@@ -184,11 +184,11 @@ func (s *Service) ArchiveDirectory(req *mcsmv1.ArchiveDirectoryRequest, stream m
 	defer r.Close() // stops WriteZip if the client goes away
 	go func() { w.CloseWithError(datadir.WriteZip(stream.Context(), w, sub, censor, ".")) }()
 	return sendChunks(r, func(data []byte) error {
-		return stream.Send(&mcsmv1.ArchiveDirectoryResponse{Data: data})
+		return stream.Send(&noryxv1.ArchiveDirectoryResponse{Data: data})
 	})
 }
 
-func (s *Service) CreateDirectory(ctx context.Context, req *mcsmv1.CreateDirectoryRequest) (*mcsmv1.CreateDirectoryResponse, error) {
+func (s *Service) CreateDirectory(ctx context.Context, req *noryxv1.CreateDirectoryRequest) (*noryxv1.CreateDirectoryResponse, error) {
 	dir, name, err := s.open(ctx, req.GetServerId(), req.GetPath())
 	if err != nil {
 		return nil, err
@@ -197,10 +197,10 @@ func (s *Service) CreateDirectory(ctx context.Context, req *mcsmv1.CreateDirecto
 	if _, err := dir.Lstat(name); err == nil {
 		return nil, toStatus(fs.ErrExist)
 	}
-	return &mcsmv1.CreateDirectoryResponse{}, toStatus(dir.MkdirAll(name))
+	return &noryxv1.CreateDirectoryResponse{}, toStatus(dir.MkdirAll(name))
 }
 
-func (s *Service) MoveFile(ctx context.Context, req *mcsmv1.MoveFileRequest) (*mcsmv1.MoveFileResponse, error) {
+func (s *Service) MoveFile(ctx context.Context, req *noryxv1.MoveFileRequest) (*noryxv1.MoveFileResponse, error) {
 	dir, from, err := s.open(ctx, req.GetServerId(), req.GetFrom())
 	if err != nil {
 		return nil, err
@@ -219,10 +219,10 @@ func (s *Service) MoveFile(ctx context.Context, req *mcsmv1.MoveFileRequest) (*m
 	if _, err := dir.Lstat(to); err == nil {
 		return nil, toStatus(fs.ErrExist)
 	}
-	return &mcsmv1.MoveFileResponse{}, toStatus(dir.Rename(from, to))
+	return &noryxv1.MoveFileResponse{}, toStatus(dir.Rename(from, to))
 }
 
-func (s *Service) DeleteFile(ctx context.Context, req *mcsmv1.DeleteFileRequest) (*mcsmv1.DeleteFileResponse, error) {
+func (s *Service) DeleteFile(ctx context.Context, req *noryxv1.DeleteFileRequest) (*noryxv1.DeleteFileResponse, error) {
 	dir, name, err := s.open(ctx, req.GetServerId(), req.GetPath())
 	if err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func (s *Service) DeleteFile(ctx context.Context, req *mcsmv1.DeleteFileRequest)
 	if _, err := dir.Lstat(name); err != nil {
 		return nil, toStatus(err)
 	}
-	return &mcsmv1.DeleteFileResponse{}, toStatus(dir.RemoveAll(name))
+	return &noryxv1.DeleteFileResponse{}, toStatus(dir.RemoveAll(name))
 }
 
 // open opens the data directory of a server and returns the path as a name in it.
@@ -264,12 +264,12 @@ func clean(p string) (string, error) {
 	return name, nil
 }
 
-func fileInfo(info fs.FileInfo) *mcsmv1.FileInfo {
-	return &mcsmv1.FileInfo{Name: info.Name(), Directory: info.IsDir(), Size: info.Size(), ModifiedUnix: info.ModTime().Unix()}
+func fileInfo(info fs.FileInfo) *noryxv1.FileInfo {
+	return &noryxv1.FileInfo{Name: info.Name(), Directory: info.IsDir(), Size: info.Size(), ModifiedUnix: info.ModTime().Unix()}
 }
 
 // receive writes the data of a WriteFile stream to w, up to limit bytes.
-func receive(stream mcsmv1.FileService_WriteFileServer, w io.Writer, limit int64) error {
+func receive(stream noryxv1.FileService_WriteFileServer, w io.Writer, limit int64) error {
 	var written int64
 	for {
 		msg, err := stream.Recv()

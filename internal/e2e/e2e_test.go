@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/app"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/enroll"
@@ -65,27 +65,27 @@ func TestEnrollAndControlNode(t *testing.T) {
 	// The master controls the node.
 	conn, err := m.nodes.Conn(ctx, a.node.ID)
 	check(t, err)
-	info, err := mcsmv1.NewNodeServiceClient(conn).GetInfo(ctx, &mcsmv1.GetInfoRequest{})
+	info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
 	check(t, err)
 	if info.GetRuntime() != "fake" {
 		t.Fatalf("runtime = %q, want fake", info.GetRuntime())
 	}
 
-	servers := mcsmv1.NewServerServiceClient(conn)
-	lobby := &mcsmv1.CreateServerRequest{Name: "Lobby", Type: mcsmv1.ServerType_SERVER_TYPE_PAPER, MemoryMb: 2048, Port: 25565, AcceptEula: true}
+	servers := noryxv1.NewServerServiceClient(conn)
+	lobby := &noryxv1.CreateServerRequest{Name: "Lobby", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, MemoryMb: 2048, Port: 25565, AcceptEula: true}
 	created, err := servers.CreateServer(ctx, lobby)
 	check(t, err)
-	_, err = servers.StartServer(ctx, &mcsmv1.StartServerRequest{Id: created.GetServer().GetId()})
+	_, err = servers.StartServer(ctx, &noryxv1.StartServerRequest{Id: created.GetServer().GetId()})
 	check(t, err)
-	list, err := servers.ListServers(ctx, &mcsmv1.ListServersRequest{})
+	list, err := servers.ListServers(ctx, &noryxv1.ListServersRequest{})
 	check(t, err)
-	if len(list.GetServers()) != 1 || list.GetServers()[0].GetState() != mcsmv1.ServerState_SERVER_STATE_RUNNING {
+	if len(list.GetServers()) != 1 || list.GetServers()[0].GetState() != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		t.Fatalf("servers = %v, want one running server", list.GetServers())
 	}
 
 	// The console arrives without colour codes, and commands return their output.
 	id := created.GetServer().GetId()
-	logs, err := servers.StreamLogs(ctx, &mcsmv1.StreamLogsRequest{Id: id, Tail: 10})
+	logs, err := servers.StreamLogs(ctx, &noryxv1.StreamLogsRequest{Id: id, Tail: 10})
 	check(t, err)
 	var lines []string
 	for {
@@ -99,7 +99,7 @@ func TestEnrollAndControlNode(t *testing.T) {
 	if want := []string{"[INFO]: Starting", "[INFO]: Done"}; !slices.Equal(lines, want) {
 		t.Fatalf("log lines = %q, want %q", lines, want)
 	}
-	out, err := servers.SendCommand(ctx, &mcsmv1.SendCommandRequest{Id: id, Command: "/say hi"})
+	out, err := servers.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: "/say hi"})
 	check(t, err)
 	if out.GetOutput() != "ran say hi" {
 		t.Fatalf("command output = %q", out.GetOutput())
@@ -129,7 +129,7 @@ func TestEnrollAndControlNode(t *testing.T) {
 		call func() error
 	}{
 		{"missing EULA", codes.InvalidArgument, func() error {
-			_, err := servers.CreateServer(ctx, &mcsmv1.CreateServerRequest{Name: "Survival", Type: lobby.Type, MemoryMb: 2048, Port: 25566})
+			_, err := servers.CreateServer(ctx, &noryxv1.CreateServerRequest{Name: "Survival", Type: lobby.Type, MemoryMb: 2048, Port: 25566})
 			return err
 		}},
 		{"port in use", codes.AlreadyExists, func() error {
@@ -137,11 +137,11 @@ func TestEnrollAndControlNode(t *testing.T) {
 			return err
 		}},
 		{"command with several lines", codes.InvalidArgument, func() error {
-			_, err := servers.SendCommand(ctx, &mcsmv1.SendCommandRequest{Id: id, Command: "say hi\nop attacker"})
+			_, err := servers.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: "say hi\nop attacker"})
 			return err
 		}},
 		{"path traversal", codes.InvalidArgument, func() error {
-			_, err := servers.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: "../../etc"})
+			_, err := servers.DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: "../../etc"})
 			return err
 		}},
 	} {
@@ -164,14 +164,14 @@ func TestEnrollAndControlNode(t *testing.T) {
 	}
 
 	// A certificate for a key the agent did not create is rejected.
-	nodeClient := mcsmv1.NewNodeServiceClient(conn)
-	_, err = nodeClient.CreateCSR(ctx, &mcsmv1.CreateCSRRequest{})
+	nodeClient := noryxv1.NewNodeServiceClient(conn)
+	_, err = nodeClient.CreateCSR(ctx, &noryxv1.CreateCSRRequest{})
 	check(t, err)
 	foreignCSR, err := pki.NewCSR(pki.NewKey())
 	check(t, err)
 	foreign, err := m.ca.SignNodeCSR(foreignCSR, a.node.ID)
 	check(t, err)
-	if _, err := nodeClient.InstallCertificate(ctx, &mcsmv1.InstallCertificateRequest{CertificateDer: foreign}); status.Code(err) != codes.FailedPrecondition {
+	if _, err := nodeClient.InstallCertificate(ctx, &noryxv1.InstallCertificateRequest{CertificateDer: foreign}); status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("foreign certificate: got %v, want FailedPrecondition", err)
 	}
 }
@@ -209,7 +209,7 @@ func startMaster(t *testing.T) *master {
 	logStore.Start(t.Context())
 	t.Cleanup(logStore.Close)
 	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
-	mcsmv1.RegisterEnrollmentServiceServer(enrollServer, nodes)
+	noryxv1.RegisterEnrollmentServiceServer(enrollServer, nodes)
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
@@ -267,10 +267,10 @@ func (m *master) startAgent(t *testing.T, name string) agent {
 }
 
 // createServer creates a server on the agent of a node.
-func (m *master) createServer(t *testing.T, a agent, name string, typ mcsmv1.ServerType, port uint32) network.Ref {
+func (m *master) createServer(t *testing.T, a agent, name string, typ noryxv1.ServerType, port uint32) network.Ref {
 	conn, err := m.nodes.Conn(t.Context(), a.node.ID)
 	check(t, err)
-	res, err := mcsmv1.NewServerServiceClient(conn).CreateServer(t.Context(), &mcsmv1.CreateServerRequest{
+	res, err := noryxv1.NewServerServiceClient(conn).CreateServer(t.Context(), &noryxv1.CreateServerRequest{
 		Name: name, Type: typ, MemoryMb: 1024, Port: port, AcceptEula: true,
 	})
 	check(t, err)
@@ -396,7 +396,7 @@ func (f *fakeRuntime) Create(ctx context.Context, spec runtime.Spec) error {
 	if f.createErr != nil {
 		return f.createErr
 	}
-	f.servers = append(f.servers, runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})
+	f.servers = append(f.servers, runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED})
 	return os.Mkdir(filepath.Join(f.dir, spec.ID), 0o750)
 }
 
@@ -410,11 +410,11 @@ func (f *fakeRuntime) Data(_ context.Context, id string) (*datadir.Dir, error) {
 }
 
 func (f *fakeRuntime) Start(_ context.Context, id string) error {
-	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_RUNNING)
+	return f.setState(id, noryxv1.ServerState_SERVER_STATE_RUNNING)
 }
 
 func (f *fakeRuntime) Stop(_ context.Context, id string) error {
-	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_STOPPED)
+	return f.setState(id, noryxv1.ServerState_SERVER_STATE_STOPPED)
 }
 
 func (f *fakeRuntime) Update(_ context.Context, spec runtime.Spec) error {
@@ -440,7 +440,7 @@ func (f *fakeRuntime) UpdateImage(_ context.Context, id string) (bool, error) {
 }
 
 func (f *fakeRuntime) Restart(_ context.Context, id string) error {
-	return f.setState(id, mcsmv1.ServerState_SERVER_STATE_RUNNING)
+	return f.setState(id, noryxv1.ServerState_SERVER_STATE_RUNNING)
 }
 
 func (f *fakeRuntime) Remove(_ context.Context, id string) error {
@@ -476,7 +476,7 @@ func (f *fakeRuntime) Usage(_ context.Context, id string) (runtime.Usage, error)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	i := slices.IndexFunc(f.servers, func(s runtime.Server) bool { return s.ID == id })
-	if i < 0 || f.servers[i].State == mcsmv1.ServerState_SERVER_STATE_STOPPED {
+	if i < 0 || f.servers[i].State == noryxv1.ServerState_SERVER_STATE_STOPPED {
 		return runtime.Usage{}, runtime.ErrNotRunning
 	}
 	return runtime.Usage{MemoryBytes: 512 << 20, MemoryLimit: 1 << 30}, nil
@@ -494,7 +494,7 @@ func (f *fakeRuntime) Duplicate(ctx context.Context, from string, spec runtime.S
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.servers = append(f.servers, runtime.Server{Spec: spec, State: mcsmv1.ServerState_SERVER_STATE_STOPPED})
+	f.servers = append(f.servers, runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED})
 	return nil
 }
 
@@ -538,7 +538,7 @@ func (f *fakeRuntime) network(id string) runtime.Network {
 	return f.networks[id]
 }
 
-func (f *fakeRuntime) setState(id string, state mcsmv1.ServerState) error {
+func (f *fakeRuntime) setState(id string, state noryxv1.ServerState) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for i := range f.servers {

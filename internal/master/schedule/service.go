@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
@@ -46,7 +46,7 @@ type Servers func(ctx context.Context) ([]Server, error)
 
 // Server is a target server of a task.
 type Server struct {
-	*mcsmv1.Server
+	*noryxv1.Server
 	NodeID   string
 	NodeName string
 }
@@ -280,9 +280,9 @@ func (s *Service) nodeServers(ctx context.Context, nodeID string, ids []string) 
 	ctx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, nodeID)
-	var res *mcsmv1.ListServersResponse
+	var res *noryxv1.ListServersResponse
 	if err == nil {
-		res, err = mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+		res, err = noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %s", n.Name, status.Convert(err).Message())
@@ -298,7 +298,7 @@ func (s *Service) nodeServers(ctx context.Context, nodeID string, ids []string) 
 		}
 	}
 	for _, id := range ids {
-		if id != "" && !slices.ContainsFunc(res.GetServers(), func(srv *mcsmv1.Server) bool { return srv.GetId() == id }) {
+		if id != "" && !slices.ContainsFunc(res.GetServers(), func(srv *noryxv1.Server) bool { return srv.GetId() == id }) {
 			err = errors.Join(err, fmt.Errorf("%s: the server %s no longer exists", n.Name, id))
 		}
 	}

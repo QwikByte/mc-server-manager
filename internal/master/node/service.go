@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/enrollment"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
@@ -89,7 +89,7 @@ const nodeColumns = `id, name, address, enrolled_at, created_at, default_storage
 var storageName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 type Service struct {
-	mcsmv1.UnimplementedEnrollmentServiceServer
+	noryxv1.UnimplementedEnrollmentServiceServer
 
 	db     *sql.DB
 	ca     *pki.CA
@@ -208,8 +208,8 @@ func (s *Service) NewJoinToken(ctx context.Context, id string) (JoinToken, error
 	return JoinToken{token, expires}, err
 }
 
-// Enroll implements mcsmv1.EnrollmentServiceServer. The join token is consumed atomically.
-func (s *Service) Enroll(ctx context.Context, req *mcsmv1.EnrollRequest) (*mcsmv1.EnrollResponse, error) {
+// Enroll implements noryxv1.EnrollmentServiceServer. The join token is consumed atomically.
+func (s *Service) Enroll(ctx context.Context, req *noryxv1.EnrollRequest) (*noryxv1.EnrollResponse, error) {
 	// Anyone who reaches the enrollment endpoint can send IDs, so they are kept short.
 	attrs := []any{logging.Nodes, logging.KeyNode, req.GetNodeId()[:min(len(req.GetNodeId()), 64)]}
 	var client string
@@ -243,7 +243,7 @@ func (s *Service) Enroll(ctx context.Context, req *mcsmv1.EnrollRequest) (*mcsmv
 		return nil, err
 	}
 	slog.Info("Enroll node", attrs...)
-	return &mcsmv1.EnrollResponse{CertificateDer: cert, CaCertificateDer: s.ca.Cert.Raw}, nil
+	return &noryxv1.EnrollResponse{CertificateDer: cert, CaCertificateDer: s.ca.Cert.Raw}, nil
 }
 
 // inTx runs fn in a transaction that is committed if fn succeeds.

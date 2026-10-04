@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/master/network"
 )
@@ -17,11 +17,11 @@ import (
 func TestNetwork(t *testing.T) {
 	m := startMaster(t)
 	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
-	proxy := m.createServer(t, a1, "Proxy", mcsmv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
-	lobby := m.createServer(t, a1, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	vanilla := m.createServer(t, a1, "Vanilla", mcsmv1.ServerType_SERVER_TYPE_VANILLA, 25566)
-	fabric := m.createServer(t, a1, "Fabric", mcsmv1.ServerType_SERVER_TYPE_FABRIC, 25567)
-	survival := m.createServer(t, a2, "Survival", mcsmv1.ServerType_SERVER_TYPE_PURPUR, 25570)
+	proxy := m.createServer(t, a1, "Proxy", noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
+	lobby := m.createServer(t, a1, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	vanilla := m.createServer(t, a1, "Vanilla", noryxv1.ServerType_SERVER_TYPE_VANILLA, 25566)
+	fabric := m.createServer(t, a1, "Fabric", noryxv1.ServerType_SERVER_TYPE_FABRIC, 25567)
+	survival := m.createServer(t, a2, "Survival", noryxv1.ServerType_SERVER_TYPE_PURPUR, 25570)
 	api := apiClient{t: t, url: m.panel(t).URL}
 
 	var n network.Network
@@ -177,9 +177,9 @@ func TestNetwork(t *testing.T) {
 func TestBungeeNetwork(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	proxy := m.createServer(t, a, "Proxy", mcsmv1.ServerType_SERVER_TYPE_WATERFALL, 25577)
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	forge := m.createServer(t, a, "Forge", mcsmv1.ServerType_SERVER_TYPE_FORGE, 25566)
+	proxy := m.createServer(t, a, "Proxy", noryxv1.ServerType_SERVER_TYPE_WATERFALL, 25577)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	forge := m.createServer(t, a, "Forge", noryxv1.ServerType_SERVER_TYPE_FORGE, 25566)
 	api := apiClient{t: t, url: m.panel(t).URL}
 
 	api.do("POST", "/api/networks", map[string]any{"name": "Bungee", "proxy": proxy, "forwarding": "modern", "servers": []network.Ref{lobby}}, http.StatusBadRequest, nil)

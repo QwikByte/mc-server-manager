@@ -10,14 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 func TestDuplicateServer(t *testing.T) {
 	m := startMaster(t)
 	a := m.startAgent(t, "node-1")
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	m.createServer(t, a, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	m.createServer(t, a, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	base := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID
 	data := filepath.Join(a.runtime.dir, lobby.ServerID)
@@ -51,7 +51,7 @@ func TestDuplicateServer(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(a.runtime.dir, copied.ID, "outside")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("the copy contains a symbolic link")
 	}
-	if spec := a.runtime.spec(copied.ID); spec.Type != mcsmv1.ServerType_SERVER_TYPE_PAPER || spec.ID == lobby.ServerID {
+	if spec := a.runtime.spec(copied.ID); spec.Type != noryxv1.ServerType_SERVER_TYPE_PAPER || spec.ID == lobby.ServerID {
 		t.Fatalf("copied spec = %+v", spec)
 	}
 

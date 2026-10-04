@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/buildinfo"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
@@ -39,18 +39,18 @@ const (
 
 var (
 	// loaders run the plugins or mods of a server type, the most specific first.
-	loaders = map[mcsmv1.ServerType][]string{
-		mcsmv1.ServerType_SERVER_TYPE_PAPER:      {"paper", "spigot", "bukkit"},
-		mcsmv1.ServerType_SERVER_TYPE_PURPUR:     {"purpur", "paper", "spigot", "bukkit"},
-		mcsmv1.ServerType_SERVER_TYPE_VELOCITY:   {"velocity"},
-		mcsmv1.ServerType_SERVER_TYPE_BUNGEECORD: {"bungeecord", "waterfall"},
-		mcsmv1.ServerType_SERVER_TYPE_WATERFALL:  {"waterfall", "bungeecord"},
-		mcsmv1.ServerType_SERVER_TYPE_FABRIC:     {"fabric"},
-		mcsmv1.ServerType_SERVER_TYPE_FORGE:      {"forge"},
-		mcsmv1.ServerType_SERVER_TYPE_NEOFORGE:   {"neoforge"},
+	loaders = map[noryxv1.ServerType][]string{
+		noryxv1.ServerType_SERVER_TYPE_PAPER:      {"paper", "spigot", "bukkit"},
+		noryxv1.ServerType_SERVER_TYPE_PURPUR:     {"purpur", "paper", "spigot", "bukkit"},
+		noryxv1.ServerType_SERVER_TYPE_VELOCITY:   {"velocity"},
+		noryxv1.ServerType_SERVER_TYPE_BUNGEECORD: {"bungeecord", "waterfall"},
+		noryxv1.ServerType_SERVER_TYPE_WATERFALL:  {"waterfall", "bungeecord"},
+		noryxv1.ServerType_SERVER_TYPE_FABRIC:     {"fabric"},
+		noryxv1.ServerType_SERVER_TYPE_FORGE:      {"forge"},
+		noryxv1.ServerType_SERVER_TYPE_NEOFORGE:   {"neoforge"},
 	}
 	// modded are the server types that load mods; the others load plugins.
-	modded    = []mcsmv1.ServerType{mcsmv1.ServerType_SERVER_TYPE_FABRIC, mcsmv1.ServerType_SERVER_TYPE_FORGE, mcsmv1.ServerType_SERVER_TYPE_NEOFORGE}
+	modded    = []noryxv1.ServerType{noryxv1.ServerType_SERVER_TYPE_FABRIC, noryxv1.ServerType_SERVER_TYPE_FORGE, noryxv1.ServerType_SERVER_TYPE_NEOFORGE}
 	projectID = regexp.MustCompile(`^[A-Za-z0-9]{1,32}$`)
 	category  = regexp.MustCompile(`^[a-z-]{1,32}$`)
 	// Sorts are the orders of search results; without a query, relevance means downloads.
@@ -63,7 +63,7 @@ var (
 
 // Loaders returns the loaders whose plugins or mods run on a server type; none for
 // vanilla servers.
-func Loaders(t mcsmv1.ServerType) []string { return loaders[t] }
+func Loaders(t noryxv1.ServerType) []string { return loaders[t] }
 
 // AllLoaders returns the loaders of the server types that load a kind, plugins or mods,
 // or of all server types if kind is empty.
@@ -366,7 +366,7 @@ func (c *Client) do(ctx context.Context, method, target string, body io.Reader) 
 		return nil, err
 	}
 	// Modrinth asks clients to identify themselves.
-	req.Header.Set("User-Agent", "QwikByte/mc-server-manager/"+buildinfo.Version+" (github.com/QwikByte/mc-server-manager)")
+	req.Header.Set("User-Agent", "QwikByte/noryx/"+buildinfo.Version+" (github.com/QwikByte/mc-server-manager)")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

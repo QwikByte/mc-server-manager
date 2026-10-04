@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
 )
 
@@ -69,7 +69,7 @@ func (n *Names) Server(ctx context.Context, nodeID, id string) string {
 	ctx, cancel := context.WithTimeout(ctx, namesTimeout)
 	defer cancel()
 	if conn, err := n.nodes.Conn(ctx, nodeID); err == nil {
-		if res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{}); err == nil {
+		if res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{}); err == nil {
 			for _, srv := range res.GetServers() {
 				fresh.names[srv.GetId()] = srv.GetName()
 			}

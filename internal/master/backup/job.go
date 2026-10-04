@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
@@ -97,7 +97,7 @@ func (j Jobs) backUp(ctx context.Context, srv schedule.Server, t schedule.Task, 
 	if err != nil {
 		return err
 	}
-	_, err = mcsmv1.NewBackupServiceClient(conn).CreateBackup(ctx, &mcsmv1.CreateBackupRequest{
+	_, err = noryxv1.NewBackupServiceClient(conn).CreateBackup(ctx, &noryxv1.CreateBackupRequest{
 		ServerId: srv.GetId(), Label: t.Name, Selection: s.Selection.proto(), Location: s.Location, JobId: t.ID, Keep: s.Keep,
 	})
 	return err

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
@@ -43,12 +43,12 @@ var (
 
 // Spec describes a server.
 type Spec struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	Type     mcsmv1.ServerType `json:"type"`
-	Version  string            `json:"version"`
-	MemoryMB uint32            `json:"memoryMb"`
-	Port     uint32            `json:"port"`
+	ID       string             `json:"id"`
+	Name     string             `json:"name"`
+	Type     noryxv1.ServerType `json:"type"`
+	Version  string             `json:"version"`
+	MemoryMB uint32             `json:"memoryMb"`
+	Port     uint32             `json:"port"`
 	// BehindProxy makes a game server accept only players forwarded by its proxy.
 	BehindProxy bool `json:"behindProxy,omitempty"`
 	// ProxyOnNode tells that the proxy of a backend runs on the same node, which reaches it
@@ -57,10 +57,10 @@ type Spec struct {
 	// Storage is the storage location of the server's data; empty means the default.
 	Storage string `json:"storage,omitempty"`
 	// Java selects the Java version of a game server, e.g. "21"; empty means the newest.
-	Java          string               `json:"java,omitempty"`
-	RestartPolicy mcsmv1.RestartPolicy `json:"restartPolicy,omitempty"`
-	AikarFlags    bool                 `json:"aikarFlags,omitempty"`
-	JVMOptions    []string             `json:"jvmOptions,omitempty"`
+	Java          string                `json:"java,omitempty"`
+	RestartPolicy noryxv1.RestartPolicy `json:"restartPolicy,omitempty"`
+	AikarFlags    bool                  `json:"aikarFlags,omitempty"`
+	JVMOptions    []string              `json:"jvmOptions,omitempty"`
 	// CPUMillis limits the CPU time in thousandths of a core; 0 means no limit.
 	CPUMillis uint32 `json:"cpuMillis,omitempty"`
 }
@@ -68,7 +68,7 @@ type Spec struct {
 // Server is a server managed by a runtime.
 type Server struct {
 	Spec
-	State mcsmv1.ServerState
+	State noryxv1.ServerState
 	// Crashes counts the crashes since the server was last started, and ExitCode is the
 	// exit code of the latest, if known. Both are only set while it crashes, or after it
 	// stopped because of a crash.
@@ -205,7 +205,7 @@ func Find(ctx context.Context, rt Runtime, id string) (Server, error) {
 // that its data can be copied consistently while players stay connected. resume turns
 // saving on again. Stopped servers and proxies need nothing.
 func PauseSaving(ctx context.Context, rt Runtime, srv Server) (resume func(), err error) {
-	if srv.State == mcsmv1.ServerState_SERVER_STATE_STOPPED || srv.Type.Proxy() {
+	if srv.State == noryxv1.ServerState_SERVER_STATE_STOPPED || srv.Type.Proxy() {
 		return func() {}, nil
 	}
 	if _, err := rt.SendCommand(ctx, srv.ID, "save-off"); err != nil {

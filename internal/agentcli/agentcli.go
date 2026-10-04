@@ -1,4 +1,4 @@
-// Package agentcli contains the commands of mcsm-agent that control a running agent
+// Package agentcli contains the commands of noryx-agent that control a running agent
 // through its gRPC API. The agent's local CLI runs them over its Unix socket, the
 // terminal of the admin panel over the master's mutually authenticated connection.
 // Commands that change what the master may do, such as adding storage locations,
@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 // timeout limits commands that answer right away. Following logs, backing up and
@@ -67,12 +67,12 @@ func (c cli) status() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return c.call(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
-				info, err := mcsmv1.NewNodeServiceClient(conn).GetInfo(ctx, &mcsmv1.GetInfoRequest{})
+				info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
 				if err != nil {
 					return err
 				}
 				out := cmd.OutOrStdout()
-				running := info.GetRuntime() != mcsmv1.RuntimeUnavailable
+				running := info.GetRuntime() != noryxv1.RuntimeUnavailable
 				fmt.Fprintf(out, "Node     %s\nAgent    %s\nRuntime  %s\n", info.GetHostname(), info.GetAgentVersion(), info.GetRuntime())
 				if running {
 					fmt.Fprintf(out, "System   %s, %d CPUs, %.1f GiB\n", info.GetOs(), info.GetCpuCount(), float64(info.GetMemoryBytes())/(1<<30))
@@ -92,14 +92,14 @@ func (c cli) status() *cobra.Command {
 
 func (c cli) server() *cobra.Command {
 	// lifecycle runs a request that only needs the server's ID.
-	lifecycle := func(use, short string, run func(context.Context, mcsmv1.ServerServiceClient, string) error) *cobra.Command {
+	lifecycle := func(use, short string, run func(context.Context, noryxv1.ServerServiceClient, string) error) *cobra.Command {
 		return &cobra.Command{
 			Use:   use + " <id>",
 			Short: short,
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.call(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
-					return run(ctx, mcsmv1.NewServerServiceClient(conn), args[0])
+					return run(ctx, noryxv1.NewServerServiceClient(conn), args[0])
 				})
 			},
 		}
@@ -116,16 +116,16 @@ func (c cli) server() *cobra.Command {
 				})
 			},
 		},
-		lifecycle("start", "Start a server", func(ctx context.Context, s mcsmv1.ServerServiceClient, id string) error {
-			_, err := s.StartServer(ctx, &mcsmv1.StartServerRequest{Id: id})
+		lifecycle("start", "Start a server", func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
+			_, err := s.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
 			return err
 		}),
-		lifecycle("stop", "Stop a server gracefully", func(ctx context.Context, s mcsmv1.ServerServiceClient, id string) error {
-			_, err := s.StopServer(ctx, &mcsmv1.StopServerRequest{Id: id})
+		lifecycle("stop", "Stop a server gracefully", func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
+			_, err := s.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
 			return err
 		}),
-		lifecycle("restart", "Stop a server gracefully and start it again", func(ctx context.Context, s mcsmv1.ServerServiceClient, id string) error {
-			_, err := s.RestartServer(ctx, &mcsmv1.RestartServerRequest{Id: id})
+		lifecycle("restart", "Stop a server gracefully and start it again", func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
+			_, err := s.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
 			return err
 		}),
 		&cobra.Command{
@@ -144,8 +144,8 @@ func (c cli) server() *cobra.Command {
 			Args:  cobra.MinimumNArgs(2),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.call(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
-					req := &mcsmv1.SendCommandRequest{Id: args[0], Command: strings.Join(args[1:], " ")}
-					res, err := mcsmv1.NewServerServiceClient(conn).SendCommand(ctx, req)
+					req := &noryxv1.SendCommandRequest{Id: args[0], Command: strings.Join(args[1:], " ")}
+					res, err := noryxv1.NewServerServiceClient(conn).SendCommand(ctx, req)
 					if err == nil {
 						fmt.Fprintln(cmd.OutOrStdout(), strings.TrimRight(res.GetOutput(), "\n"))
 					}
@@ -167,8 +167,8 @@ func (c cli) backup() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.long(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
-				req := &mcsmv1.CreateBackupRequest{ServerId: args[0], Label: label, Selection: &mcsmv1.BackupSelection{Everything: true}}
-				res, err := mcsmv1.NewBackupServiceClient(conn).CreateBackup(ctx, req)
+				req := &noryxv1.CreateBackupRequest{ServerId: args[0], Label: label, Selection: &noryxv1.BackupSelection{Everything: true}}
+				res, err := noryxv1.NewBackupServiceClient(conn).CreateBackup(ctx, req)
 				if err == nil {
 					fmt.Fprintf(cmd.OutOrStdout(), "Created backup %s (%.1f MiB).\n", res.GetBackup().GetId(), float64(res.GetBackup().GetSize())/(1<<20))
 				}
@@ -184,7 +184,7 @@ func (c cli) backup() *cobra.Command {
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.call(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
-					res, err := mcsmv1.NewBackupServiceClient(conn).ListBackups(ctx, &mcsmv1.ListBackupsRequest{ServerId: args[0]})
+					res, err := noryxv1.NewBackupServiceClient(conn).ListBackups(ctx, &noryxv1.ListBackupsRequest{ServerId: args[0]})
 					if err != nil {
 						return err
 					}
@@ -205,8 +205,8 @@ func (c cli) backup() *cobra.Command {
 			Args:  cobra.ExactArgs(2),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.long(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
-					req := &mcsmv1.RestoreBackupRequest{ServerId: args[0], BackupId: args[1]}
-					if _, err := mcsmv1.NewBackupServiceClient(conn).RestoreBackup(ctx, req); err != nil {
+					req := &noryxv1.RestoreBackupRequest{ServerId: args[0], BackupId: args[1]}
+					if _, err := noryxv1.NewBackupServiceClient(conn).RestoreBackup(ctx, req); err != nil {
 						return err
 					}
 					fmt.Fprintf(cmd.OutOrStdout(), "Restored backup %s.\n", args[1])
@@ -219,7 +219,7 @@ func (c cli) backup() *cobra.Command {
 }
 
 func followLogs(ctx context.Context, conn grpc.ClientConnInterface, id string, out io.Writer) error {
-	stream, err := mcsmv1.NewServerServiceClient(conn).StreamLogs(ctx, &mcsmv1.StreamLogsRequest{Id: id, Tail: 100})
+	stream, err := noryxv1.NewServerServiceClient(conn).StreamLogs(ctx, &noryxv1.StreamLogsRequest{Id: id, Tail: 100})
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func followLogs(ctx context.Context, conn grpc.ClientConnInterface, id string, o
 }
 
 func printServers(ctx context.Context, conn grpc.ClientConnInterface, out io.Writer) error {
-	res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+	res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
 		return err
 	}

@@ -1,7 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 
-/** A published release of MC Server Manager. */
+/** A published release of Noryx. */
 export interface Release {
   version: string
   /** Release notes, as written on GitHub; empty when GitHub's API limited the master's requests. */

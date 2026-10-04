@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 )
 
@@ -45,7 +45,7 @@ func (h *Handler) logs(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	req := &mcsmv1.StreamLogsRequest{Id: r.PathValue("id"), Tail: logTail, AfterUnixNano: after}
+	req := &noryxv1.StreamLogsRequest{Id: r.PathValue("id"), Tail: logTail, AfterUnixNano: after}
 	if after > 0 {
 		req.Tail = maxTail
 	}
@@ -99,7 +99,7 @@ func (h *Handler) command(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.SendCommand(ctx, &mcsmv1.SendCommandRequest{Id: r.PathValue("id"), Command: req.Command})
+	res, err := c.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: r.PathValue("id"), Command: req.Command})
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return

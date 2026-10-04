@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
 
@@ -56,7 +56,7 @@ func storageCommand(cfg *config) *cobra.Command {
 			RunE: func(cmd *cobra.Command, args []string) error {
 				// The running agent knows which servers use the location.
 				return cfg.local(cmd.Context(), func(conn grpc.ClientConnInterface) error {
-					res, err := mcsmv1.NewServerServiceClient(conn).ListServers(cmd.Context(), &mcsmv1.ListServersRequest{})
+					res, err := noryxv1.NewServerServiceClient(conn).ListServers(cmd.Context(), &noryxv1.ListServersRequest{})
 					if err != nil {
 						return err
 					}

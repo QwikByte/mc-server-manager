@@ -21,7 +21,7 @@ const (
 	filePerm = 0o640
 	dirPerm  = 0o750
 	// tempPrefix starts the names of temporary files and folders of the agent.
-	tempPrefix = ".mcsm-"
+	tempPrefix = ".noryx-"
 	maxPath    = 1024
 )
 

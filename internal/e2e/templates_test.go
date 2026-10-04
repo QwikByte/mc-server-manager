@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/template"
 )
 
@@ -55,7 +55,7 @@ func TestTemplates(t *testing.T) {
 	var created struct{ ID string }
 	api.do("POST", path, server, http.StatusCreated, &created)
 	spec := a.runtime.spec(created.ID)
-	if spec.Java != "21" || spec.RestartPolicy != mcsmv1.RestartPolicy_RESTART_POLICY_ON_CRASH || !spec.AikarFlags || spec.CPUMillis != 2000 {
+	if spec.Java != "21" || spec.RestartPolicy != noryxv1.RestartPolicy_RESTART_POLICY_ON_CRASH || !spec.AikarFlags || spec.CPUMillis != 2000 {
 		t.Fatalf("spec = %+v", spec)
 	}
 	props, err := os.ReadFile(filepath.Join(a.runtime.dir, created.ID, "server.properties"))

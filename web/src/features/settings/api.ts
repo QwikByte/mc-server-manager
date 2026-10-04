@@ -135,7 +135,7 @@ export function useRestartMaster() {
       }
       throw new Error(
         samePanel(next, currentPanel(master))
-          ? t("The master hasn't answered for a minute. See: journalctl -u mcsm-master")
+          ? t("The master hasn't answered for a minute. See: journalctl -u noryx-master")
           : t(
               "The master hasn't answered here for a minute. It listens at {{address}} now: open the panel there, or point your reverse proxy to it.",
               {

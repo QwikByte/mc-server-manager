@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs or updates MC Server Manager from its GitHub releases on Linux with systemd.
+# Installs or updates Noryx from its GitHub releases on Linux with systemd.
 #
 #   install.sh master [--public-host <host>] [--panel-addr <ip:port>] [--admin <name>]
 #                                                                the panel and control plane
@@ -20,11 +20,11 @@ set -Eeuo pipefail
 version=latest
 readonly REPO=https://github.com/QwikByte/mc-server-manager
 # The release workflow signs checksums.txt with this Ed25519 key, so a release is only installed if it was
-# published by MC Server Manager's release workflow, not just by someone who can change its releases.
+# published by Noryx's release workflow, not just by someone who can change its releases.
 readonly RELEASE_KEY=MCowBQYDK2VwAyEA18ilyBW0qkWpfEqFR+rW5eQeGC3Sif4OiD8RKpEry5s=
 readonly ENROLL_PORT=9443 AGENT_PORT=7443 PANEL_ADDR=127.0.0.1:8080
 # A generated password goes here rather than into logs of provisioning tools, for root only.
-readonly PASSWORD_FILE=/etc/mcsm/admin-password
+readonly PASSWORD_FILE=/etc/noryx/admin-password
 
 public_host="" panel_addr="" admin=admin join="" install_docker=no only="" local_agent=no fresh_master=no password=""
 
@@ -69,7 +69,7 @@ parse_args() {
 
 check_system() {
   [ "$(id -u)" -eq 0 ] || die "Run the installer as root, e.g. with sudo."
-  [ -d /run/systemd/system ] || die "MC Server Manager needs a Linux system running systemd."
+  [ -d /run/systemd/system ] || die "Noryx needs a Linux system running systemd."
   case $(uname -m) in
     x86_64 | amd64) arch=amd64 ;;
     aarch64 | arm64) arch=arm64 ;;
@@ -174,7 +174,7 @@ panel_host() {
 }
 
 setup_master() {
-  if [ ! -e /var/lib/mcsm-master/master.db ]; then
+  if [ ! -e /var/lib/noryx-master/master.db ]; then
     fresh_master=yes
     [ -n "$public_host" ] || public_host=$(ask "Host name or IP address under which your nodes reach this machine [$(uname -n)]:" "")
     # A host name, an IPv4 address or an IPv6 address, which has at least two colons.
@@ -185,24 +185,24 @@ setup_master() {
   elif [ -n "$public_host$panel_addr" ]; then
     warn "--public-host and --panel-addr only apply to a new installation. Change the addresses in the panel's settings."
   fi
-  install_package mcsm-master
+  install_package noryx-master
   if [ "$fresh_master" = yes ]; then
-    [ -z "$public_host" ] || sed -i "s|^MCSM_MASTER_OPTS=\"|&--public-enroll-addr $public_host:$ENROLL_PORT |" /etc/mcsm/master.env
-    sed -i "/^MCSM_MASTER_OPTS=/s|--http-addr [^ \"]*|--http-addr $panel_addr|" /etc/mcsm/master.env
+    [ -z "$public_host" ] || sed -i "s|^NORYX_MASTER_OPTS=\"|&--public-enroll-addr $public_host:$ENROLL_PORT |" /etc/noryx/master.env
+    sed -i "/^NORYX_MASTER_OPTS=/s|--http-addr [^ \"]*|--http-addr $panel_addr|" /etc/noryx/master.env
     log "Creating the administrator $admin"
-    install -d -o mcsm -g mcsm -m 0700 /var/lib/mcsm-master
+    install -d -o noryx -g noryx -m 0700 /var/lib/noryx-master
     if interactive; then
       printf 'Choose the password for %s, with at least 12 characters. What you type is not shown.\n' "$admin"
-      runuser -u mcsm -- mcsm-master user add "$admin"
+      runuser -u noryx -- noryx-master user add "$admin"
     else
       password=$(head -c 18 /dev/urandom | base64)
       (umask 077 && printf '%s\n' "$password" >"$PASSWORD_FILE")
-      runuser -u mcsm -- mcsm-master user add "$admin" <"$PASSWORD_FILE"
+      runuser -u noryx -- noryx-master user add "$admin" <"$PASSWORD_FILE"
     fi
   fi
-  systemctl enable --now --quiet mcsm-master
+  systemctl enable --now --quiet noryx-master
   if [ "$fresh_master" = yes ]; then
-    wait_for_port "${panel_addr##*:}" "$(panel_host)" || die "The panel did not start at $panel_addr, see: journalctl -u mcsm-master"
+    wait_for_port "${panel_addr##*:}" "$(panel_host)" || die "The panel did not start at $panel_addr, see: journalctl -u noryx-master"
   fi
 }
 
@@ -210,7 +210,7 @@ setup_docker() {
   if ! installed docker; then
     [ "$install_docker" = yes ] ||
       [[ $(ask "The agent runs servers in Docker, which is not installed. Install it with Docker's script from https://get.docker.com? [Y/n]" y) =~ ^[yYjJ] ]] ||
-      { warn "Without Docker the node can't run servers. Install it and restart the agent: systemctl restart mcsm-agent"; return; }
+      { warn "Without Docker the node can't run servers. Install it and restart the agent: systemctl restart noryx-agent"; return; }
     log "Installing Docker, which takes a few minutes"
     fetch -o "$tmp/get-docker.sh" https://get.docker.com
     sh "$tmp/get-docker.sh" >/dev/null
@@ -220,18 +220,18 @@ setup_docker() {
 
 setup_agent() {
   setup_docker
-  install_package mcsm-agent
+  install_package noryx-agent
   if [ "$local_agent" = yes ]; then
-    sed -i "s|^MCSM_AGENT_OPTS=.*|MCSM_AGENT_OPTS=\"--listen 127.0.0.1:$AGENT_PORT\"|" /etc/mcsm/agent.env
-    wait_for_port "$ENROLL_PORT" || die "The master did not start, see: journalctl -u mcsm-master"
+    sed -i "s|^NORYX_AGENT_OPTS=.*|NORYX_AGENT_OPTS=\"--listen 127.0.0.1:$AGENT_PORT\"|" /etc/noryx/agent.env
+    wait_for_port "$ENROLL_PORT" || die "The master did not start, see: journalctl -u noryx-master"
   fi
   if [ -n "$join" ]; then
     log "Connecting the agent to the master"
-    mcsm-agent enroll "$join"
-    systemctl enable --quiet mcsm-agent
-    systemctl restart mcsm-agent
-  elif [ -e /var/lib/mcsm-agent/pki/ca.crt ]; then
-    systemctl enable --now --quiet mcsm-agent
+    noryx-agent enroll "$join"
+    systemctl enable --quiet noryx-agent
+    systemctl restart noryx-agent
+  elif [ -e /var/lib/noryx-agent/pki/ca.crt ]; then
+    systemctl enable --now --quiet noryx-agent
   fi
 }
 
@@ -239,8 +239,8 @@ setup_agent() {
 # only accepts connections from this machine.
 setup_all() {
   setup_master
-  if [ ! -e /var/lib/mcsm-agent/pki/ca.crt ] && [ -z "$join" ]; then
-    join=$(runuser -u mcsm -- mcsm-master node add "$(uname -n)" "127.0.0.1:$AGENT_PORT" --public-enroll-addr "127.0.0.1:$ENROLL_PORT")
+  if [ ! -e /var/lib/noryx-agent/pki/ca.crt ] && [ -z "$join" ]; then
+    join=$(runuser -u noryx -- noryx-master node add "$(uname -n)" "127.0.0.1:$AGENT_PORT" --public-enroll-addr "127.0.0.1:$ENROLL_PORT")
     local_agent=yes
   fi
   setup_agent
@@ -251,7 +251,7 @@ summary_master() {
   if [ "$fresh_master" = yes ]; then
     printf '  Sign in     as %s%s\n' "$admin" "${password:+ with the password in $PASSWORD_FILE, then change it in the panel and delete the file}"
   else
-    panel_addr=$(sed -n 's/^MCSM_MASTER_OPTS=.*--http-addr \([^ "]*\).*/\1/p' /etc/mcsm/master.env)
+    panel_addr=$(sed -n 's/^NORYX_MASTER_OPTS=.*--http-addr \([^ "]*\).*/\1/p' /etc/noryx/master.env)
     panel_addr=${panel_addr:-$PANEL_ADDR}
   fi
   local local_addr
@@ -267,16 +267,16 @@ summary_master() {
                 panel.example.com {
                     reverse_proxy $local_addr
                 }
-              and add --trusted-proxy $(panel_host) to MCSM_MASTER_OPTS in /etc/mcsm/master.env.
+              and add --trusted-proxy $(panel_host) to NORYX_MASTER_OPTS in /etc/noryx/master.env.
   Nodes       enroll on port $ENROLL_PORT, open it for them. Add them in the panel under Nodes.
-              The address they use is set in /etc/mcsm/master.env or the panel's settings.
-  Settings    /etc/mcsm/master.env, then: systemctl restart mcsm-master
-  Log         journalctl -u mcsm-master, or: sudo -u mcsm mcsm-master logs
+              The address they use is set in /etc/noryx/master.env or the panel's settings.
+  Settings    /etc/noryx/master.env, then: systemctl restart noryx-master
+  Log         journalctl -u noryx-master, or: sudo -u noryx noryx-master logs
 EOF
 }
 
 summary_agent() {
-  if [ ! -e /var/lib/mcsm-agent/pki/ca.crt ]; then
+  if [ ! -e /var/lib/noryx-agent/pki/ca.crt ]; then
     printf '\nThe agent is installed. Add this node in the panel and run the command it shows.\n'
     return
   fi
@@ -285,9 +285,9 @@ summary_agent() {
 The agent is running.
 
   Firewall    allow port $AGENT_PORT only from the master's IP address
-  Status      mcsm-agent status
-  Settings    /etc/mcsm/agent.env, then: systemctl restart mcsm-agent
-  Log         journalctl -u mcsm-agent, or: mcsm-agent logs
+  Status      noryx-agent status
+  Settings    /etc/noryx/agent.env, then: systemctl restart noryx-agent
+  Log         journalctl -u noryx-agent, or: noryx-agent logs
 EOF
 }
 
@@ -317,10 +317,10 @@ main() {
       ;;
     update)
       local program updated=()
-      for program in mcsm-master mcsm-agent; do
-        if [[ -z "$only" || "$program" == "mcsm-$only" ]] && installed "$program"; then updated+=("$program"); fi
+      for program in noryx-master noryx-agent; do
+        if [[ -z "$only" || "$program" == "noryx-$only" ]] && installed "$program"; then updated+=("$program"); fi
       done
-      ((${#updated[@]})) || die "Nothing to update: ${only:+mcsm-$only is }not installed."
+      ((${#updated[@]})) || die "Nothing to update: ${only:+noryx-$only is }not installed."
       for program in "${updated[@]}"; do install_package "$program"; done
       log "Updated to $version. Running services were restarted."
       ;;

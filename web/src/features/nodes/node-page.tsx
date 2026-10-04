@@ -114,12 +114,12 @@ export function NodePage() {
               description={
                 node.address
                   ? t(
-                      "The master can't reach the agent at {{address}}. Check that mcsm-agent is running and that the port is open for the master.",
+                      "The master can't reach the agent at {{address}}. Check that noryx-agent is running and that the port is open for the master.",
                       {
                         address: node.address,
                       },
                     )
-                  : t("The master can't reach the agent. Check that mcsm-agent is running and that the port is open for the master.")
+                  : t("The master can't reach the agent. Check that noryx-agent is running and that the port is open for the master.")
               }
             />
           )}

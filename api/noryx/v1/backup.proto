@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package noryx.v1;
+
+option go_package = "github.com/QwikByte/mc-server-manager/api/noryx/v1;noryxv1";
+
+// BackupService is served by every agent and keeps backups of its servers on the node, in
+// the backups folder of a storage location, where containers can't reach them. A backup is
+// a ZIP archive of the selected files and folders of a server.
+service BackupService {
+  // ListBackups returns the backups of a server, newest first.
+  rpc ListBackups(ListBackupsRequest) returns (ListBackupsResponse);
+  // CreateBackup archives the selected data of a server. A running game server writes its
+  // worlds to disk first and pauses saving meanwhile, so players stay connected.
+  rpc CreateBackup(CreateBackupRequest) returns (CreateBackupResponse);
+  // RestoreBackup replaces the files and folders in a backup with their backed up state.
+  // A running server is stopped meanwhile and started again.
+  rpc RestoreBackup(RestoreBackupRequest) returns (RestoreBackupResponse);
+  rpc DeleteBackup(DeleteBackupRequest) returns (DeleteBackupResponse);
+  // DownloadBackup sends the archive in chunks. The first message carries its size, if known.
+  rpc DownloadBackup(DownloadBackupRequest) returns (stream DownloadBackupResponse);
+  // ImportBackup adds a backup of a server that came from another node. The header
+  // describes it, the data that follows is its archive.
+  rpc ImportBackup(stream ImportBackupRequest) returns (ImportBackupResponse);
+}
+
+// BackupSelection chooses what of a server is backed up.
+message BackupSelection {
+  // The whole data directory; the other fields are ignored.
+  bool everything = 1;
+  // Folders with a level.dat, e.g. world and world_nether.
+  bool worlds = 2;
+  // The plugins or mods folder; for mods also config/, where they keep their settings.
+  bool plugins = 3;
+  // Files in the data directory except .jar files and logs, and the config folder.
+  bool config = 4;
+  // Further files or folders, relative to the data directory. Missing ones are skipped.
+  repeated string paths = 5;
+}
+
+message Backup {
+  string id = 1;
+  // What the administrator entered, or the name of the job that made the backup.
+  string label = 2;
+  int64 created_unix = 3;
+  int64 size = 4;
+  // Storage location that holds the backup.
+  string location = 5;
+  // Files and folders in the backup, relative to the data directory; "." is everything.
+  repeated string paths = 6;
+  // Job that made the backup; empty if it was made by hand.
+  string job_id = 7;
+}
+
+message ListBackupsRequest {
+  string server_id = 1;
+}
+
+message ListBackupsResponse {
+  repeated Backup backups = 1;
+}
+
+message CreateBackupRequest {
+  string server_id = 1;
+  string label = 2;
+  BackupSelection selection = 3;
+  // Storage location for the backup; empty means the default location.
+  string location = 4;
+  string job_id = 5;
+  // Backups of the job to keep for the server, 0 for all. Older ones are deleted once the
+  // new backup exists. Backups made by hand are never deleted this way.
+  uint32 keep = 6;
+}
+
+message CreateBackupResponse {
+  Backup backup = 1;
+}
+
+message RestoreBackupRequest {
+  string server_id = 1;
+  string backup_id = 2;
+}
+
+message RestoreBackupResponse {}
+
+message DeleteBackupRequest {
+  string server_id = 1;
+  string backup_id = 2;
+}
+
+message DeleteBackupResponse {}
+
+message DownloadBackupRequest {
+  string server_id = 1;
+  string backup_id = 2;
+  // Hides the secrets like ArchiveDirectoryRequest.hide_secrets; the size of the archive
+  // isn't known in advance then.
+  bool hide_secrets = 3;
+}
+
+message DownloadBackupResponse {
+  // Size of the archive, 0 if unknown.
+  int64 size = 1;
+  bytes data = 2;
+}
+
+message ImportBackupHeader {
+  string server_id = 1;
+  // The backup keeps its ID; location chooses where it is kept on this node.
+  Backup backup = 2;
+}
+
+message ImportBackupRequest {
+  oneof content {
+    ImportBackupHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message ImportBackupResponse {
+  Backup backup = 1;
+}

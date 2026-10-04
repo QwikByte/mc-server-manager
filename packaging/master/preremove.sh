@@ -4,5 +4,5 @@
 set -e
 case "$1" in
 upgrade | 1) ;;
-*) [ ! -d /run/systemd/system ] || systemctl disable --now mcsm-master.service mcsm-master-update.path ;;
+*) [ ! -d /run/systemd/system ] || systemctl disable --now noryx-master.service noryx-master-update.path ;;
 esac

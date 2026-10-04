@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/modrinth"
 	"github.com/QwikByte/mc-server-manager/internal/master/plugin"
@@ -152,14 +152,14 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 // build validates a template and looks up its plugins, which must support its type.
 func (s *Service) build(ctx context.Context, in Input) (Template, error) {
 	t := Template{Name: strings.TrimSpace(in.Name), Description: strings.TrimSpace(in.Description), Settings: in.Settings, Plugins: []plugin.Project{}}
-	typ := mcsmv1.ParseServerType(t.Type)
+	typ := noryxv1.ParseServerType(t.Type)
 	t.Type = typ.Slug()
 	if typ.Proxy() {
 		t.Version, t.Java, t.AikarFlags = "LATEST", "", false
 	} else if t.Version == "" {
 		t.Version = "LATEST"
 	}
-	t.RestartPolicy = mcsmv1.ParseRestartPolicy(t.RestartPolicy).Slug()
+	t.RestartPolicy = noryxv1.ParseRestartPolicy(t.RestartPolicy).Slug()
 	t.JVMOptions = append([]string{}, t.JVMOptions...)
 	if t.Properties == nil {
 		t.Properties = map[string]string{}
@@ -189,19 +189,19 @@ func (s *Service) build(ctx context.Context, in Input) (Template, error) {
 }
 
 // check returns a message for the administrator if a template is invalid.
-func check(t Template, typ mcsmv1.ServerType, in Input) string {
+func check(t Template, typ noryxv1.ServerType, in Input) string {
 	switch {
 	case t.Name == "" || len(t.Name) > 64:
 		return "Enter a name with up to 64 characters."
 	case len(t.Description) > maxDescription:
 		return "Keep the description below 500 characters."
-	case typ == mcsmv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+	case typ == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return "Choose the software of the servers."
 	case !versionPattern.MatchString(t.Version):
 		return "Enter a Minecraft version like 1.21.4, or leave it empty for the latest."
 	case t.MemoryMB < 512 || t.MemoryMB > 64*1024:
 		return "Memory must be between 512 and 65536 MB."
-	case in.RestartPolicy != "" && mcsmv1.ParseRestartPolicy(in.RestartPolicy) == mcsmv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED:
+	case in.RestartPolicy != "" && noryxv1.ParseRestartPolicy(in.RestartPolicy) == noryxv1.RestartPolicy_RESTART_POLICY_UNSPECIFIED:
 		return "Choose when the servers start on their own."
 	case t.CPULimit < 0 || t.CPULimit > 1024:
 		return "Enter a CPU limit in cores, or 0 for no limit."

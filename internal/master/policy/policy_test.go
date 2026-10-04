@@ -12,7 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/schedule"
 )
 
@@ -48,7 +48,7 @@ func (a *agent) Invoke(_ context.Context, method string, args, _ any, _ ...grpc.
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	call := method[strings.LastIndex(method, "/")+1:]
-	if req, ok := args.(*mcsmv1.SendCommandRequest); ok {
+	if req, ok := args.(*noryxv1.SendCommandRequest); ok {
 		call += " " + req.GetCommand()
 	} else {
 		call += " " + args.(interface{ GetId() string }).GetId()
@@ -64,11 +64,11 @@ func (a *agent) NewStream(context.Context, *grpc.StreamDesc, string, ...grpc.Cal
 func (a *agent) Conn(context.Context, string) (grpc.ClientConnInterface, error) { return a, nil }
 
 func TestRun(t *testing.T) {
-	server := func(id string, typ mcsmv1.ServerType, state mcsmv1.ServerState) schedule.Server {
-		return schedule.Server{Server: &mcsmv1.Server{Id: id, Name: id, Type: typ, State: state}, NodeID: "n1", NodeName: "node-1"}
+	server := func(id string, typ noryxv1.ServerType, state noryxv1.ServerState) schedule.Server {
+		return schedule.Server{Server: &noryxv1.Server{Id: id, Name: id, Type: typ, State: state}, NodeID: "n1", NodeName: "node-1"}
 	}
-	paper, velocity := mcsmv1.ServerType_SERVER_TYPE_PAPER, mcsmv1.ServerType_SERVER_TYPE_VELOCITY
-	running, stopped := mcsmv1.ServerState_SERVER_STATE_RUNNING, mcsmv1.ServerState_SERVER_STATE_STOPPED
+	paper, velocity := noryxv1.ServerType_SERVER_TYPE_PAPER, noryxv1.ServerType_SERVER_TYPE_VELOCITY
+	running, stopped := noryxv1.ServerState_SERVER_STATE_RUNNING, noryxv1.ServerState_SERVER_STATE_STOPPED
 	servers := func(context.Context) ([]schedule.Server, error) {
 		return []schedule.Server{server("lobby", paper, running), server("proxy", velocity, running), server("old", paper, stopped)},
 			errors.New("node-2: unreachable")

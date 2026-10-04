@@ -93,7 +93,7 @@ function MasterFacts({ master, settings }: { master: Master; settings: MasterSet
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={CubeIcon} tone="info" label={t("Master")} value={master.version}>
           {/* i18next-instrument-ignore-next-line: the name of the program */}
-          mcsm-master
+          noryx-master
         </StatCard>
         <StatCard icon={ClockIcon} tone="success" label={t("Running for")} value={formatDuration(openedAt - Date.parse(master.startedAt))}>
           {t("since {{time}}", { time: formatDateTime(master.startedAt) })}
@@ -447,7 +447,7 @@ function PanelRestartNotice({ settings, master }: { settings: MasterSettings; ma
           i18nKey="The panel stays at <current/> until the master starts again, e.g. with <command/> or the next update, then it is at <next/>."
           components={{
             current: <span className="font-mono">{panelURL(current)}</span>,
-            command: <span className="font-mono">systemctl restart mcsm-master</span>,
+            command: <span className="font-mono">systemctl restart noryx-master</span>,
             next: <span className="font-mono">{panelURL(next)}</span>,
           }}
         />{" "}

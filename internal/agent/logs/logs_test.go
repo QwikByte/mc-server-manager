@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 )
 
 func TestBuffer(t *testing.T) {
@@ -41,8 +41,8 @@ func TestCallDetails(t *testing.T) {
 			t.Errorf("describe(%s) = %q, want %q", name, got, want)
 		}
 	}
-	upload := &mcsmv1.WriteFileRequest{Content: &mcsmv1.WriteFileRequest_Header{Header: &mcsmv1.WriteFileHeader{ServerId: "s1", Path: "plugins/x.yml"}}}
-	network := &mcsmv1.ConfigureNetworkRequest{Id: "s1", ForwardingSecret: "secret"}
+	upload := &noryxv1.WriteFileRequest{Content: &noryxv1.WriteFileRequest_Header{Header: &noryxv1.WriteFileHeader{ServerId: "s1", Path: "plugins/x.yml"}}}
+	network := &noryxv1.ConfigureNetworkRequest{Id: "s1", ForwardingSecret: "secret"}
 	for req, want := range map[proto.Message][]string{upload: {"path=plugins/x.yml", "server=s1"}, network: {"server=s1"}} {
 		var got []string
 		for _, a := range details(req.ProtoReflect(), nil, true) {

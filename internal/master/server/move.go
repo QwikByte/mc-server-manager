@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
@@ -161,7 +161,7 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	from, id := r.PathValue("node"), r.PathValue("id")
-	var src *mcsmv1.Server
+	var src *noryxv1.Server
 	err := h.checkMove(ctx, from, id, &req, &src)
 	var mv *Move
 	if err == nil {
@@ -187,7 +187,7 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
 // checkMove finds the server and checks that it can move to the node of the request with
 // its port and storage location, which default to the server's port and the node's default
 // storage.
-func (h *Handler) checkMove(ctx context.Context, from, id string, req *moveRequest, src **mcsmv1.Server) error {
+func (h *Handler) checkMove(ctx context.Context, from, id string, req *moveRequest, src **noryxv1.Server) error {
 	switch {
 	case req.Node == "" || req.Node == from:
 		return httpapi.Errorf(http.StatusBadRequest, "Choose another node.")
@@ -212,39 +212,39 @@ func (h *Handler) checkMove(ctx context.Context, from, id string, req *moveReque
 	if err != nil {
 		return err
 	}
-	info, err := mcsmv1.NewNodeServiceClient(conn).GetInfo(ctx, &mcsmv1.GetInfoRequest{})
+	info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
 	if err != nil {
 		return err
 	}
-	list, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+	list, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
 		return err
 	}
-	used := slices.IndexFunc(list.GetServers(), func(s *mcsmv1.Server) bool { return s.GetPort() == req.Port })
+	used := slices.IndexFunc(list.GetServers(), func(s *noryxv1.Server) bool { return s.GetPort() == req.Port })
 	switch {
-	case !slices.ContainsFunc(info.GetStorage(), func(l *mcsmv1.StorageLocation) bool { return l.GetName() == req.Storage }):
+	case !slices.ContainsFunc(info.GetStorage(), func(l *noryxv1.StorageLocation) bool { return l.GetName() == req.Storage }):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose a storage location of %s.", to.Name)
 	case info.GetCpuCount() > 0 && source.GetCpuMillis() > info.GetCpuCount()*1000:
 		return httpapi.Errorf(http.StatusConflict, "%s has %d CPU cores. Lower the CPU limit of the server first.", to.Name, info.GetCpuCount())
 	case used >= 0:
 		return httpapi.Errorf(http.StatusConflict, "Port %d is used by %q on %s. Choose another port.", req.Port, list.GetServers()[used].GetName(), to.Name)
-	case slices.ContainsFunc(list.GetServers(), func(s *mcsmv1.Server) bool { return s.GetId() == id }):
+	case slices.ContainsFunc(list.GetServers(), func(s *noryxv1.Server) bool { return s.GetId() == id }):
 		return httpapi.Errorf(http.StatusConflict, "The server exists on %s already.", to.Name)
 	}
 	return h.checkLimits(ctx, to.ID, "", req.Port, source.GetMemoryMb())
 }
 
 // find returns a server of a node.
-func (h *Handler) find(ctx context.Context, nodeID, id string) (*mcsmv1.Server, error) {
+func (h *Handler) find(ctx context.Context, nodeID, id string) (*noryxv1.Server, error) {
 	conn, err := h.nodes.Conn(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
-	res, err := mcsmv1.NewServerServiceClient(conn).ListServers(ctx, &mcsmv1.ListServersRequest{})
+	res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
 		return nil, err
 	}
-	i := slices.IndexFunc(res.GetServers(), func(s *mcsmv1.Server) bool { return s.GetId() == id })
+	i := slices.IndexFunc(res.GetServers(), func(s *noryxv1.Server) bool { return s.GetId() == id })
 	if i < 0 {
 		return nil, httpapi.Errorf(http.StatusNotFound, "Server not found.")
 	}
@@ -252,10 +252,10 @@ func (h *Handler) find(ctx context.Context, nodeID, id string) (*mcsmv1.Server, 
 }
 
 // runMove moves the server and logs how it went.
-func (h *Handler) runMove(ctx context.Context, mv Move, src *mcsmv1.Server, req moveRequest, user string) {
+func (h *Handler) runMove(ctx context.Context, mv Move, src *noryxv1.Server, req moveRequest, user string) {
 	ctx, cancel := context.WithTimeout(ctx, moveTimeout)
 	defer cancel()
-	running := src.GetState() != mcsmv1.ServerState_SERVER_STATE_STOPPED
+	running := src.GetState() != noryxv1.ServerState_SERVER_STATE_STOPPED
 	err := h.transfer(ctx, mv, src, req, running)
 	var warnings []string
 	if err == nil {
@@ -282,7 +282,7 @@ func (h *Handler) runMove(ctx context.Context, mv Move, src *mcsmv1.Server, req 
 
 // transfer stops the server and copies it, and its backups if asked, to the new node. If
 // that fails, the copy goes away and the server runs again as before.
-func (h *Handler) transfer(ctx context.Context, mv Move, src *mcsmv1.Server, req moveRequest, running bool) (err error) {
+func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, req moveRequest, running bool) (err error) {
 	from, err := h.nodes.Conn(ctx, mv.From)
 	if err != nil {
 		return err
@@ -291,9 +291,9 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *mcsmv1.Server, req
 	if err != nil {
 		return err
 	}
-	source, target := mcsmv1.NewServerServiceClient(from), mcsmv1.NewServerServiceClient(to)
+	source, target := noryxv1.NewServerServiceClient(from), noryxv1.NewServerServiceClient(to)
 	if running {
-		if _, err := source.StopServer(ctx, &mcsmv1.StopServerRequest{Id: mv.ServerID}); err != nil {
+		if _, err := source.StopServer(ctx, &noryxv1.StopServerRequest{Id: mv.ServerID}); err != nil {
 			return err
 		}
 	}
@@ -303,11 +303,11 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *mcsmv1.Server, req
 		}
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), actionTimeout)
 		defer cancel()
-		if _, err := target.DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: mv.ServerID}); err != nil && status.Code(err) != codes.NotFound {
+		if _, err := target.DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: mv.ServerID}); err != nil && status.Code(err) != codes.NotFound {
 			slog.Error("Can't delete the copy of a server that failed to move", logging.Servers, logging.KeyNode, mv.To, logging.KeyServer, mv.ServerID, "err", err)
 		}
 		if running {
-			if _, err := source.StartServer(ctx, &mcsmv1.StartServerRequest{Id: mv.ServerID}); err != nil {
+			if _, err := source.StartServer(ctx, &noryxv1.StartServerRequest{Id: mv.ServerID}); err != nil {
 				slog.Error("Can't start a server again that failed to move", logging.Servers, logging.KeyNode, mv.From, logging.KeyServer, mv.ServerID, "err", err)
 			}
 		}
@@ -318,44 +318,44 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *mcsmv1.Server, req
 
 	progress := func(n int) { h.moves.update(mv.ServerID, func(m *Move) { m.Bytes += int64(n) }) }
 	h.moves.update(mv.ServerID, func(m *Move) { m.Phase = "copying" })
-	header := &mcsmv1.Server{
+	header := &noryxv1.Server{
 		Id: mv.ServerID, Name: src.GetName(), Type: src.GetType(), Version: src.GetVersion(), MemoryMb: src.GetMemoryMb(),
 		Port: req.Port, Storage: req.Storage, Java: src.GetJava(), RestartPolicy: src.GetRestartPolicy(),
 		AikarFlags: src.GetAikarFlags(), JvmOptions: src.GetJvmOptions(), CpuMillis: src.GetCpuMillis(),
 	}
 	err = relay(ctx,
-		func(ctx context.Context) (grpc.ServerStreamingClient[mcsmv1.ArchiveDirectoryResponse], error) {
-			return mcsmv1.NewFileServiceClient(from).ArchiveDirectory(ctx, &mcsmv1.ArchiveDirectoryRequest{ServerId: mv.ServerID, Path: "."})
+		func(ctx context.Context) (grpc.ServerStreamingClient[noryxv1.ArchiveDirectoryResponse], error) {
+			return noryxv1.NewFileServiceClient(from).ArchiveDirectory(ctx, &noryxv1.ArchiveDirectoryRequest{ServerId: mv.ServerID, Path: "."})
 		},
 		target.ImportServer,
-		&mcsmv1.ImportServerRequest{Content: &mcsmv1.ImportServerRequest_Header{Header: header}},
-		func(data []byte) *mcsmv1.ImportServerRequest {
-			return &mcsmv1.ImportServerRequest{Content: &mcsmv1.ImportServerRequest_Data{Data: data}}
+		&noryxv1.ImportServerRequest{Content: &noryxv1.ImportServerRequest_Header{Header: header}},
+		func(data []byte) *noryxv1.ImportServerRequest {
+			return &noryxv1.ImportServerRequest{Content: &noryxv1.ImportServerRequest_Data{Data: data}}
 		},
 		progress)
 	if err != nil || !req.Backups {
 		return err
 	}
 
-	backups := mcsmv1.NewBackupServiceClient(from)
-	list, err := backups.ListBackups(ctx, &mcsmv1.ListBackupsRequest{ServerId: mv.ServerID})
+	backups := noryxv1.NewBackupServiceClient(from)
+	list, err := backups.ListBackups(ctx, &noryxv1.ListBackupsRequest{ServerId: mv.ServerID})
 	if err != nil {
 		return err
 	}
 	h.moves.update(mv.ServerID, func(m *Move) { m.Phase, m.BackupsTotal = "backups", len(list.GetBackups()) })
 	for _, b := range list.GetBackups() {
-		imported := &mcsmv1.Backup{
+		imported := &noryxv1.Backup{
 			Id: b.GetId(), Label: b.GetLabel(), CreatedUnix: b.GetCreatedUnix(), Location: req.Storage, Paths: b.GetPaths(), JobId: b.GetJobId(),
 			Size: b.GetSize(), // refused upfront if it doesn't fit
 		}
 		err := relay(ctx,
-			func(ctx context.Context) (grpc.ServerStreamingClient[mcsmv1.DownloadBackupResponse], error) {
-				return backups.DownloadBackup(ctx, &mcsmv1.DownloadBackupRequest{ServerId: mv.ServerID, BackupId: b.GetId()})
+			func(ctx context.Context) (grpc.ServerStreamingClient[noryxv1.DownloadBackupResponse], error) {
+				return backups.DownloadBackup(ctx, &noryxv1.DownloadBackupRequest{ServerId: mv.ServerID, BackupId: b.GetId()})
 			},
-			mcsmv1.NewBackupServiceClient(to).ImportBackup,
-			&mcsmv1.ImportBackupRequest{Content: &mcsmv1.ImportBackupRequest_Header{Header: &mcsmv1.ImportBackupHeader{ServerId: mv.ServerID, Backup: imported}}},
-			func(data []byte) *mcsmv1.ImportBackupRequest {
-				return &mcsmv1.ImportBackupRequest{Content: &mcsmv1.ImportBackupRequest_Data{Data: data}}
+			noryxv1.NewBackupServiceClient(to).ImportBackup,
+			&noryxv1.ImportBackupRequest{Content: &noryxv1.ImportBackupRequest_Header{Header: &noryxv1.ImportBackupHeader{ServerId: mv.ServerID, Backup: imported}}},
+			func(data []byte) *noryxv1.ImportBackupRequest {
+				return &noryxv1.ImportBackupRequest{Content: &noryxv1.ImportBackupRequest_Data{Data: data}}
 			},
 			progress)
 		if err != nil {
@@ -434,7 +434,7 @@ func (h *Handler) finish(ctx context.Context, mv Move, running bool) []string {
 func (h *Handler) start(ctx context.Context, nodeID, id string) error {
 	conn, err := h.nodes.Conn(ctx, nodeID)
 	if err == nil {
-		_, err = mcsmv1.NewServerServiceClient(conn).StartServer(ctx, &mcsmv1.StartServerRequest{Id: id})
+		_, err = noryxv1.NewServerServiceClient(conn).StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
 	}
 	return err
 }
@@ -442,7 +442,7 @@ func (h *Handler) start(ctx context.Context, nodeID, id string) error {
 func (h *Handler) remove(ctx context.Context, nodeID, id string) error {
 	conn, err := h.nodes.Conn(ctx, nodeID)
 	if err == nil {
-		_, err = mcsmv1.NewServerServiceClient(conn).DeleteServer(ctx, &mcsmv1.DeleteServerRequest{Id: id})
+		_, err = noryxv1.NewServerServiceClient(conn).DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: id})
 	}
 	return err
 }

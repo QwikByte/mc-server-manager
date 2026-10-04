@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 	"github.com/QwikByte/mc-server-manager/internal/master/httpapi"
 	"github.com/QwikByte/mc-server-manager/internal/master/node"
@@ -88,14 +88,14 @@ func (s *Store) sample(ctx context.Context, now time.Time) {
 }
 
 // Latest asks the agent of a node for its latest measurement.
-func (s *Store) Latest(ctx context.Context, nodeID string) (*mcsmv1.GetStatsResponse, error) {
+func (s *Store) Latest(ctx context.Context, nodeID string) (*noryxv1.GetStatsResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, statsTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
-	res, err := mcsmv1.NewStatsServiceClient(conn).GetStats(ctx, &mcsmv1.GetStatsRequest{})
+	res, err := noryxv1.NewStatsServiceClient(conn).GetStats(ctx, &noryxv1.GetStatsRequest{})
 	if status.Code(err) == codes.Unimplemented {
 		err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of this node to see what it uses.")
 	}
@@ -103,7 +103,7 @@ func (s *Store) Latest(ctx context.Context, nodeID string) (*mcsmv1.GetStatsResp
 }
 
 // add records the node and its running servers.
-func (s *Store) add(ctx context.Context, nodeID string, at time.Time, stats *mcsmv1.GetStatsResponse) error {
+func (s *Store) add(ctx context.Context, nodeID string, at time.Time, stats *noryxv1.GetStatsResponse) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

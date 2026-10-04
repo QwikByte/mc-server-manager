@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/storage"
 )
@@ -48,12 +48,12 @@ type backup struct {
 func (b backup) archive() string { return filepath.Join(b.dir, b.ID+".zip") }
 func (b backup) info() string    { return filepath.Join(b.dir, b.ID+".json") }
 
-func (b backup) proto() *mcsmv1.Backup {
+func (b backup) proto() *noryxv1.Backup {
 	paths := make([]string, len(b.Paths))
 	for i, p := range b.Paths {
 		paths[i] = filepath.ToSlash(p)
 	}
-	return &mcsmv1.Backup{
+	return &noryxv1.Backup{
 		Id: b.ID, Label: b.Label, CreatedUnix: b.Created.Unix(), Size: b.Size, Location: b.Location, Paths: paths, JobId: b.JobID,
 	}
 }

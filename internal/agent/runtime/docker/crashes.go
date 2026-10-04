@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
@@ -39,24 +39,19 @@ func (d *Docker) addCrashes(ctx context.Context, containerID string, srv *runtim
 		return
 	}
 	c := res.Container
-	if srv.State == mcsmv1.ServerState_SERVER_STATE_STOPPED && c.State.ExitCode == 0 {
+	if srv.State == noryxv1.ServerState_SERVER_STATE_STOPPED && c.State.ExitCode == 0 {
 		return // stopped cleanly after it ran again
 	}
 	srv.Crashes, srv.ExitCode = c.RestartCount, c.State.ExitCode
-	if srv.State == mcsmv1.ServerState_SERVER_STATE_STARTING {
-		srv.State = mcsmv1.ServerState_SERVER_STATE_CRASHING
+	if srv.State == noryxv1.ServerState_SERVER_STATE_STARTING {
+		srv.State = noryxv1.ServerState_SERVER_STATE_CRASHING
 	}
 }
 
-// Watch keeps the servers in order until ctx is done: it moves servers of older agents
-// into the current networks whenever it connects to Docker, and stops servers that keep
-// crashing.
+// Watch stops servers that keep crashing until ctx is done.
 func (d *Docker) Watch(ctx context.Context) {
 	inRow := map[string]int{} // crashes in a row by container ID
 	for ctx.Err() == nil {
-		if err := d.adopt(ctx); err != nil && ctx.Err() == nil {
-			slog.Warn("Can't move servers into the current networks", logging.Servers, "err", err)
-		}
 		err := d.watch(ctx, inRow)
 		if ctx.Err() == nil {
 			slog.Debug("Can't watch the servers for crashes", logging.Servers, "err", err)

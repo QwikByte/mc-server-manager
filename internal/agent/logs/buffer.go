@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
@@ -25,7 +25,7 @@ type Buffer struct {
 	boot string
 
 	mu      sync.Mutex
-	entries []*mcsmv1.LogEntry // oldest first, never changed once added
+	entries []*noryxv1.LogEntry // oldest first, never changed once added
 	seq     uint64
 	changed chan struct{} // closed when an entry is added
 }
@@ -41,8 +41,8 @@ func (b *Buffer) Handler(level slog.Leveler) slog.Handler {
 			b.entries = slices.Delete(b.entries, 0, keep/10) // drops in batches, not on every entry
 		}
 		b.seq++
-		b.entries = append(b.entries, &mcsmv1.LogEntry{ //nolint:gosec // levels are normalized to -4 to 8
-			Boot: b.boot, Seq: b.seq, TimeUnixNano: e.Time.UnixNano(), Level: int32(e.Level), Message: e.Message,
+		b.entries = append(b.entries, &noryxv1.LogEntry{
+			Boot: b.boot, Seq: b.seq, TimeUnixNano: e.Time.UnixNano(), Level: int32(e.Level), Message: e.Message, //nolint:gosec // levels are normalized to -4 to 8
 			Category: e.Category, ServerId: e.Server, Attrs: e.Attrs,
 		})
 		close(b.changed)
@@ -51,7 +51,7 @@ func (b *Buffer) Handler(level slog.Leveler) slog.Handler {
 }
 
 // after returns the entries after a position, and a channel that is closed once there are newer ones.
-func (b *Buffer) after(boot string, seq uint64) ([]*mcsmv1.LogEntry, <-chan struct{}) {
+func (b *Buffer) after(boot string, seq uint64) ([]*noryxv1.LogEntry, <-chan struct{}) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if boot != b.boot {
@@ -61,20 +61,20 @@ func (b *Buffer) after(boot string, seq uint64) ([]*mcsmv1.LogEntry, <-chan stru
 	return slices.Clone(b.entries[i:]), b.changed
 }
 
-// Service implements mcsmv1.LogServiceServer.
+// Service implements noryxv1.LogServiceServer.
 type Service struct {
-	mcsmv1.UnimplementedLogServiceServer
+	noryxv1.UnimplementedLogServiceServer
 	buf *Buffer
 }
 
 func NewService(buf *Buffer) *Service { return &Service{buf: buf} }
 
-func (s *Service) ReadLog(req *mcsmv1.ReadLogRequest, stream grpc.ServerStreamingServer[mcsmv1.ReadLogResponse]) error {
+func (s *Service) ReadLog(req *noryxv1.ReadLogRequest, stream grpc.ServerStreamingServer[noryxv1.ReadLogResponse]) error {
 	boot, seq := req.GetBoot(), req.GetAfter()
 	for {
 		entries, changed := s.buf.after(boot, seq)
 		for chunk := range slices.Chunk(entries, chunkSize) {
-			if err := stream.Send(&mcsmv1.ReadLogResponse{Entries: chunk}); err != nil {
+			if err := stream.Send(&noryxv1.ReadLogResponse{Entries: chunk}); err != nil {
 				return err
 			}
 		}

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/master/access"
 	masterapp "github.com/QwikByte/mc-server-manager/internal/master/app"
 	"github.com/QwikByte/mc-server-manager/internal/master/auth"
@@ -35,8 +35,8 @@ func TestLogs(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	a := m.startAgent(t, "node-1")
 	go m.logs.Collect(t.Context(), m.nodes)
-	lobby := m.createServer(t, a, "Lobby", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25565)
-	survival := m.createServer(t, a, "Survival", mcsmv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	survival := m.createServer(t, a, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
 	path := func(s network.Ref) string { return "/api/nodes/" + s.NodeID + "/servers/" + s.ServerID }
 
 	svc := m.services(t)

@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
 )
@@ -49,13 +49,13 @@ func locked(spec runtime.Spec) map[string]string {
 }
 
 type Service struct {
-	mcsmv1.UnimplementedPropertiesServiceServer
+	noryxv1.UnimplementedPropertiesServiceServer
 	rt runtime.Runtime
 }
 
 func NewService(rt runtime.Runtime) *Service { return &Service{rt: rt} }
 
-func (s *Service) GetServerProperties(ctx context.Context, req *mcsmv1.GetServerPropertiesRequest) (*mcsmv1.GetServerPropertiesResponse, error) {
+func (s *Service) GetServerProperties(ctx context.Context, req *noryxv1.GetServerPropertiesRequest) (*noryxv1.GetServerPropertiesResponse, error) {
 	spec, dir, err := s.open(ctx, req.GetServerId())
 	if err != nil {
 		return nil, err
@@ -65,20 +65,20 @@ func (s *Service) GetServerProperties(ctx context.Context, req *mcsmv1.GetServer
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	res := &mcsmv1.GetServerPropertiesResponse{Exists: err == nil, Properties: map[string]string{}}
+	res := &noryxv1.GetServerPropertiesResponse{Exists: err == nil, Properties: map[string]string{}}
 	for _, e := range parse(string(data)) {
 		if e.key != "" && !Secret[e.key] {
 			res.Properties[e.key] = e.value
 		}
 	}
 	for key, reason := range locked(spec) {
-		res.Locked = append(res.Locked, &mcsmv1.LockedProperty{Key: key, Reason: reason})
+		res.Locked = append(res.Locked, &noryxv1.LockedProperty{Key: key, Reason: reason})
 	}
-	slices.SortFunc(res.Locked, func(a, b *mcsmv1.LockedProperty) int { return cmp.Compare(a.GetKey(), b.GetKey()) })
+	slices.SortFunc(res.Locked, func(a, b *noryxv1.LockedProperty) int { return cmp.Compare(a.GetKey(), b.GetKey()) })
 	return res, nil
 }
 
-func (s *Service) UpdateServerProperties(ctx context.Context, req *mcsmv1.UpdateServerPropertiesRequest) (*mcsmv1.UpdateServerPropertiesResponse, error) {
+func (s *Service) UpdateServerProperties(ctx context.Context, req *noryxv1.UpdateServerPropertiesRequest) (*noryxv1.UpdateServerPropertiesResponse, error) {
 	spec, dir, err := s.open(ctx, req.GetServerId())
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (s *Service) UpdateServerProperties(ctx context.Context, req *mcsmv1.Update
 	if err := Write(dir, req.GetProperties()); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return &mcsmv1.UpdateServerPropertiesResponse{}, nil
+	return &noryxv1.UpdateServerPropertiesResponse{}, nil
 }
 
 // Check returns a message for the operator if the properties can't be set on a server.

@@ -17,7 +17,7 @@ export function StorageList({ locations }: { locations: StorageLocation[] }) {
           i18nKey="Add a location on the node with <command/>."
           components={{
             command: (
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">mcsm-agent storage add &lt;name&gt; &lt;path&gt;</code>
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">noryx-agent storage add &lt;name&gt; &lt;path&gt;</code>
             ),
           }}
         />

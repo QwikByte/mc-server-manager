@@ -44,7 +44,7 @@ export function TerminalPage() {
           </SelectContent>
         </Select>
       </Field>
-      <Terminal target={node?.id ?? masterTarget} prompt={node ? `mcsm-agent@${node.name}` : "mcsm-master"} />
+      <Terminal target={node?.id ?? masterTarget} prompt={node ? `noryx-agent@${node.name}` : "noryx-master"} />
     </>
   )
 }

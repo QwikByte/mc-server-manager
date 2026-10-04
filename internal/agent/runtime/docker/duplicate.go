@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io/fs"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
@@ -54,7 +54,7 @@ func standalone(path string, original runtime.Spec) error {
 		_, err = mcnet.WriteBackend(data, original.Type, runtime.ForwardingNone, "")
 	case original.Type.Bungee():
 		_, _, err = mcnet.WriteProxy(data, original.Type, runtime.Network{})
-	case original.Type == mcsmv1.ServerType_SERVER_TYPE_VELOCITY:
+	case original.Type == noryxv1.ServerType_SERVER_TYPE_VELOCITY:
 		if err = data.Remove(mcnet.ForwardingSecretFile); errors.Is(err, fs.ErrNotExist) {
 			err = nil
 		}

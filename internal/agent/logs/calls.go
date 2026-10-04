@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	mcsmv1 "github.com/QwikByte/mc-server-manager/api/mcsm/v1"
+	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/logging"
 )
 
@@ -49,7 +49,7 @@ func Interceptors(origin string, log *slog.Logger) []grpc.ServerOption {
 			return res, err
 		}),
 		grpc.ChainStreamInterceptor(func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-			if info.FullMethod == mcsmv1.LogService_ReadLog_FullMethodName {
+			if info.FullMethod == noryxv1.LogService_ReadLog_FullMethodName {
 				return handler(srv, ss) // reading the log would add to it
 			}
 			rs, start := &recording{ServerStream: ss}, time.Now()
@@ -75,7 +75,7 @@ func (r *recording) RecvMsg(m any) error {
 }
 
 func logCall(ctx context.Context, log *slog.Logger, origin, method string, req any, start time.Time, err error) {
-	service, name, _ := strings.Cut(strings.TrimPrefix(method, "/mcsm.v1."), "/")
+	service, name, _ := strings.Cut(strings.TrimPrefix(method, "/noryx.v1."), "/")
 	code := status.Code(err)
 	level := slog.LevelInfo
 	switch {

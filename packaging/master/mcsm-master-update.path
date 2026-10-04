@@ -1,8 +1,0 @@
-[Unit]
-Description=Update MC Server Manager when the panel asks for it
-Documentation=https://github.com/QwikByte/mc-server-manager
-
-[Path]
-# The master may not install anything itself; it only creates this file. To forbid
-# updates from the panel: systemctl mask mcsm-master-update.path
-PathExists=/var/lib/mcsm-master/update-request

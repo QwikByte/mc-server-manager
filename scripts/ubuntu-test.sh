@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sets up a complete MC Server Manager test environment on Ubuntu (desktop, server or WSL):
+# Sets up a complete Noryx test environment on Ubuntu (desktop, server or WSL):
 # installs Go, Node.js and Docker when missing, builds both programs, starts the master,
 # enrolls a local agent and optionally creates a Paper test server.
 #
@@ -149,8 +149,8 @@ stopped() { ! $SUDO kill -0 "$1" 2>/dev/null; }
 
 start_master() {
   running "$DATA/master.pid" && return
-  ! port_in_use 8080 || die "Port 8080 is already in use. Stop the other mcsm-master first."
-  nohup "$REPO_DIR/bin/mcsm-master" --data-dir "$DATA/master" serve --public-enroll-addr 127.0.0.1:9443 >>"$DATA/master.log" 2>&1 &
+  ! port_in_use 8080 || die "Port 8080 is already in use. Stop the other noryx-master first."
+  nohup "$REPO_DIR/bin/noryx-master" --data-dir "$DATA/master" serve --public-enroll-addr 127.0.0.1:9443 >>"$DATA/master.log" 2>&1 &
   echo $! >"$DATA/master.pid"
   wait_for 20 curl -so /dev/null "$BASE/api/auth/me" || die "The master did not start, see $DATA/master.log"
 }
@@ -158,9 +158,9 @@ start_master() {
 # The agent runs as root because access to Docker is equivalent to root anyway.
 start_agent() {
   running "$DATA/agent.pid" && return
-  ! port_in_use "$AGENT_PORT" || die "Port $AGENT_PORT is already in use. Stop the other mcsm-agent first."
+  ! port_in_use "$AGENT_PORT" || die "Port $AGENT_PORT is already in use. Stop the other noryx-agent first."
   # shellcheck disable=SC2086 # $SUDO is empty when running as root
-  nohup $SUDO "$REPO_DIR/bin/mcsm-agent" --data-dir "$DATA/agent" serve --listen "127.0.0.1:$AGENT_PORT" >>"$DATA/agent.log" 2>&1 &
+  nohup $SUDO "$REPO_DIR/bin/noryx-agent" --data-dir "$DATA/agent" serve --listen "127.0.0.1:$AGENT_PORT" >>"$DATA/agent.log" 2>&1 &
   echo $! >"$DATA/agent.pid"
 }
 
@@ -172,7 +172,7 @@ initialise() {
   chmod 700 "$DATA"
   log "Creating the administrator account"
   password=$(python3 -c 'import secrets; print(secrets.token_hex(12))')
-  printf '%s\n' "$password" | "$REPO_DIR/bin/mcsm-master" --data-dir "$DATA/master" user add admin
+  printf '%s\n' "$password" | "$REPO_DIR/bin/noryx-master" --data-dir "$DATA/master" user add admin
   printf '%s\n' "$password" >"$DATA/admin-password"
   chmod 600 "$DATA/admin-password"
 
@@ -183,7 +183,7 @@ initialise() {
   log "Registering this machine as node and enrolling its agent"
   read -r node_id token < <(api -d "{\"name\":\"$(hostname)\",\"address\":\"127.0.0.1:$AGENT_PORT\"}" "$BASE/api/nodes" |
     py 'print(d["node"]["id"], d["joinToken"])')
-  $SUDO "$REPO_DIR/bin/mcsm-agent" --data-dir "$DATA/agent" enroll "$token"
+  $SUDO "$REPO_DIR/bin/noryx-agent" --data-dir "$DATA/agent" enroll "$token"
   start_agent
   wait_for 30 node_online "$node_id" || die "The agent did not come online, see $DATA/agent.log"
   touch "$DATA/initialised"
@@ -219,7 +219,7 @@ summary() {
   fi
   cat <<EOF
 
-MC Server Manager is running.
+Noryx is running.
 
   Panel      $BASE  ($hint)
   Login      admin / $(cat "$DATA/admin-password")
@@ -234,7 +234,7 @@ EOF
 }
 
 cmd_start() {
-  [ -x "$REPO_DIR/bin/mcsm-master" ] || die "Nothing is built yet, run: $SELF setup"
+  [ -x "$REPO_DIR/bin/noryx-master" ] || die "Nothing is built yet, run: $SELF setup"
   [ -z "$SUDO" ] || sudo -v
   start_docker
   if [ -f "$DATA/initialised" ]; then
@@ -270,7 +270,7 @@ cmd_reset() {
   cmd_stop
   if docker_up; then
     # shellcheck disable=SC2086 # $SUDO is empty when running as root
-    $SUDO docker ps -aq --filter label=io.mcsm.managed | xargs -r $SUDO docker rm -f >/dev/null
+    $SUDO docker ps -aq --filter label=io.noryx.managed | xargs -r $SUDO docker rm -f >/dev/null
   fi
   $SUDO rm -rf -- "${DATA:?}"
   log "Deleted all test data and servers."
