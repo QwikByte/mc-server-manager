@@ -35,3 +35,20 @@ export function formatDuration(ms: number): string {
   const [unit, size] = units.find(([, size]) => ms >= size) ?? units[2]
   return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long" }).format(Math.floor(ms / size))
 }
+
+/** Formats how long something took as minutes and seconds, e.g. "1:05" or "1:02:03". */
+export function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const [h, m] = [Math.floor(s / 3600), Math.floor((s % 3600) / 60)]
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`
+}
+
+/** Formats how long ago a time was in the viewer's locale, e.g. "3 minutes ago". */
+export function formatAgo(iso: string, now = Date.now()): string {
+  const seconds = Math.round((Date.parse(iso) - now) / 1000)
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+  if (Math.abs(seconds) < 60) return rtf.format(seconds, "second")
+  if (Math.abs(seconds) < 3600) return rtf.format(Math.round(seconds / 60), "minute")
+  return rtf.format(Math.round(seconds / 3600), "hour")
+}

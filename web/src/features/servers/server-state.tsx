@@ -3,12 +3,22 @@ import { t } from "i18next"
 import { Callout } from "@/components/callout"
 import { StatusBadge, StatusDot } from "@/components/status"
 import { toneDots } from "@/components/tone"
+import { msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import type { Server, ServerState } from "./api"
+import { type Server, type ServerState, usePendingAction } from "./api"
 import { serverStates, states } from "./server-types"
 
-export function ServerStateBadge({ state }: { state: ServerState }) {
-  return <StatusBadge status={serverStates[state]} />
+const pendingStates = {
+  start: { tone: "warning", label: msg("Starting…"), pulse: true },
+  stop: { tone: "warning", label: msg("Stopping…"), pulse: true },
+  restart: { tone: "warning", label: msg("Restarting…"), pulse: true },
+  delete: { tone: "destructive", label: msg("Deleting…"), pulse: true },
+} as const
+
+/** The state of a server, or the action this browser runs on it, e.g. stopping. */
+export function ServerStateBadge({ server, nodeId }: { server: Server; nodeId: string }) {
+  const pending = usePendingAction(nodeId, server.id)
+  return <StatusBadge status={pending && pending !== "command" ? pendingStates[pending] : serverStates[server.state]} />
 }
 
 /** How many servers are in each state, as a bar of coloured parts and their counts. */

@@ -32,6 +32,7 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/enroll"
 	agentlogs "github.com/QwikByte/noryx/internal/agent/logs"
 	agentnode "github.com/QwikByte/noryx/internal/agent/node"
+	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/master/access"
@@ -43,6 +44,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/schedule"
@@ -188,6 +190,8 @@ type master struct {
 	enrollAddr string
 	modrinth   *fakeModrinth
 	update     update.Options
+	// quick is how long requests wait for their operations; tests get the result right away.
+	quick time.Duration
 }
 
 func startMaster(t *testing.T) *master {
@@ -214,7 +218,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), update: update.Options{DataDir: dir},
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), update: update.Options{DataDir: dir}, quick: time.Minute,
 	}
 }
 
@@ -228,7 +232,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
 		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
-		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes), Tags: tag.NewStore(m.db),
+		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes), Tags: tag.NewStore(m.db), Operations: operation.New(m.quick),
 		Moves: moves,
 	}
 }
@@ -385,13 +389,17 @@ func (f *fakeRuntime) Create(ctx context.Context, spec runtime.Spec) error {
 	f.mu.Lock()
 	hold := f.hold
 	f.mu.Unlock()
+	// Like Docker, it downloads the image first, which the hold holds up halfway.
+	progress.Step(ctx, "image", 0)
 	if hold != nil {
+		progress.Set(ctx, 50, 100)
 		select {
 		case <-hold:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+	progress.Step(ctx, "container", 0)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.createErr != nil {

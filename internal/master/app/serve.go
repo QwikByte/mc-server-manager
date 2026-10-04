@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/properties"
@@ -127,6 +129,8 @@ func serve(ctx context.Context, cfg config) error {
 	noryxv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	plugins := plugin.NewService(nodes, modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN))
 	moves := server.NewMoves()
+	// Requests whose operation takes longer are answered right away, and the operation goes on.
+	ops := operation.New(time.Second)
 	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
@@ -140,7 +144,7 @@ func serve(ctx context.Context, cfg config) error {
 	var restart func() error
 	if cfg.restartCode != 0 {
 		restart = func() error {
-			err := moves.CheckIdle()
+			err := cmp.Or(moves.CheckIdle(), ops.CheckIdle())
 			if err == nil {
 				once.Do(func() { close(restarted) })
 			}
@@ -156,7 +160,7 @@ func serve(ctx context.Context, cfg config) error {
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes, plugins),
 			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
-			Usage: usageStore, Tags: tag.NewStore(db), Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
+			Usage: usageStore, Tags: tag.NewStore(db), Operations: ops, Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests themselves have no time limit, as uploads and streams last long.
@@ -222,7 +226,9 @@ type Services struct {
 	Updates   *update.Service
 	Usage     *usage.Store
 	Tags      *tag.Store
-	Moves     *server.Moves
+	// Operations are the long actions in progress.
+	Operations *operation.Operations
+	Moves      *server.Moves
 	// Restart restarts the master, if its service manager starts it again; otherwise nil.
 	Restart func() error
 	// HSTS makes browsers use HTTPS only, if the master serves a certificate they trust.
@@ -253,13 +259,14 @@ func API(s Services) *http.ServeMux {
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
-	network.NewHandler(s.Networks).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
+	operation.NewHandler(s.Operations).Register(m)
+	network.NewHandler(s.Networks, s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
-	plugin.NewHandler(s.Plugins).Register(m)
+	plugin.NewHandler(s.Plugins, s.Operations).Register(m)
 	template.NewHandler(s.Templates).Register(m)
-	backup.NewHandler(s.Nodes).Register(m)
+	backup.NewHandler(s.Nodes, s.Operations).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
 	update.NewHandler(s.Updates).Register(m)

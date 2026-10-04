@@ -8,6 +8,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	mcnet "github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
@@ -37,6 +38,7 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 		return err
 	}
 	// The image is present, as the container of the original uses it.
+	progress.Step(ctx, "container", 0)
 	return d.createContainer(ctx, spec, home(spec))
 }
 

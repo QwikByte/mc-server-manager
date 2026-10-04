@@ -13,8 +13,10 @@ import (
 	"google.golang.org/grpc"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
 const (
@@ -75,9 +77,14 @@ func toView(b *noryxv1.Backup) view {
 	return view{b.GetId(), b.GetLabel(), time.Unix(b.GetCreatedUnix(), 0), b.GetSize(), b.GetLocation(), append([]string{}, b.GetPaths()...), b.GetJobId()}
 }
 
-type Handler struct{ nodes Nodes }
+type Handler struct {
+	nodes Nodes
+	ops   *operation.Operations
+}
 
-func NewHandler(nodes Nodes) *Handler { return &Handler{nodes: nodes} }
+func NewHandler(nodes Nodes, ops *operation.Operations) *Handler {
+	return &Handler{nodes: nodes, ops: ops}
+}
 
 func (h *Handler) Register(mux access.Mux) {
 	const base = "/api/nodes/{node}/servers/{id}/backups"
@@ -122,36 +129,54 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "%s", msg))
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), backupTimeout)
-	defer cancel()
-	c, err := h.client(ctx, r)
-	var res *noryxv1.CreateBackupResponse
-	if err == nil {
-		res, err = c.CreateBackup(ctx, &noryxv1.CreateBackupRequest{
-			ServerId: r.PathValue("id"), Label: req.Label, Selection: req.Selection.proto(), Location: req.Location,
+	spec := h.spec(r, "backup.create", []string{"save", "archive"}, http.StatusCreated)
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		var res *noryxv1.CreateBackupResponse
+		err := h.agent(ctx, r, func(ctx context.Context, c noryxv1.BackupServiceClient) (err error) {
+			res, err = c.CreateBackup(ctx, &noryxv1.CreateBackupRequest{
+				ServerId: spec.ServerID, Label: req.Label, Selection: req.Selection.proto(), Location: req.Location,
+			})
+			return err
 		})
-	}
-	if err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetBackup()))
+		if err != nil {
+			return nil, err
+		}
+		return toView(res.GetBackup()), nil
+	})
 }
 
 // restore replaces the data of a server with a backup. It finishes if the browser goes away,
 // so the server isn't left stopped.
 func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), backupTimeout)
-	defer cancel()
-	c, err := h.client(ctx, r)
-	if err == nil {
-		_, err = c.RestoreBackup(ctx, &noryxv1.RestoreBackupRequest{ServerId: r.PathValue("id"), BackupId: r.PathValue("backup")})
+	spec := h.spec(r, "backup.restore", []string{"restore"}, http.StatusNoContent)
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		return nil, h.agent(ctx, r, func(ctx context.Context, c noryxv1.BackupServiceClient) error {
+			_, err := c.RestoreBackup(ctx, &noryxv1.RestoreBackupRequest{ServerId: spec.ServerID, BackupId: r.PathValue("backup")})
+			return err
+		})
+	})
+}
+
+// spec describes an operation on the backups of the server of a request, which those see who
+// may see its backups.
+func (h *Handler) spec(r *http.Request, kind string, steps []string, status int) operation.Spec {
+	nodeID, serverID := r.PathValue("node"), r.PathValue("id")
+	return operation.Spec{
+		Kind: kind, NodeID: nodeID, ServerID: serverID, Steps: steps, Status: status, Timeout: backupTimeout, Category: logging.Backups,
+		Visible: func(g access.Grants) bool { return g.On(access.BackupsView, nodeID, serverID) },
 	}
+}
+
+// agent calls the agent of the server of a request within an operation, which follows the
+// call's progress.
+func (h *Handler) agent(ctx context.Context, r *http.Request, call func(context.Context, noryxv1.BackupServiceClient) error) error {
+	conn, err := h.nodes.Conn(ctx, r.PathValue("node"))
 	if err != nil {
-		httpapi.WriteError(w, r, err)
-		return
+		return err
 	}
-	w.WriteHeader(http.StatusNoContent)
+	ctx, stop := operation.Agent(ctx, conn)
+	defer stop()
+	return call(ctx, noryxv1.NewBackupServiceClient(conn))
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {

@@ -115,7 +115,7 @@ export function ServerPage() {
           <PageHeader
             {...serverLook(server.type)}
             title={server.name}
-            badge={<ServerStateBadge state={server.state} />}
+            badge={<ServerStateBadge server={server} nodeId={nodeId} />}
             description={
               <span className="mt-1 flex flex-wrap gap-2 text-foreground">
                 <Chip>

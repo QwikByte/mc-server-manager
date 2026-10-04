@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"syscall"
+
+	"github.com/QwikByte/noryx/internal/agent/progress"
 )
 
 // Copy copies the data directory src into dst, which must not exist yet. Files keep their
@@ -27,6 +29,9 @@ func Copy(ctx context.Context, src, dst string) error {
 		return err
 	}
 	defer to.Close()
+	if progress.Active(ctx) {
+		progress.Step(ctx, "copy", Size(from.FS(), "."))
+	}
 	return fs.WalkDir(from.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || ctx.Err() != nil {
 			return cmp.Or(err, ctx.Err())
@@ -38,7 +43,7 @@ func Copy(ctx context.Context, src, dst string) error {
 		case d.IsDir() && name != ".":
 			err = to.Mkdir(name, dirPerm)
 		case d.Type().IsRegular():
-			err = copyFile(from, to, name)
+			err = copyFile(ctx, from, to, name)
 		case !d.IsDir():
 			return nil
 		}
@@ -49,7 +54,7 @@ func Copy(ctx context.Context, src, dst string) error {
 	})
 }
 
-func copyFile(from, to *os.Root, name string) error {
+func copyFile(ctx context.Context, from, to *os.Root, name string) error {
 	in, err := from.Open(name)
 	if err != nil {
 		return err
@@ -59,8 +64,22 @@ func copyFile(from, to *os.Root, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(out, in)
+	_, err = io.Copy(out, progress.Reader(ctx, in))
 	return errors.Join(err, out.Close())
+}
+
+// Size returns the size of the regular files at paths of fsys and below them.
+func Size(fsys fs.FS, paths ...string) int64 {
+	var size int64
+	for _, p := range paths {
+		_ = fs.WalkDir(fsys, p, func(_ string, d fs.DirEntry, err error) error {
+			if info, ierr := d.Info(); err == nil && ierr == nil && d.Type().IsRegular() {
+				size += info.Size()
+			}
+			return nil
+		})
+	}
+	return size
 }
 
 // keepMode gives a copied entry the permissions and owner of the original.

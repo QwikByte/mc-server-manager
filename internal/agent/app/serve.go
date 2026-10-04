@@ -21,6 +21,7 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/network"
 	"github.com/QwikByte/noryx/internal/agent/node"
 	"github.com/QwikByte/noryx/internal/agent/plugin"
+	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/properties"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/runtime/docker"
@@ -113,6 +114,7 @@ type services struct {
 	backup     *backup.Service
 	stats      *stats.Service
 	log        *agentlogs.Service
+	progress   *progress.Registry
 	calls      *slog.Logger
 }
 
@@ -130,6 +132,7 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 		backup:     backups,
 		stats:      stats.NewService(rt),
 		log:        agentlogs.NewService(buf),
+		progress:   progress.NewRegistry(),
 		calls:      calls,
 	}
 }
@@ -137,7 +140,7 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 // grpcServer serves the services to callers from origin, logging their calls. If a call failed
 // because the runtime is down, the log keeps the original error and the caller learns that.
 func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Server {
-	opts = slices.Concat(runtime.Interceptors(s.rt), agentlogs.Interceptors(origin, s.calls), opts)
+	opts = slices.Concat(runtime.Interceptors(s.rt), agentlogs.Interceptors(origin, s.calls), []grpc.ServerOption{s.progress.Interceptor()}, opts)
 	srv := grpc.NewServer(opts...)
 	noryxv1.RegisterNodeServiceServer(srv, s.node)
 	noryxv1.RegisterServerServiceServer(srv, s.server)
@@ -148,6 +151,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 	noryxv1.RegisterBackupServiceServer(srv, s.backup)
 	noryxv1.RegisterStatsServiceServer(srv, s.stats)
 	noryxv1.RegisterLogServiceServer(srv, s.log)
+	noryxv1.RegisterProgressServiceServer(srv, s.progress)
 	return srv
 }
 

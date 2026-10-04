@@ -4,15 +4,33 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
-type Handler struct{ svc *Service }
+type Handler struct {
+	svc *Service
+	ops *operation.Operations
+}
 
-func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
+func NewHandler(svc *Service, ops *operation.Operations) *Handler {
+	return &Handler{svc: svc, ops: ops}
+}
+
+// networkTimeout covers configuring all servers of a large network one after the other.
+const networkTimeout = time.Hour
+
+// run runs an action on a network as an operation, which those see who may see networks.
+func (h *Handler) run(w http.ResponseWriter, r *http.Request, kind, name, id string, status int, task operation.Task) {
+	h.ops.Run(w, r, operation.Spec{
+		Kind: kind, Subject: name, NetworkID: id, Status: status, Timeout: networkTimeout, Category: logging.Networks,
+		Visible: func(g access.Grants) bool { return g.Has(access.NetworksView) },
+	}, task)
+}
 
 // powers are the permissions the actions on all servers of a network need on each of them.
 var powers = map[string]access.Permission{Start: access.ServersStart, Stop: access.ServersStop, Restart: access.ServersRestart}
@@ -27,8 +45,7 @@ func (h *Handler) Register(mux access.Mux) {
 		var d Draft
 		if read(w, r, &d) {
 			logging.Note(r.Context(), slog.String("name", d.Name))
-			n, err := h.svc.Create(r.Context(), d)
-			write(w, r, http.StatusCreated, n, err)
+			h.run(w, r, "network.create", d.Name, "", http.StatusCreated, func(ctx context.Context) (any, error) { return h.svc.Create(ctx, d) })
 		}
 	})
 	mux.Handle("GET /api/networks/{id}", view, func(w http.ResponseWriter, r *http.Request) {
@@ -39,54 +56,73 @@ func (h *Handler) Register(mux access.Mux) {
 		var c Change
 		if read(w, r, &c) {
 			logging.Note(r.Context(), slog.String("name", c.Name))
-			n, err := h.svc.Update(r.Context(), r.PathValue("id"), c)
-			write(w, r, http.StatusOK, n, err)
+			id := r.PathValue("id")
+			h.run(w, r, "network.update", c.Name, id, http.StatusOK, func(ctx context.Context) (any, error) { return h.svc.Update(ctx, id, c) })
 		}
 	})
-	mux.Handle("DELETE /api/networks/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
-		write(w, r, http.StatusNoContent, nil, h.svc.Delete(r.Context(), r.PathValue("id")))
-	})
-	mux.Handle("POST /api/networks/{id}/apply", manage, func(w http.ResponseWriter, r *http.Request) {
-		n, err := h.svc.Apply(r.Context(), r.PathValue("id"))
-		write(w, r, http.StatusOK, n, err)
-	})
+	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusNoContent, func(ctx context.Context, n Network) (any, error) {
+		return nil, h.svc.Delete(ctx, n.ID)
+	}))
+	mux.Handle("POST /api/networks/{id}/apply", manage, h.onNetwork("network.apply", http.StatusOK, func(ctx context.Context, n Network) (any, error) {
+		return h.svc.Apply(ctx, n.ID)
+	}))
 	// Actions on all servers need the permission for each server, which they check.
 	for action, p := range powers {
-		mux.Handle("POST /api/networks/{id}/"+action, view, h.onServers(p, func(ctx context.Context, n Network, _ http.ResponseWriter, _ *http.Request) error {
-			return h.svc.Power(ctx, n, action)
-		}))
+		mux.Handle("POST /api/networks/{id}/"+action, view, func(w http.ResponseWriter, r *http.Request) {
+			n, err := h.allowed(r, p)
+			if err != nil {
+				httpapi.WriteError(w, r, err)
+				return
+			}
+			h.run(w, r, "network."+action, n.Name, n.ID, http.StatusNoContent, func(ctx context.Context) (any, error) {
+				return nil, h.svc.Power(ctx, n, action)
+			})
+		})
 	}
-	mux.Handle("POST /api/networks/{id}/broadcast", view, h.onServers(access.ConsoleCommands, func(ctx context.Context, n Network, w http.ResponseWriter, r *http.Request) error {
+	mux.Handle("POST /api/networks/{id}/broadcast", view, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Message string `json:"message"`
 		}
-		if err := httpapi.ReadJSON(w, r, &req); err != nil {
-			return err
+		n, err := h.allowed(r, access.ConsoleCommands)
+		if err == nil {
+			err = httpapi.ReadJSON(w, r, &req)
 		}
-		return h.svc.Broadcast(ctx, n, req.Message)
-	}))
+		if err == nil {
+			err = h.svc.Broadcast(r.Context(), n, req.Message)
+		}
+		write(w, r, http.StatusNoContent, nil, err)
+	})
 	mux.Handle("GET /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.proxySettings)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.updateProxySettings)
 }
 
-// onServers wraps an action on the servers of a network, which needs p on each of them.
-func (h *Handler) onServers(p access.Permission, action func(context.Context, Network, http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+// onNetwork runs an action on the network of a request as an operation.
+func (h *Handler) onNetwork(kind string, status int, action func(context.Context, Network) (any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
-		if err == nil {
-			logging.Note(r.Context(), slog.String("name", n.Name))
-			grants := access.From(r.Context())
-			for _, ref := range append([]Ref{n.Proxy}, refs(n.Backends)...) {
-				if !grants.On(p, ref.NodeID, ref.ServerID) {
-					err = access.Denied(p)
-				}
-			}
+		if err != nil {
+			httpapi.WriteError(w, r, err)
+			return
 		}
-		if err == nil {
-			err = action(r.Context(), n, w, r)
-		}
-		write(w, r, http.StatusNoContent, nil, err)
+		logging.Note(r.Context(), slog.String("name", n.Name))
+		h.run(w, r, kind, n.Name, n.ID, status, func(ctx context.Context) (any, error) { return action(ctx, n) })
 	}
+}
+
+// allowed returns the network of a request if the user has p on each of its servers.
+func (h *Handler) allowed(r *http.Request, p access.Permission) (Network, error) {
+	n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return n, err
+	}
+	logging.Note(r.Context(), slog.String("name", n.Name))
+	grants := access.From(r.Context())
+	for _, ref := range append([]Ref{n.Proxy}, refs(n.Backends)...) {
+		if !grants.On(p, ref.NodeID, ref.ServerID) {
+			return n, access.Denied(p)
+		}
+	}
+	return n, nil
 }
 
 func refs(backends []Backend) []Ref {

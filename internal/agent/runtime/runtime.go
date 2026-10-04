@@ -16,6 +16,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/logging"
 )
 
@@ -208,6 +209,7 @@ func PauseSaving(ctx context.Context, rt Runtime, srv Server) (resume func(), er
 	if srv.State == noryxv1.ServerState_SERVER_STATE_STOPPED || srv.Type.Proxy() {
 		return func() {}, nil
 	}
+	progress.Step(ctx, "save", 0)
 	if _, err := rt.SendCommand(ctx, srv.ID, "save-off"); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrNotReady, err)
 	}

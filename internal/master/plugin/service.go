@@ -8,21 +8,20 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
-	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
 const (
@@ -115,7 +114,7 @@ func (s *Service) List(ctx context.Context, ref Ref) (Listing, error) {
 	}
 	if len(l.Plugins) > 0 {
 		if err := s.describe(ctx, srv, res.GetPlugins(), l.Plugins); err != nil {
-			l.CatalogueError = message(err)
+			l.CatalogueError = httpapi.Message(err)
 		}
 	}
 	return l, nil
@@ -184,17 +183,31 @@ func (s *Service) Install(ctx context.Context, projects []string, chosen map[str
 	run := &installation{Service: s, chosen: chosen}
 	results := make([]Result, len(servers))
 	var wg sync.WaitGroup
+	var finished atomic.Int64
+	operation.Count(ctx, 0, int64(len(servers)), "servers")
 	for i, ref := range servers {
 		wg.Go(func() {
 			installed, err := run.install(ctx, ref, projects)
 			results[i] = Result{Ref: ref, Installed: installed}
 			if err != nil {
-				results[i].Error = message(err)
+				results[i].Error = httpapi.Message(err)
 			}
+			operation.Count(ctx, finished.Add(1), int64(len(servers)), "servers")
 		})
 	}
 	wg.Wait()
 	return results
+}
+
+// InstallOn installs projects on a server, e.g. those of a template on a new server.
+func (s *Service) InstallOn(ctx context.Context, projects []string, nodeID, serverID string) error {
+	if err := checkProjects(projects); err != nil {
+		return err
+	}
+	if r := s.Install(ctx, projects, nil, []Ref{{nodeID, serverID}})[0]; r.Error != "" {
+		return errors.New(r.Error)
+	}
+	return nil
 }
 
 // installation shares lookups and downloads between the servers of one Install call.
@@ -472,17 +485,6 @@ func (s *Service) server(ctx context.Context, ref Ref) (grpc.ClientConnInterface
 }
 
 // message returns what administrators are told about an error.
-func message(err error) string {
-	var apiErr *httpapi.Error
-	if errors.As(err, &apiErr) {
-		return apiErr.Message
-	}
-	if st, ok := status.FromError(err); ok {
-		return st.Message()
-	}
-	slog.Error("Plugin operation failed", logging.Plugins, "err", err)
-	return "internal error"
-}
 
 // memo runs a function once per key and shares its result, also between goroutines.
 type memo[T any] struct {

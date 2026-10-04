@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { useAccess } from "@/features/access/use-access"
 import { meQuery, useLogout, useSetLanguage } from "@/features/auth/api"
 import { LogAlerts } from "@/features/logs/log-alerts"
+import { Activity } from "@/features/operations/activity"
 import { PaletteButton } from "@/features/palette/command-palette"
 import { UpdateBanner } from "@/features/updates/update-banner"
 import { chooseLanguage, chosenLanguage } from "@/lib/i18n"
@@ -30,6 +31,13 @@ export function AppShell() {
     if (user?.language) chooseLanguage(user.language)
   }, [user?.language])
 
+  const preferences = (
+    <>
+      <LanguageMenu value={user?.language ?? chosenLanguage()} onChoose={(language) => setLanguage.mutate(language)} />
+      <ThemeToggle className="flex-1" />
+    </>
+  )
+
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
       <aside className="sticky top-0 z-30 flex shrink-0 items-center gap-1.5 border-b bg-sidebar/80 px-3 py-2.5 backdrop-blur-xl md:h-svh md:w-64 md:flex-col md:items-stretch md:gap-8 md:border-r md:border-b-0 md:px-4 md:py-6">
@@ -45,6 +53,10 @@ export function AppShell() {
               {t("Noryx")}
             </SheetTitle>
             <MainNav onNavigate={() => setMenu(false)} />
+            {/* On small screens, the bar at the top has no room for them. */}
+            <div className="mt-auto flex items-center gap-2">
+              {preferences}
+            </div>
           </SheetContent>
         </Sheet>
         <Link to="/" className="flex items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring md:px-2">
@@ -58,9 +70,9 @@ export function AppShell() {
         <MainNav className="max-md:hidden" />
         <div className="ml-auto flex items-center gap-1.5 md:mt-auto md:ml-0 md:flex-col md:items-stretch md:gap-3">
           <div className="flex items-center gap-1.5 md:gap-2">
+            <Activity />
             {access.canSomewhere("logs.view") && <LogAlerts />}
-            <LanguageMenu value={user?.language ?? chosenLanguage()} onChoose={(language) => setLanguage.mutate(language)} />
-            <ThemeToggle className="md:flex-1" />
+            <div className="contents max-md:hidden">{preferences}</div>
           </div>
           <div className="flex items-center gap-1.5 md:gap-3 md:rounded-xl md:bg-muted/60 md:p-2">
             <Link

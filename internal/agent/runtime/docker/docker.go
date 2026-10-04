@@ -22,11 +22,13 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/jsonstream"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 )
@@ -148,6 +150,7 @@ func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {
 	if err := d.pull(ctx, imageRef(spec)); err != nil {
 		return err
 	}
+	progress.Step(ctx, "container", 0)
 	if err := os.Mkdir(path, 0o750); err != nil {
 		return err
 	}
@@ -286,6 +289,7 @@ func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
 			return err
 		}
 	}
+	progress.Step(ctx, "container", 0)
 	return d.recreate(ctx, spec, c.State.Running, placement(c, spec))
 }
 
@@ -301,6 +305,7 @@ func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
 	if err != nil || img.ID == c.Image {
 		return false, err
 	}
+	progress.Step(ctx, "container", 0)
 	if err := d.recreate(ctx, spec, c.State.Running, placement(c, spec)); err != nil {
 		return true, err
 	}
@@ -439,14 +444,32 @@ func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, e
 	return out.String(), nil
 }
 
+// pull pulls an image, and reports how much of its layers it downloaded.
 func (d *Docker) pull(ctx context.Context, ref string) error {
+	progress.Step(ctx, "image", 0)
 	res, err := d.cli.ImagePull(ctx, ref, client.ImagePullOptions{})
-	if err == nil {
-		defer res.Close()
-		err = res.Wait(ctx)
-	}
 	if err != nil {
 		return fmt.Errorf("pull %s: %w", ref, err)
+	}
+	layers := map[string]*jsonstream.Progress{}
+	for msg, err := range res.JSONMessages(ctx) {
+		switch {
+		case err != nil:
+			return fmt.Errorf("pull %s: %w", ref, err)
+		case msg.Error != nil:
+			return fmt.Errorf("pull %s: %s", ref, msg.Error.Message)
+		case msg.Status == "Downloading" && msg.Progress != nil:
+			layers[msg.ID] = msg.Progress
+		case msg.Status == "Download complete" && layers[msg.ID] != nil:
+			layers[msg.ID].Current = layers[msg.ID].Total
+		default:
+			continue
+		}
+		var done, total int64
+		for _, l := range layers {
+			done, total = done+l.Current, total+l.Total
+		}
+		progress.Set(ctx, done, total)
 	}
 	return nil
 }

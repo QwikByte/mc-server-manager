@@ -1,13 +1,13 @@
 import { ArrowClockwiseIcon, PlayIcon, StopIcon, TagIcon, TerminalIcon, XIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { type FormEvent, useState } from "react"
-import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
+import { useOperation } from "@/features/operations/use-operation"
 import { type BulkAction, type NodeServer, serverKey, useBulkAction } from "./api"
 import { TagsDialog } from "./tags"
 
@@ -25,6 +25,7 @@ const actions: Record<Kind, { permission: Permission; running: boolean; icon: ty
 export function BulkBar({ selected, onClear }: { selected: NodeServer[]; onClear: () => void }) {
   const { can } = useAccess()
   const bulk = useBulkAction()
+  const operation = useOperation()
   const [dialog, setDialog] = useState<Kind | "tags">()
   const close = (open: boolean) => !open && setDialog(undefined)
   const targets = (kind: Kind) =>
@@ -34,24 +35,22 @@ export function BulkBar({ selected, onClear }: { selected: NodeServer[]; onClear
   function run(action: BulkAction) {
     const servers = targets(action.action)
     const names = new Map(servers.map((s) => [serverKey(s), s.name]))
-    const id = toast.loading(progress[action.action](servers.length))
-    bulk.mutate(
-      { ...action, servers },
-      {
-        onSuccess: (results) => {
-          const failed = results.filter((r) => r.error)
-          if (failed.length === 0) return toast.success(done[action.action](results.length), { id })
-          toast.warning(t("{{failed}} of {{count}} servers failed", { failed: failed.length, count: results.length }), {
-            id,
-            description: failed
-              .slice(0, 5)
-              .map((r) => `${names.get(`${r.nodeId}/${r.serverId}`)}: ${r.error}`)
-              .join("; "),
-          })
-        },
-        onError: (e) => toast.error(e.message, { id }),
+    operation.run((onStart) => bulk.mutateAsync({ ...action, servers, onStart }), {
+      title: progress[action.action](servers.length),
+      notify: true,
+      done: (results) => {
+        const failed = results.filter((r) => r.error)
+        if (failed.length === 0) return { message: done[action.action](results.length) }
+        return {
+          message: t("{{failed}} of {{count}} servers failed", { failed: failed.length, count: results.length }),
+          description: failed
+            .slice(0, 5)
+            .map((r) => `${names.get(`${r.nodeId}/${r.serverId}`)}: ${r.error}`)
+            .join("; "),
+          warning: true,
+        }
       },
-    )
+    })
   }
 
   return (

@@ -1,4 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { operate } from "@/features/operations/api"
+import type { Followed } from "@/features/servers/api"
 import { api } from "@/lib/api"
 
 export interface ServerRef {
@@ -67,7 +69,7 @@ export const networkQuery = (id: string) =>
 export function useCreateNetwork() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (network: NewNetwork) => api<Network>("/networks", { body: network }),
+    mutationFn: ({ onStart, ...network }: NewNetwork & Followed) => operate<Network>("/networks", { body: network }, onStart),
     // A failed apply still saves the network, so the list is refreshed either way.
     onSettled: () => queryClient.invalidateQueries({ queryKey: networksQuery.queryKey }),
   })
@@ -77,7 +79,8 @@ export function useCreateNetwork() {
 export function useUpdateNetwork(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (settings: NetworkSettings) => api<Network>(`/networks/${id}`, { method: "PUT", body: settings }),
+    mutationFn: ({ settings, onStart }: { settings: NetworkSettings } & Followed) =>
+      operate<Network>(`/networks/${id}`, { method: "PUT", body: settings }, onStart),
     onSettled: () => queryClient.invalidateQueries({ queryKey: networksQuery.queryKey }),
   })
 }
@@ -88,15 +91,15 @@ export type NetworkAction = { action: "apply" | "delete" | "start" | "stop" | "r
 export function useNetworkAction(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (a: NetworkAction) => {
+    mutationFn: (a: NetworkAction & Followed) => {
       const path = `/networks/${id}`
       switch (a.action) {
         case "delete":
-          return api(path, { method: "DELETE" })
+          return operate(path, { method: "DELETE" }, a.onStart)
         case "broadcast":
           return api(`${path}/broadcast`, { body: { message: a.message } })
         default:
-          return api(`${path}/${a.action}`, { method: "POST" })
+          return operate(`${path}/${a.action}`, { method: "POST" }, a.onStart)
       }
     },
     // A deleted network is only refreshed in the list, as its page is left.

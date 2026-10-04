@@ -9,6 +9,8 @@ import (
 	"slices"
 
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+
+	"github.com/QwikByte/noryx/internal/agent/progress"
 )
 
 // stage extracts a backup into a temporary folder of the data directory, which the caller
@@ -20,6 +22,11 @@ func stage(ctx context.Context, dir *datadir.Dir, b backup) (string, error) {
 		return "", err
 	}
 	defer zr.Close()
+	var size int64
+	for _, f := range zr.File {
+		size += int64(f.UncompressedSize64) //nolint:gosec // archives are written by the agent itself
+	}
+	progress.Step(ctx, "restore", size)
 	tmp := datadir.TempName(".")
 	return tmp, dir.ExtractZip(ctx, &zr.Reader, tmp)
 }

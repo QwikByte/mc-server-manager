@@ -1,0 +1,113 @@
+import { t } from "i18next"
+import { formatBytes } from "@/lib/format"
+import type { Operation } from "./api"
+
+/** What an operation does, e.g. "Create Lobby". name is the name of its server, for operations that don't name it. */
+export function titleOf(op: Operation, name?: string): string {
+  // While the name of the server loads.
+  const subject = op.subject || name || "…"
+  const count = Number(op.subject) || 0
+  switch (op.kind) {
+    case "server.create":
+      return t("Create {{name}}", { name: subject })
+    case "server.duplicate":
+      return t("Create {{name}} as a copy", { name: subject })
+    case "server.settings":
+      return t("Save the settings of {{name}}", { name: subject })
+    case "server.image":
+      return t("Update the image of {{name}}", { name: subject })
+    case "server.move":
+      return t("Move {{name}}", { name: subject })
+    case "plugins.install":
+      return op.serverId && name
+        ? t("Install plugins on {{name}}", { name })
+        : t("Install plugins on {{count}} servers", { count, defaultValue_one: "Install plugins on {{count}} server" })
+    case "backup.create":
+      return t("Back up {{name}}", { name: subject })
+    case "backup.restore":
+      return t("Restore a backup of {{name}}", { name: subject })
+    case "network.create":
+      return t("Create the network {{name}}", { name: subject })
+    case "network.update":
+      return t("Save the network {{name}}", { name: subject })
+    case "network.apply":
+      return t("Apply the network {{name}} again", { name: subject })
+    case "network.delete":
+      return t("Delete the network {{name}}", { name: subject })
+    case "network.start":
+      return t("Start the network {{name}}", { name: subject })
+    case "network.stop":
+      return t("Stop the network {{name}}", { name: subject })
+    case "network.restart":
+      return t("Restart the network {{name}}", { name: subject })
+    case "servers.start":
+      return t("Start {{count}} servers", { count, defaultValue_one: "Start {{count}} server" })
+    case "servers.stop":
+      return t("Stop {{count}} servers", { count, defaultValue_one: "Stop {{count}} server" })
+    case "servers.restart":
+      return t("Restart {{count}} servers", { count, defaultValue_one: "Restart {{count}} server" })
+    case "servers.command":
+      return t("Send a command to {{count}} servers", { count, defaultValue_one: "Send a command to {{count}} server" })
+  }
+  return op.kind
+}
+
+/** What a step of an operation does. */
+export function stepOf(op: Operation, step: string): string {
+  const verb = op.kind.split(".")[1]
+  switch (step) {
+    case "image":
+      return t("Prepare the server image")
+    case "container":
+      return t("Create the container")
+    case "plugins":
+      return t("Install the plugins")
+    case "save":
+      return t("Save the worlds")
+    case "copy":
+    case "copying":
+      return t("Copy the data")
+    case "archive":
+      return t("Pack the backup")
+    case "restore":
+      return t("Unpack the backup")
+    case "stop":
+    case "stopping":
+      return t("Stop the server")
+    case "start":
+      return t("Start the server")
+    case "backups":
+      return t("Copy the backups")
+    case "finishing":
+      return t("Set the server up on the new node")
+    case "proxy":
+      return t("Configure the proxy")
+    case "proxy-stop":
+      return t("Stop the proxy")
+    case "proxy-start":
+      return t("Start the proxy")
+    case "servers":
+      if (verb === "start") return t("Start the servers")
+      if (verb === "stop") return t("Stop the servers")
+      if (verb === "restart") return t("Restart the servers")
+      if (verb === "command") return t("Send the command")
+      if (verb === "delete") return t("Make the servers standalone")
+      return t("Configure the servers")
+  }
+  return step
+}
+
+/** How far the current step of an operation is, e.g. "245 MB of 610 MB", if it tells. */
+export function amountOf(op: Operation): string | undefined {
+  if (op.unit === "bytes" && op.total > 0) return t("{{done}} of {{total}}", { done: formatBytes(op.done), total: formatBytes(op.total) })
+  if (op.unit === "bytes" && op.done > 0) return formatBytes(op.done)
+  if (op.unit === "servers" && op.total > 1) return t("{{done}} of {{count}} servers", { done: op.done, count: op.total })
+  if (op.unit === "backups" && op.total > 0) return t("{{done}} of {{count}} backups", { done: op.done, count: op.total })
+  return undefined
+}
+
+/** How much of the current step of an operation is done, from 0 to 1, if it is known. */
+export function shareOf(op: Operation): number | undefined {
+  if (op.total > 0 && (op.unit !== "servers" || op.total > 1)) return Math.min(op.done / op.total, 1)
+  return undefined
+}

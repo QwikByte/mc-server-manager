@@ -4,13 +4,13 @@ import { getRouteApi, useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { Trans } from "react-i18next"
-import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { nodeQuery } from "@/features/nodes/api"
+import { useOperation } from "@/features/operations/use-operation"
 import { type Server, type ServerSettings, useServer, useUpdateImage, useUpdateServer } from "./api"
 import { serverType, splitOptions } from "./server-types"
 import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField } from "./settings-fields"
@@ -34,17 +34,19 @@ export function SettingsPage() {
 /** Servers keep the image they were created with, until it is updated here. */
 function UpdateImage({ nodeId, server }: { nodeId: string; server: Server }) {
   const update = useUpdateImage(nodeId, server.id)
+  const operation = useOperation()
   const running = server.state !== "stopped"
   function run() {
-    toast.promise(update.mutateAsync(), {
-      loading: t("Downloading the newest image…"),
-      success: ({ updated }) =>
-        !updated
+    operation.run((onStart) => update.mutateAsync({ onStart }), {
+      title: t("Update the image of {{name}}", { name: server.name }),
+      notify: true,
+      done: ({ updated }) => ({
+        message: !updated
           ? t("{{name}} has the newest image already", { name: server.name })
           : running
             ? t("Updated and restarted {{name}}", { name: server.name })
             : t("Updated {{name}}", { name: server.name }),
-      error: (e: Error) => e.message,
+      }),
     })
   }
   const button = (
@@ -80,6 +82,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   const initial = settingsOf(server)
   const [form, setForm] = useState({ ...initial, jvmOptions: initial.jvmOptions.join("\n") })
   const update = useUpdateServer(nodeId, server.id)
+  const operation = useOperation()
   const { data: node } = useQuery(nodeQuery(nodeId))
   const game = !serverType(server.type).proxy
   const settings: ServerSettings = { ...form, jvmOptions: splitOptions(form.jvmOptions) }
@@ -89,10 +92,10 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    toast.promise(update.mutateAsync(settings), {
-      loading: server.state === "stopped" ? t("Saving…") : t("Saving and restarting {{name}}…", { name: server.name }),
-      success: t("Saved the settings of {{name}}", { name: form.name }),
-      error: (e: Error) => e.message,
+    operation.run((onStart) => update.mutateAsync({ settings, onStart }), {
+      title: server.state === "stopped" ? t("Saving…") : t("Saving and restarting {{name}}…", { name: server.name }),
+      notify: true,
+      done: () => ({ message: t("Saved the settings of {{name}}", { name: form.name }) }),
     })
   }
 

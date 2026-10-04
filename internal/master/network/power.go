@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
 
 	"google.golang.org/grpc/codes"
@@ -14,6 +15,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
 const maxBroadcast = 256
@@ -48,15 +50,25 @@ var (
 func (s *Service) Power(ctx context.Context, n Network, action string) error {
 	ctx = context.WithoutCancel(ctx)
 	proxy := []Backend{{Ref: n.Proxy, Name: "the proxy"}}
-	switch action {
-	case Start:
-		return errors.Join(s.each(ctx, n.Backends, start), s.each(ctx, proxy, start))
-	case Stop:
-		return errors.Join(s.each(ctx, proxy, stop), s.each(ctx, n.Backends, stop))
-	case Restart:
-		return errors.Join(s.each(ctx, proxy, stop), s.each(ctx, n.Backends, restart), s.each(ctx, proxy, start))
+	// The steps of the action, as they are named in its operation.
+	steps := map[string][]struct {
+		name    string
+		servers []Backend
+		call    serverCall
+	}{
+		Start:   {{"servers", n.Backends, start}, {"proxy-start", proxy, start}},
+		Stop:    {{"proxy-stop", proxy, stop}, {"servers", n.Backends, stop}},
+		Restart: {{"proxy-stop", proxy, stop}, {"servers", n.Backends, restart}, {"proxy-start", proxy, start}},
+	}[action]
+	if steps == nil {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose start, stop or restart.")
 	}
-	return httpapi.Errorf(http.StatusBadRequest, "Choose start, stop or restart.")
+	var errs []error
+	for _, step := range steps {
+		operation.Step(ctx, step.name)
+		errs = append(errs, s.each(ctx, step.servers, step.call))
+	}
+	return errors.Join(errs...)
 }
 
 // Broadcast sends a chat message to the players of all running game servers of a network.
@@ -78,8 +90,12 @@ func (s *Service) Broadcast(ctx context.Context, n Network, text string) error {
 func (s *Service) each(ctx context.Context, servers []Backend, call serverCall) error {
 	errs := make([]error, len(servers))
 	var wg sync.WaitGroup
+	var finished atomic.Int64
+	total := int64(len(servers))
+	operation.Count(ctx, 0, total, "servers")
 	for i, b := range servers {
 		wg.Go(func() {
+			defer func() { operation.Count(ctx, finished.Add(1), total, "servers") }()
 			ctx, cancel := context.WithTimeout(ctx, configureTimeout)
 			defer cancel()
 			conn, err := s.nodes.Conn(ctx, b.NodeID)

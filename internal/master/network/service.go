@@ -28,6 +28,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 )
 
@@ -258,11 +259,14 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	ctx = context.WithoutCancel(ctx)
-	for _, b := range n.Backends {
+	operation.Step(ctx, "servers")
+	for i, b := range n.Backends {
+		operation.Count(ctx, int64(i), int64(len(n.Backends)), "servers")
 		if err := s.leave(ctx, b); err != nil {
 			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
 		}
 	}
+	operation.Step(ctx, "proxy")
 	detach := &noryxv1.ConfigureNetworkRequest{Id: n.Proxy.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE}
 	if err := ignoreMissing(s.configure(ctx, n.Proxy, detach)); err != nil {
 		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because its proxy could not be updated: %s", message(err))
@@ -437,7 +441,9 @@ func (n *Network) moved(serverID, from, to string) {
 // changed, the proxy reloads its configuration.
 func (s *Service) apply(ctx context.Context, n Network) error {
 	ctx = context.WithoutCancel(ctx) // finish even if the client goes away
-	for _, b := range n.Backends {
+	operation.Step(ctx, "servers")
+	for i, b := range n.Backends {
+		operation.Count(ctx, int64(i), int64(len(n.Backends)), "servers")
 		if err := s.join(ctx, n, b); err != nil {
 			return applyFailed(b.Name, err)
 		}
@@ -456,6 +462,7 @@ func (s *Service) apply(ctx context.Context, n Network) error {
 	}
 	req := n.request(n.Proxy)
 	req.Backends, req.Try, req.ForcedHosts = backends, n.Try, hosts
+	operation.Step(ctx, "proxy")
 	if err := s.configure(ctx, n.Proxy, req); err != nil {
 		return applyFailed("the proxy", err)
 	}

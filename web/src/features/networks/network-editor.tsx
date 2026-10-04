@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
 import { useState } from "react"
-import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Section } from "@/components/section"
 import { Button } from "@/components/ui/button"
@@ -10,6 +9,7 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
+import { useOperation } from "@/features/operations/use-operation"
 import { allServersQuery } from "@/features/servers/api"
 import { type Network, useUpdateNetwork } from "./api"
 import { BackendList } from "./backend-list"
@@ -39,6 +39,7 @@ export function NetworkEditor({ network }: { network: Network }) {
   }
   const dirty = !same(draft, saved)
   const update = useUpdateNetwork(network.id)
+  const operation = useOperation()
   const { data: servers } = useQuery(allServersQuery)
   const { data: proxyNode } = useQuery(nodeQuery(network.proxy.nodeId))
   const usage = useNetworkUsage([network])
@@ -51,10 +52,12 @@ export function NetworkEditor({ network }: { network: Network }) {
   const address = proxy && proxyHost ? `${proxyHost}:${proxy.port}` : undefined
 
   function save() {
-    toast.promise(
-      update.mutateAsync(settingsOf(draft)).then((n) => setDraft(draftOf(n))),
-      { loading: t("Configuring {{name}}…", { name: draft.name }), success: t("Saved {{name}}", { name: draft.name }), error: (e: Error) => e.message },
-    )
+    operation.run((onStart) => update.mutateAsync({ settings: settingsOf(draft), onStart }), {
+      title: t("Configuring {{name}}…", { name: draft.name }),
+      notify: true,
+      done: () => ({ message: t("Saved {{name}}", { name: draft.name }) }),
+      then: (n) => setDraft(draftOf(n)),
+    })
   }
 
   return (
