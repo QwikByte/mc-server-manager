@@ -27,6 +27,14 @@ import { MoveServerDialog } from "./move-server-dialog"
 import { serverType } from "./server-types"
 import { TagsDialog } from "./tags"
 
+/** What a notification says while an action on a server runs. */
+const pendingLabels: Record<ServerAction, (name: string) => string> = {
+  start: (name) => t("Starting {{name}}…", { name }),
+  stop: (name) => t("Stopping {{name}}…", { name }),
+  restart: (name) => t("Restarting {{name}}…", { name }),
+  delete: (name) => t("Deleting {{name}}…", { name }),
+}
+
 /**
  * Start or stop a server, copy it, move it, tag it, save it as a template and delete it after
  * confirmation. While it moves, it can't be changed. Compact actions only have icons, e.g. in a table.
@@ -48,16 +56,15 @@ export function ServerActions({
   const running = server.state !== "stopped"
   const dialogProps = { nodeId, server, open: true, onOpenChange: (open: boolean) => !open && setDialog(undefined) }
 
+  // The notification follows the action also if this component goes away meanwhile.
   function run(action: ServerAction, done: string, then?: () => void) {
-    mutation.mutate(
-      { id: server.id, action },
-      {
-        onSuccess: () => {
-          toast.success(done)
-          then?.()
-        },
-        onError: (e) => toast.error(e.message),
+    const id = toast.loading(pendingLabels[action](server.name))
+    mutation.mutateAsync({ id: server.id, action }).then(
+      () => {
+        toast.success(done, { id })
+        then?.()
       },
+      (e: Error) => toast.error(e.message, { id }),
     )
   }
 

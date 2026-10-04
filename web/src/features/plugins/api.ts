@@ -2,6 +2,7 @@ import { infiniteQueryOptions, keepPreviousData, queryOptions, useMutation, useQ
 import { t } from "i18next"
 import type { ServerRef } from "@/features/networks/api"
 import { serverType } from "@/features/servers/server-types"
+import { type Operation, operate } from "@/features/operations/api"
 import { api, responseError } from "@/lib/api"
 
 /** A plugin or mod on Modrinth. */
@@ -128,14 +129,21 @@ export const pluginsQuery = (ref: ServerRef) =>
  * Installs or updates projects, with the projects they require, on servers: the newest release that suits each
  * server, or the version chosen for a project.
  */
-export const installPlugins = (projects: string[], servers: ServerRef[], versions?: Record<string, string>) =>
-  api<{ results: InstallResult[] }>("/plugins/install", { body: { projects, servers, versions } }).then((res) => res.results)
-
+/** Installs Modrinth projects on servers; on many, it takes a while. */
 export function useInstallPlugins() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ projects, servers, versions }: { projects: string[]; servers: ServerRef[]; versions?: Record<string, string> }) =>
-      installPlugins(projects, servers, versions),
+    mutationFn: ({
+      projects,
+      servers,
+      versions,
+      onStart,
+    }: {
+      projects: string[]
+      servers: ServerRef[]
+      versions?: Record<string, string>
+      onStart?: (op: Operation) => void
+    }) => operate<{ results: InstallResult[] }>("/plugins/install", { body: { projects, servers, versions } }, onStart).then((res) => res.results),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
   })
 }

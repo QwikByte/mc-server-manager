@@ -19,6 +19,7 @@ import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
+import { useOperation } from "@/features/operations/use-operation"
 import { type Network, type NetworkAction, useNetworkAction } from "./api"
 
 type Power = "start" | "stop" | "restart"
@@ -27,13 +28,14 @@ type Power = "start" | "stop" | "restart"
 export function NetworkActions({ network }: { network: Network }) {
   const { can } = useAccess()
   const action = useNetworkAction(network.id)
+  const operation = useOperation()
   const navigate = useNavigate()
   const [dialog, setDialog] = useState<Power | "broadcast">()
   const onAll = (p: Permission) => [network.proxy, ...network.backends].every((s) => can(p, s.nodeId, s.serverId))
   const powers = (["start", "restart", "stop"] as const).filter((p) => onAll(`servers.${p}`))
 
   function run(a: NetworkAction, loading: string, success: string, then?: () => void) {
-    toast.promise(action.mutateAsync(a).then(then), { loading, success, error: (e: Error) => e.message })
+    operation.run((onStart) => action.mutateAsync({ ...a, onStart }), { title: loading, notify: true, done: () => ({ message: success }), then })
   }
 
   const power: Record<Power, { icon: typeof PlayIcon; label: string; run: () => void; confirm?: string }> = {

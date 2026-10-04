@@ -12,6 +12,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/QwikByte/noryx/internal/agent/progress"
 )
 
 // stored lists extensions of files that are compressed already; deflating them again
@@ -48,7 +50,7 @@ func WriteZip(ctx context.Context, w io.Writer, root *os.Root, censor Censor, pa
 					return nil
 				}
 			}
-			return addFile(zw, root, name, d, edit)
+			return addFile(ctx, zw, root, name, d, edit)
 		}); err != nil {
 			break
 		}
@@ -103,7 +105,7 @@ func readEdited(r io.Reader) ([]byte, error) {
 	return data, err
 }
 
-func addFile(zw *zip.Writer, root *os.Root, name string, d fs.DirEntry, edit func([]byte) []byte) error {
+func addFile(ctx context.Context, zw *zip.Writer, root *os.Root, name string, d fs.DirEntry, edit func([]byte) []byte) error {
 	info, err := d.Info()
 	if err != nil {
 		return err
@@ -128,7 +130,7 @@ func addFile(zw *zip.Writer, root *os.Root, name string, d fs.DirEntry, edit fun
 	}
 	defer f.Close()
 	if edit == nil {
-		_, err = io.Copy(fw, f)
+		_, err = io.Copy(fw, progress.Reader(ctx, f))
 		return err
 	}
 	data, err := readEdited(f)
@@ -163,14 +165,14 @@ func (d *Dir) ExtractZip(ctx context.Context, zr *zip.Reader, dest string) error
 		if err := d.MkdirAll(filepath.Dir(target)); err != nil {
 			return err
 		}
-		if err := d.extract(f, target); err != nil {
+		if err := d.extract(ctx, f, target); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (d *Dir) extract(f *zip.File, name string) error {
+func (d *Dir) extract(ctx context.Context, f *zip.File, name string) error {
 	r, err := f.Open()
 	if err != nil {
 		return err
@@ -180,7 +182,7 @@ func (d *Dir) extract(f *zip.File, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(out, r) //nolint:gosec // archives are written by the agent itself
+	_, err = io.Copy(out, progress.Reader(ctx, r)) //nolint:gosec // archives are written by the agent itself
 	if err := errors.Join(err, out.Close(), d.Chmod(name, f.Mode().Perm()), d.own(name)); err != nil {
 		return err
 	}

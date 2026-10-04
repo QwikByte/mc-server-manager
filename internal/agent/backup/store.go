@@ -18,6 +18,8 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/storage"
+
+	"github.com/QwikByte/noryx/internal/agent/progress"
 )
 
 // A backup of a server is kept as <backups of the location>/<server ID>/<ID>.zip, with its
@@ -121,24 +123,12 @@ func (s store) find(serverID, id string) (backup, error) {
 
 // create archives paths of a server's data into a new backup in a location.
 func (s store) create(ctx context.Context, data *datadir.Dir, serverID, location string, d details) (backup, error) {
-	return s.add(serverID, location, newID(d.Created), d, sizeOf(data, d.Paths), func(w io.Writer) error {
+	// The archive hardly exceeds the size of the files.
+	size := datadir.Size(data.FS(), d.Paths...)
+	progress.Step(ctx, "archive", size)
+	return s.add(serverID, location, newID(d.Created), d, size, func(w io.Writer) error {
 		return datadir.WriteZip(ctx, w, data.Root, nil, d.Paths...)
 	})
-}
-
-// sizeOf returns the size of the files at paths of a server's data, which their archive
-// hardly exceeds.
-func sizeOf(data *datadir.Dir, paths []string) int64 {
-	var size int64
-	for _, p := range paths {
-		_ = fs.WalkDir(data.FS(), p, func(_ string, d fs.DirEntry, err error) error {
-			if info, ierr := d.Info(); err == nil && ierr == nil && d.Type().IsRegular() {
-				size += info.Size()
-			}
-			return nil
-		})
-	}
-	return size
 }
 
 // add adds a backup to a location, whose archive write writes, if size bytes fit. It only

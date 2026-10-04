@@ -2,14 +2,11 @@ package server
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/logging"
@@ -107,7 +104,7 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if err != nil {
-				results[i].Error = message(err)
+				results[i].Error = httpapi.Message(err)
 			}
 		})
 	}
@@ -195,17 +192,4 @@ func (h *Handler) checkExist(ctx context.Context, servers []tag.Server) error {
 		}
 	}
 	return nil
-}
-
-// message is what the panel shows about a failed action on one server.
-func message(err error) string {
-	var apiErr *httpapi.Error
-	if errors.As(err, &apiErr) {
-		return apiErr.Message
-	}
-	if st, ok := status.FromError(err); ok {
-		return st.Message()
-	}
-	slog.Error("Action on a server failed", logging.Servers, "err", err)
-	return "internal error"
 }

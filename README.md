@@ -83,6 +83,17 @@ permission to change the server's settings, though it doesn't restart the server
 **Ctrl+K** (⌘K) searches servers, also by tag, networks, nodes and pages from anywhere in the panel. A search that starts
 with an action, e.g. `restart lobby`, starts, restarts or stops a server or opens its console.
 
+Long actions run as **operations**: creating, copying and changing servers, updating their image, installing plugins
+on many servers, backing up and restoring, and the actions on networks and on many servers at once. The panel shows
+their steps as they go, e.g. how much of a server image is downloaded or how many servers of a network are configured.
+A dialog can't be closed by mistake meanwhile; **Continue in the background** hands the operation to a notification,
+which follows it to its end and links to its result. The operations of the last hour, also those of other users, are in
+the list behind the button next to the warnings. The master runs them in the background: an answer comes right away if
+the action ends within a second, otherwise `202 Accepted` with the operation, which `GET /api/operations/{id}` follows,
+so that neither a closed browser nor a proxy in front of the master cuts it off. The master can't restart while one runs.
+Agents tell the progress of their part, e.g. the bytes of a download, through `ProgressService`; agents of older versions
+only let the panel show the steps.
+
 The panel speaks English and German. It follows the browser until someone chooses a language with the button next to the
 colour theme, which the panel stores for the signed-in user, so that it applies in all their browsers; on the sign-in
 page, the choice applies to the browser. Dates, times and numbers follow the language too. What the master and the
@@ -525,7 +536,7 @@ Users get their permissions from groups; a user can be in several groups and has
 The code is organised by feature, not by layer.
 
 ```
-api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, plugins, backups, log, stats) and generated code
+api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, plugins, backups, log, stats, progress) and generated code
 cmd/noryx-master/        master binary
 cmd/noryx-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -542,6 +553,7 @@ internal/master/
   update/               looks for new releases, updates the master through systemd and the agents after it
   server/               server API, forwarded to the node's agent
   tag/                  tags of servers, which the panel finds and groups them by
+  operation/            long actions run in the background, with their steps and progress, and the API that follows them
   network/              networks of servers behind a proxy, applied through the agents; actions on their servers and the
                         settings of proxies
   files/                file manager, streamed between the browser and the agent
@@ -569,13 +581,15 @@ internal/agent/
   plugin/               plugin and mod files of servers
   backup/               backups of servers: selection, archives, restoring
   logs/                 latest log entries in memory, log service, logging of every call
+  progress/             tells the master the progress of calls, e.g. downloading an image, through ProgressService
   stats/                measures what the node and its servers use: CPU, memory, network, data, players, TPS
   runtime/              runtime interface; docker/ implements it
 internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, dashboard, nodes, servers, files, properties, networks, plugins, templates, backups,
                         policies, schedules (shared by backups and policies), settings, terminal, logs, usage,
-                        access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K)
+                        access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K),
+                        operations (progress, notifications and the list of operations)
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

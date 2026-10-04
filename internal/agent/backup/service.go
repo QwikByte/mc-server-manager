@@ -30,6 +30,8 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/secrets"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/logging"
+
+	"github.com/QwikByte/noryx/internal/agent/progress"
 )
 
 const (
@@ -142,12 +144,14 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 	}
 	running := srv.State != noryxv1.ServerState_SERVER_STATE_STOPPED
 	if running {
+		progress.Step(ctx, "stop", 0)
 		if err := s.rt.Stop(ctx, srv.ID); err != nil {
 			return nil, toStatus(err)
 		}
 	}
 	err = swap(data, b, staged)
 	if running { // also after a failure, which leaves the server as it was or partly restored
+		progress.Step(ctx, "start", 0)
 		err = errors.Join(err, s.rt.Start(context.WithoutCancel(ctx), srv.ID))
 	}
 	return &noryxv1.RestoreBackupResponse{}, toStatus(err)

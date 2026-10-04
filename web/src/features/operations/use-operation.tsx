@@ -1,0 +1,79 @@
+import { useRef, useState } from "react"
+import { toast } from "sonner"
+import { type Operation, useLiveOperation } from "./api"
+import { LiveToast } from "./operation-progress"
+
+/** What a notification says about an operation that ended well, with a link to what it made. */
+export interface Done {
+  message: string
+  description?: string
+  action?: { label: string; onClick: () => void }
+  /** It ended, but not entirely well. */
+  warning?: boolean
+}
+
+/**
+ * Runs an action that may become an operation and tells how it ends in a notification. A
+ * dialog shows the live operation meanwhile, until it lets it go on in the background, where
+ * a notification follows it; with notify, a notification follows it from the start.
+ */
+export function useOperation() {
+  const [id, setId] = useState<string>()
+  const live = useLiveOperation(id)
+  const notification = useRef<string | number>(undefined)
+  const background = useRef(false)
+
+  function run<T>(
+    start: (onStart: (op: Operation) => void) => Promise<T>,
+    {
+      title,
+      done,
+      then,
+      notify = false,
+    }: {
+      title: string
+      done: (result: T) => Done
+      /** What follows unless the operation went on in the background, e.g. closing the dialog. */
+      then?: (result: T) => void
+      notify?: boolean
+    },
+  ) {
+    setId(undefined)
+    background.current = false
+    notification.current = notify ? toast.loading(title) : undefined
+    void start((op) => {
+      setId(op.id)
+      if (notification.current !== undefined) toast.loading(<LiveToast id={op.id} title={title} />, { id: notification.current })
+    }).then(
+      (result) => {
+        const { message, description, action, warning } = done(result)
+        ;(warning ? toast.warning : toast.success)(message, { id: notification.current, description, action })
+        if (!background.current) then?.(result)
+      },
+      // A dialog in the foreground shows the error itself.
+      (e: Error) => notification.current !== undefined && toast.error(e.message, { id: notification.current, description: title }),
+    )
+  }
+
+  return {
+    run,
+    /** The operation as it goes on, once the master runs the action as one. */
+    live,
+    /** Lets the operation go on in a notification, e.g. as its dialog closes. */
+    background: (title: string) => {
+      if (!id) return
+      background.current = true
+      notification.current = toast.loading(<LiveToast id={id} title={title} />)
+    },
+    reset: () => setId(undefined),
+  }
+}
+
+/** Keeps a dialog open while its action runs, so that it isn't closed by mistake. */
+export function guard(busy: boolean) {
+  return {
+    showCloseButton: !busy,
+    onInteractOutside: (e: Event) => busy && e.preventDefault(),
+    onEscapeKeyDown: (e: KeyboardEvent) => busy && e.preventDefault(),
+  }
+}

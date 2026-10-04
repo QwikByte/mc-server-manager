@@ -1,12 +1,15 @@
 package e2e
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/network"
+	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
@@ -90,4 +93,65 @@ func TestBulkActionsAndTags(t *testing.T) {
 	if tags, err := tag.NewStore(m.db).All(t.Context()); err != nil || len(tags) != 2 || !slices.Equal(tags[tag.Server{NodeID: b.node.ID, ServerID: copied.ID}], []string{"bedwars", "eu"}) {
 		t.Fatalf("tags = %v, %v", tags, err)
 	}
+}
+
+// Long operations are answered right away and go on, with the progress the agent reports.
+func TestOperations(t *testing.T) {
+	m := startMaster(t)
+	m.quick = 0
+	a := m.startAgent(t, "node-1")
+	api := apiClient{t: t, url: m.panel(t).URL}
+	hold := make(chan struct{})
+	a.runtime.mu.Lock()
+	a.runtime.hold = hold
+	a.runtime.mu.Unlock()
+	create := func(name string, port int) operation.Operation {
+		var op operation.Operation
+		api.do("POST", "/api/nodes/"+a.node.ID+"/servers",
+			map[string]any{"name": name, "type": "paper", "memoryMb": 1024, "port": port, "acceptEula": true}, http.StatusAccepted, &op)
+		if op.Kind != "server.create" || op.Subject != name || op.FinishedAt != nil || !slices.Equal(op.Steps, []string{"image", "container"}) {
+			t.Fatalf("operation = %+v", op)
+		}
+		return op
+	}
+	wait := func(id string, ok func(operation.Operation) bool) operation.Operation {
+		t.Helper()
+		var op operation.Operation
+		for range 500 {
+			api.do("GET", "/api/operations/"+id, nil, http.StatusOK, &op)
+			if ok(op) {
+				return op
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatalf("operation = %+v", op)
+		return op
+	}
+
+	op := create("Lobby", 25565)
+	got := wait(op.ID, func(op operation.Operation) bool { return op.Done == 50 })
+	if got.Steps[got.Step] != "image" || got.Total != 100 || got.Unit != "bytes" {
+		t.Fatalf("operation = %+v", got)
+	}
+	close(hold)
+	got = wait(op.ID, func(op operation.Operation) bool { return op.FinishedAt != nil })
+	result, _ := got.Result.(map[string]any)
+	if got.Error != "" || result["name"] != "Lobby" || got.ServerID != result["id"] || got.NodeID != a.node.ID {
+		t.Fatalf("operation = %+v", got)
+	}
+	var listed []operation.Operation
+	api.do("GET", "/api/operations", nil, http.StatusOK, &listed)
+	if len(listed) != 1 || listed[0].ID != op.ID {
+		t.Fatalf("operations = %+v", listed)
+	}
+
+	// A failed operation tells why.
+	a.runtime.mu.Lock()
+	a.runtime.createErr = errors.New("no space left on device")
+	a.runtime.mu.Unlock()
+	op = create("Survival", 25566)
+	if got := wait(op.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); got.Error == "" || got.Steps[got.Step] != "container" {
+		t.Fatalf("operation = %+v", got)
+	}
+	api.do("GET", "/api/operations/unknown", nil, http.StatusNotFound, nil)
 }

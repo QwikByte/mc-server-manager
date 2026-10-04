@@ -170,3 +170,17 @@
 @utility surface {
   @apply bg-card shadow-xs ring-1 ring-foreground/8 dark:shadow-none;
 }
+
+/* A bar that runs back and forth while it is unknown how long something takes. */
+@keyframes indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@utility animate-indeterminate {
+  animation: indeterminate 1.4s ease-in-out infinite;
+}

@@ -67,6 +67,20 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 }
 
+// Message returns what users may learn about an error: the message of an *Error or of a
+// gRPC status. Unexpected errors are logged and hidden.
+func Message(err error) string {
+	var apiErr *Error
+	if errors.As(err, &apiErr) {
+		return apiErr.Message
+	}
+	if st, ok := status.FromError(err); ok {
+		return st.Message()
+	}
+	slog.Error("Unexpected error", "err", err)
+	return "internal error"
+}
+
 // ReadJSON decodes a size limited request body into v and rejects unknown fields.
 func ReadJSON(w http.ResponseWriter, r *http.Request, v any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))

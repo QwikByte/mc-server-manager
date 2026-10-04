@@ -179,7 +179,7 @@ function ServerCard({
             {serverType(server.type).label} {displayVersion(server.version)}
           </p>
         </div>
-        <ServerStateBadge state={server.state} />
+        <ServerStateBadge server={server} nodeId={server.nodeId} />
         <Checkbox
           checked={selected}
           aria-label={t("Select {{name}}", { name: server.name })}
@@ -284,7 +284,7 @@ export function ServerTable({ groups, facts, showNode, selected, onSelect, colla
                       </div>
                     </TableCell>
                     <TableCell>
-                      <ServerStateBadge state={server.state} />
+                      <ServerStateBadge server={server} nodeId={server.nodeId} />
                     </TableCell>
                     {showNode && <TableCell className="text-muted-foreground max-md:hidden">{server.nodeName}</TableCell>}
                     {showNetwork && (

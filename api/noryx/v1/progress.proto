@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package noryx.v1;
+
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
+
+// ProgressService tells how long calls of the agent are getting on, e.g. one that downloads
+// a server image. The master names such a call with the metadata key noryx-operation and
+// watches it under that name; calls without it report nothing.
+service ProgressService {
+  // WatchProgress sends the progress of the named call whenever it changes, until the call
+  // ends. It may start before the call does.
+  rpc WatchProgress(WatchProgressRequest) returns (stream WatchProgressResponse);
+}
+
+message WatchProgressRequest {
+  string operation_id = 1;
+}
+
+message WatchProgressResponse {
+  // The step the call is at: image (downloading the server image), container (creating
+  // it), save (a running server writes its worlds), copy (copying data), archive (packing
+  // a backup), restore (unpacking one), stop or start.
+  string step = 1;
+  // Bytes of the step done so far, and in all; total is 0 if unknown.
+  int64 done = 2;
+  int64 total = 3;
+}

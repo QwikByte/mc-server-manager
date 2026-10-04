@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
+import { useOperation } from "@/features/operations/use-operation"
 import { covers } from "@/features/schedules/api"
 import { describeSchedule } from "@/features/schedules/describe"
 import { type Server, useServer } from "@/features/servers/api"
@@ -112,6 +113,7 @@ export function ServerBackupsPage() {
 function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server; backup: Backup }) {
   const { can } = useAccess()
   const { restore, remove } = useBackups(nodeId, server.id)
+  const operation = useOperation()
   const created = formatDateTime(backup.createdAt)
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -154,10 +156,10 @@ function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server;
             action={t("Restore")}
             destructive
             onConfirm={() =>
-              toast.promise(restore.mutateAsync(backup.id), {
-                loading: t("Restoring {{name}}…", { name: server.name }),
-                success: t("Restored the backup of {{time}}", { time: created }),
-                error: (e: Error) => e.message,
+              operation.run((onStart) => restore.mutateAsync({ id: backup.id, onStart }), {
+                title: t("Restoring {{name}}…", { name: server.name }),
+                notify: true,
+                done: () => ({ message: t("Restored the backup of {{time}}", { time: created }) }),
               })
             }
           />
@@ -198,14 +200,15 @@ function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server
   const [location, setLocation] = useState("")
   const { data: node } = useQuery(nodeQuery(nodeId))
   const { create } = useBackups(nodeId, server.id)
+  const operation = useOperation()
 
   function submit(event: FormEvent) {
     event.preventDefault()
     setOpen(false)
-    toast.promise(create.mutateAsync({ label: label.trim(), selection, location }), {
-      loading: t("Backing up {{name}}…", { name: server.name }),
-      success: (b) => t("Backed up {{name}} ({{size}})", { name: server.name, size: formatBytes(b.size) }),
-      error: (e: Error) => e.message,
+    operation.run((onStart) => create.mutateAsync({ label: label.trim(), selection, location, onStart }), {
+      title: t("Backing up {{name}}…", { name: server.name }),
+      notify: true,
+      done: (b) => ({ message: t("Backed up {{name}} ({{size}})", { name: server.name, size: formatBytes(b.size) }) }),
     })
     setLabel("")
   }

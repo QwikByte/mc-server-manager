@@ -1,5 +1,5 @@
-import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { installPlugins } from "@/features/plugins/api"
+import { type QueryClient, queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query"
+import { type Operation, operate } from "@/features/operations/api"
 import { api } from "@/lib/api"
 
 export type ServerState = "stopped" | "starting" | "running" | "crashing"
@@ -56,11 +56,14 @@ export interface NewServer extends Partial<Pick<Server, "java" | "restartPolicy"
   properties?: Record<string, string>
 }
 
+/** How often lists of servers are checked: more often while servers start, to show them running soon. */
+const interval = (servers?: Server[]) => (servers?.some((s) => s.state === "starting") ? 2_000 : 5_000)
+
 export const serversQuery = (nodeId: string) =>
   queryOptions({
     queryKey: ["nodes", nodeId, "servers"],
     queryFn: () => api<Server[]>(`/nodes/${nodeId}/servers`),
-    refetchInterval: 5_000,
+    refetchInterval: (query) => interval(query.state.data),
   })
 
 /** A server of a node, looked up in the list of the node's servers. */
@@ -73,23 +76,24 @@ export function useServer(nodeId: string, serverId: string) {
 export const allServersQuery = queryOptions({
   queryKey: ["servers"],
   queryFn: () => api<NodeServer[]>("/servers"),
-  refetchInterval: 5_000,
+  refetchInterval: (query) => interval(query.state.data),
 })
 
+/** Learns of the operation an action becomes, to follow it; see operate. */
+export interface Followed {
+  onStart?: (op: Operation) => void
+}
+
 /**
- * Creates a server, then installs Modrinth projects on it, e.g. the plugins of a template.
- * pluginError tells why they couldn't be installed; the server exists anyway.
+ * Creates a server, with the Modrinth projects to install on it, e.g. the plugins of a
+ * template. pluginError tells why they couldn't be installed; the server exists anyway.
  */
 export function useCreateServer() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ nodeId, server, plugins = [] }: { nodeId: string; server: NewServer; plugins?: string[] }) => {
-      const created = await api<Server>(`/nodes/${nodeId}/servers`, { body: server })
-      if (plugins.length === 0) return { server: created }
-      const [result] = await installPlugins(plugins, [{ nodeId, serverId: created.id }]).catch((e: Error) => [{ error: e.message }])
-      return { server: created, pluginError: result.error }
-    },
-    onSettled: (_data, _error, { nodeId }) => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
+    mutationFn: ({ nodeId, server, plugins, onStart }: { nodeId: string; server: NewServer; plugins?: string[] } & Followed) =>
+      operate<Server & { pluginError?: string }>(`/nodes/${nodeId}/servers`, { body: { ...server, plugins } }, onStart),
+    onSettled: (_data, _error, { nodeId }) => refreshServers(queryClient, nodeId),
   })
 }
 
@@ -97,9 +101,9 @@ export function useCreateServer() {
 export function useDuplicateServer(nodeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, name, port }: { id: string; name: string; port: number }) =>
-      api<Server>(`/nodes/${nodeId}/servers/${id}/duplicate`, { body: { name, port } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
+    mutationFn: ({ id, name, port, onStart }: { id: string; name: string; port: number } & Followed) =>
+      operate<Server>(`/nodes/${nodeId}/servers/${id}/duplicate`, { body: { name, port } }, onStart),
+    onSettled: () => refreshServers(queryClient, nodeId),
   })
 }
 
@@ -166,18 +170,22 @@ export interface BulkResult {
 
 const refsOf = (servers: Pick<NodeServer, "nodeId" | "id">[]) => servers.map((s) => ({ nodeId: s.nodeId, serverId: s.id }))
 
-/** Refreshes the lists of servers of all nodes, after a change to servers on any of them. */
-const refreshServers = (queryClient: QueryClient) =>
+/** Refreshes the lists of servers of a node, or of all nodes, after a change to servers on it. */
+const refreshServers = (queryClient: QueryClient, nodeId?: string) =>
   queryClient.invalidateQueries({
-    predicate: ({ queryKey }) => queryKey[0] === "servers" || (queryKey[0] === "nodes" && queryKey[2] === "servers"),
+    predicate: ({ queryKey }) =>
+      queryKey[0] === "servers" || (queryKey[0] === "nodes" && (!nodeId || queryKey[1] === nodeId) && queryKey[2] === "servers"),
   })
 
 /** Starts, stops or restarts servers on any nodes, or sends them a console command. */
 export function useBulkAction() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ servers, ...action }: BulkAction & { servers: NodeServer[] }) =>
-      api<{ results: BulkResult[] }>("/servers/actions", { body: { ...action, servers: refsOf(servers) } }).then((r) => r.results),
+    mutationKey: ["server-action"],
+    mutationFn: ({ servers, onStart, ...action }: BulkAction & { servers: NodeServer[] } & Followed) =>
+      operate<{ results: BulkResult[] }>("/servers/actions", { body: { ...action, servers: refsOf(servers) } }, onStart).then(
+        (r) => r.results,
+      ),
     onSettled: () => refreshServers(queryClient),
   })
 }
@@ -192,9 +200,29 @@ export function useChangeTags() {
   })
 }
 
+/**
+ * The action that runs on a server right now, started in this browser, e.g. stop while the
+ * server shuts down.
+ */
+export function usePendingAction(nodeId: string, serverId: string): BulkAction["action"] | "delete" | undefined {
+  const pending = useMutationState({
+    filters: { mutationKey: ["server-action"], status: "pending" },
+    select: (m) => ({
+      node: m.options.mutationKey?.[1],
+      vars: m.state.variables as { id: string; action: ServerAction } | (BulkAction & { servers: NodeServer[] }),
+    }),
+  })
+  for (const { node, vars } of pending) {
+    if ("servers" in vars && vars.servers.some((s) => s.nodeId === nodeId && s.id === serverId)) return vars.action
+    if ("id" in vars && node === nodeId && vars.id === serverId) return vars.action
+  }
+  return undefined
+}
+
 export function useServerAction(nodeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    mutationKey: ["server-action", nodeId],
     mutationFn: ({ id, action }: { id: string; action: ServerAction }) =>
       action === "delete"
         ? api(`/nodes/${nodeId}/servers/${id}`, { method: "DELETE" })
@@ -206,8 +234,9 @@ export function useServerAction(nodeId: string) {
 export function useUpdateServer(nodeId: string, serverId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (settings: ServerSettings) => api<Server>(`/nodes/${nodeId}/servers/${serverId}`, { method: "PUT", body: settings }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
+    mutationFn: ({ settings, onStart }: { settings: ServerSettings } & Followed) =>
+      operate<Server>(`/nodes/${nodeId}/servers/${serverId}`, { method: "PUT", body: settings }, onStart),
+    onSettled: () => refreshServers(queryClient, nodeId),
   })
 }
 
@@ -215,8 +244,9 @@ export function useUpdateServer(nodeId: string, serverId: string) {
 export function useUpdateImage(nodeId: string, serverId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => api<{ updated: boolean }>(`/nodes/${nodeId}/servers/${serverId}/update-image`, { method: "POST" }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
+    mutationFn: ({ onStart }: Followed = {}) =>
+      operate<{ updated: boolean }>(`/nodes/${nodeId}/servers/${serverId}/update-image`, { method: "POST" }, onStart),
+    onSettled: () => refreshServers(queryClient, nodeId),
   })
 }
 

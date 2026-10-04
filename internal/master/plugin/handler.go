@@ -12,9 +12,11 @@ import (
 	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
 const (
@@ -26,9 +28,14 @@ const (
 
 var gameVersion = regexp.MustCompile(`^[A-Za-z0-9._-]{0,32}$`)
 
-type Handler struct{ svc *Service }
+type Handler struct {
+	svc *Service
+	ops *operation.Operations
+}
 
-func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
+func NewHandler(svc *Service, ops *operation.Operations) *Handler {
+	return &Handler{svc: svc, ops: ops}
+}
 
 // Register adds the routes. Searching Modrinth needs no permission; installing on many
 // servers at once checks the permission for each of them.
@@ -152,9 +159,10 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	badVersion := func(project string) bool {
 		return !slices.Contains(req.Projects, project) || !modrinth.ValidProjectID(req.Versions[project])
 	}
-	switch {
-	case len(req.Projects) == 0 || len(req.Projects) > maxProjects || slices.ContainsFunc(req.Projects, func(id string) bool { return !modrinth.ValidProjectID(id) }):
-		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose up to %d projects to install.", maxProjects))
+	grants := access.From(r.Context())
+	switch err := checkProjects(req.Projects); {
+	case err != nil:
+		httpapi.WriteError(w, r, err)
 		return
 	case slices.ContainsFunc(slices.Collect(maps.Keys(req.Versions)), badVersion):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose versions only for the projects to install."))
@@ -162,14 +170,31 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	case len(req.Servers) == 0 || len(req.Servers) > maxServers || len(slices.Compact(slices.SortedFunc(slices.Values(req.Servers), compareRefs))) != len(req.Servers):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", maxServers))
 		return
-	case slices.ContainsFunc(req.Servers, func(s Ref) bool { return !access.From(r.Context()).On(access.Plugins, s.NodeID, s.ServerID) }):
+	case slices.ContainsFunc(req.Servers, func(s Ref) bool { return !grants.On(access.Plugins, s.NodeID, s.ServerID) }):
 		httpapi.WriteError(w, r, access.Denied(access.Plugins))
 		return
 	}
-	// The installation finishes even if the browser goes away.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), installTimeout)
-	defer cancel()
-	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"results": h.svc.Install(ctx, req.Projects, req.Versions, req.Servers)})
+	spec := operation.Spec{
+		Kind: "plugins.install", Subject: strconv.Itoa(len(req.Servers)), Steps: []string{"plugins"}, Status: http.StatusOK,
+		Timeout: installTimeout, Category: logging.Plugins,
+		Visible: func(g access.Grants) bool {
+			return !slices.ContainsFunc(req.Servers, func(s Ref) bool { return !g.On(access.ServersView, s.NodeID, s.ServerID) })
+		},
+	}
+	if len(req.Servers) == 1 {
+		spec.NodeID, spec.ServerID = req.Servers[0].NodeID, req.Servers[0].ServerID
+	}
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		return map[string]any{"results": h.svc.Install(ctx, req.Projects, req.Versions, req.Servers)}, nil
+	})
+}
+
+// checkProjects checks the Modrinth projects to install, before anything is looked up.
+func checkProjects(projects []string) error {
+	if len(projects) == 0 || len(projects) > maxProjects || slices.ContainsFunc(projects, func(id string) bool { return !modrinth.ValidProjectID(id) }) {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d projects to install.", maxProjects)
+	}
+	return nil
 }
 
 func compareRefs(a, b Ref) int {

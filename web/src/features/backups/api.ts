@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
 import { defaultSchedule, type TaskInput, taskApi } from "@/features/schedules/api"
+import { type Operation, operate } from "@/features/operations/api"
 import { api } from "@/lib/api"
 import { locale } from "@/lib/i18n"
 
@@ -85,12 +86,13 @@ export function useBackups(nodeId: string, serverId: string) {
   const onSettled = () => queryClient.invalidateQueries({ queryKey: backupsQuery(nodeId, serverId).queryKey })
   return {
     create: useMutation({
-      mutationFn: (input: { label: string; selection: Selection; location: string }) =>
-        api<Backup>(base(nodeId, serverId), { body: input }),
+      mutationFn: ({ onStart, ...input }: { label: string; selection: Selection; location: string; onStart?: (op: Operation) => void }) =>
+        operate<Backup>(base(nodeId, serverId), { body: input }, onStart),
       onSettled,
     }),
     restore: useMutation({
-      mutationFn: (id: string) => api(`${base(nodeId, serverId)}/${id}/restore`, { method: "POST" }),
+      mutationFn: ({ id, onStart }: { id: string; onStart?: (op: Operation) => void }) =>
+        operate(`${base(nodeId, serverId)}/${id}/restore`, { method: "POST" }, onStart),
       onSettled: () => queryClient.invalidateQueries({ queryKey: ["nodes", nodeId, "servers"] }),
     }),
     remove: useMutation({ mutationFn: (id: string) => api(`${base(nodeId, serverId)}/${id}`, { method: "DELETE" }), onSettled }),

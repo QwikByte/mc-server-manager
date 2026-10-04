@@ -18,6 +18,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
@@ -50,6 +51,11 @@ type Tags interface {
 	Copy(ctx context.Context, from, to tag.Server) error
 }
 
+// Plugins installs plugins and mods, e.g. those of a template on a new server.
+type Plugins interface {
+	InstallOn(ctx context.Context, projects []string, nodeID, serverID string) error
+}
+
 // References refer to servers, e.g. the targets of backup jobs and the scopes of groups.
 type References interface {
 	// Forget forgets a deleted server.
@@ -62,12 +68,14 @@ type Handler struct {
 	nodes    Nodes
 	networks Networks
 	tags     Tags
+	plugins  Plugins
+	ops      *operation.Operations
 	moves    *Moves
 	refs     []References
 }
 
-func NewHandler(nodes Nodes, networks Networks, tags Tags, moves *Moves, refs ...References) *Handler {
-	return &Handler{nodes: nodes, networks: networks, tags: tags, moves: moves, refs: refs}
+func NewHandler(nodes Nodes, networks Networks, tags Tags, plugins Plugins, ops *operation.Operations, moves *Moves, refs ...References) *Handler {
+	return &Handler{nodes: nodes, networks: networks, tags: tags, plugins: plugins, ops: ops, moves: moves, refs: refs}
 }
 
 // Register adds the routes. The lists only contain the servers the user may see.
@@ -241,8 +249,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, visible(r, r.PathValue("node"), res.GetServers(), tags))
 }
 
-// create creates a server. Besides the basics, it takes the settings and server.properties
-// a template provides.
+// create creates a server as an operation, which downloads the server image if the node
+// doesn't have it. Besides the basics, it takes the settings, server.properties and plugins
+// a template provides; plugins that can't be installed leave the server without them.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name       string `json:"name"`
@@ -254,49 +263,68 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Storage    string `json:"storage"`
 		settings
 		Properties map[string]string `json:"properties"`
+		// Plugins are the IDs of Modrinth projects to install on the new server.
+		Plugins []string `json:"plugins"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), createTimeout)
+	nodeID := r.PathValue("node")
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	policy, cpuMillis, err := req.check()
-	var c noryxv1.ServerServiceClient
-	if err == nil {
-		c, err = h.client(ctx, r)
+	if err == nil && len(req.Plugins) > 0 && !access.From(r.Context()).On(access.Plugins, nodeID, "") {
+		err = access.Denied(access.Plugins)
 	}
 	if err == nil {
-		err = h.checkLimits(ctx, r.PathValue("node"), "", req.Port, req.MemoryMB)
+		err = h.checkLimits(ctx, nodeID, "", req.Port, req.MemoryMB)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.CreateServer(ctx, &noryxv1.CreateServerRequest{
-		Name:          req.Name,
-		Type:          noryxv1.ParseServerType(req.Type),
-		Version:       req.Version,
-		MemoryMb:      req.MemoryMB,
-		Port:          req.Port,
-		AcceptEula:    req.AcceptEULA,
-		Storage:       req.Storage,
-		Java:          req.Java,
-		RestartPolicy: policy,
-		AikarFlags:    req.AikarFlags,
-		JvmOptions:    req.JVMOptions,
-		CpuMillis:     cpuMillis,
-		Properties:    req.Properties,
+	steps := []string{"image", "container"}
+	if len(req.Plugins) > 0 {
+		steps = append(steps, "plugins")
+	}
+	spec := operation.Spec{
+		Kind: "server.create", Subject: req.Name, NodeID: nodeID, Steps: steps, Status: http.StatusCreated,
+		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, ""),
+	}
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		var res *noryxv1.CreateServerResponse
+		err := h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) (err error) {
+			res, err = c.CreateServer(ctx, &noryxv1.CreateServerRequest{
+				Name: req.Name, Type: noryxv1.ParseServerType(req.Type), Version: req.Version, MemoryMb: req.MemoryMB,
+				Port: req.Port, AcceptEula: req.AcceptEULA, Storage: req.Storage, Java: req.Java, RestartPolicy: policy,
+				AikarFlags: req.AikarFlags, JvmOptions: req.JVMOptions, CpuMillis: cpuMillis, Properties: req.Properties,
+			})
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		id := res.GetServer().GetId()
+		operation.Target(ctx, nodeID, id)
+		logging.Note(ctx, slog.String(logging.KeyServer, id), slog.String(logging.KeyServerName, res.GetServer().GetName()))
+		created := struct {
+			view
+			// PluginError tells why the plugins couldn't be installed.
+			PluginError string `json:"pluginError,omitempty"`
+		}{view: toView(res.GetServer())}
+		if len(req.Plugins) > 0 {
+			operation.Step(ctx, "plugins")
+			if err := h.plugins.InstallOn(ctx, req.Plugins, nodeID, id); err != nil {
+				created.PluginError = httpapi.Message(err)
+			}
+		}
+		return created, nil
 	})
-	if err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	logging.Note(r.Context(), slog.String(logging.KeyServer, res.GetServer().GetId()), slog.String(logging.KeyServerName, res.GetServer().GetName()))
-	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetServer()))
 }
 
-// duplicate copies a server with its data into a new server on the same node.
+// duplicate copies a server with its data into a new server on the same node, as an
+// operation, which takes a while for big worlds.
 func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
@@ -306,7 +334,8 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // copying worlds takes a while
+	nodeID, id := r.PathValue("node"), r.PathValue("id")
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	c, err := h.client(ctx, r)
 	var list *noryxv1.ListServersResponse
@@ -317,28 +346,45 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	i := slices.IndexFunc(list.GetServers(), func(s *noryxv1.Server) bool { return s.GetId() == r.PathValue("id") })
+	i := slices.IndexFunc(list.GetServers(), func(s *noryxv1.Server) bool { return s.GetId() == id })
 	if i < 0 {
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusNotFound, "Server not found."))
 		return
 	}
-	err = h.checkLimits(ctx, r.PathValue("node"), "", req.Port, list.GetServers()[i].GetMemoryMb())
-	var res *noryxv1.DuplicateServerResponse
-	if err == nil {
-		res, err = c.DuplicateServer(ctx, &noryxv1.DuplicateServerRequest{Id: r.PathValue("id"), Name: req.Name, Port: req.Port})
-	}
-	if err != nil {
+	source := list.GetServers()[i]
+	if err := h.checkLimits(ctx, nodeID, "", req.Port, source.GetMemoryMb()); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	logging.Note(r.Context(), slog.String("copy", res.GetServer().GetName()), slog.String("copy_id", res.GetServer().GetId()))
-	nodeID := r.PathValue("node")
-	if err := h.tags.Copy(ctx, tag.Server{NodeID: nodeID, ServerID: r.PathValue("id")}, tag.Server{NodeID: nodeID, ServerID: res.GetServer().GetId()}); err != nil {
-		slog.Warn("The copy of a server didn't get its tags", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, res.GetServer().GetId(), "err", err)
+	steps := []string{"copy", "container"}
+	if source.GetState() != noryxv1.ServerState_SERVER_STATE_STOPPED && !source.GetType().Proxy() {
+		steps = append([]string{"save"}, steps...) // it saves its worlds first
 	}
-	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetServer()))
+	spec := operation.Spec{
+		Kind: "server.duplicate", Subject: req.Name, NodeID: nodeID, ServerID: id, Steps: steps, Status: http.StatusCreated,
+		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
+	}
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		var res *noryxv1.DuplicateServerResponse
+		err := h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) (err error) {
+			res, err = c.DuplicateServer(ctx, &noryxv1.DuplicateServerRequest{Id: id, Name: req.Name, Port: req.Port})
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		copied := res.GetServer()
+		operation.Target(ctx, nodeID, copied.GetId())
+		logging.Note(ctx, slog.String("copy", copied.GetName()), slog.String("copy_id", copied.GetId()))
+		if err := h.tags.Copy(ctx, tag.Server{NodeID: nodeID, ServerID: id}, tag.Server{NodeID: nodeID, ServerID: copied.GetId()}); err != nil {
+			slog.Warn("The copy of a server didn't get its tags", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, copied.GetId(), "err", err)
+		}
+		return toView(copied), nil
+	})
 }
 
+// update changes the settings of a server as an operation: the agent creates its container
+// again, after downloading another image for another Java version.
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     string `json:"name"`
@@ -351,46 +397,56 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), createTimeout) // a new Java version pulls an image
+	nodeID, id := r.PathValue("node"), r.PathValue("id")
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	policy, cpuMillis, err := req.check()
-	var c noryxv1.ServerServiceClient
 	if err == nil {
-		c, err = h.client(ctx, r)
-	}
-	if err == nil {
-		err = h.checkLimits(ctx, r.PathValue("node"), r.PathValue("id"), req.Port, req.MemoryMB)
+		err = h.checkLimits(ctx, nodeID, id, req.Port, req.MemoryMB)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	res, err := c.UpdateServer(ctx, &noryxv1.UpdateServerRequest{
-		Id: r.PathValue("id"), Name: req.Name, Version: req.Version, MemoryMb: req.MemoryMB, Port: req.Port,
-		Java: req.Java, RestartPolicy: policy, AikarFlags: req.AikarFlags,
-		JvmOptions: req.JVMOptions, CpuMillis: cpuMillis,
+	spec := operation.Spec{
+		Kind: "server.settings", Subject: req.Name, NodeID: nodeID, ServerID: id, Steps: []string{"image", "container"},
+		Status: http.StatusOK, Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
+	}
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		var res *noryxv1.UpdateServerResponse
+		err := h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) (err error) {
+			res, err = c.UpdateServer(ctx, &noryxv1.UpdateServerRequest{
+				Id: id, Name: req.Name, Version: req.Version, MemoryMb: req.MemoryMB, Port: req.Port,
+				Java: req.Java, RestartPolicy: policy, AikarFlags: req.AikarFlags, JvmOptions: req.JVMOptions, CpuMillis: cpuMillis,
+			})
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		return toView(res.GetServer()), nil
 	})
-	if err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	httpapi.WriteJSON(w, http.StatusOK, toView(res.GetServer()))
 }
 
-// updateImage pulls the server's image again and, if it changed, recreates the container.
+// updateImage pulls the server's image again as an operation and, if it changed, recreates
+// the container.
 func (h *Handler) updateImage(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), createTimeout)
-	defer cancel()
-	c, err := h.client(ctx, r)
-	var res *noryxv1.UpdateImageResponse
-	if err == nil {
-		res, err = c.UpdateImage(ctx, &noryxv1.UpdateImageRequest{Id: r.PathValue("id")})
+	nodeID, id := r.PathValue("node"), r.PathValue("id")
+	spec := operation.Spec{
+		Kind: "server.image", NodeID: nodeID, ServerID: id, Steps: []string{"image", "container"}, Status: http.StatusOK,
+		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
 	}
-	if err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"updated": res.GetUpdated()})
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		var res *noryxv1.UpdateImageResponse
+		err := h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) (err error) {
+			res, err = c.UpdateImage(ctx, &noryxv1.UpdateImageRequest{Id: id})
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"updated": res.GetUpdated()}, nil
+	})
 }
 
 // delete deletes a server with its data and backups, unless a network needs it.
@@ -437,6 +493,22 @@ func (h *Handler) lifecycle(op func(context.Context, noryxv1.ServerServiceClient
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// agent calls the agent of a node within an operation, which follows the call's progress.
+func (h *Handler) agent(ctx context.Context, nodeID string, call func(context.Context, noryxv1.ServerServiceClient) error) error {
+	conn, err := h.nodes.Conn(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	ctx, stop := operation.Agent(ctx, conn)
+	defer stop()
+	return call(ctx, noryxv1.NewServerServiceClient(conn))
+}
+
+// viewable lets those see an operation who may see its server, or the whole node.
+func viewable(nodeID, serverID string) func(access.Grants) bool {
+	return func(g access.Grants) bool { return g.On(access.ServersView, nodeID, serverID) }
 }
 
 // client returns a client of the agent of the node in the path.
