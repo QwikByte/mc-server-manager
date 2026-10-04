@@ -48,15 +48,10 @@ func (d *Docker) addCrashes(ctx context.Context, containerID string, srv *runtim
 	}
 }
 
-// Watch keeps the servers in order until ctx is done: it moves servers of older agents
-// into the current networks whenever it connects to Docker, and stops servers that keep
-// crashing.
+// Watch stops servers that keep crashing until ctx is done.
 func (d *Docker) Watch(ctx context.Context) {
 	inRow := map[string]int{} // crashes in a row by container ID
 	for ctx.Err() == nil {
-		if err := d.adopt(ctx); err != nil && ctx.Err() == nil {
-			slog.Warn("Can't move servers into the current networks", logging.Servers, "err", err)
-		}
 		err := d.watch(ctx, inRow)
 		if ctx.Err() == nil {
 			slog.Debug("Can't watch the servers for crashes", logging.Servers, "err", err)

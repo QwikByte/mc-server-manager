@@ -434,10 +434,7 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Containers.** Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images
   need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`, for proxies also `DAC_READ_SEARCH`.
   Servers of a node can't reach each other: they share a Docker network without communication between containers
-  (`noryx-servers`), and a Velocity proxy shares another one only with its backends on the node. Containers created by
-  earlier versions move into these networks when the agent starts, and leave the old shared network `mcsm` when the
-  agent starts them again, so that no player is disconnected; their capabilities change once they are created again,
-  e.g. by changing their settings or with **Apply again** for a network.
+  (`noryx-servers`), and a Velocity proxy shares another one only with its backends on the node.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), and servers are only created after the operator accepts the Minecraft EULA. JVM options may only
   contain characters that the image's start script can't interpret as shell syntax, can't override the memory limit

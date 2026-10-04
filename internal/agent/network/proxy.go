@@ -9,8 +9,6 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/pelletier/go-toml/v2"
-
 	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
@@ -197,19 +195,4 @@ func listeners(s map[string]any) []map[string]any {
 		}
 	}
 	return found
-}
-
-// VelocityBackends returns the addresses of the backends in velocity.toml.
-func VelocityBackends(config []byte) []string {
-	var settings struct{ Servers map[string]any }
-	if toml.Unmarshal(config, &settings) != nil {
-		return nil
-	}
-	var addresses []string
-	for name, address := range settings.Servers {
-		if s, ok := address.(string); ok && name != "try" {
-			addresses = append(addresses, s)
-		}
-	}
-	return addresses
 }

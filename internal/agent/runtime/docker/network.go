@@ -1,12 +1,9 @@
 package docker
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"net"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,7 +13,6 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
-	noryxv1 "github.com/QwikByte/mc-server-manager/api/noryx/v1"
 	"github.com/QwikByte/mc-server-manager/internal/agent/datadir"
 	mcnet "github.com/QwikByte/mc-server-manager/internal/agent/network"
 	"github.com/QwikByte/mc-server-manager/internal/agent/runtime"
@@ -120,8 +116,6 @@ const (
 	// sharedNetwork connects the servers of the node that aren't part of a network to the
 	// internet, but not to each other.
 	sharedNetwork = "noryx-servers"
-	// legacyNetwork was shared by all servers of older agents, which could reach each other.
-	legacyNetwork = "mcsm"
 	// A Velocity proxy and its backends on the node have a network of their own.
 	proxyNetworkPrefix = "noryx-proxy-"
 )
@@ -151,8 +145,7 @@ func placement(c container.InspectResponse, spec runtime.Spec) string {
 }
 
 // move puts a container into a network and takes it out of the other networks of the
-// agent, so that its name resolves to a single address. The network of older agents
-// stays until the agent starts the server again, so that no player is disconnected now.
+// agent, so that its name resolves to a single address.
 func (d *Docker) move(ctx context.Context, c container.InspectResponse, to string) error {
 	if err := d.ensureNetwork(ctx, to); err != nil {
 		return err
@@ -198,23 +191,12 @@ func (d *Docker) release(ctx context.Context, proxyID string, backends []runtime
 	return nil
 }
 
-// prepare readies a server that is about to start, which disconnects its players anyway.
+// prepare readies a server that is about to start: a proxy listens on the port its
+// container publishes, as the default configuration of the Velocity image listens on another one.
 func (d *Docker) prepare(ctx context.Context, id string) error {
-	c, spec, err := d.inspect(ctx, id)
-	if err != nil {
+	_, spec, err := d.inspect(ctx, id)
+	if err != nil || !spec.Type.Proxy() {
 		return err
-	}
-	if err := d.listen(spec); err != nil {
-		return err
-	}
-	return d.leaveLegacy(ctx, c)
-}
-
-// listen makes a proxy listen on the port its container publishes, as the default
-// configuration of the Velocity image listens on another one.
-func (d *Docker) listen(spec runtime.Spec) error {
-	if !spec.Type.Proxy() {
-		return nil
 	}
 	path, err := d.dataPath(spec)
 	if err != nil {
@@ -227,94 +209,6 @@ func (d *Docker) listen(spec runtime.Spec) error {
 	defer data.Close()
 	_, err = mcnet.ProxyBind(data, spec.Type, images[spec.Type].port)
 	return err
-}
-
-// leaveLegacy takes a container out of the network of older agents, once it is in one
-// of the current networks, and removes that network once empty.
-func (d *Docker) leaveLegacy(ctx context.Context, c container.InspectResponse) error {
-	if c.NetworkSettings == nil || c.NetworkSettings.Networks[legacyNetwork] == nil || len(c.NetworkSettings.Networks) < 2 {
-		return nil
-	}
-	if _, err := d.cli.NetworkDisconnect(ctx, legacyNetwork, client.NetworkDisconnectOptions{Container: c.ID}); err != nil {
-		return err
-	}
-	_, _ = d.cli.NetworkRemove(ctx, legacyNetwork, client.NetworkRemoveOptions{}) // fails while others use it
-	return nil
-}
-
-// adopt moves the servers of older agents, which shared one network, into the current
-// ones: a Velocity proxy and the backends its configuration names into the proxy's
-// network, the others into the shared one. Stopped servers leave the old network now,
-// running ones when the agent starts them again, so that no player is disconnected.
-func (d *Docker) adopt(ctx context.Context) error {
-	res, err := d.cli.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("label", labelManaged).Add("network", legacyNetwork)})
-	if err != nil {
-		return err
-	}
-	var specs []runtime.Spec
-	for _, c := range res.Items {
-		if spec, ok := specOf(c.Labels); ok && slices.Contains(c.Names, "/"+containerName(spec.ID)) {
-			specs = append(specs, spec)
-		}
-	}
-	// Proxies first, which take their backends along.
-	slices.SortFunc(specs, func(a, b runtime.Spec) int { return cmp.Compare(proxyRank(b), proxyRank(a)) })
-	adopted := map[string]bool{}
-	for _, spec := range specs {
-		members := []string{spec.ID}
-		to := sharedNetwork
-		if spec.Type == noryxv1.ServerType_SERVER_TYPE_VELOCITY {
-			members, to = append(members, d.localBackends(spec)...), proxyNetwork(spec.ID)
-		} else if adopted[spec.ID] {
-			continue
-		}
-		for _, id := range members {
-			c, _, err := d.inspect(ctx, id)
-			if err != nil {
-				return err
-			}
-			if err := d.move(ctx, c, to); err != nil {
-				return err
-			}
-			adopted[id] = true
-			if !c.State.Running {
-				if c, _, err = d.inspect(ctx, id); err == nil {
-					err = d.leaveLegacy(ctx, c)
-				}
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func proxyRank(spec runtime.Spec) int {
-	if spec.Type == noryxv1.ServerType_SERVER_TYPE_VELOCITY {
-		return 1
-	}
-	return 0
-}
-
-// localBackends returns the servers of this node that the configuration of a proxy names.
-func (d *Docker) localBackends(proxy runtime.Spec) []string {
-	path, err := d.dataPath(proxy)
-	if err != nil {
-		return nil
-	}
-	config, err := os.ReadFile(filepath.Join(path, "velocity.toml")) //nolint:gosec // a file of the proxy's data
-	if err != nil {
-		return nil
-	}
-	var ids []string
-	for _, address := range mcnet.VelocityBackends(config) {
-		host, _, _ := net.SplitHostPort(address)
-		if id, ok := strings.CutPrefix(host, containerName("")); ok && runtime.ValidID(id) {
-			ids = append(ids, id)
-		}
-	}
-	return ids
 }
 
 // ensureNetwork creates a network of the agent if it doesn't exist yet. Containers in the

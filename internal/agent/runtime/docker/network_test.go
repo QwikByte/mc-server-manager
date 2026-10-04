@@ -31,7 +31,6 @@ func TestPlacement(t *testing.T) {
 	}{
 		{"proxy", in(sharedNetwork), proxy, "noryx-proxy-proxy"},
 		{"backend", in("noryx-proxy-proxy"), backend, "noryx-proxy-proxy"},
-		{"backend of an older agent", in(legacyNetwork), backend, sharedNetwork},
 		{"backend that left its network", in("noryx-proxy-proxy"), standalone, sharedNetwork},
 		{"standalone", in(sharedNetwork), standalone, sharedNetwork},
 	} {

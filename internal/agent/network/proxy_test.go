@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -222,15 +221,5 @@ func TestProxyBind(t *testing.T) {
 	want(t, read(t, dir, "velocity.toml"), map[string]any{"config-version": "2.9", "bind": "0.0.0.0:25565"})
 	if changed, err := ProxyBind(dir, noryxv1.ServerType_SERVER_TYPE_BUNGEECORD, 25577); changed || err != nil {
 		t.Fatalf("changed = %v, err = %v", changed, err)
-	}
-}
-
-func TestVelocityBackends(t *testing.T) {
-	got := VelocityBackends([]byte(defaultVelocity))
-	if len(got) != 2 || !slices.Contains(got, "127.0.0.1:30066") || !slices.Contains(got, "127.0.0.1:30067") {
-		t.Fatalf("backends = %q", got)
-	}
-	if got := VelocityBackends([]byte("not toml [")); got != nil {
-		t.Fatalf("backends of a broken file = %q", got)
 	}
 }
