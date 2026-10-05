@@ -15,21 +15,21 @@ const (
 	ForgeProxyFile  = "config/proxy-compatible-forge.toml"
 )
 
-// ErrModernOnly is returned for Fabric servers with legacy forwarding, as FabricProxy-Lite
-// only supports Velocity's modern forwarding.
-var ErrModernOnly = errors.New("Fabric servers only support Velocity's modern forwarding.") //nolint:staticcheck // shown to the operator
+// ErrModernOnly is returned for Fabric and Quilt servers with legacy forwarding, as
+// FabricProxy-Lite only supports Velocity's modern forwarding.
+var ErrModernOnly = errors.New("Fabric and Quilt servers only support Velocity's modern forwarding.") //nolint:staticcheck // shown to the operator
 
 // WriteBackend writes how a game server accepts the players its proxy forwards, or that it
-// accepts players directly again with runtime.ForwardingNone: Paper and Purpur in their own
-// configuration, Fabric, Forge and NeoForge in that of the forwarding mod the master
-// installs, FabricProxy-Lite or Proxy-Compatible-Forge. It reports whether a file changed.
+// accepts players directly again with runtime.ForwardingNone: Paper and its forks in their
+// own configuration, Fabric, Quilt, Forge and NeoForge in that of the forwarding mod the
+// master installs, FabricProxy-Lite or Proxy-Compatible-Forge. It reports whether a file changed.
 func WriteBackend(dir *datadir.Dir, typ noryxv1.ServerType, f runtime.Forwarding, secret string) (bool, error) {
 	modern, legacy, joined := f == runtime.ForwardingModern, f == runtime.ForwardingLegacy, f != runtime.ForwardingNone
 	if !modern {
 		secret = ""
 	}
-	switch typ {
-	case noryxv1.ServerType_SERVER_TYPE_PAPER, noryxv1.ServerType_SERVER_TYPE_PURPUR:
+	switch {
+	case typ.Paper():
 		// Paper fills in missing settings when it starts.
 		paper, err := edit(dir, PaperGlobalFile, true, func(s map[string]any) error {
 			velocity := child(child(s, "proxies"), "velocity")
@@ -44,7 +44,7 @@ func WriteBackend(dir *datadir.Dir, typ noryxv1.ServerType, f runtime.Forwarding
 			return nil
 		})
 		return paper || spigot, err
-	case noryxv1.ServerType_SERVER_TYPE_FABRIC:
+	case typ.Fabric():
 		if legacy {
 			return false, ErrModernOnly
 		}
@@ -52,7 +52,7 @@ func WriteBackend(dir *datadir.Dir, typ noryxv1.ServerType, f runtime.Forwarding
 			s["secret"] = secret
 			return nil
 		})
-	case noryxv1.ServerType_SERVER_TYPE_FORGE, noryxv1.ServerType_SERVER_TYPE_NEOFORGE:
+	case typ == noryxv1.ServerType_SERVER_TYPE_FORGE, typ == noryxv1.ServerType_SERVER_TYPE_NEOFORGE:
 		return edit(dir, ForgeProxyFile, joined, func(s map[string]any) error {
 			forwarding := child(s, "forwarding")
 			forwarding["enabled"], forwarding["secret"] = joined, secret

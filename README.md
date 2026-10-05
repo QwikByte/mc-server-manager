@@ -17,7 +17,7 @@ controls **agents** on any number of dedicated servers.
 | `noryx-agent`  | every dedicated host | Runs the Minecraft servers through a runtime (Docker), accepts commands from the master or its CLI |
 
 Servers run as containers based on [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server)
-(Vanilla, Paper, Purpur, Fabric, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy)
+(Vanilla, Paper, Purpur, Folia, Leaf, Fabric, Quilt, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy)
 (Velocity, BungeeCord, Waterfall). Container labels are the agent's only state, so servers keep running while an agent restarts.
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
@@ -204,9 +204,9 @@ that come from Modrinth. Worlds and plugin configurations are not part of templa
 
 ## Plugins and mods
 
-Plugins (Paper, Purpur, Velocity, BungeeCord, Waterfall) and mods (Fabric, Forge, NeoForge) are installed from
-[Modrinth](https://modrinth.com), either on any number of servers at once from the **Plugins** page or from the
-**Plugins**/**Mods** tab of a server. The **Plugins** page switches between plugins and mods, so a project made for
+Plugins (Paper, Purpur, Folia, Leaf, Velocity, BungeeCord, Waterfall) and mods (Fabric, Quilt, Forge, NeoForge) are
+installed from [Modrinth](https://modrinth.com), either on any number of servers at once from the **Plugins** page or
+from the **Plugins**/**Mods** tab of a server. The **Plugins** page switches between plugins and mods, so a project made for
 both only shows the software and servers of the chosen kind. The search filters by software, Minecraft version,
 categories (e.g. economy, management, optimization) and, for mods, those players don't have to install, and sorts by
 relevance, downloads, followers, newest or recently updated. The master picks the newest release for each server's
@@ -276,16 +276,16 @@ stores the network and configures each server through its agent.
 | Velocity              | `velocity.toml` | modern (recommended) or legacy               |
 | BungeeCord, Waterfall | `config.yml`    | legacy (`ip_forward`), BungeeCord's only way |
 
-| Game server     | Accepts the players of the proxy through                                                        |
-| --------------- | ----------------------------------------------------------------------------------------------- |
-| Paper, Purpur   | `config/paper-global.yml` (modern) or `spigot.yml` with `bungeecord: true` (legacy)             |
-| Fabric          | [FabricProxy-Lite](https://modrinth.com/mod/fabricproxy-lite) and the Fabric API (modern only)  |
-| Forge, NeoForge | [Proxy-Compatible-Forge](https://modrinth.com/mod/proxy-compatible-forge) (modern or legacy)    |
+| Game server                | Accepts the players of the proxy through                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------- |
+| Paper, Purpur, Folia, Leaf | `config/paper-global.yml` (modern) or `spigot.yml` with `bungeecord: true` (legacy)            |
+| Fabric, Quilt              | [FabricProxy-Lite](https://modrinth.com/mod/fabricproxy-lite) and the Fabric API (modern only) |
+| Forge, NeoForge            | [Proxy-Compatible-Forge](https://modrinth.com/mod/proxy-compatible-forge) (modern or legacy)   |
 
 Vanilla servers can't tell forwarded players apart and can't join. Game servers in a network run with
 `online-mode=false`, as the proxy authenticates the players, and turn away anyone who doesn't come through the proxy.
-The panel installs the forwarding mod of a Fabric, Forge or NeoForge server from Modrinth when it joins, and removes it
-when it leaves.
+The panel installs the forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and
+removes it when it leaves.
 
 - **Map and routing.** The network's page shows where players connect, the proxy and its servers with their state and
   players. Players join the servers of the join order and fall back to the next one when a server is offline, full or
@@ -351,7 +351,7 @@ The panel shows what nodes and servers use, now and during the last week.
 
 - **Now.** Every agent measures every 5 seconds: CPU and memory of the node and of each server (without the page
   cache, like `docker stats`), the network traffic of each server, the size of its data (every 5 minutes), the players
-  online and the ticks per second of Paper and Purpur servers. The number of players comes from the status request that
+  online and the ticks per second of Paper, Purpur and Leaf servers. The number of players comes from the status request that
   the server list in the game sends too, which game servers and Velocity answer; BungeeCord and Waterfall are left out,
   as they log every such request. The names of all players and the ticks per second come through the server's console
   port (`list`, `tps`) over a connection that stays open, because servers log every new one. Server cards show CPU, memory and players; the **Usage** tab of a server and the node page
@@ -510,8 +510,8 @@ Users get their permissions from groups; a user can be in several groups and has
   Content Security Policy stays unchanged.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
   directory. A copied Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a
-  copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. A copied Fabric server
-  keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab.
+  copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. A copied Fabric or Quilt
+  server keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab.
 - **Backups.** The agent keeps backups outside of the servers' folders, accessible to itself only (mode `0700`), so a
   compromised server can't read or tamper with them. The master can only choose among the storage locations the
   node's administrator allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry

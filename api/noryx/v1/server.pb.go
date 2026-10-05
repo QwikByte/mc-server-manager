@@ -35,21 +35,30 @@ const (
 	ServerType_SERVER_TYPE_VELOCITY   ServerType = 7
 	ServerType_SERVER_TYPE_BUNGEECORD ServerType = 8
 	ServerType_SERVER_TYPE_WATERFALL  ServerType = 9
+	// Forks of Paper with its configuration: Folia runs regions of the worlds in parallel and
+	// only loads plugins made for it, Leaf optimises performance.
+	ServerType_SERVER_TYPE_FOLIA ServerType = 10
+	ServerType_SERVER_TYPE_LEAF  ServerType = 11
+	// Quilt loads its own mods and those of Fabric.
+	ServerType_SERVER_TYPE_QUILT ServerType = 12
 )
 
 // Enum value maps for ServerType.
 var (
 	ServerType_name = map[int32]string{
-		0: "SERVER_TYPE_UNSPECIFIED",
-		1: "SERVER_TYPE_VANILLA",
-		2: "SERVER_TYPE_PAPER",
-		3: "SERVER_TYPE_PURPUR",
-		4: "SERVER_TYPE_FABRIC",
-		5: "SERVER_TYPE_FORGE",
-		6: "SERVER_TYPE_NEOFORGE",
-		7: "SERVER_TYPE_VELOCITY",
-		8: "SERVER_TYPE_BUNGEECORD",
-		9: "SERVER_TYPE_WATERFALL",
+		0:  "SERVER_TYPE_UNSPECIFIED",
+		1:  "SERVER_TYPE_VANILLA",
+		2:  "SERVER_TYPE_PAPER",
+		3:  "SERVER_TYPE_PURPUR",
+		4:  "SERVER_TYPE_FABRIC",
+		5:  "SERVER_TYPE_FORGE",
+		6:  "SERVER_TYPE_NEOFORGE",
+		7:  "SERVER_TYPE_VELOCITY",
+		8:  "SERVER_TYPE_BUNGEECORD",
+		9:  "SERVER_TYPE_WATERFALL",
+		10: "SERVER_TYPE_FOLIA",
+		11: "SERVER_TYPE_LEAF",
+		12: "SERVER_TYPE_QUILT",
 	}
 	ServerType_value = map[string]int32{
 		"SERVER_TYPE_UNSPECIFIED": 0,
@@ -62,6 +71,9 @@ var (
 		"SERVER_TYPE_VELOCITY":    7,
 		"SERVER_TYPE_BUNGEECORD":  8,
 		"SERVER_TYPE_WATERFALL":   9,
+		"SERVER_TYPE_FOLIA":       10,
+		"SERVER_TYPE_LEAF":        11,
+		"SERVER_TYPE_QUILT":       12,
 	}
 )
 
@@ -2145,7 +2157,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
 	"\acontent\"@\n" +
 	"\x14ImportServerResponse\x12(\n" +
-	"\x06server\x18\x01 \x01(\v2\x10.noryx.v1.ServerR\x06server*\x8b\x02\n" +
+	"\x06server\x18\x01 \x01(\v2\x10.noryx.v1.ServerR\x06server*\xcf\x02\n" +
 	"\n" +
 	"ServerType\x12\x1b\n" +
 	"\x17SERVER_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -2157,7 +2169,11 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x14SERVER_TYPE_NEOFORGE\x10\x06\x12\x18\n" +
 	"\x14SERVER_TYPE_VELOCITY\x10\a\x12\x1a\n" +
 	"\x16SERVER_TYPE_BUNGEECORD\x10\b\x12\x19\n" +
-	"\x15SERVER_TYPE_WATERFALL\x10\t*\x81\x01\n" +
+	"\x15SERVER_TYPE_WATERFALL\x10\t\x12\x15\n" +
+	"\x11SERVER_TYPE_FOLIA\x10\n" +
+	"\x12\x14\n" +
+	"\x10SERVER_TYPE_LEAF\x10\v\x12\x15\n" +
+	"\x11SERVER_TYPE_QUILT\x10\f*\x81\x01\n" +
 	"\rRestartPolicy\x12\x1e\n" +
 	"\x1aRESTART_POLICY_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15RESTART_POLICY_ALWAYS\x10\x01\x12\x1b\n" +

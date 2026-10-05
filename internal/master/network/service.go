@@ -50,7 +50,7 @@ var (
 	errNotFound   = httpapi.Errorf(http.StatusNotFound, "Network not found.")
 	errProxyType  = httpapi.Errorf(http.StatusBadRequest, "Choose a Velocity, BungeeCord or Waterfall proxy.")
 	errExposed    = httpapi.Errorf(http.StatusConflict, "With legacy forwarding, anyone who reaches a server can join it as any player. Confirm that a firewall lets only the proxy's node reach the servers on other nodes.")
-	errFabricMode = httpapi.Errorf(http.StatusBadRequest, "Fabric servers only support Velocity's modern forwarding.")
+	errFabricMode = httpapi.Errorf(http.StatusBadRequest, "Fabric and Quilt servers only support Velocity's modern forwarding.")
 
 	nonSlug     = regexp.MustCompile(`[^a-z0-9]+`)
 	namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
@@ -58,9 +58,11 @@ var (
 )
 
 // mods are the Modrinth projects with which game servers that can't verify forwarded
-// players themselves learn it: FabricProxy-Lite and Proxy-Compatible-Forge.
+// players themselves learn it: FabricProxy-Lite, which runs on Quilt too, and
+// Proxy-Compatible-Forge.
 var mods = map[noryxv1.ServerType]string{
 	noryxv1.ServerType_SERVER_TYPE_FABRIC:   "8dI2tmqs",
+	noryxv1.ServerType_SERVER_TYPE_QUILT:    "8dI2tmqs",
 	noryxv1.ServerType_SERVER_TYPE_FORGE:    "vDyrHl8l",
 	noryxv1.ServerType_SERVER_TYPE_NEOFORGE: "vDyrHl8l",
 }
@@ -132,7 +134,7 @@ type Nodes interface {
 	Conn(ctx context.Context, id string) (grpc.ClientConnInterface, error)
 }
 
-// Mods installs and removes the forwarding mods of Fabric, Forge and NeoForge servers.
+// Mods installs and removes the forwarding mods of Fabric, Quilt, Forge and NeoForge servers.
 type Mods interface {
 	Ensure(ctx context.Context, ref plugin.Ref, project string) error
 	Uninstall(ctx context.Context, ref plugin.Ref, project string) error
@@ -576,8 +578,8 @@ func (s *Service) backend(ctx context.Context, ref Ref, forwarding string) (*nor
 	}
 	switch typ := srv.GetType(); {
 	case typ.Proxy() || typ == noryxv1.ServerType_SERVER_TYPE_VANILLA:
-		return nil, httpapi.Errorf(http.StatusBadRequest, "Only Paper, Purpur, Fabric, Forge and NeoForge servers can verify the players a proxy forwards.")
-	case typ == noryxv1.ServerType_SERVER_TYPE_FABRIC && forwarding != Modern:
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Only Paper and its forks, Fabric, Quilt, Forge and NeoForge servers can verify the players a proxy forwards.")
+	case typ.Fabric() && forwarding != Modern:
 		return nil, errFabricMode
 	}
 	return srv, nil

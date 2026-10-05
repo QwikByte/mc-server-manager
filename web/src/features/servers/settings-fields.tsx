@@ -108,7 +108,7 @@ export function JavaFields({
         <Switch id="settings-aikar" checked={aikarFlags} onCheckedChange={(on) => onChange({ aikarFlags: on })} />
         <FieldContent>
           <FieldLabel htmlFor="settings-aikar">{t("Aikar's flags")}</FieldLabel>
-          <FieldDescription>{t("Garbage collector tuning recommended for Paper and Purpur, which reduces lag spikes.")}</FieldDescription>
+          <FieldDescription>{t("Garbage collector tuning recommended for Paper and its forks, which reduces lag spikes.")}</FieldDescription>
         </FieldContent>
       </Field>
     </>

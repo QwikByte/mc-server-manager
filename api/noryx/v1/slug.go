@@ -13,6 +13,20 @@ func (t ServerType) Bungee() bool {
 	return t == ServerType_SERVER_TYPE_BUNGEECORD || t == ServerType_SERVER_TYPE_WATERFALL
 }
 
+// Paper reports whether the type is Paper or a fork of it with the same configuration.
+func (t ServerType) Paper() bool {
+	switch t {
+	case ServerType_SERVER_TYPE_PAPER, ServerType_SERVER_TYPE_PURPUR, ServerType_SERVER_TYPE_FOLIA, ServerType_SERVER_TYPE_LEAF:
+		return true
+	}
+	return false
+}
+
+// Fabric reports whether the type loads Fabric mods: Fabric itself, or Quilt.
+func (t ServerType) Fabric() bool {
+	return t == ServerType_SERVER_TYPE_FABRIC || t == ServerType_SERVER_TYPE_QUILT
+}
+
 // Slug returns the short lower-case name, e.g. "running" for SERVER_STATE_RUNNING.
 func (s ServerState) Slug() string { return slug(s.String(), "SERVER_STATE_") }
 

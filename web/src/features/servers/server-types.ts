@@ -17,14 +17,23 @@ const bukkit = ["paper", "spigot", "bukkit"]
 export const serverTypes: ServerType[] = [
   { value: "paper", label: "Paper", proxy: false, addons: { kind: "plugins", loaders: bukkit } },
   { value: "purpur", label: "Purpur", proxy: false, addons: { kind: "plugins", loaders: ["purpur", ...bukkit] } },
+  // Folia only loads plugins made for it.
+  { value: "folia", label: "Folia", proxy: false, addons: { kind: "plugins", loaders: ["folia"] } },
+  { value: "leaf", label: "Leaf", proxy: false, addons: { kind: "plugins", loaders: bukkit } },
   { value: "vanilla", label: "Vanilla", proxy: false },
   { value: "fabric", label: "Fabric", proxy: false, addons: { kind: "mods", loaders: ["fabric"] } },
+  { value: "quilt", label: "Quilt", proxy: false, addons: { kind: "mods", loaders: ["quilt", "fabric"] } },
   { value: "forge", label: "Forge", proxy: false, addons: { kind: "mods", loaders: ["forge"] } },
   { value: "neoforge", label: "NeoForge", proxy: false, addons: { kind: "mods", loaders: ["neoforge"] } },
   { value: "velocity", label: "Velocity", proxy: true, addons: { kind: "plugins", loaders: ["velocity"] } },
   { value: "bungeecord", label: "BungeeCord", proxy: true, addons: { kind: "plugins", loaders: ["bungeecord", "waterfall"] } },
   { value: "waterfall", label: "Waterfall", proxy: true, addons: { kind: "plugins", loaders: ["waterfall", "bungeecord"] } },
 ]
+
+/** Paper and its forks share Paper's configuration. */
+export const isPaper = (type: string) => ["paper", "purpur", "folia", "leaf"].includes(type)
+/** Fabric and Quilt load Fabric mods. */
+export const isFabric = (type: string) => type === "fabric" || type === "quilt"
 
 export const memoryOptionsMb = [512, 1024, 2048, 4096, 6144, 8192, 12288, 16384]
 

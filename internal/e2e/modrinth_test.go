@@ -50,7 +50,7 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	f.version("vault", "1.7", paper)
 	f.project("fabricapi", "Fabric API", []string{"fabric"})
 	f.version("fabricapi", "0.119", []string{"fabric"})
-	f.project("8dI2tmqs", "FabricProxy-Lite", []string{"quilt", "fabric"}) // not found by searches for Fabric
+	f.project("8dI2tmqs", "FabricProxy-Lite", []string{"quilt", "fabric"}) // found by searches for Quilt, not Fabric
 	f.version("8dI2tmqs", "2.10", []string{"fabric"}, "fabricapi")
 	f.project("broken", "Broken", paper)
 	f.version("broken", "1.0", paper)

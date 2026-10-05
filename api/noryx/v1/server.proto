@@ -52,6 +52,12 @@ enum ServerType {
   SERVER_TYPE_VELOCITY = 7;
   SERVER_TYPE_BUNGEECORD = 8;
   SERVER_TYPE_WATERFALL = 9;
+  // Forks of Paper with its configuration: Folia runs regions of the worlds in parallel and
+  // only loads plugins made for it, Leaf optimises performance.
+  SERVER_TYPE_FOLIA = 10;
+  SERVER_TYPE_LEAF = 11;
+  // Quilt loads its own mods and those of Fabric.
+  SERVER_TYPE_QUILT = 12;
 }
 
 // RestartPolicy decides when the node starts a server on its own.

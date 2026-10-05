@@ -24,7 +24,7 @@ export function ForwardingChoice({
       icon: ShieldCheckIcon,
       title: t("Modern"),
       badge: t("Recommended"),
-      description: t("Velocity signs the identity of each player with a secret that only the network's servers know. Paper, Purpur, Fabric, Forge and NeoForge from 1.13 on."),
+      description: t("Velocity signs the identity of each player with a secret that only the network's servers know. Paper, Fabric, Forge, NeoForge and their forks from 1.13 on."),
     },
     {
       value: "legacy" as const,

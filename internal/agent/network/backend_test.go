@@ -55,6 +55,25 @@ func TestWriteBackendKeepsUntouchedFiles(t *testing.T) {
 	}
 }
 
+// Forks of Paper and Quilt are configured like Paper and Fabric.
+func TestWriteBackendForks(t *testing.T) {
+	for _, typ := range []noryxv1.ServerType{noryxv1.ServerType_SERVER_TYPE_FOLIA, noryxv1.ServerType_SERVER_TYPE_LEAF} {
+		dir := dataDir(t, nil)
+		if _, err := WriteBackend(dir, typ, runtime.ForwardingModern, "s3cret"); err != nil {
+			t.Fatal(err)
+		}
+		want(t, read(t, dir, PaperGlobalFile), map[string]any{"proxies/velocity/secret": "s3cret"})
+	}
+	dir := dataDir(t, nil)
+	if _, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_QUILT, runtime.ForwardingModern, "s3cret"); err != nil {
+		t.Fatal(err)
+	}
+	want(t, read(t, dir, FabricProxyFile), map[string]any{"secret": "s3cret"})
+	if _, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_QUILT, runtime.ForwardingLegacy, ""); !errors.Is(err, ErrModernOnly) {
+		t.Fatalf("legacy forwarding on Quilt: err = %v", err)
+	}
+}
+
 func TestWriteBackendMods(t *testing.T) {
 	dir := dataDir(t, nil)
 	if changed, err := WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_FABRIC, runtime.ForwardingModern, "s3cret"); !changed || err != nil {

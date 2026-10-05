@@ -42,15 +42,21 @@ var (
 	loaders = map[noryxv1.ServerType][]string{
 		noryxv1.ServerType_SERVER_TYPE_PAPER:      {"paper", "spigot", "bukkit"},
 		noryxv1.ServerType_SERVER_TYPE_PURPUR:     {"purpur", "paper", "spigot", "bukkit"},
+		noryxv1.ServerType_SERVER_TYPE_FOLIA:      {"folia"}, // other plugins don't run on Folia
+		noryxv1.ServerType_SERVER_TYPE_LEAF:       {"paper", "spigot", "bukkit"},
 		noryxv1.ServerType_SERVER_TYPE_VELOCITY:   {"velocity"},
 		noryxv1.ServerType_SERVER_TYPE_BUNGEECORD: {"bungeecord", "waterfall"},
 		noryxv1.ServerType_SERVER_TYPE_WATERFALL:  {"waterfall", "bungeecord"},
 		noryxv1.ServerType_SERVER_TYPE_FABRIC:     {"fabric"},
+		noryxv1.ServerType_SERVER_TYPE_QUILT:      {"quilt", "fabric"},
 		noryxv1.ServerType_SERVER_TYPE_FORGE:      {"forge"},
 		noryxv1.ServerType_SERVER_TYPE_NEOFORGE:   {"neoforge"},
 	}
 	// modded are the server types that load mods; the others load plugins.
-	modded    = []noryxv1.ServerType{noryxv1.ServerType_SERVER_TYPE_FABRIC, noryxv1.ServerType_SERVER_TYPE_FORGE, noryxv1.ServerType_SERVER_TYPE_NEOFORGE}
+	modded = []noryxv1.ServerType{
+		noryxv1.ServerType_SERVER_TYPE_FABRIC, noryxv1.ServerType_SERVER_TYPE_QUILT,
+		noryxv1.ServerType_SERVER_TYPE_FORGE, noryxv1.ServerType_SERVER_TYPE_NEOFORGE,
+	}
 	projectID = regexp.MustCompile(`^[A-Za-z0-9]{1,32}$`)
 	category  = regexp.MustCompile(`^[a-z-]{1,32}$`)
 	// Sorts are the orders of search results; without a query, relevance means downloads.

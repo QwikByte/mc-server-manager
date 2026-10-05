@@ -45,6 +45,9 @@ const (
 	minCPUMillis  = 100
 )
 
+// errUnknownType is returned for server types of newer masters.
+var errUnknownType = status.Error(codes.FailedPrecondition, "This node's agent doesn't know this server type yet. Update it first.")
+
 var (
 	namePattern    = regexp.MustCompile(`^[\pL\pN][\pL\pN _.-]{0,31}$`)
 	versionPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
@@ -113,8 +116,10 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 	switch {
 	case !req.GetAcceptEula():
 		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a server.")
-	case !knownType || req.GetType() == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+	case req.GetType() == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return nil, status.Error(codes.InvalidArgument, "Choose a server type.")
+	case !knownType:
+		return nil, errUnknownType
 	}
 	if msg := properties.Check(spec, req.GetProperties()); msg != "" {
 		return nil, status.Error(codes.InvalidArgument, msg)
@@ -186,8 +191,10 @@ func (s *Service) ImportServer(stream noryxv1.ServerService_ImportServerServer) 
 	switch {
 	case !runtime.ValidID(spec.ID):
 		return status.Error(codes.InvalidArgument, "invalid server ID")
-	case !knownType || spec.Type == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+	case spec.Type == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return status.Error(codes.InvalidArgument, "Choose a server type.")
+	case !knownType:
+		return errUnknownType
 	}
 	if err := s.check(ctx, spec); err != nil {
 		return err
