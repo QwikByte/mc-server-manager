@@ -50,3 +50,39 @@ func TestReloaded(t *testing.T) {
 		})
 	}
 }
+
+func TestSent(t *testing.T) {
+	line := func(text string) string { return "\x1b[m> 10:12:01 [\x1b[0;34;1mINFO\x1b[m] \x1b[0;31;1m" + text }
+	for _, tt := range []struct {
+		name  string
+		lines []string // as the console of BungeeCord answers, after a player joined
+		err   error
+		msg   string
+	}{
+		{"sent", []string{
+			"\x1b[m>send Steve lobby10:12:01 [\x1b[0;34;1mINFO\x1b[m] [Steve] <-> ServerConnector [lobby] has connected",
+			"\x1b[m10:12:01 [\x1b[0;34;1mINFO\x1b[m] \x1b[0;32mAttempting to send 1 players to lobby",
+		}, nil, ""},
+		{"no module", []string{line("Command not found")}, runtime.ErrNoSend, runtime.ErrNoSend.Error()},
+		{"offline", []string{line("That user is not online.")}, runtime.ErrNotSent, runtime.ErrNotSent.Error() + ": That user is not online."},
+		{"unknown server", []string{line("The specified server does not exist.")}, runtime.ErrNotSent, runtime.ErrNotSent.Error() + ": The specified server does not exist."},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			done, err := false, error(nil)
+			for _, l := range tt.lines {
+				if done, err = sent(l); done {
+					break
+				}
+			}
+			switch {
+			case !done:
+				t.Fatal("the answer wasn't recognised")
+			case !errors.Is(err, tt.err), err != nil && err.Error() != tt.msg:
+				t.Fatalf("err = %v, want %q", err, tt.msg)
+			}
+		})
+	}
+	if done, _ := sent("\x1b[m10:12:00 [\x1b[0;34;1mINFO\x1b[m] Steve has connected"); done {
+		t.Fatal("other lines end the answer")
+	}
+}

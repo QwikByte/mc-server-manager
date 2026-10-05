@@ -325,7 +325,8 @@ removes it when it leaves.
 - **Restart server by server.** The running game servers restart a few at a time (1, 2, 5 or 10) while the network
   stays open: the proxy first sends their players to another running server with `send`, and the next servers restart
   once these run again. The servers players join first restart last and one at a time; the proxy keeps running, and a
-  server that doesn't start again stops the restart.
+  server that doesn't start again stops the restart. It also stops before servers whose players the proxy can't send,
+  e.g. a BungeeCord or Waterfall proxy without its module `cmd_send`.
 - **Maintenance.** The network's overview turns maintenance on and off with the
   [Maintenance](https://modrinth.com/plugin/maintenance) plugin on the proxy: the server list shows the network in
   maintenance, and only the team may join. The first time, the panel installs the plugin from Modrinth and restarts the
@@ -370,6 +371,9 @@ how many servers have each player, and the changes that wait for stopped servers
   and turn the whitelist on or off. A change goes to the player's server, the network or all servers, as chosen; bans
   go to the network first. Kicks leave the server: Velocity sends kicked players to another server of the network,
   BungeeCord disconnects them. **Send to another server** moves a player within the network through the proxy (`send`).
+  The agent reads BungeeCord's answer, so the panel tells if the player isn't online or the proxy has no `send`. Players
+  named `all` or `current`, and on BungeeCord like a server of the network, can't be sent, as `send` would read their
+  name as other players too.
 - **Stopped servers** get a change once they run again, so that a ban also reaches the servers of a network that are
   stopped. The agent keeps the waiting changes in `noryx-pending-players.json` in the server's data.
 - **How.** The agents run Minecraft's own commands (`minecraft:ban` and so on) through the server's console port, so the

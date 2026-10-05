@@ -84,6 +84,10 @@ func TestPlayers(t *testing.T) {
 	}
 	api.do("POST", "/api/networks/"+n.ID+"/players/send", map[string]string{"name": "Alex", "server": "elsewhere"}, http.StatusBadRequest, nil)
 	api.do("POST", "/api/networks/"+n.ID+"/players/send", map[string]string{"name": "Alex lobby", "server": "game"}, http.StatusBadRequest, nil)
+	api.do("POST", "/api/networks/"+n.ID+"/players/send", map[string]string{"name": "all", "server": "game"}, http.StatusBadRequest, nil) // everyone
+	if got := a.runtime.commandsTo(proxy.ServerID); len(got) != 1 {
+		t.Fatalf("proxy commands = %q", got)
+	}
 }
 
 func TestMaintenance(t *testing.T) {

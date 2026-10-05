@@ -40,6 +40,10 @@ var (
 	ErrNotReady = errors.New("the server is starting")
 	// ErrReload is returned when a proxy answers that it couldn't reload its configuration.
 	ErrReload = errors.New("the proxy couldn't reload its configuration")
+	// ErrNoSend is returned when a proxy has no send command, as it couldn't load its module.
+	ErrNoSend = errors.New("the proxy has no send command")
+	// ErrNotSent is returned when a proxy answers that it couldn't send a player.
+	ErrNotSent = errors.New("the proxy couldn't send the player")
 )
 
 // Spec describes a server.

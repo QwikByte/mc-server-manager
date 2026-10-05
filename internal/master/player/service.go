@@ -204,16 +204,20 @@ func (s *Service) GameServers(ctx context.Context, keep func(network.Ref) bool) 
 }
 
 // Send sends a player to a server of a network with the proxy's send command, which
-// Velocity and BungeeCord have.
+// Velocity has, and BungeeCord with its module cmd_send. The agent tells if BungeeCord
+// couldn't send the player.
 func (s *Service) Send(ctx context.Context, n network.Network, player, server string) error {
-	if !noryxv1.ValidPlayerName(player) {
+	command, alone := n.SendCommand(player, server)
+	switch {
+	case !noryxv1.ValidPlayerName(player):
 		return httpapi.Errorf(http.StatusBadRequest, "Enter the name of a player: up to 16 letters, digits and underscores.")
-	}
-	if !slices.ContainsFunc(n.Backends, func(b network.Backend) bool { return b.Name == server }) {
+	case !slices.ContainsFunc(n.Backends, func(b network.Backend) bool { return b.Name == server }):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose a server of the network.")
+	case !alone:
+		return httpapi.Errorf(http.StatusBadRequest, "The proxy can't send %s, as its send command reads this name as other players too.", player)
 	}
 	return s.call(ctx, n.Proxy.NodeID, func(ctx context.Context, conn grpc.ClientConnInterface) error {
-		_, err := noryxv1.NewServerServiceClient(conn).SendCommand(ctx, &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: "send " + player + " " + server})
+		_, err := noryxv1.NewServerServiceClient(conn).SendCommand(ctx, &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: command})
 		return err
 	})
 }

@@ -11,6 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/operation"
@@ -65,7 +68,9 @@ func (s *Service) RollingRestart(ctx context.Context, n Network, batch int) erro
 	operation.Count(ctx, 0, total, "servers")
 	for _, group := range groups {
 		if states[n.Proxy] == running {
-			s.moveOff(ctx, n, group, up)
+			if err := s.moveOff(ctx, n, group, up); err != nil {
+				return err
+			}
 		}
 		if err := s.restart(ctx, group); err != nil {
 			return err
@@ -77,11 +82,13 @@ func (s *Service) RollingRestart(ctx context.Context, n Network, batch int) erro
 }
 
 // moveOff sends the players of servers to another running server through the proxy: to the
-// first that players join, if it can, and gives them a moment to move.
-func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) {
+// first that players join, if it can, and gives them a moment to move. It fails if the proxy
+// can't send anyone, e.g. without a send command or while its node can't be reached, so that
+// the servers don't restart.
+func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) error {
 	others := slices.DeleteFunc(slices.Clone(up), func(b Backend) bool { return slices.ContainsFunc(group, b.same) })
 	if len(others) == 0 {
-		return // the players have nowhere to go
+		return nil // the players have nowhere to go
 	}
 	target := others[0].Name
 	for _, name := range n.Try {
@@ -92,16 +99,23 @@ func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) {
 	}
 	players := s.players(ctx, group)
 	if len(players) == 0 {
-		return
+		return nil
 	}
 	conn, err := s.nodes.Conn(ctx, n.Proxy.NodeID)
 	if err != nil {
-		return
+		return err
 	}
 	proxy := noryxv1.NewServerServiceClient(conn)
 	for _, name := range players {
-		req := &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: "send " + name + " " + target}
-		if _, err := proxy.SendCommand(ctx, req); err != nil {
+		command, ok := n.SendCommand(name, target)
+		if !ok {
+			continue // it would send other players too
+		}
+		_, err := proxy.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: command})
+		switch {
+		case status.Code(err) == codes.FailedPrecondition:
+			return httpapi.Errorf(http.StatusConflict, "The restart stopped, as the players can't move to another server. %s", status.Convert(err).Message())
+		case err != nil:
 			slog.Debug("Can't move a player before a restart", "player", name, "err", err)
 		}
 	}
@@ -109,6 +123,7 @@ func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) {
 	case <-ctx.Done():
 	case <-time.After(moveWait):
 	}
+	return nil
 }
 
 // players returns the names of the players on servers, as their agents measured them last.

@@ -425,7 +425,7 @@ func logLine(text string) runtime.LogLine {
 
 // SendCommand runs the command of a game server through rcon-cli, which the itzg server
 // image ships together with a preconfigured RCON connection. Proxies have no RCON and get
-// the command on their console instead, whose output follows in the logs.
+// the command on their console instead, whose output follows in the logs; see command.
 func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, error) {
 	c, spec, err := d.inspect(ctx, id)
 	switch {
@@ -436,7 +436,7 @@ func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, e
 	case spec.Type.Proxy() && !c.Config.OpenStdin:
 		return "", runtime.ErrUnsupported // created by an older agent, until it is created again
 	case spec.Type.Proxy():
-		return "", d.console(ctx, id, command, nil)
+		return "", d.command(ctx, id, spec.Type, command)
 	}
 	// As the server's user: root in the container may not read its data.
 	user, err := d.owner(spec)
