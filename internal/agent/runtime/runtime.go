@@ -46,6 +46,15 @@ var (
 	ErrNotSent = errors.New("the proxy couldn't send the player")
 )
 
+type noWaitKey struct{}
+
+// NoWait makes SendCommand not wait for an answer to a send command that only comes if the
+// proxy can't send the player, as Velocity's, e.g. to send many players at once.
+func NoWait(ctx context.Context) context.Context { return context.WithValue(ctx, noWaitKey{}, true) }
+
+// Waits reports whether SendCommand waits for an answer that only comes on failure.
+func Waits(ctx context.Context) bool { return ctx.Value(noWaitKey{}) == nil }
+
 // Spec describes a server.
 type Spec struct {
 	ID       string             `json:"id"`

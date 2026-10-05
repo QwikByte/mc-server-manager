@@ -111,7 +111,8 @@ func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) e
 		if !ok {
 			continue // it would send other players too
 		}
-		_, err := proxy.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: command})
+		// Velocity only answers if it can't send, which would cost a moment per player.
+		_, err := proxy.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: command, NoWait: true})
 		switch {
 		case status.Code(err) == codes.FailedPrecondition:
 			return httpapi.Errorf(http.StatusConflict, "The restart stopped, as the players can't move to another server. %s", status.Convert(err).Message())

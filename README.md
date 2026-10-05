@@ -387,7 +387,8 @@ how many servers have each player, and the changes that wait for stopped servers
   and turn the whitelist on or off. A change goes to the player's server, the network or all servers, as chosen; bans
   go to the network first. Kicks leave the server: Velocity sends kicked players to another server of the network,
   BungeeCord disconnects them. **Send to another server** moves a player within the network through the proxy (`send`).
-  The agent reads BungeeCord's answer, so the panel tells if the player isn't online or the proxy has no `send`. Players
+  The agent reads the proxy's answer, so the panel tells if the player isn't online or the proxy has no `send`. Velocity
+  only answers if it can't send, so the agent waits a second for that answer; rolling restarts don't wait. Players
   named `all` or `current`, and on BungeeCord like a server of the network, can't be sent, as `send` would read their
   name as other players too.
 - **Stopped servers** get a change once they run again, so that a ban also reaches the servers of a network that are

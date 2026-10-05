@@ -1432,7 +1432,10 @@ type SendCommandRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// A single console command, e.g. "say Hello". A leading slash is optional.
-	Command       string `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	Command string `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	// Don't wait for an answer to a send command that only comes if the proxy can't send the
+	// player, as Velocity's, e.g. to send many players before a rolling restart.
+	NoWait        bool `protobuf:"varint,3,opt,name=no_wait,json=noWait,proto3" json:"no_wait,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1479,6 +1482,13 @@ func (x *SendCommandRequest) GetCommand() string {
 		return x.Command
 	}
 	return ""
+}
+
+func (x *SendCommandRequest) GetNoWait() bool {
+	if x != nil {
+		return x.NoWait
+	}
+	return false
 }
 
 type SendCommandResponse struct {
@@ -2185,10 +2195,11 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"N\n" +
 	"\x12StreamLogsResponse\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\tR\x04line\x12$\n" +
-	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\">\n" +
+	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\"W\n" +
 	"\x12SendCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\acommand\x18\x02 \x01(\tR\acommand\"-\n" +
+	"\acommand\x18\x02 \x01(\tR\acommand\x12\x17\n" +
+	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"-\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
 	"\x06output\x18\x01 \x01(\tR\x06output\"\xfd\x02\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +

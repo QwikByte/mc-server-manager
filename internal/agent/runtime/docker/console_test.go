@@ -83,3 +83,21 @@ func TestSent(t *testing.T) {
 		t.Fatal("other lines end the answer")
 	}
 }
+
+func TestVelocitySent(t *testing.T) {
+	answer := velocitySent("Alex", "lobby")
+	for line, want := range map[string]string{ // velocity.command.player-not-found and server-does-not-exist
+		"[10:12:01 INFO]: The specified player Alex does not exist.":  "The specified player Alex does not exist.",
+		"[10:12:01 INFO]: The specified server lobby does not exist.": "The specified server lobby does not exist.",
+	} {
+		if done, err := answer(line); !done || !errors.Is(err, runtime.ErrNotSent) || err.Error() != runtime.ErrNotSent.Error()+": "+want {
+			t.Errorf("answer(%q) = %v, %v; want %q", line, done, err, want)
+		}
+	}
+	// Answers to other sends, and other lines, don't end it.
+	for _, line := range []string{"[10:12:01 INFO]: The specified player Steve does not exist.", "[10:12:01 INFO]: Alex has connected"} {
+		if done, _ := answer(line); done {
+			t.Errorf("answer(%q) ended the answer", line)
+		}
+	}
+}

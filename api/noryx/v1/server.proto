@@ -216,6 +216,9 @@ message SendCommandRequest {
   string id = 1;
   // A single console command, e.g. "say Hello". A leading slash is optional.
   string command = 2;
+  // Don't wait for an answer to a send command that only comes if the proxy can't send the
+  // player, as Velocity's, e.g. to send many players before a rolling restart.
+  bool no_wait = 3;
 }
 
 message SendCommandResponse {

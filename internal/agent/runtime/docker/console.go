@@ -28,7 +28,13 @@ const (
 	// sendTimeout is how long BungeeCord may take to answer its send command, which it
 	// answers right away.
 	sendTimeout = 5 * time.Second
+	// velocityWait is how long Velocity may take to answer its send command, which it only
+	// answers if it can't send the player.
+	velocityWait = time.Second
 )
+
+// errQuiet ends reading Velocity's console after a send command that it didn't answer.
+var errQuiet = errors.New("the proxy didn't answer")
 
 // notSent are parts of the answers of BungeeCord to a send command that can't send anyone.
 var notSent = []string{"That user is not online", "The specified server does not exist", "Only in game players"}
@@ -133,16 +139,28 @@ func reloaded(p mcnet.Proxy) func(line string) (bool, error) {
 	}
 }
 
-// command writes a command to the console of a proxy. BungeeCord's answer to sending a player
-// tells whether it could, so it is awaited: without its module cmd_send, which Waterfall can't
-// download anymore, BungeeCord has no send command. Velocity only answers if it can't send.
+// command writes a command to the console of a proxy. Its answer to sending a player tells
+// whether it could, so it is awaited. BungeeCord always answers: without its module cmd_send,
+// which Waterfall can't download anymore, it has no send command. Velocity only answers if it
+// can't send, so its console is read for a moment, unless runtime.NoWait says not to.
 func (d *Docker) command(ctx context.Context, id string, typ noryxv1.ServerType, command string) error {
-	if args := strings.Fields(command); !typ.Bungee() || len(args) != 3 || !strings.EqualFold(args[0], "send") {
+	args := strings.Fields(command)
+	switch {
+	case len(args) != 3 || !strings.EqualFold(args[0], "send"):
+		return d.console(ctx, id, command, nil)
+	case typ.Bungee():
+		ctx, cancel := context.WithTimeout(ctx, sendTimeout)
+		defer cancel()
+		return d.console(ctx, id, command, sent)
+	case !runtime.Waits(ctx):
 		return d.console(ctx, id, command, nil)
 	}
-	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, velocityWait, errQuiet)
 	defer cancel()
-	return d.console(ctx, id, command, sent)
+	if err := d.console(ctx, id, command, velocitySent(args[1], args[2])); !errors.Is(context.Cause(ctx), errQuiet) {
+		return err
+	}
+	return nil // quiet means sent
 }
 
 // sent reads the answer of BungeeCord to a send command, line by line, until it tells whether
@@ -161,6 +179,22 @@ func sent(line string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// velocitySent reads the answer of Velocity to a send command, which only comes if it can't
+// send the player. It names the player or the server, so that sends at the same time can tell
+// their answers apart.
+func velocitySent(player, server string) func(line string) (bool, error) {
+	answers := []string{"The specified player " + player + " does not exist", "The specified server " + server + " does not exist"}
+	return func(line string) (bool, error) {
+		line = plainLine(line)
+		for _, answer := range answers {
+			if i := strings.Index(line, answer); i >= 0 {
+				return true, fmt.Errorf("%w: %s", runtime.ErrNotSent, line[i:])
+			}
+		}
+		return false, nil
+	}
 }
 
 // console writes a command to the standard input of a proxy, which reads its console

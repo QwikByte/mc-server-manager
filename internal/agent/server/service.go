@@ -402,6 +402,9 @@ func (s *Service) SendCommand(ctx context.Context, req *noryxv1.SendCommandReque
 	if command == "" || len(command) > maxCommand || strings.ContainsFunc(command, unicode.IsControl) {
 		return nil, status.Errorf(codes.InvalidArgument, "Enter a single command with up to %d characters.", maxCommand)
 	}
+	if req.GetNoWait() {
+		ctx = runtime.NoWait(ctx)
+	}
 	output, err := s.rt.SendCommand(ctx, req.GetId(), command)
 	switch {
 	case errors.Is(err, runtime.ErrUnsupported):
