@@ -425,9 +425,10 @@ The master keeps a log of what happens on it and on its agents, so that it's cle
 
 - **Actions.** Every request of the panel that changes something, and every download of a file, folder, backup or
   export, is logged with the user, the IP address, the node and server it concerned (with their names at that time),
-  the outcome and how long it took. Denied requests are logged as warnings, failed ones as warnings or, if the master
-  or an agent failed, errors. Sign-ins, failed sign-ins, password changes, changes of two-factor authentication,
-  sign-outs, enrollments, certificate renewals and what backup jobs and policies did on each server are logged too.
+  the outcome and how long it took. Denied requests are logged as warnings, and failed ones as errors if the master or
+  an agent failed. Others, e.g. with an invalid input, are only information: the panel tells the user why. Sign-ins,
+  failed sign-ins, password changes, changes of two-factor authentication, sign-outs, enrollments, certificate
+  renewals and what backup jobs and policies did on each server are logged too.
 - **Agents.** An agent logs every call it receives with its origin (the master or its local CLI) and keeps its latest
   entries in memory. The master collects them over the mutually authenticated connection and continues where it left
   off, also after a restart of either. Calls that only read are logged at the debug level, downloads at the info level.

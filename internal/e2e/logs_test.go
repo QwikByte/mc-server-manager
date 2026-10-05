@@ -64,7 +64,8 @@ func TestLogs(t *testing.T) {
 	watcher, nobody := invite("watcher", watchers.ID), invite("nobody")
 
 	// Requests that change something are logged with the user and what they concern,
-	// those that are denied as warnings.
+	// those that are denied as warnings, invalid ones as information for the user.
+	root.do("POST", "/api/groups", map[string]any{"name": "", "permissions": []string{}}, http.StatusBadRequest, nil)
 	root.do("POST", path(lobby)+"/start", nil, http.StatusNoContent, nil)
 	watcher.do("POST", path(survival)+"/stop", nil, http.StatusForbidden, nil)
 	watcher.do("POST", path(lobby)+"/restart", nil, http.StatusForbidden, nil)
@@ -91,7 +92,8 @@ func TestLogs(t *testing.T) {
 		return &entries[i]
 	}
 	all := waitFor(root, "", func(entries []logEntry) bool {
-		return find(entries, logs.FromAgent, "Start server") != nil && find(entries, logs.FromMaster, "Restart server denied") != nil
+		return find(entries, logs.FromAgent, "Start server") != nil && find(entries, logs.FromMaster, "Restart server denied") != nil &&
+			find(entries, logs.FromMaster, "Create group failed") != nil
 	})
 	started, agentStarted := find(all, logs.FromMaster, "Start server"), find(all, logs.FromAgent, "Start server")
 	if started == nil || started.User != "admin" || started.NodeName != "node-1" || started.ServerName != "Lobby" ||
@@ -103,6 +105,9 @@ func TestLogs(t *testing.T) {
 	}
 	if denied := find(all, logs.FromMaster, "Stop server denied"); denied == nil || denied.Level != "warn" || denied.User != "watcher" {
 		t.Errorf("denied entry = %+v", denied)
+	}
+	if invalid := find(all, logs.FromMaster, "Create group failed"); invalid == nil || invalid.Level != "info" || invalid.Attrs["err"] == "" {
+		t.Errorf("entry of the invalid request = %+v", invalid)
 	}
 	for _, want := range []struct{ message, user string }{
 		{"Sign in failed", "admin"}, {"Sign in", "admin"}, {"Set password with setup link", "nobody"},
