@@ -59,11 +59,14 @@ export interface Search {
   serverOnly: boolean
 }
 
+/** Where a version was published: as a release, or as a pre-release in beta or alpha. */
+export type Channel = "release" | "beta" | "alpha"
+
 /** A version of a project. */
 export interface ProjectVersion {
   id: string
   number: string
-  channel: "release" | "beta" | "alpha"
+  channel: Channel
   published: string
   /** The versions of Minecraft it supports. */
   gameVersions?: string[]
@@ -76,6 +79,8 @@ export interface InstalledPlugin {
   project?: Project
   version?: string
   versionId?: string
+  /** Set for a version that isn't a release. */
+  channel?: Exclude<Channel, "release">
   /** A newer release that suits the server. */
   update?: string
 }
@@ -87,10 +92,22 @@ export interface PluginListing {
   catalogueError?: string
 }
 
+/** A file installed on a server. */
+export interface InstalledFile {
+  projectId: string
+  fileName: string
+  version: string
+  /** Set for a version that isn't a release. */
+  channel?: Exclude<Channel, "release">
+}
+
 export interface InstallResult extends ServerRef {
-  installed: { projectId: string; fileName: string; version: string }[]
+  installed: InstalledFile[]
   error?: string
 }
+
+/** Whether a pre-release was installed because no release suits the server, rather than chosen among the versions. */
+export const fallback = (file: InstalledFile, versions?: Record<string, string>) => file.channel !== undefined && !versions?.[file.projectId]
 
 /** Whether a project runs on a server type. */
 export function supports(loaders: string[], type: string) {

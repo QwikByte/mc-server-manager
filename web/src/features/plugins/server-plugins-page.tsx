@@ -32,7 +32,9 @@ import { serverType } from "@/features/servers/server-types"
 import { formatBytes } from "@/lib/format"
 import { locale } from "@/lib/i18n"
 import {
+  fallback,
   type InstalledPlugin,
+  type InstallResult,
   onHangar,
   type Project,
   type ProjectVersion,
@@ -42,6 +44,7 @@ import {
   useChangePlugins,
   useInstallPlugins,
 } from "./api"
+import { ChannelPill } from "./channel-pill"
 import { PluginIcon } from "./plugin-icon"
 import { PluginSearch } from "./plugin-search"
 import { VersionMenu } from "./version-menu"
@@ -191,15 +194,17 @@ export function ServerPluginsPage() {
 /** Installs a project on a server, the newest suitable release or a chosen version, and tells how it went. */
 function useInstallOn(serverRef: ServerRef) {
   const install = useInstallPlugins()
-  const run = (project: Project, version?: ProjectVersion) =>
+  const run = (project: Project, version?: ProjectVersion) => {
+    const versions = version && { [project.id]: version.id }
     toast.promise(
-      install.mutateAsync({ projects: [project.id], servers: [serverRef], versions: version && { [project.id]: version.id } }).then(failIfAny),
+      install.mutateAsync({ projects: [project.id], servers: [serverRef], versions }).then((results) => failIfAny(results, versions)),
       {
         loading: t("Installing {{name}}…", { name: version ? `${project.title} ${version.number}` : project.title }),
         success: (files) => t("Installed {{files}}. Restart the server to load it.", { files }),
         error: (e: Error) => e.message,
       },
     )
+  }
   return { run, pending: install.isPending }
 }
 
@@ -249,6 +254,7 @@ function PluginRow({
           ) : (
             plugin.version && <span className="truncate font-mono text-xs font-normal text-muted-foreground">{plugin.version}</span>
           )}
+          <ChannelPill channel={plugin.channel} />
         </p>
         <p className="truncate text-xs text-muted-foreground">
           {project ? plugin.fileName : elsewhere} · {formatBytes(plugin.size)}
@@ -402,8 +408,11 @@ function InstallButton({ hit, server, serverRef, installed }: { hit: SearchHit; 
   )
 }
 
-/** Throws the error of a single-server installation, or returns the installed files. */
-function failIfAny([result]: { error?: string; installed: { fileName: string }[] }[]): string {
+/** Throws the error of a single-server installation, or returns the installed files and warns of pre-releases nobody chose. */
+function failIfAny([result]: InstallResult[], versions?: Record<string, string>): string {
   if (result.error) throw new Error(result.error)
+  for (const file of result.installed.filter((f) => fallback(f, versions))) {
+    toast.warning(t("No release suits the server, so the pre-release {{version}} was installed: {{file}}", { version: file.version, file: file.fileName }))
+  }
   return result.installed.map((i) => i.fileName).join(", ")
 }

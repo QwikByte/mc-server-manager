@@ -215,8 +215,9 @@ both only shows the software and servers of the chosen kind. The search filters 
 categories (e.g. economy, management, optimization) and, for mods, those players don't have to install, and sorts by
 relevance, downloads, followers, newest or recently updated. The master picks the newest release for each server's
 software and Minecraft version, installs the projects it requires, and replaces an older version of the same project.
-Another version that suits the server, betas and alphas included, can be chosen instead, also to downgrade a project.
-Installed files are recognised by their hash, so the tab shows their project, version and available updates, also for
+Where no release suits a server, it installs the newest beta or alpha and the panel warns about it. Another version that
+suits the server, betas and alphas included, can be chosen instead, also to downgrade a project. Installed files are
+recognised by their hash, so the tab shows their project, version (marked as beta or alpha) and available updates, also for
 files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once. Own
 `.jar` files can be uploaded too. Servers load changes when they restart.
 
