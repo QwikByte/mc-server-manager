@@ -250,7 +250,8 @@ its worlds to disk first and pauses saving while they are archived, so players s
   and deletes its backups.
 - **Jobs.** The **Backups** page schedules backup jobs for servers or whole nodes (including servers created later):
   on chosen weekdays at one or more times of day in a time zone. A job keeps the newest backups per server and deletes
-  older ones; backups made by hand are never deleted that way. A job backs up one server per node at a time.
+  older ones; backups made by hand are never deleted that way. A job backs up one server per node at a time, and
+  skips servers without any of the selected data yet, e.g. new ones that never started: its last run lists them.
 - **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds
   and leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
   stopped while the files are swapped, and started again afterwards.

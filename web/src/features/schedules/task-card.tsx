@@ -88,6 +88,11 @@ export function TaskCard<S>({
           <span className="whitespace-pre-line">{task.lastRun.error}</span>
         </Callout>
       )}
+      {task.lastRun?.note && (
+        <Callout title={t("Skipped in the last run")} className="py-3">
+          <span className="whitespace-pre-line">{task.lastRun.note}</span>
+        </Callout>
+      )}
       <p className="text-xs text-muted-foreground">
         {task.lastRun ? t("Last run {{time}}", { time: formatDateTime(task.lastRun.at) }) : t("Never run")}
         {task.nextRun && ` · ${t("next {{time}}", { time: formatDateTime(task.nextRun) })}`}

@@ -52,6 +52,15 @@ export const emptyJob: TaskInput<JobSettings> = {
   settings: { selection: defaultSelection, location: "", keep: 7 },
 }
 
+/** Why the master refuses the further paths of a selection, if it does. */
+export function pathsError(paths: string[]): string | undefined {
+  if (paths.length > 20) return t("Enter at most 20 files or folders.")
+  const invalid = paths.find((p) => p.length > 1024 || /[\0\\]/.test(p) || p.split("/").includes(".."))
+  if (invalid !== undefined) {
+    return t("The path {{path}} is invalid. Enter paths inside the server's folder, like plugins/LuckPerms.", { path: invalid })
+  }
+}
+
 /** Whether a selection backs up nothing. */
 export const nothingSelected = (s: Selection) => !s.everything && !s.worlds && !s.plugins && !s.config && s.paths.length === 0
 

@@ -59,11 +59,11 @@ export function useOperation() {
     run,
     /** The operation as it goes on, once the master runs the action as one. */
     live,
-    /** Lets the operation go on in a notification, e.g. as its dialog closes. */
-    background: (title: string) => {
-      if (!id) return
+    /** Lets the operation go on in a notification, e.g. as its dialog closes; op is its ID, as soon as it starts. */
+    background: (title: string, op = id) => {
+      if (!op) return
       background.current = true
-      notification.current = toast.loading(<LiveToast id={id} title={title} />)
+      notification.current = toast.loading(<LiveToast id={op} title={title} />)
     },
     reset: () => setId(undefined),
   }

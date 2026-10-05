@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,20 +50,48 @@ type Server struct {
 	*noryxv1.Server
 	NodeID   string
 	NodeName string
+	notes    *notes // of the run
 }
+
+// Skipped is the error of an action that left a server out rather than failed on it, e.g. a
+// backup of a server without data yet. Report notes it on the run, which succeeds.
+type Skipped string
+
+func (s Skipped) Error() string { return string(s) }
 
 // Report logs the outcome of an action of a task on the server, e.g. "Restart server", and
 // returns its error with the name of the server.
 func (s Server) Report(t Task, category slog.Attr, action string, err error) error {
 	attrs := []any{category, "task", t.Name, logging.KeyNode, s.NodeID, logging.KeyNodeName, s.NodeName,
 		logging.KeyServer, s.GetId(), logging.KeyServerName, s.GetName()}
-	if err == nil {
+	var skipped Skipped
+	switch {
+	case err == nil:
 		slog.Info(action, attrs...)
+		return nil
+	case errors.As(err, &skipped):
+		slog.Info(action+" skipped", append(attrs, "reason", string(skipped))...)
+		s.notes.add(fmt.Sprintf("%s on %s: %s", s.GetName(), s.NodeName, skipped))
 		return nil
 	}
 	msg := status.Convert(err).Message()
 	slog.Warn(action+" failed", append(attrs, "err", msg)...)
 	return fmt.Errorf("%s on %s: %s", s.GetName(), s.NodeName, msg)
+}
+
+// notes are what a run tells besides its errors, e.g. the servers it skipped.
+type notes struct {
+	mu   sync.Mutex
+	list []string
+}
+
+func (n *notes) add(note string) {
+	if n == nil { // a server outside of a run
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.list = append(n.list, note)
 }
 
 // Nodes provides the nodes and connections to their agents.
@@ -223,27 +252,31 @@ func (s *Service) execute(ctx context.Context, id string, at time.Time) {
 	if errors.Is(err, errNotFound) {
 		return // deleted meanwhile
 	}
+	run := &notes{}
 	if err == nil {
-		err = s.kinds[t.kind].Run(ctx, t, s.servers(t.Targets), at)
+		err = s.kinds[t.kind].Run(ctx, t, s.servers(t.Targets, run), at)
 	}
 	var msg string
 	category := s.kinds[t.kind].Category()
 	if err != nil {
-		if msg = err.Error(); len(msg) > maxError {
-			msg = msg[:maxError]
-		}
+		msg = clip(err.Error())
 		slog.Warn("Run scheduled task failed", category, "task", t.Name, "err", msg)
 	} else {
 		slog.Info("Run scheduled task", category, "task", t.Name)
 	}
-	if _, err := s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE tasks SET last_run_at = ?, last_error = ? WHERE id = ?`,
-		at.Unix(), msg, id); err != nil {
+	slices.Sort(run.list)
+	if _, err := s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE tasks SET last_run_at = ?, last_error = ?, last_note = ? WHERE id = ?`,
+		at.Unix(), msg, clip(strings.Join(run.list, "\n")), id); err != nil {
 		slog.Error("Can't record the run of a task", category, "task", t.Name, "err", err)
 	}
 }
 
-// servers returns a function that finds the servers of the targets on their nodes.
-func (s *Service) servers(targets []Target) Servers {
+// clip shortens the error or note of a run to what is stored.
+func clip(msg string) string { return msg[:min(len(msg), maxError)] }
+
+// servers returns a function that finds the servers of the targets on their nodes for a run
+// with its notes.
+func (s *Service) servers(targets []Target, run *notes) Servers {
 	return func(ctx context.Context) ([]Server, error) {
 		byNode := map[string][]string{}
 		for _, t := range targets {
@@ -267,6 +300,9 @@ func (s *Service) servers(targets []Target) Servers {
 		slices.SortFunc(servers, func(a, b Server) int {
 			return cmp.Or(cmp.Compare(a.NodeName, b.NodeName), cmp.Compare(a.GetName(), b.GetName()))
 		})
+		for i := range servers {
+			servers[i].notes = run
+		}
 		return servers, errors.Join(errs...)
 	}
 }
@@ -294,7 +330,7 @@ func (s *Service) nodeServers(ctx context.Context, nodeID string, ids []string) 
 		case s.busy(srv.GetId()):
 			err = errors.Join(err, fmt.Errorf("%s: %s is moving to another node", n.Name, srv.GetName()))
 		default:
-			servers = append(servers, Server{srv, n.ID, n.Name})
+			servers = append(servers, Server{Server: srv, NodeID: n.ID, NodeName: n.Name})
 		}
 	}
 	for _, id := range ids {

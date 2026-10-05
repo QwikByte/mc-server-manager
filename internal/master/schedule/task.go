@@ -50,6 +50,8 @@ type Target struct {
 type Run struct {
 	At    time.Time `json:"at"`
 	Error string    `json:"error,omitempty"`
+	// Note tells what the run left out, e.g. servers without data to back up.
+	Note string `json:"note,omitempty"`
 }
 
 // Input is a new or changed task.
@@ -214,7 +216,7 @@ func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 	// that a task that isn't running shows the outcome of its latest run.
 	running := s.runningTasks()
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, kind, name, enabled, schedule, settings, last_run_at, last_error, created_at
+		SELECT id, kind, name, enabled, schedule, settings, last_run_at, last_error, last_note, created_at
 		FROM tasks WHERE ? IN ('', kind) AND ? IN ('', id) ORDER BY name`, kind, id)
 	if err != nil {
 		return nil, err
@@ -226,9 +228,9 @@ func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 		t := Task{Targets: []Target{}}
 		var schedule, settings string
 		var lastRun sql.NullInt64
-		var lastError sql.NullString
+		var lastError, lastNote sql.NullString
 		var createdAt int64
-		if err := rows.Scan(&t.ID, &t.kind, &t.Name, &t.Enabled, &schedule, &settings, &lastRun, &lastError, &createdAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.kind, &t.Name, &t.Enabled, &schedule, &settings, &lastRun, &lastError, &lastNote, &createdAt); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(schedule), &t.Schedule); err != nil {
@@ -236,7 +238,7 @@ func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 		}
 		t.Settings, t.CreatedAt = json.RawMessage(settings), time.Unix(createdAt, 0)
 		if lastRun.Valid {
-			t.LastRun = &Run{At: time.Unix(lastRun.Int64, 0), Error: lastError.String}
+			t.LastRun = &Run{At: time.Unix(lastRun.Int64, 0), Error: lastError.String, Note: lastNote.String}
 		}
 		t.NextRun, t.Running = s.nextRun(t.ID), running[t.ID]
 		index[t.ID] = len(tasks)

@@ -94,7 +94,10 @@ func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupReq
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	if len(paths) == 0 {
+	switch {
+	case len(paths) == 0 && req.GetSkipWithoutData():
+		return &noryxv1.CreateBackupResponse{}, nil
+	case len(paths) == 0:
 		return nil, status.Error(codes.FailedPrecondition, "The server has none of the selected data.")
 	}
 	resume, err := runtime.PauseSaving(ctx, s.rt, srv)

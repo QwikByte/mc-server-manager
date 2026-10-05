@@ -297,9 +297,12 @@ type CreateBackupRequest struct {
 	JobId    string `protobuf:"bytes,5,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
 	// Backups of the job to keep for the server, 0 for all. Older ones are deleted once the
 	// new backup exists. Backups made by hand are never deleted this way.
-	Keep          uint32 `protobuf:"varint,6,opt,name=keep,proto3" json:"keep,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Keep uint32 `protobuf:"varint,6,opt,name=keep,proto3" json:"keep,omitempty"`
+	// Whether a server without any of the selected data, e.g. one that never started, is
+	// skipped: the response has no backup then. Otherwise that is an error.
+	SkipWithoutData bool `protobuf:"varint,7,opt,name=skip_without_data,json=skipWithoutData,proto3" json:"skip_without_data,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateBackupRequest) Reset() {
@@ -372,6 +375,13 @@ func (x *CreateBackupRequest) GetKeep() uint32 {
 		return x.Keep
 	}
 	return 0
+}
+
+func (x *CreateBackupRequest) GetSkipWithoutData() bool {
+	if x != nil {
+		return x.SkipWithoutData
+	}
+	return false
 }
 
 type CreateBackupResponse struct {
@@ -912,14 +922,15 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x12ListBackupsRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\"A\n" +
 	"\x13ListBackupsResponse\x12*\n" +
-	"\abackups\x18\x01 \x03(\v2\x10.noryx.v1.BackupR\abackups\"\xc8\x01\n" +
+	"\abackups\x18\x01 \x03(\v2\x10.noryx.v1.BackupR\abackups\"\xf4\x01\n" +
 	"\x13CreateBackupRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x127\n" +
 	"\tselection\x18\x03 \x01(\v2\x19.noryx.v1.BackupSelectionR\tselection\x12\x1a\n" +
 	"\blocation\x18\x04 \x01(\tR\blocation\x12\x15\n" +
 	"\x06job_id\x18\x05 \x01(\tR\x05jobId\x12\x12\n" +
-	"\x04keep\x18\x06 \x01(\rR\x04keep\"@\n" +
+	"\x04keep\x18\x06 \x01(\rR\x04keep\x12*\n" +
+	"\x11skip_without_data\x18\a \x01(\bR\x0fskipWithoutData\"@\n" +
 	"\x14CreateBackupResponse\x12(\n" +
 	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup\"P\n" +
 	"\x14RestoreBackupRequest\x12\x1b\n" +
