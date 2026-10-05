@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
+import { EndOfLifeNotice } from "@/features/servers/software"
 import { maintenanceQuery, networkQuery } from "./api"
 import { MaintenanceSection } from "./maintenance"
 import { NetworkActions } from "./network-actions"
@@ -98,6 +99,7 @@ export function NetworkPage() {
         }
         actions={<NetworkActions network={network} />}
       />
+      <EndOfLifeNotice type={network.proxyType} className="mb-6" />
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
         <StatCard icon={UsersThreeIcon} tone="info" label={t("Players online")} value={players ?? "–"} />
         <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={`${running} / ${network.backends.length}`} />

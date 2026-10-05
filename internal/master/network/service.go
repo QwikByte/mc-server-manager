@@ -450,6 +450,15 @@ func checkNames(list []string, names map[string]bool, what string) error {
 	return nil
 }
 
+// SendCommand returns the console command of the proxy that sends a player to a backend, and
+// false if the proxy would read the name as other players too: both proxies read all and
+// current so, and BungeeCord reads the name of a server as its players.
+func (n *Network) SendCommand(player, backend string) (string, bool) {
+	others := strings.EqualFold(player, "all") || strings.EqualFold(player, "current") ||
+		noryxv1.ParseServerType(n.ProxyType).Bungee() && slices.ContainsFunc(n.Backends, func(b Backend) bool { return strings.EqualFold(b.Name, player) })
+	return "send " + player + " " + backend, !others
+}
+
 func (b Backend) same(o Backend) bool { return b.Ref == o.Ref }
 
 func (n *Network) has(ref Ref) bool {

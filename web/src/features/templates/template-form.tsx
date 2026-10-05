@@ -9,22 +9,14 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { Project } from "@/features/plugins/api"
 import { PluginIcon } from "@/features/plugins/plugin-icon"
 import { PluginSearch } from "@/features/plugins/plugin-search"
-import { defaults, serverType, serverTypes, splitOptions } from "@/features/servers/server-types"
+import { defaults, serverType, splitOptions } from "@/features/servers/server-types"
 import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField } from "@/features/servers/settings-fields"
+import { EndOfLifeNotice, SoftwareOptions } from "@/features/servers/software"
 import { parseProperties, propertiesText, type TemplateDraft, type TemplateInput } from "./api"
 
 /** Compares drafts regardless of the order of their properties. */
@@ -94,23 +86,12 @@ export function TemplateForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[false, true].map((proxy) => (
-                  <SelectGroup key={String(proxy)}>
-                    {proxy && <SelectSeparator />}
-                    <SelectLabel>{proxy ? t("Proxies for networks") : t("Game servers")}</SelectLabel>
-                    {serverTypes
-                      .filter((s) => s.proxy === proxy)
-                      .map((s) => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                  </SelectGroup>
-                ))}
+                <SoftwareOptions chosen={initial.type} />
               </SelectContent>
             </Select>
           </Field>
         </div>
+        <EndOfLifeNotice type={form.type} />
         <Field>
           <FieldLabel htmlFor="template-description">{t("Description")}</FieldLabel>
           <Textarea

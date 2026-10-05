@@ -37,7 +37,8 @@ import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Template, templatesQuery } from "@/features/templates/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { type NewServer, serversQuery, useCreateServer } from "./api"
-import { defaults, memoryOptionsMb, modpack, serverType, serverTypes, suggestPort, usedPorts } from "./server-types"
+import { defaults, memoryOptionsMb, modpack, serverType, suggestPort, usedPorts } from "./server-types"
+import { EndOfLifeNotice, SoftwareOptions } from "./software"
 
 // Node, port and storage stay unset until chosen, so that the suggestions apply.
 type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string; nodeId?: string; templateId?: string; modpack?: ModpackChoice }
@@ -252,19 +253,7 @@ export function CreateServerDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {[false, true].map((isProxy) => (
-                        <SelectGroup key={String(isProxy)}>
-                          {isProxy && <SelectSeparator />}
-                          <SelectLabel>{isProxy ? t("Proxies for networks") : t("Game servers")}</SelectLabel>
-                          {serverTypes
-                            .filter((s) => s.proxy === isProxy)
-                            .map((s) => (
-                              <SelectItem key={s.value} value={s.value}>
-                                {s.label}
-                              </SelectItem>
-                            ))}
-                        </SelectGroup>
-                      ))}
+                      <SoftwareOptions chosen={form.type} />
                       {nodeId && can("plugins.manage", nodeId) && (
                         <SelectGroup>
                           <SelectSeparator />
@@ -287,6 +276,7 @@ export function CreateServerDialog({
                   </Field>
                 )}
               </div>
+              <EndOfLifeNotice type={form.type} />
               {fromModpack && <ModpackPicker onChange={chooseModpack} />}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field>

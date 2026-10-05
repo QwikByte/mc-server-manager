@@ -101,3 +101,23 @@ func TestExposed(t *testing.T) {
 		t.Fatal("modern forwarding is exposed")
 	}
 }
+
+func TestSendCommand(t *testing.T) {
+	backends := []Backend{{Name: "lobby"}, {Name: "survival-2"}}
+	for _, tt := range []struct {
+		proxy, player string
+		alone         bool
+	}{
+		{"velocity", "Steve", true},
+		{"velocity", "Lobby", true},
+		{"velocity", "all", false},
+		{"bungeecord", "Current", false},
+		{"bungeecord", "Lobby", false}, // BungeeCord sends the players of the server lobby
+		{"waterfall", "survival_2", true},
+	} {
+		n := Network{ProxyType: tt.proxy, Backends: backends}
+		if command, alone := n.SendCommand(tt.player, "survival-2"); command != "send "+tt.player+" survival-2" || alone != tt.alone {
+			t.Errorf("%s: SendCommand(%q) = %q, %v", tt.proxy, tt.player, command, alone)
+		}
+	}
+}

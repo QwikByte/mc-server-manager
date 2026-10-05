@@ -358,10 +358,14 @@ func (s *Service) SendCommand(ctx context.Context, req *noryxv1.SendCommandReque
 		return nil, status.Errorf(codes.InvalidArgument, "Enter a single command with up to %d characters.", maxCommand)
 	}
 	output, err := s.rt.SendCommand(ctx, req.GetId(), command)
-	if errors.Is(err, runtime.ErrUnsupported) {
+	switch {
+	case errors.Is(err, runtime.ErrUnsupported):
 		return nil, status.Error(codes.FailedPrecondition, "This proxy was created by an older agent. It accepts console commands once its settings were saved or its network applied again.")
-	}
-	if err != nil {
+	case errors.Is(err, runtime.ErrNoSend):
+		return nil, status.Error(codes.FailedPrecondition, "The proxy has no send command, as it couldn't download its module cmd_send. Waterfall can't anymore, as it reached its end of life: use Velocity or BungeeCord instead.")
+	case errors.Is(err, runtime.ErrNotSent):
+		return nil, status.Error(codes.NotFound, err.Error())
+	case err != nil:
 		return nil, toStatus(err)
 	}
 	return &noryxv1.SendCommandResponse{Output: plain(output)}, nil
