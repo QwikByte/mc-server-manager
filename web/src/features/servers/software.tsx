@@ -1,5 +1,6 @@
 import { WarningIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
+import type { ReactNode } from "react"
 import { Callout } from "@/components/callout"
 import { SelectGroup, SelectItem, SelectLabel, SelectSeparator } from "@/components/ui/select"
 import { serverType, serverTypes } from "./server-types"
@@ -21,13 +22,14 @@ export function SoftwareOptions({ chosen }: { chosen: string }) {
   ))
 }
 
-/** Warns that software reached its end of life, and tells what to use instead. */
-export function EndOfLifeNotice({ type, className }: { type: string; className?: string }) {
+/** Warns that software reached its end of life, and tells what to use instead; children offer a way out. */
+export function EndOfLifeNotice({ type, className, children }: { type: string; className?: string; children?: ReactNode }) {
   const { label, endOfLife } = serverType(type)
   if (!endOfLife) return null
   return (
     <Callout tone="warning" icon={WarningIcon} role="note" className={className} title={t("{{software}} reached its end of life", { software: label })}>
       {t(endOfLife)}
+      {children && <div className="mt-3">{children}</div>}
     </Callout>
   )
 }

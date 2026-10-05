@@ -42,7 +42,7 @@ const (
 )
 
 var velocity = Proxy{
-	File: "velocity.toml",
+	File: noryxv1.ServerType_SERVER_TYPE_VELOCITY.ConfigFile(),
 	managed: map[string]string{
 		"config-version":              "Velocity manages the version of its configuration.",
 		"bind":                        bound,
@@ -61,7 +61,7 @@ var velocity = Proxy{
 }
 
 var bungee = Proxy{
-	File: "config.yml",
+	File: noryxv1.ServerType_SERVER_TYPE_BUNGEECORD.ConfigFile(),
 	managed: map[string]string{
 		"servers":                  inNetwork,
 		"ip_forward":               "The forwarding is chosen in the proxy's network.",

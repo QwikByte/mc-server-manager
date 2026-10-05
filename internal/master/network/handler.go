@@ -63,6 +63,19 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusNoContent, func(ctx context.Context, n Network) (any, error) {
 		return nil, h.svc.Delete(ctx, n.ID)
 	}))
+	mux.Handle("POST /api/networks/{id}/proxy", manage, func(w http.ResponseWriter, r *http.Request) {
+		var sw Swap
+		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+		if err == nil {
+			err = httpapi.ReadJSON(w, r, &sw)
+		}
+		if err != nil {
+			httpapi.WriteError(w, r, err)
+			return
+		}
+		logging.Note(r.Context(), slog.String("name", n.Name), slog.String("proxy", sw.Proxy.ServerID))
+		h.run(w, r, "network.proxy", n.Name, n.ID, http.StatusOK, func(ctx context.Context) (any, error) { return h.svc.SwapProxy(ctx, n.ID, sw) })
+	})
 	mux.Handle("POST /api/networks/{id}/apply", manage, h.onNetwork("network.apply", http.StatusOK, func(ctx context.Context, n Network) (any, error) {
 		return h.svc.Apply(ctx, n.ID)
 	}))

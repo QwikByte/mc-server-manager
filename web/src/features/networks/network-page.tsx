@@ -1,4 +1,5 @@
 import {
+  ArrowsLeftRightIcon,
   ArrowsSplitIcon,
   CubeIcon,
   DeviceMobileIcon,
@@ -22,6 +23,7 @@ import { StatCard } from "@/components/stat-card"
 import { Pill } from "@/components/status"
 import { TabLink } from "@/components/tab-link"
 import { Tabs } from "@/components/tabs"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery } from "@/features/servers/api"
@@ -34,6 +36,7 @@ import { NetworkEditor } from "./network-editor"
 import { ProxySettingsEditor } from "./proxy-settings"
 import { ServerLabel } from "./server-label"
 import { findServer } from "./servers"
+import { SwapProxyDialog } from "./swap-proxy-dialog"
 import { playersOnline, useNetworkUsage } from "./usage"
 
 const route = getRouteApi("/_app/networks/$networkId")
@@ -100,7 +103,19 @@ export function NetworkPage() {
         }
         actions={<NetworkActions network={network} />}
       />
-      <EndOfLifeNotice type={network.proxyType} className="mb-6" />
+      <EndOfLifeNotice type={network.proxyType} className="mb-6">
+        {can("networks.manage") && (
+          <SwapProxyDialog
+            network={network}
+            trigger={
+              <Button size="sm" variant="outline">
+                <ArrowsLeftRightIcon />
+                {t("Change proxy")}
+              </Button>
+            }
+          />
+        )}
+      </EndOfLifeNotice>
       {network.applyError && (
         <Callout tone="warning" icon={WarningCircleIcon} role="alert" title={t("The proxy may send players to the wrong address")} className="mb-6">
           {network.applyError}

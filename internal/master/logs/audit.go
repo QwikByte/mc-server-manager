@@ -89,6 +89,7 @@ var actions = map[string]action{
 	"POST /api/networks":                          {logging.Networks, "Create network"},
 	"PUT /api/networks/{id}":                      {logging.Networks, "Change network"},
 	"DELETE /api/networks/{id}":                   {logging.Networks, "Delete network"},
+	"POST /api/networks/{id}/proxy":               {logging.Networks, "Change network proxy"},
 	"POST /api/networks/{id}/apply":               {logging.Networks, "Apply network"},
 	"POST /api/networks/{id}/start":               {logging.Networks, "Start network"},
 	"POST /api/networks/{id}/stop":                {logging.Networks, "Stop network"},
