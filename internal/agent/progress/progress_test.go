@@ -15,9 +15,10 @@ import (
 // A watcher that starts before the named call gets its progress and ends with it.
 func TestWatchProgress(t *testing.T) {
 	r := NewRegistry()
-	stream := &fakeStream{ctx: t.Context(), sent: make(chan *noryxv1.WatchProgressResponse, 100)}
+	stream := &fakeStream{ctx: t.Context(), header: make(chan struct{}), sent: make(chan *noryxv1.WatchProgressResponse, 100)}
 	watched := make(chan error)
 	go func() { watched <- r.WatchProgress(&noryxv1.WatchProgressRequest{OperationId: "op-1"}, stream) }()
+	<-stream.header // like the master, which starts the call once the watcher follows it
 
 	ctx := metadata.NewIncomingContext(t.Context(), metadata.Pairs(noryxv1.OperationKey, "op-1"))
 	_, err := r.intercept(ctx, nil, &grpc.UnaryServerInfo{}, func(ctx context.Context, _ any) (any, error) {
@@ -60,13 +61,17 @@ func TestUnnamed(t *testing.T) {
 
 type fakeStream struct {
 	grpc.ServerStreamingServer[noryxv1.WatchProgressResponse]
-	ctx  context.Context
-	sent chan *noryxv1.WatchProgressResponse
+	ctx    context.Context
+	header chan struct{}
+	sent   chan *noryxv1.WatchProgressResponse
 }
 
 func (f *fakeStream) Context() context.Context { return f.ctx }
 
-func (f *fakeStream) SendHeader(metadata.MD) error { return nil }
+func (f *fakeStream) SendHeader(metadata.MD) error {
+	close(f.header)
+	return nil
+}
 
 func (f *fakeStream) Send(m *noryxv1.WatchProgressResponse) error {
 	f.sent <- m
