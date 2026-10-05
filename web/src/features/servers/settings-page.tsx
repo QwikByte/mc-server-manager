@@ -11,8 +11,9 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { nodeQuery } from "@/features/nodes/api"
 import { useOperation } from "@/features/operations/use-operation"
+import { cn } from "@/lib/utils"
 import { type Server, type ServerSettings, useServer, useUpdateImage, useUpdateServer } from "./api"
-import { serverType, splitOptions } from "./server-types"
+import { isModded, serverType, splitOptions } from "./server-types"
 import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField } from "./settings-fields"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/settings")
@@ -74,8 +75,8 @@ function UpdateImage({ nodeId, server }: { nodeId: string; server: Server }) {
 }
 
 function settingsOf(s: Server): ServerSettings {
-  const { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit } = s
-  return { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit }
+  const { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, loaderVersion } = s
+  return { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, loaderVersion }
 }
 
 function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
@@ -85,6 +86,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   const operation = useOperation()
   const { data: node } = useQuery(nodeQuery(nodeId))
   const game = !serverType(server.type).proxy
+  const modded = isModded(server.type)
   const settings: ServerSettings = { ...form, jvmOptions: splitOptions(form.jvmOptions) }
   const dirty = JSON.stringify(settings) !== JSON.stringify(initial)
   const blocker = useBlocker({ shouldBlockFn: () => dirty && !update.isPending, enableBeforeUnload: () => dirty, withResolver: true })
@@ -106,7 +108,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
           <FieldLabel htmlFor="settings-name">{t("Name")}</FieldLabel>
           <Input id="settings-name" required maxLength={32} value={form.name} onChange={(e) => set({ name: e.target.value })} />
         </Field>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className={cn("grid gap-4", modded ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
           {game && (
             <Field>
               <FieldLabel htmlFor="settings-version">{t("Minecraft version")}</FieldLabel>
@@ -115,6 +117,18 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
                 placeholder={t("Latest")}
                 value={form.version === "LATEST" ? "" : form.version}
                 onChange={(e) => set({ version: e.target.value.trim() || "LATEST" })}
+              />
+            </Field>
+          )}
+          {modded && (
+            <Field>
+              <FieldLabel htmlFor="settings-loader">{t("Loader version")}</FieldLabel>
+              <Input
+                id="settings-loader"
+                placeholder={t("Newest")}
+                className="font-mono"
+                value={form.loaderVersion}
+                onChange={(e) => set({ loaderVersion: e.target.value.trim() })}
               />
             </Field>
           )}
@@ -136,6 +150,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
         {game && form.version !== initial.version && (
           <FieldDescription>
             {t("Worlds can't be opened by older Minecraft versions. Make a backup before you downgrade.")}
+            {modded && form.loaderVersion && ` ${t("Empty the loader version unless it suits the new Minecraft version.")}`}
           </FieldDescription>
         )}
       </FormSection>

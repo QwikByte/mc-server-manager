@@ -86,6 +86,10 @@ export function stepOf(op: Operation, step: string): string {
       return t("Create the container")
     case "plugins":
       return t("Install the plugins")
+    case "modpack":
+      return t("Download the modpack")
+    case "mods":
+      return t("Install the mods of the modpack")
     case "save":
       return t("Save the worlds")
     case "copy":
@@ -135,6 +139,7 @@ export function amountOf(op: Operation): string | undefined {
   if (op.unit === "bytes" && op.done > 0) return formatBytes(op.done)
   if (op.unit === "servers" && op.total > 1) return t("{{done}} of {{count}} servers", { done: op.done, count: op.total })
   if (op.unit === "backups" && op.total > 0) return t("{{done}} of {{count}} backups", { done: op.done, count: op.total })
+  if (op.unit === "files" && op.total > 0) return t("{{done}} of {{count}} files", { done: op.done, count: op.total })
   return undefined
 }
 

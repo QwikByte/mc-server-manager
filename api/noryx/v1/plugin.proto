@@ -20,8 +20,10 @@ message PluginFile {
   // Name of the .jar file in the plugin folder.
   string file_name = 1;
   int64 size = 2;
-  // Hex-encoded SHA-512 of the file, which identifies it in plugin catalogues.
+  // Hex-encoded SHA-512 of the file, which identifies it on Modrinth.
   string sha512 = 3;
+  // Hex-encoded SHA-256 of the file, which identifies it on Hangar.
+  string sha256 = 4;
 }
 
 message ListPluginsRequest {

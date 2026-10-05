@@ -127,23 +127,12 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context()) // cancelling discards the partial file
 	defer cancel()
 	c, err := h.client(ctx, r)
-	if err != nil {
-		httpapi.WriteError(w, r, err)
-		return
-	}
-	stream, err := c.WriteFile(ctx)
+	var file *noryxv1.FileInfo
 	if err == nil {
-		err = stream.Send(&noryxv1.WriteFileRequest{Content: &noryxv1.WriteFileRequest_Header{Header: &noryxv1.WriteFileHeader{
+		file, err = Write(ctx, c, &noryxv1.WriteFileHeader{
 			ServerId: r.PathValue("id"), Path: r.URL.Query().Get("path"), Overwrite: r.URL.Query().Get("overwrite") == "true",
 			Size: max(r.ContentLength, 0),
-		}}})
-	}
-	if err == nil {
-		err = sendBody(http.MaxBytesReader(w, r.Body, maxUploadBytes), stream)
-	}
-	var res *noryxv1.WriteFileResponse
-	if err == nil || errors.Is(err, io.EOF) { // io.EOF: the agent ended the stream, its reply tells why
-		res, err = stream.CloseAndRecv()
+		}, http.MaxBytesReader(w, r.Body, maxUploadBytes))
 	}
 	var tooLarge *http.MaxBytesError
 	switch {
@@ -152,26 +141,33 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		httpapi.WriteError(w, r, err)
 	default:
-		httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetFile()))
+		httpapi.WriteJSON(w, http.StatusCreated, toView(file))
 	}
 }
 
-func sendBody(body io.Reader, stream noryxv1.FileService_WriteFileClient) error {
+// Write creates or replaces a file of a server, as header describes it, with content.
+func Write(ctx context.Context, c noryxv1.FileServiceClient, header *noryxv1.WriteFileHeader, content io.Reader) (*noryxv1.FileInfo, error) {
+	stream, err := c.WriteFile(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = stream.Send(&noryxv1.WriteFileRequest{Content: &noryxv1.WriteFileRequest_Header{Header: header}})
 	buf := make([]byte, chunkSize)
-	for {
-		n, err := io.ReadFull(body, buf)
+	for err == nil {
+		var n int
+		n, err = io.ReadFull(content, buf)
 		if n > 0 {
-			if err := stream.Send(&noryxv1.WriteFileRequest{Content: &noryxv1.WriteFileRequest_Data{Data: buf[:n]}}); err != nil {
-				return err
+			if sendErr := stream.Send(&noryxv1.WriteFileRequest{Content: &noryxv1.WriteFileRequest_Data{Data: buf[:n]}}); sendErr != nil {
+				err = sendErr
 			}
 		}
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
 	}
+	// The content ended, or the agent ended the stream (io.EOF), whose reply tells why.
+	if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, err
+	}
+	res, err := stream.CloseAndRecv()
+	return res.GetFile(), err
 }
 
 func (h *Handler) createDirectory(w http.ResponseWriter, r *http.Request) {

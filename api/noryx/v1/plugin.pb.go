@@ -26,8 +26,10 @@ type PluginFile struct {
 	// Name of the .jar file in the plugin folder.
 	FileName string `protobuf:"bytes,1,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
 	Size     int64  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
-	// Hex-encoded SHA-512 of the file, which identifies it in plugin catalogues.
-	Sha512        string `protobuf:"bytes,3,opt,name=sha512,proto3" json:"sha512,omitempty"`
+	// Hex-encoded SHA-512 of the file, which identifies it on Modrinth.
+	Sha512 string `protobuf:"bytes,3,opt,name=sha512,proto3" json:"sha512,omitempty"`
+	// Hex-encoded SHA-256 of the file, which identifies it on Hangar.
+	Sha256        string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -79,6 +81,13 @@ func (x *PluginFile) GetSize() int64 {
 func (x *PluginFile) GetSha512() string {
 	if x != nil {
 		return x.Sha512
+	}
+	return ""
+}
+
+func (x *PluginFile) GetSha256() string {
+	if x != nil {
+		return x.Sha256
 	}
 	return ""
 }
@@ -459,12 +468,13 @@ var File_noryx_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/plugin.proto\x12\bnoryx.v1\"U\n" +
+	"\x15noryx/v1/plugin.proto\x12\bnoryx.v1\"m\n" +
 	"\n" +
 	"PluginFile\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x16\n" +
-	"\x06sha512\x18\x03 \x01(\tR\x06sha512\"1\n" +
+	"\x06sha512\x18\x03 \x01(\tR\x06sha512\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\"1\n" +
 	"\x12ListPluginsRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\"]\n" +
 	"\x13ListPluginsResponse\x12\x16\n" +

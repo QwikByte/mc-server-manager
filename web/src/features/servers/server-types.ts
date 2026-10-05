@@ -17,8 +17,12 @@ const bukkit = ["paper", "spigot", "bukkit"]
 export const serverTypes: ServerType[] = [
   { value: "paper", label: "Paper", proxy: false, addons: { kind: "plugins", loaders: bukkit } },
   { value: "purpur", label: "Purpur", proxy: false, addons: { kind: "plugins", loaders: ["purpur", ...bukkit] } },
+  // Folia only loads plugins made for it.
+  { value: "folia", label: "Folia", proxy: false, addons: { kind: "plugins", loaders: ["folia"] } },
+  { value: "leaf", label: "Leaf", proxy: false, addons: { kind: "plugins", loaders: bukkit } },
   { value: "vanilla", label: "Vanilla", proxy: false },
   { value: "fabric", label: "Fabric", proxy: false, addons: { kind: "mods", loaders: ["fabric"] } },
+  { value: "quilt", label: "Quilt", proxy: false, addons: { kind: "mods", loaders: ["quilt", "fabric"] } },
   { value: "forge", label: "Forge", proxy: false, addons: { kind: "mods", loaders: ["forge"] } },
   { value: "neoforge", label: "NeoForge", proxy: false, addons: { kind: "mods", loaders: ["neoforge"] } },
   { value: "velocity", label: "Velocity", proxy: true, addons: { kind: "plugins", loaders: ["velocity"] } },
@@ -26,16 +30,28 @@ export const serverTypes: ServerType[] = [
   { value: "waterfall", label: "Waterfall", proxy: true, addons: { kind: "plugins", loaders: ["waterfall", "bungeecord"] } },
 ]
 
+/** Paper and its forks share Paper's configuration. */
+export const isPaper = (type: string) => ["paper", "purpur", "folia", "leaf"].includes(type)
+/** Fabric and Quilt load Fabric mods. */
+export const isFabric = (type: string) => type === "fabric" || type === "quilt"
+
 export const memoryOptionsMb = [512, 1024, 2048, 4096, 6144, 8192, 12288, 16384]
 
 export function serverType(value: string): ServerType {
   return serverTypes.find((type) => type.value === value) ?? { value, label: value, proxy: false }
 }
 
-/** Sensible defaults: proxies listen on 25577 and need far less memory than game servers. */
+/** Sensible defaults: proxies listen on 25577 and need far less memory than game servers, modpacks more. */
 export function defaults(type: string) {
+  if (type === modpack) return { port: 25565, memoryMb: 4096 }
   return serverType(type).proxy ? { port: 25577, memoryMb: 512 } : { port: 25565, memoryMb: 2048 }
 }
+
+/** Chosen as the software of a new server, a Modrinth modpack decides it. */
+export const modpack = "modpack"
+
+/** Fabric, Quilt, Forge and NeoForge load mods with a mod loader of a version that can be chosen. */
+export const isModded = (type: string) => serverType(type).addons?.kind === "mods"
 
 /** The first free port from the preferred one on, within the node's port range. */
 export function suggestPort(used: number[], preferred: number, min = 1024, max = 65535): number {

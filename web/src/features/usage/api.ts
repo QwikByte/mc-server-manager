@@ -24,7 +24,7 @@ export interface ServerUsage {
   diskBytes: number
   /** Missing if the server didn't answer; for a proxy, the players of the whole network. */
   players?: { online: number; max: number; names: string[] }
-  /** Ticks per second over the last minute; only Paper and Purpur tell it. */
+  /** Ticks per second over the last minute; only Paper and its forks except Folia tell it. */
   tps?: number
 }
 

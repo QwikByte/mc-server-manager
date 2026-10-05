@@ -14,7 +14,7 @@ import (
 // the request is cancelled, and the deletion succeeds.
 func TestDeleteForgetsEverything(t *testing.T) {
 	failing, other := &fakeRefs{err: errors.New("database is locked")}, &fakeRefs{}
-	h := NewHandler(fakeNodes{}, fakeNetworks{}, nil, nil, nil, NewMoves(), failing, other)
+	h := NewHandler(fakeNodes{}, fakeNetworks{}, nil, nil, nil, nil, NewMoves(), failing, other)
 	mux := http.NewServeMux()
 	mux.HandleFunc("DELETE /api/nodes/{node}/servers/{id}", h.delete)
 	ctx, cancel := context.WithCancel(t.Context())

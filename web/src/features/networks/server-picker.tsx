@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { NodeServer } from "@/features/servers/api"
-import { serverType } from "@/features/servers/server-types"
+import { isFabric, serverType } from "@/features/servers/server-types"
 import { cn } from "@/lib/utils"
 import type { Forwarding, ServerRef } from "./api"
 import { canJoin, forwardingMod, key, refOf } from "./servers"
@@ -14,7 +14,7 @@ import { canJoin, forwardingMod, key, refOf } from "./servers"
 /** Why a server can't join a network with the forwarding, if it can't. */
 function reason(type: string, forwarding: Forwarding) {
   if (canJoin(type, forwarding)) return undefined
-  if (type === "fabric") return t("FabricProxy-Lite only supports Velocity's modern forwarding.")
+  if (isFabric(type)) return t("FabricProxy-Lite only supports Velocity's modern forwarding.")
   return t("Vanilla servers can't verify the players a proxy forwards.")
 }
 
@@ -32,7 +32,7 @@ export function ServerPicker({
 }) {
   const [search, setSearch] = useState("")
   if (servers.length === 0)
-    return <p className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">{t("No game server is free to join. Create a Paper, Purpur, Fabric, Forge or NeoForge server first.")}</p>
+    return <p className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">{t("No game server is free to join. Create a Paper, Fabric, Forge or NeoForge server or one of their forks first.")}</p>
   const order = selected.map(key)
   const words = search.toLowerCase().split(/\s+/).filter(Boolean)
   const sorted = [...servers]

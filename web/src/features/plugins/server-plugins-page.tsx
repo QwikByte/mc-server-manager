@@ -31,7 +31,17 @@ import { type Server, useServer } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
 import { formatBytes } from "@/lib/format"
 import { locale } from "@/lib/i18n"
-import { type InstalledPlugin, type Project, type ProjectVersion, pluginsQuery, type SearchHit, useChangePlugins, useInstallPlugins } from "./api"
+import {
+  type InstalledPlugin,
+  onHangar,
+  type Project,
+  type ProjectVersion,
+  pluginsQuery,
+  projectUrl,
+  type SearchHit,
+  useChangePlugins,
+  useInstallPlugins,
+} from "./api"
 import { PluginIcon } from "./plugin-icon"
 import { PluginSearch } from "./plugin-search"
 import { VersionMenu } from "./version-menu"
@@ -41,14 +51,17 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/plugins")
 type Kind = "plugins" | "mods"
 type Show = "all" | "updates" | "foreign"
 
-/** The texts that name what a server loads, plugins or mods. */
-function texts(kind: Kind, type: string) {
+/** The texts that name what a server of a type loads, plugins or mods, and where they come from. */
+function texts(kind: Kind, serverTypeValue: string) {
+  const type = serverType(serverTypeValue).label
+  const elsewhere = onHangar(serverTypeValue) ? t("Not from Modrinth or Hangar") : t("Not from Modrinth")
   return kind === "plugins"
     ? {
         none: t("No plugins yet"),
         add: t("Add plugins"),
-        addTitle: t("Add plugins from Modrinth"),
+        addTitle: onHangar(serverTypeValue) ? t("Add plugins from Modrinth or Hangar") : t("Add plugins from Modrinth"),
         addDescription: t("Only plugins for {{type}} are shown. What they require is installed too.", { type }),
+        elsewhere,
         updated: (count: number) =>
           t("Updated {{count}} plugins. Restart the server to load them.", {
             count,
@@ -60,6 +73,7 @@ function texts(kind: Kind, type: string) {
         add: t("Add mods"),
         addTitle: t("Add mods from Modrinth"),
         addDescription: t("Only mods for {{type}} are shown. What they require is installed too.", { type }),
+        elsewhere,
         updated: (count: number) =>
           t("Updated {{count}} mods. Restart the server to load them.", {
             count,
@@ -86,7 +100,7 @@ export function ServerPluginsPage() {
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
   const kind = serverType(server.type).addons?.kind ?? "plugins"
-  const words = texts(kind, serverType(server.type).label)
+  const words = texts(kind, server.type)
   const count = data.plugins.length
   const installed = data.plugins.flatMap((p) => (p.project ? [p.project.id] : []))
   const updates = data.plugins.flatMap((p) => (p.update && p.project ? [p.project] : []))
@@ -117,7 +131,7 @@ export function ServerPluginsPage() {
     >
       {data.catalogueError && (
         <Callout tone="warning" className="mb-4">
-          {t("Modrinth couldn't identify the files: {{error}}", { error: data.catalogueError })}
+          {t("The files couldn't be identified: {{error}}", { error: data.catalogueError })}
         </Callout>
       )}
       {count === 0 ? (
@@ -146,7 +160,7 @@ export function ServerPluginsPage() {
               options={[
                 { value: "all", label: t("All ({{number}})", { number: count }) },
                 { value: "updates", label: t("Updates ({{number}})", { number: updates.length }) },
-                { value: "foreign", label: t("Not from Modrinth ({{number}})", { number: foreign }) },
+                { value: "foreign", label: `${words.elsewhere} (${foreign})` },
               ]}
             />
             <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
@@ -164,7 +178,7 @@ export function ServerPluginsPage() {
           ) : (
             <ul className="surface divide-y rounded-xl">
               {shown.map((plugin) => (
-                <PluginRow key={plugin.fileName} plugin={plugin} server={server} serverRef={ref} manage={manage} />
+                <PluginRow key={plugin.fileName} plugin={plugin} server={server} serverRef={ref} manage={manage} elsewhere={words.elsewhere} />
               ))}
             </ul>
           )}
@@ -189,7 +203,20 @@ function useInstallOn(serverRef: ServerRef) {
   return { run, pending: install.isPending }
 }
 
-function PluginRow({ plugin, server, serverRef, manage }: { plugin: InstalledPlugin; server: Server; serverRef: ServerRef; manage: boolean }) {
+function PluginRow({
+  plugin,
+  server,
+  serverRef,
+  manage,
+  elsewhere,
+}: {
+  plugin: InstalledPlugin
+  server: Server
+  serverRef: ServerRef
+  manage: boolean
+  /** What files from elsewhere are called. */
+  elsewhere: string
+}) {
   const change = useChangePlugins(serverRef)
   const install = useInstallOn(serverRef)
   const { project, update } = plugin
@@ -200,7 +227,7 @@ function PluginRow({ plugin, server, serverRef, manage }: { plugin: InstalledPlu
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 truncate text-sm font-semibold">
           {project ? (
-            <a href={`https://modrinth.com/project/${project.slug}`} target="_blank" rel="noreferrer" className="truncate hover:underline">
+            <a href={projectUrl(project)} target="_blank" rel="noreferrer" className="truncate hover:underline">
               {project.title}
             </a>
           ) : (
@@ -224,7 +251,7 @@ function PluginRow({ plugin, server, serverRef, manage }: { plugin: InstalledPlu
           )}
         </p>
         <p className="truncate text-xs text-muted-foreground">
-          {project ? plugin.fileName : t("Not from Modrinth")} · {formatBytes(plugin.size)}
+          {project ? plugin.fileName : elsewhere} · {formatBytes(plugin.size)}
         </p>
       </div>
       {update && !manage && <Pill tone="info">{t("Update to {{version}}", { version: update })}</Pill>}

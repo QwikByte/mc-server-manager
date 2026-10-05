@@ -64,6 +64,9 @@ type Spec struct {
 	JVMOptions    []string              `json:"jvmOptions,omitempty"`
 	// CPUMillis limits the CPU time in thousandths of a core; 0 means no limit.
 	CPUMillis uint32 `json:"cpuMillis,omitempty"`
+	// LoaderVersion selects the version of the mod loader of a modded server, e.g. one a
+	// modpack needs; empty means the newest.
+	LoaderVersion string `json:"loaderVersion,omitempty"`
 }
 
 // Server is a server managed by a runtime.

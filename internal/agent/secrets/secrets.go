@@ -29,7 +29,7 @@ var hidden = []string{".rcon-cli.env", ".rcon-cli.yaml", network.ForwardingSecre
 var redacted = map[string]*regexp.Regexp{
 	"server.properties": lines(slices.Collect(maps.Keys(properties.Secret))),
 	// The forwarding secret of a network on game servers: in Paper's configuration or in
-	// that of the forwarding mod of Fabric, Forge or NeoForge.
+	// that of the forwarding mod of Fabric, Quilt, Forge or NeoForge.
 	network.PaperGlobalFile: lines([]string{"secret"}),
 	network.FabricProxyFile: lines([]string{"secret"}),
 	network.ForgeProxyFile:  lines([]string{"secret"}),

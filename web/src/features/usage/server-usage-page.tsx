@@ -6,6 +6,7 @@ import { Meter } from "@/components/meter"
 import { StatCard } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type Server, useServer } from "@/features/servers/api"
+import { isPaper } from "@/features/servers/server-types"
 import { niceBytes } from "@/lib/chart"
 import { formatBytes } from "@/lib/format"
 import { type ServerUsage, useServerUsage } from "./api"
@@ -14,8 +15,8 @@ import { type ChartSpec, UsageHistory } from "./usage-history"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/usage")
 
-/** Only Paper and Purpur tell their ticks per second. */
-const hasTPS = (type: string) => type === "paper" || type === "purpur"
+/** Paper and its forks tell their ticks per second, except Folia, which tells those of each region. */
+const hasTPS = (type: string) => isPaper(type) && type !== "folia"
 
 /** The Usage tab of a server: what it uses now, and during the last day or week. */
 export function ServerUsagePage() {

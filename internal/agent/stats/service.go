@@ -202,7 +202,8 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 			stats.Players.Names = names
 		}
 	}
-	if srv.Type == noryxv1.ServerType_SERVER_TYPE_PAPER || srv.Type == noryxv1.ServerType_SERVER_TYPE_PURPUR {
+	// Folia tells the ticks per second of each region instead.
+	if srv.Type.Paper() && srv.Type != noryxv1.ServerType_SERVER_TYPE_FOLIA {
 		if out, ok := st.command(ctx, rt, srv.ID, u.Host, now, "tps"); ok {
 			if m := tpsPattern.FindStringSubmatch(out); m != nil {
 				tps, _ := strconv.ParseFloat(m[1], 64)

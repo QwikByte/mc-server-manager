@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useAccess } from "@/features/access/use-access"
 import type { NodeServer } from "@/features/servers/api"
+import { isFabric, isPaper } from "@/features/servers/server-types"
 import { type Forwarding, type Network, networksQuery, type ServerRef } from "./api"
 
 export const proxyTypes = ["velocity", "bungeecord", "waterfall"]
@@ -8,17 +9,18 @@ export const proxyTypes = ["velocity", "bungeecord", "waterfall"]
 export const isBungee = (type: string) => type === "bungeecord" || type === "waterfall"
 
 /**
- * Game servers that can verify the players a proxy forwards: Paper and Purpur themselves,
- * Fabric with FabricProxy-Lite, which only knows modern forwarding, Forge and NeoForge with
- * Proxy-Compatible-Forge. The panel installs the mods.
+ * Game servers that can verify the players a proxy forwards: Paper and its forks themselves,
+ * Fabric and Quilt with FabricProxy-Lite, which only knows modern forwarding, Forge and NeoForge
+ * with Proxy-Compatible-Forge. The panel installs the mods.
  */
 export function canJoin(type: string, forwarding: Forwarding) {
-  return ["paper", "purpur", "forge", "neoforge"].includes(type) || (type === "fabric" && forwarding === "modern")
+  return isPaper(type) || type === "forge" || type === "neoforge" || (isFabric(type) && forwarding === "modern")
 }
 
 /** The forwarding mod a server type gets, if any. */
 export function forwardingMod(type: string) {
-  return { fabric: "FabricProxy-Lite", forge: "Proxy-Compatible-Forge", neoforge: "Proxy-Compatible-Forge" }[type]
+  if (isFabric(type)) return "FabricProxy-Lite"
+  return { forge: "Proxy-Compatible-Forge", neoforge: "Proxy-Compatible-Forge" }[type]
 }
 
 export const key = ({ nodeId, serverId }: ServerRef) => `${nodeId}/${serverId}`

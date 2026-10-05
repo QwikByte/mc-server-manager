@@ -4,9 +4,11 @@ package plugin
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
 	"errors"
+	"hash"
 	"io"
 	"io/fs"
 	"path/filepath"
@@ -32,10 +34,13 @@ const (
 var folders = map[noryxv1.ServerType]string{
 	noryxv1.ServerType_SERVER_TYPE_PAPER:      "plugins",
 	noryxv1.ServerType_SERVER_TYPE_PURPUR:     "plugins",
+	noryxv1.ServerType_SERVER_TYPE_FOLIA:      "plugins",
+	noryxv1.ServerType_SERVER_TYPE_LEAF:       "plugins",
 	noryxv1.ServerType_SERVER_TYPE_VELOCITY:   "plugins",
 	noryxv1.ServerType_SERVER_TYPE_BUNGEECORD: "plugins",
 	noryxv1.ServerType_SERVER_TYPE_WATERFALL:  "plugins",
 	noryxv1.ServerType_SERVER_TYPE_FABRIC:     "mods",
+	noryxv1.ServerType_SERVER_TYPE_QUILT:      "mods",
 	noryxv1.ServerType_SERVER_TYPE_FORGE:      "mods",
 	noryxv1.ServerType_SERVER_TYPE_NEOFORGE:   "mods",
 }
@@ -59,9 +64,9 @@ type Service struct {
 }
 
 type sum struct {
-	size     int64
-	modified time.Time
-	sha512   string
+	size           int64
+	modified       time.Time
+	sha512, sha256 string
 }
 
 func NewService(rt runtime.Runtime) *Service {
@@ -93,14 +98,13 @@ func (s *Service) ListPlugins(ctx context.Context, req *noryxv1.ListPluginsReque
 		}
 		cached, ok := known[e.Name()]
 		if !ok || cached.size != info.Size() || !cached.modified.Equal(info.ModTime()) {
-			hash, err := hashFile(dir, filepath.Join(folder, e.Name()))
-			if err != nil {
+			if cached, err = hashFile(dir, filepath.Join(folder, e.Name())); err != nil {
 				return nil, toStatus(err)
 			}
-			cached = sum{info.Size(), info.ModTime(), hash}
+			cached.size, cached.modified = info.Size(), info.ModTime()
 		}
 		current[e.Name()] = cached
-		res.Plugins = append(res.Plugins, &noryxv1.PluginFile{FileName: e.Name(), Size: info.Size(), Sha512: cached.sha512})
+		res.Plugins = append(res.Plugins, &noryxv1.PluginFile{FileName: e.Name(), Size: info.Size(), Sha512: cached.sha512, Sha256: cached.sha256})
 	}
 	s.mu.Lock()
 	s.sums[req.GetServerId()] = current
@@ -108,17 +112,34 @@ func (s *Service) ListPlugins(ctx context.Context, req *noryxv1.ListPluginsReque
 	return res, nil
 }
 
-func hashFile(dir *datadir.Dir, name string) (string, error) {
+// hashFile returns the hashes of a file, with which plugin catalogues identify it.
+func hashFile(dir *datadir.Dir, name string) (sum, error) {
 	f, err := dir.Open(name)
 	if err != nil {
-		return "", err
+		return sum{}, err
 	}
 	defer f.Close()
-	h := sha512.New()
+	h := newHashes()
 	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+		return sum{}, err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return h.sum(), nil
+}
+
+// hashes computes the SHA-512 and SHA-256 of what is written to it.
+type hashes struct {
+	io.Writer
+	sha512, sha256 hash.Hash
+}
+
+func newHashes() hashes {
+	h := hashes{sha512: sha512.New(), sha256: sha256.New()}
+	h.Writer = io.MultiWriter(h.sha512, h.sha256)
+	return h
+}
+
+func (h hashes) sum() sum {
+	return sum{sha512: hex.EncodeToString(h.sha512.Sum(nil)), sha256: hex.EncodeToString(h.sha256.Sum(nil))}
 }
 
 func (s *Service) InstallPlugin(stream noryxv1.PluginService_InstallPluginServer) error {
@@ -141,7 +162,7 @@ func (s *Service) InstallPlugin(stream noryxv1.PluginService_InstallPluginServer
 	if err := dir.MkdirAll(folder); err != nil {
 		return toStatus(err)
 	}
-	h := sha512.New()
+	h := newHashes()
 	var size int64
 	err = dir.Replace(filepath.Join(folder, header.GetFileName()), true, func(w io.Writer) error {
 		for {
@@ -170,8 +191,9 @@ func (s *Service) InstallPlugin(stream noryxv1.PluginService_InstallPluginServer
 			return toStatus(err)
 		}
 	}
+	sums := h.sum()
 	return stream.SendAndClose(&noryxv1.InstallPluginResponse{Plugin: &noryxv1.PluginFile{
-		FileName: header.GetFileName(), Size: size, Sha512: hex.EncodeToString(h.Sum(nil)),
+		FileName: header.GetFileName(), Size: size, Sha512: sums.sha512, Sha256: sums.sha256,
 	}})
 }
 

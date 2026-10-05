@@ -2,7 +2,7 @@ import { PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
-import { type FormEvent, type ReactElement, useState } from "react"
+import { type FormEvent, type ReactElement, useCallback, useState } from "react"
 import { Trans } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -19,6 +19,8 @@ import {
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAccess } from "@/features/access/use-access"
+import type { ModpackChoice } from "@/features/modpacks/api"
+import { ModpackPicker } from "@/features/modpacks/modpack-picker"
 import {
   Select,
   SelectContent,
@@ -35,10 +37,10 @@ import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Template, templatesQuery } from "@/features/templates/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { type NewServer, serversQuery, useCreateServer } from "./api"
-import { defaults, memoryOptionsMb, serverType, serverTypes, suggestPort } from "./server-types"
+import { defaults, memoryOptionsMb, modpack, serverType, serverTypes, suggestPort } from "./server-types"
 
 // Node, port and storage stay unset until chosen, so that the suggestions apply.
-type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string; nodeId?: string; templateId?: string }
+type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string; nodeId?: string; templateId?: string; modpack?: ModpackChoice }
 
 const none = "none"
 
@@ -90,6 +92,8 @@ export function CreateServerDialog({
   const { data: servers } = useQuery({ ...serversQuery(nodeId ?? ""), enabled: open && !!nodeId })
   const locations = node?.info?.storage ?? []
   const proxy = serverType(form.type).proxy
+  const fromModpack = form.type === modpack
+  const chooseModpack = useCallback((choice?: ModpackChoice) => setForm((f) => ({ ...f, modpack: choice })), [])
   const port =
     form.port ??
     suggestPort(servers?.map((s) => s.port) ?? [], defaults(form.type).port, node?.portMin ?? undefined, node?.portMax ?? undefined)
@@ -122,6 +126,7 @@ export function CreateServerDialog({
     if (!nodeId) return
     const { name, type, memoryMb, acceptEula } = form
     const server: NewServer = { name, type, memoryMb, acceptEula, port, storage, version: proxy ? "" : form.version.trim() }
+    if (fromModpack) Object.assign(server, { type: "", version: "", modpack: form.modpack })
     if (template) {
       const { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties } = template
       Object.assign(server, { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties })
@@ -260,10 +265,17 @@ export function CreateServerDialog({
                             ))}
                         </SelectGroup>
                       ))}
+                      {nodeId && can("plugins.manage", nodeId) && (
+                        <SelectGroup>
+                          <SelectSeparator />
+                          <SelectLabel>{t("Modpacks")}</SelectLabel>
+                          <SelectItem value={modpack}>{t("Modrinth modpack")}</SelectItem>
+                        </SelectGroup>
+                      )}
                     </SelectContent>
                   </Select>
                 </Field>
-                {!proxy && (
+                {!proxy && !fromModpack && (
                   <Field>
                     <FieldLabel htmlFor="server-version">{t("Minecraft version")}</FieldLabel>
                     <Input
@@ -275,6 +287,7 @@ export function CreateServerDialog({
                   </Field>
                 )}
               </div>
+              {fromModpack && <ModpackPicker onChange={chooseModpack} />}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="server-memory">{t("Memory")}</FieldLabel>
@@ -358,7 +371,7 @@ export function CreateServerDialog({
                   {t("Cancel")}
                 </Button>
               </DialogClose>
-              <Button type="submit" disabled={create.isPending || !nodeId}>
+              <Button type="submit" disabled={create.isPending || !nodeId || (fromModpack && !form.modpack)}>
                 {create.isPending ? (template?.plugins.length ? t("Creating and installing…") : t("Creating…")) : t("Create server")}
               </Button>
             </DialogFooter>
