@@ -52,6 +52,9 @@ export interface NodeServer extends Server {
 /** Memory that servers take from their nodes: the limits of their containers, as the master counts them. */
 export const assignedMemoryMb = (servers: Server[]) => servers.reduce((sum, s) => sum + s.memoryLimitMb, 0)
 
+/** How many servers run, not counting those that start or crash. */
+export const runningCount = (servers: Server[]) => servers.filter((s) => s.state === "running").length
+
 /** Identifies a server across nodes, e.g. to select it. */
 export const serverKey = (s: { nodeId: string; id: string }) => `${s.nodeId}/${s.id}`
 

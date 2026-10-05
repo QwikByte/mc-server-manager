@@ -68,6 +68,10 @@ export function memoryCapacityMb(node: Node): number | undefined {
   return memoryLimitMb(node) ?? (node.info?.memoryBytes ? Math.floor(node.info.memoryBytes / 1024 ** 2) : undefined)
 }
 
+/** Memory in MB that the servers of the online nodes can get in total. */
+export const onlineCapacityMb = (nodes: Node[]) =>
+  nodes.filter((n) => n.status === "online").reduce((sum, n) => sum + (memoryCapacityMb(n) ?? 0), 0)
+
 export const nodesQuery = queryOptions({
   queryKey: ["nodes"],
   queryFn: () => api<Node[]>("/nodes"),

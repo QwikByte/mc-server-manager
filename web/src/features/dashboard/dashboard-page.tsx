@@ -22,12 +22,12 @@ import { useAccess } from "@/features/access/use-access"
 import { networksQuery } from "@/features/networks/api"
 import { useNetworkOf } from "@/features/networks/servers"
 import { playersOnline } from "@/features/networks/usage"
-import { memoryCapacityMb, nodesQuery } from "@/features/nodes/api"
-import { allServersQuery, assignedMemoryMb, type NodeServer } from "@/features/servers/api"
+import { nodesQuery, onlineCapacityMb } from "@/features/nodes/api"
+import { allServersQuery, assignedMemoryMb, type NodeServer, runningCount } from "@/features/servers/api"
 import { StateBar } from "@/features/servers/server-state"
 import { serverLook, serverType } from "@/features/servers/server-types"
 import { useUsages } from "@/features/usage/api"
-import { formatCores } from "@/features/usage/format"
+import { formatCores, formatNumber } from "@/features/usage/format"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { problemsOf } from "./attention"
 
@@ -50,7 +50,7 @@ export function DashboardPage() {
     networks.reduce((sum, n) => sum + (playersOnline(n, usage) ?? 0), 0) +
     gameServers.filter((s) => !networkOf(ref(s))).reduce((sum, s) => sum + (usage(ref(s))?.players?.online ?? 0), 0)
   const assignedMb = assignedMemoryMb(servers)
-  const capacityMb = online.reduce((sum, n) => sum + (memoryCapacityMb(n) ?? 0), 0)
+  const capacityMb = onlineCapacityMb(nodes)
   const problems = problemsOf(nodes, servers, networks, usages)
   const busiest = gameServers
     .filter((s) => usage(ref(s))?.players?.online)
@@ -66,7 +66,7 @@ export function DashboardPage() {
           icon={CubeIcon}
           tone="success"
           label={t("Servers running")}
-          value={`${servers.filter((s) => s.state !== "stopped").length} / ${servers.length}`}
+          value={`${runningCount(servers)} / ${servers.length}`}
         >
           <StateBar servers={servers} />
         </StatCard>
@@ -161,7 +161,11 @@ export function DashboardPage() {
                       </span>
                       {live?.cpuCount && live.memoryTotalBytes ? (
                         <span className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-                          <Load label={t("CPU")} value={live.cpuMillis / (live.cpuCount * 1000)} detail={formatCores(live.cpuMillis)} />
+                          <Load
+                            label={t("CPU")}
+                            value={live.cpuMillis / (live.cpuCount * 1000)}
+                            detail={t("{{used}} of {{total}}", { used: formatNumber(live.cpuMillis / 1000), total: formatCores(live.cpuCount * 1000) })}
+                          />
                           <Load
                             label={t("Memory")}
                             value={live.memoryUsedBytes / live.memoryTotalBytes}

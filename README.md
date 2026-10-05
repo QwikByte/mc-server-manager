@@ -72,6 +72,8 @@ which gives Java about a quarter more than the server's memory and 256 MB for wh
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use,
 the networks, the servers with the most players, and what needs attention: crashing servers, offline nodes, nodes with
 more memory assigned than they can give or almost full storage, and proxies that are stopped while their servers run.
+It counts like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned against
+what the online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
 
 The **Servers** page and the page of each node list servers as cards or as a compact table, the table from 13 servers
 on until one is chosen. They are searched, filtered by state, type, node, network and tag, sorted by name, state,
