@@ -106,9 +106,10 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	for _, m := range res.Hits {
 		project := h.svc.Describe(modrinth.Project{ID: m.ProjectID, Slug: m.Slug, Title: m.Title, IconURL: m.IconURL})
 		// The categories include the loaders; only those searched for are of interest, so
-		// that a project for plugins and mods only shows as either.
-		loaders := slices.DeleteFunc(slices.Clone(m.Categories), func(c string) bool { return !loader(c) })
-		categories := slices.DeleteFunc(slices.Clone(m.DisplayCategories), loader)
+		// that a project for plugins and mods only shows as either. Both are lists in the
+		// JSON, also when Modrinth leaves them out.
+		loaders := slices.DeleteFunc(append([]string{}, m.Categories...), func(c string) bool { return !loader(c) })
+		categories := slices.DeleteFunc(append([]string{}, m.DisplayCategories...), loader)
 		hits = append(hits, hit{project, m.Description, m.Author, m.Downloads, m.Follows, m.Updated, m.ClientSide, loaders, categories})
 	}
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"hits": hits, "total": res.Total})
