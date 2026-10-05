@@ -340,7 +340,8 @@ removes it when it leaves.
   network updates both to their newest build. The proxy restarts when Bedrock players are let in or no longer, their
   port changes or a plugin is updated; the game servers restart when they are let in or no longer, as they stop
   demanding signed chat messages, which Bedrock players can't send (`ENFORCE_SECURE_PROFILE=FALSE`, locked in their
-  properties; afterwards `enforce-secure-profile=true` again). The panel shows where Bedrock players connect and
+  properties; afterwards `enforce-secure-profile=true` again). Java players who only show secure chat don't see what
+  Bedrock players write. The panel shows where Bedrock players connect and
   warns about what keeps them out: Geyser joins as one Minecraft version (it tells which), so game servers of older
   versions need ViaVersion and newer ones ViaVersion and ViaBackwards; Geyser needs about 1 GB of memory on the proxy;
   and the UDP port must be open on the proxy's node, e.g. in the provider's firewall. Geyser also needs to reach
