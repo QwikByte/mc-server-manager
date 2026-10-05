@@ -1,8 +1,8 @@
 import { locale } from "./i18n"
 
-const units = ["B", "KB", "MB", "GB", "TB"]
+const units = ["B", "KiB", "MiB", "GiB", "TiB"]
 
-/** Formats a size in bytes using binary units, e.g. "31.3 GB" or "512 B". */
+/** Formats a size in bytes using binary units, e.g. "31.3 GiB" or "512 B". */
 export function formatBytes(bytes: number): string {
   let value = bytes
   let unit = 0
@@ -10,7 +10,7 @@ export function formatBytes(bytes: number): string {
   return `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unit]}`
 }
 
-/** Formats a size in megabytes, e.g. 2048 → "2 GB", 512 → "512 MB". */
+/** Formats a size in mebibytes, e.g. 2048 → "2 GiB", 512 → "512 MiB". */
 export function formatMegabytes(mb: number): string {
   return formatBytes(mb * 1024 ** 2)
 }

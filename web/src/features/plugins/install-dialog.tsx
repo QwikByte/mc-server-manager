@@ -2,6 +2,7 @@ import { CaretDownIcon, CheckCircleIcon, DownloadSimpleIcon, WarningCircleIcon }
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { useState } from "react"
+import { Callout } from "@/components/callout"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -21,7 +22,8 @@ import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { displayVersion, serverType } from "@/features/servers/server-types"
 import { OperationStatus } from "@/features/operations/operation-status"
 import { guard, useOperation } from "@/features/operations/use-operation"
-import { type InstallResult, type ProjectVersion, type SearchHit, supports, useInstallPlugins } from "./api"
+import { fallback, type InstallResult, type ProjectVersion, type SearchHit, supports, useInstallPlugins } from "./api"
+import { ChannelPill } from "./channel-pill"
 import { PluginIcon } from "./plugin-icon"
 import { VersionMenu } from "./version-menu"
 
@@ -45,14 +47,16 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
 
   const title = t("Install {{name}}", { name: hit.title })
 
+  const versions = pinned && { [hit.id]: pinned.id }
+
   function start() {
     operation.run(
-      (onStart) =>
-        install.mutateAsync({ projects: [hit.id], servers: chosen.map(refOf), versions: pinned && { [hit.id]: pinned.id }, onStart }),
+      (onStart) => install.mutateAsync({ projects: [hit.id], servers: chosen.map(refOf), versions, onStart }),
       {
         title,
         done: (results) => {
           const ok = results.filter((r) => !r.error).length
+          const preReleases = results.some((r) => r.installed.some((f) => fallback(f, versions)))
           return {
             message:
               ok === results.length
@@ -62,7 +66,8 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
                     defaultValue_one: "Installed {{name}} on {{count}} server",
                   })
                 : t("Installed {{name}} on {{ok}} of {{count}} servers", { name: hit.title, ok, count: results.length }),
-            warning: ok < results.length,
+            description: preReleases ? t("Where no release suits a server, a pre-release was installed.") : undefined,
+            warning: ok < results.length || preReleases,
           }
         },
       },
@@ -111,7 +116,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
               </div>
             </DialogHeader>
             {install.data ? (
-              <Results results={install.data} servers={servers} />
+              <Results results={install.data} servers={servers} versions={versions} />
             ) : suitable.length === 0 ? (
               <p className="py-4 text-sm text-muted-foreground">{t("None of your servers can run {{name}}.", { name: hit.title })}</p>
             ) : (
@@ -177,8 +182,9 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
   )
 }
 
-/** What was installed on each server. Servers load new plugins when they restart. */
-export function Results({ results, servers }: { results: InstallResult[]; servers: NodeServer[] }) {
+/** What was installed on each server, with the pre-releases installed where no release suits it. Servers load new plugins when they restart. */
+export function Results({ results, servers, versions }: { results: InstallResult[]; servers: NodeServer[]; versions?: Record<string, string> }) {
+  const preReleases = results.some((r) => r.installed.some((f) => fallback(f, versions)))
   return (
     <div className="grid gap-3">
       <ul className="grid gap-2">
@@ -191,11 +197,25 @@ export function Results({ results, servers }: { results: InstallResult[]; server
             )}
             <span className="min-w-0">
               <span className="block font-medium">{servers.find((s) => key(refOf(s)) === key(r))?.name ?? r.serverId}</span>
-              <span className="block text-xs text-muted-foreground">{r.error ?? r.installed.map((i) => i.fileName).join(", ")}</span>
+              {r.error ? (
+                <span className="block text-xs text-muted-foreground">{r.error}</span>
+              ) : (
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  {r.installed.map((f) => (
+                    <span key={f.fileName} className="inline-flex items-center gap-1.5">
+                      {f.fileName}
+                      <ChannelPill channel={f.channel} />
+                    </span>
+                  ))}
+                </span>
+              )}
             </span>
           </li>
         ))}
       </ul>
+      {preReleases && (
+        <Callout tone="warning">{t("No release suits some of the servers, so a pre-release was installed there. Test it before you use it in production.")}</Callout>
+      )}
       <p className="text-xs text-muted-foreground">{t("Restart the servers to load what was installed.")}</p>
     </div>
   )

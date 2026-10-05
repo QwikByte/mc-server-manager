@@ -109,6 +109,19 @@ func TestBackups(t *testing.T) {
 	api.do("DELETE", base+"/backups/"+b.ID, nil, http.StatusNoContent, nil)
 	api.do("DELETE", base+"/backups/"+b.ID, nil, http.StatusNotFound, nil)
 
+	// A job skips a server without the selected data, e.g. one that never started, and notes
+	// it; backing it up by hand fails.
+	empty := m.createServer(t, a, "Empty", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	job["name"], job["settings"] = "Worlds", map[string]any{"selection": map[string]any{"worlds": true}}
+	api.do("POST", "/api/backup-jobs", job, http.StatusCreated, &task)
+	run(t, api, "/api/backup-jobs/"+task.ID)
+	api.do("GET", "/api/backup-jobs/"+task.ID, nil, http.StatusOK, &task)
+	if want := "Empty on node-1: It has none of the selected data yet, e.g. as it never started."; task.LastRun.Note != want {
+		t.Fatalf("note = %q, want %q", task.LastRun.Note, want)
+	}
+	api.do("POST", "/api/nodes/"+empty.NodeID+"/servers/"+empty.ServerID+"/backups", map[string]any{"selection": map[string]any{"worlds": true}},
+		http.StatusConflict, nil)
+
 	// A deleted server is no longer a target, and its backups are gone.
 	policy := map[string]any{
 		"name": "Broadcast", "enabled": true, "schedule": job["schedule"],

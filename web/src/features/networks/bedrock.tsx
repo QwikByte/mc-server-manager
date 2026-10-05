@@ -125,7 +125,7 @@ export function BedrockSection({
             )}
             {proxy && proxy.memoryMb < geyserMemory && (
               <Callout tone="warning" icon={WarningIcon} title={t("The proxy needs more memory")}>
-                {t("With Geyser, it needs at least {{memory}} MB, and more the more Bedrock players join, but it has {{current}} MB.", {
+                {t("With Geyser, it needs at least {{memory}} MiB, and more the more Bedrock players join, but it has {{current}} MiB.", {
                   memory: geyserMemory,
                   current: proxy.memoryMb,
                 })}{" "}

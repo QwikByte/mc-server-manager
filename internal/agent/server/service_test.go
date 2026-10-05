@@ -37,7 +37,11 @@ func TestCheckSettings(t *testing.T) {
 		{"all settings", func(s *runtime.Spec) {
 			s.Java, s.AikarFlags, s.CPUMillis = "17", true, 2500
 			s.RestartPolicy = noryxv1.RestartPolicy_RESTART_POLICY_ON_CRASH
-			s.JVMOptions = []string{"-Dfile.encoding=UTF-8", "-XX:+UseZGC", "-XX:+HeapDumpOnOutOfMemoryError", "-Dcom.example.agent=x"}
+			s.JVMOptions = []string{
+				"-Dfile.encoding=UTF-8", "-XX:+UseZGC", "-XX:+HeapDumpOnOutOfMemoryError", "-Dcom.example.agent=x", "-Djava.awt.headless=true",
+				"-Dlog4j2.formatMsgNoLookups=true", "-XX:+PrintFlagsFinal", "--add-modules=jdk.incubator.vector", "--enable-native-access=ALL-UNNAMED",
+				"-Dusing.aikars.flags=https://mcflags.emc.gs", "-Xss4M",
+			}
 		}, true},
 		{"unknown Java", func(s *runtime.Spec) { s.Java = "22" }, false},
 		{"Java for a proxy", func(s *runtime.Spec) { s.Type, s.Java = noryxv1.ServerType_SERVER_TYPE_VELOCITY, "21" }, false},
@@ -60,11 +64,18 @@ func TestCheckSettings(t *testing.T) {
 			t.Errorf("%s: checkSettings() = %q, want ok = %v", tt.name, msg, tt.ok)
 		}
 	}
-	// Changing settings can't run code: no commands, agents or debugging and management ports.
+	// Changing settings can't run code: no commands, agents or debugging and management ports,
+	// and no options, classes, libraries or configurations loaded from files or URLs.
 	for _, option := range []string{
 		"-javaagent:/data/agent.jar", "-agentpath:/data/libx.so", "-agentlib:jdwp=transport=dt_socket,server=y,address=5005",
 		"-Xrunjdwp:server=y", "-Xbootclasspath/a:/data/x.jar", "-XX:OnOutOfMemoryError=/data/x.sh", "-XX:OnError=/data/x.sh",
-		"-Dcom.sun.management.jmxremote.port=9010",
+		"-Dcom.sun.management.jmxremote.port=9010", "-Dcom.sun.management.config.file=/data/x",
+		"-XX:VMOptionsFile=/data/x", "-XX:Flags=/data/x", "-XX:SharedArchiveFile=/data/x.jsa", "-XX:AOTCache=/data/x.aot",
+		"-XX:+EnableJVMCI", "-XX:JVMCILibPath=/data", "-XX:CRaCRestoreFrom=/data/cr",
+		"-Dlog4j2.configurationFile=https://example.com/x.xml", "-Dlog4j.configurationFile=/data/x.xml", "-DLOG4J2_configurationFile=/data/x",
+		"-Dlogback.configurationFile=/data/x.xml", "-Djava.system.class.loader=x.Loader", "-Djava.library.path=/data",
+		"-Djava.util.logging.config.class=x.Config", "-Djna.library.path=/data", "-Djdk.module.patch.0=java.base=/data/x",
+		"-cp", "--class-path=/data/x.jar", "--module-path=/data/mods", "--patch-module=java.base=/data/x", "-jar",
 	} {
 		spec := valid
 		spec.JVMOptions = []string{option}

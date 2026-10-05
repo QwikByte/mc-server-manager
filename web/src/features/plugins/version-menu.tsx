@@ -2,11 +2,11 @@ import { CheckIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { type ReactNode, useState } from "react"
-import { Pill } from "@/components/status"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatDate } from "@/lib/format"
 import { type ProjectVersion, versionsQuery } from "./api"
+import { ChannelPill } from "./channel-pill"
 
 /**
  * A menu of the versions of a project that run on a server type and Minecraft version, the newest first, betas and
@@ -58,7 +58,7 @@ export function VersionMenu({
           data.map((v) => (
             <DropdownMenuItem key={v.id} onSelect={() => onPick(v)}>
               <span className="truncate font-mono text-xs">{v.number}</span>
-              {v.channel !== "release" && <Pill tone={v.channel === "beta" ? "warning" : "destructive"}>{v.channel === "beta" ? t("Beta") : t("Alpha")}</Pill>}
+              <ChannelPill channel={v.channel} />
               <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatDate(v.published)}</span>
               {mark(v.id === current)}
             </DropdownMenuItem>

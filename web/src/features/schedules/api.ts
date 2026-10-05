@@ -19,7 +19,8 @@ export interface Task<S> {
   schedule: Schedule
   targets: Target[]
   settings: S
-  lastRun?: { at: string; error?: string }
+  /** The latest run; note tells what it left out, e.g. servers without data to back up. */
+  lastRun?: { at: string; error?: string; note?: string }
   /** The scheduled time of the next run of an enabled task. */
   nextRun?: string
   running: boolean

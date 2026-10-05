@@ -10,10 +10,10 @@ import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
-import { allServersQuery, assignedMemoryMb, type NodeServer } from "@/features/servers/api"
+import { allServersQuery, assignedMemoryMb, type NodeServer, runningCount } from "@/features/servers/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { AddNodeDialog } from "./add-node-dialog"
-import { memoryCapacityMb, type Node, nodesQuery } from "./api"
+import { memoryCapacityMb, type Node, nodesQuery, onlineCapacityMb } from "./api"
 import { NodeStatusBadge } from "./node-status"
 
 export function NodesPage() {
@@ -53,23 +53,22 @@ export function NodesPage() {
   )
 }
 
-/** Totals across all nodes; servers of offline nodes are not counted. */
+/** Totals across all nodes, counted like the dashboard does; the master can't list the servers of offline nodes. */
 function Overview({ nodes, servers }: { nodes: Node[]; servers?: NodeServer[] }) {
   const online = nodes.filter((n) => n.status === "online")
-  const running = servers?.filter((s) => s.state === "running").length
   const assignedMb = servers && assignedMemoryMb(servers)
-  const memoryBytes = online.reduce((sum, n) => sum + (n.info?.memoryBytes ?? 0), 0)
+  const capacityMb = onlineCapacityMb(nodes)
   return (
     <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
       <StatCard icon={HardDrivesIcon} tone="info" label={t("Nodes online")} value={`${online.length} / ${nodes.length}`} />
-      <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={servers ? `${running} / ${servers.length}` : "–"} />
+      <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={servers ? `${runningCount(servers)} / ${servers.length}` : "–"} />
       <StatCard
         icon={MemoryIcon}
         tone="violet"
         label={t("Memory assigned")}
         value={assignedMb === undefined ? "–" : formatMegabytes(assignedMb)}
       >
-        {memoryBytes > 0 && t("of {{memory}} on online nodes", { memory: formatBytes(memoryBytes) })}
+        {capacityMb > 0 && t("of {{memory}} on online nodes", { memory: formatMegabytes(capacityMb) })}
       </StatCard>
       <StatCard icon={CpuIcon} tone="warning" label={t("CPU cores")} value={online.reduce((sum, n) => sum + (n.info?.cpuCount ?? 0), 0)} />
     </div>
@@ -101,7 +100,7 @@ function NodeCard({ node, servers }: { node: Node; servers?: NodeServer[] }) {
             <Fact label={t("Memory")} value={formatBytes(info.memoryBytes)} />
             <Fact
               label={t("Servers")}
-              value={servers ? `${servers.filter((s) => s.state === "running").length} / ${servers.length}` : "–"}
+              value={servers ? `${runningCount(servers)} / ${servers.length}` : "–"}
             />
           </dl>
           {capacityMb !== undefined && servers && (

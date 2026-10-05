@@ -97,8 +97,12 @@ func (j Jobs) backUp(ctx context.Context, srv schedule.Server, t schedule.Task, 
 	if err != nil {
 		return err
 	}
-	_, err = noryxv1.NewBackupServiceClient(conn).CreateBackup(ctx, &noryxv1.CreateBackupRequest{
+	res, err := noryxv1.NewBackupServiceClient(conn).CreateBackup(ctx, &noryxv1.CreateBackupRequest{
 		ServerId: srv.GetId(), Label: t.Name, Selection: s.Selection.proto(), Location: s.Location, JobId: t.ID, Keep: s.Keep,
+		SkipWithoutData: true,
 	})
+	if err == nil && res.GetBackup() == nil {
+		return schedule.Skipped("It has none of the selected data yet, e.g. as it never started.")
+	}
 	return err
 }

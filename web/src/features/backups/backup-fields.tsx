@@ -2,11 +2,11 @@ import { t } from "i18next"
 import { useState } from "react"
 import { Trans } from "react-i18next"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Field, FieldContent, FieldDescription, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { msg } from "@/lib/i18n"
-import type { Selection } from "./api"
+import { pathsError, type Selection } from "./api"
 
 const choices: [key: keyof Omit<Selection, "paths">, label: string, description: string][] = [
   ["everything", msg("Everything"), msg("The whole folder of the server, including the server software.")],
@@ -18,6 +18,7 @@ const choices: [key: keyof Omit<Selection, "paths">, label: string, description:
 /** Chooses what of a server is backed up. */
 export function SelectionField({ value, onChange }: { value: Selection; onChange: (selection: Selection) => void }) {
   const [paths, setPaths] = useState(value.paths.join("\n"))
+  const error = pathsError(value.paths)
   return (
     <>
       <FieldSet>
@@ -45,7 +46,7 @@ export function SelectionField({ value, onChange }: { value: Selection; onChange
         </div>
       </FieldSet>
       {!value.everything && (
-        <Field>
+        <Field data-invalid={!!error}>
           <FieldLabel htmlFor="selection-paths">{t("More files and folders")}</FieldLabel>
           <Textarea
             id="selection-paths"
@@ -54,14 +55,17 @@ export function SelectionField({ value, onChange }: { value: Selection; onChange
             // i18next-instrument-ignore-next-line: an example of what to enter
             placeholder={"plugins/LuckPerms\nbanned-players.json"}
             value={paths}
+            aria-invalid={!!error}
             onChange={(e) => {
               setPaths(e.target.value)
               onChange({ ...value, paths: e.target.value.split("\n").flatMap((p) => p.trim() || []) })
             }}
           />
-          <FieldDescription>
-            {t("One path per line, inside the server's folder. Paths a server doesn't have are skipped.")}
-          </FieldDescription>
+          {error ? (
+            <FieldError>{error}</FieldError>
+          ) : (
+            <FieldDescription>{t("One path per line, inside the server's folder. Paths a server doesn't have are skipped.")}</FieldDescription>
+          )}
         </Field>
       )}
     </>

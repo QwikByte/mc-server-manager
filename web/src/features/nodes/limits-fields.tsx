@@ -58,7 +58,7 @@ export function LimitsFields({
       </Field>
       {form.limitMemory && (
         <Field>
-          <FieldLabel htmlFor={`${id}-reserve`}>{t("Reserve in MB")}</FieldLabel>
+          <FieldLabel htmlFor={`${id}-reserve`}>{t("Reserve in MiB")}</FieldLabel>
           <Input
             id={`${id}-reserve`}
             type="number"
@@ -74,7 +74,7 @@ export function LimitsFields({
                   total: formatMegabytes(memoryMb),
                 })} `
               : ""}
-            {t("Each server counts with what Java needs besides its memory: about a quarter more and 256 MB.")}
+            {t("Each server counts with what Java needs besides its memory: about a quarter more and 256 MiB.")}
           </FieldDescription>
         </Field>
       )}

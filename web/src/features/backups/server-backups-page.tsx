@@ -22,17 +22,27 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
-import { useOperation } from "@/features/operations/use-operation"
+import { guard, useOperation } from "@/features/operations/use-operation"
 import { covers } from "@/features/schedules/api"
 import { describeSchedule } from "@/features/schedules/describe"
 import { type Server, useServer } from "@/features/servers/api"
 import { formatBytes, formatDateTime } from "@/lib/format"
-import { type Backup, backupsQuery, defaultSelection, describeContent, downloadUrl, jobs, nothingSelected, useBackups } from "./api"
+import {
+  type Backup,
+  backupsQuery,
+  defaultSelection,
+  describeContent,
+  downloadUrl,
+  jobs,
+  nothingSelected,
+  pathsError,
+  useBackups,
+} from "./api"
 import { LocationField, SelectionField } from "./backup-fields"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/backups")
@@ -192,7 +202,10 @@ function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server;
   )
 }
 
-/** Backs up a server by hand. The dialog closes right away, as large worlds take a while. */
+/**
+ * Backs up a server by hand. Once the master backs it up, the dialog closes and a notification follows the backup, as
+ * large worlds take a while; a request that fails right away shows its error in the dialog.
+ */
 function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server }) {
   const [open, setOpen] = useState(false)
   const [label, setLabel] = useState("")
@@ -202,26 +215,49 @@ function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server
   const { create } = useBackups(nodeId, server.id)
   const operation = useOperation()
 
-  function submit(event: FormEvent) {
-    event.preventDefault()
+  const close = () => {
     setOpen(false)
-    operation.run((onStart) => create.mutateAsync({ label: label.trim(), selection, location, onStart }), {
-      title: t("Backing up {{name}}…", { name: server.name }),
-      notify: true,
-      done: (b) => ({ message: t("Backed up {{name}} ({{size}})", { name: server.name, size: formatBytes(b.size) }) }),
-    })
     setLabel("")
   }
 
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    const title = t("Backing up {{name}}…", { name: server.name })
+    operation.run(
+      (onStart) =>
+        create.mutateAsync({
+          label: label.trim(),
+          selection,
+          location,
+          onStart: (op) => {
+            onStart(op)
+            operation.background(title, op.id)
+            close()
+          },
+        }),
+      {
+        title,
+        done: (b) => ({ message: t("Backed up {{name}} ({{size}})", { name: server.name, size: formatBytes(b.size) }) }),
+        then: close,
+      },
+    )
+  }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (next) create.reset()
+      }}
+    >
       <DialogTrigger asChild>
         <Button disabled={create.isPending}>
           <PlusIcon />
           {create.isPending ? t("Backing up…") : t("Back up now")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl" {...guard(create.isPending)}>
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
             <DialogTitle>{t("Back up {{name}}", { name: server.name })}</DialogTitle>
@@ -237,7 +273,7 @@ function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server
               <Input
                 id="backup-label"
                 maxLength={64}
-                placeholder={t("Before the update to 1.21.5")}
+                placeholder={t("Before the update")}
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
               />
@@ -245,12 +281,15 @@ function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server
             <SelectionField value={selection} onChange={setSelection} />
             <LocationField locations={node?.info?.storage.map((l) => l.name) ?? []} value={location} onChange={setLocation} />
           </FieldGroup>
+          {create.error && <FieldError>{create.error.message}</FieldError>}
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">{t("Cancel")}</Button>
+              <Button variant="outline" disabled={create.isPending}>
+                {t("Cancel")}
+              </Button>
             </DialogClose>
-            <Button type="submit" disabled={nothingSelected(selection)}>
-              {t("Back up")}
+            <Button type="submit" disabled={nothingSelected(selection) || !!pathsError(selection.paths) || create.isPending}>
+              {create.isPending ? t("Backing up…") : t("Back up")}
             </Button>
           </DialogFooter>
         </form>

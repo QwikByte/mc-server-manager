@@ -130,6 +130,8 @@ func (s *Store) Audit() access.Wrapper {
 			rec := &recorder{ResponseWriter: w}
 			h(rec, r.WithContext(ctx))
 
+			// Other failed requests, e.g. with an invalid input or a port in use, are no warning:
+			// the panel tells the user who made them why, and nobody else needs to know.
 			status, level, message := cmp.Or(rec.status, http.StatusOK), slog.LevelInfo, a.message
 			switch {
 			case status == http.StatusUnauthorized || status == http.StatusForbidden:
@@ -137,7 +139,7 @@ func (s *Store) Audit() access.Wrapper {
 			case status >= http.StatusInternalServerError:
 				level, message = slog.LevelError, message+" failed"
 			case status >= http.StatusBadRequest:
-				level, message = slog.LevelWarn, message+" failed"
+				message += " failed"
 			}
 			attrs = append(attrs, slog.Int("status", status), slog.Duration("duration", time.Since(start).Round(time.Millisecond)))
 			if status >= http.StatusBadRequest {

@@ -96,6 +96,8 @@ type Plugin struct {
 	Version  string   `json:"version,omitempty"`
 	// VersionID is the ID of the version on Modrinth.
 	VersionID string `json:"versionId,omitempty"`
+	// Channel is beta or alpha for a version that isn't a release.
+	Channel string `json:"channel,omitempty"`
 	// Update is a newer release of the project for the server.
 	Update string `json:"update,omitempty"`
 }
@@ -155,7 +157,7 @@ func (s *Service) describe(ctx context.Context, srv *noryxv1.Server, files []*no
 			continue
 		}
 		project := s.Describe(projects[j])
-		plugins[i].Project, plugins[i].Version, plugins[i].VersionID = &project, v.VersionNumber, v.ID
+		plugins[i].Project, plugins[i].Version, plugins[i].VersionID, plugins[i].Channel = &project, v.VersionNumber, v.ID, preRelease(v)
 		if u, ok := updates[hash]; ok && u.ID != v.ID && u.Published.After(v.Published) {
 			plugins[i].Update = u.VersionNumber
 		}
@@ -168,7 +170,9 @@ type Installed struct {
 	ProjectID string `json:"projectId"`
 	FileName  string `json:"fileName"`
 	Version   string `json:"version"`
-	written   bool   // rather than present already
+	// Channel is beta or alpha for a version that isn't a release.
+	Channel string `json:"channel,omitempty"`
+	written bool   // rather than present already
 }
 
 // Result tells what was installed on a server, and why the rest wasn't.
@@ -254,7 +258,7 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 				return installed, err
 			}
 		}
-		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, written: !old.is(f)})
+		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, Channel: preRelease(v), written: !old.is(f)})
 	}
 	return installed, nil
 }
@@ -348,6 +352,14 @@ func (r *installation) pick(ctx context.Context, project string, t target) (modr
 		return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "The chosen version of %s doesn't run on %s.", title, t)
 	}
 	return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "%s has no version for %s.", title, t)
+}
+
+// preRelease returns the channel of a version that isn't a release: beta or alpha.
+func preRelease(v modrinth.Version) string {
+	if v.VersionType == "release" {
+		return ""
+	}
+	return v.VersionType
 }
 
 // compatible returns the versions of a project that run on a server, the newest first.

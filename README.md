@@ -72,6 +72,8 @@ which gives Java about a quarter more than the server's memory and 256 MB for wh
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use,
 the networks, the servers with the most players, and what needs attention: crashing servers, offline nodes, nodes with
 more memory assigned than they can give or almost full storage, and proxies that are stopped while their servers run.
+It counts like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned against
+what the online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
 
 The **Servers** page and the page of each node list servers as cards or as a compact table, the table from 13 servers
 on until one is chosen. They are searched, filtered by state, type, node, network and tag, sorted by name, state,
@@ -215,8 +217,9 @@ both only shows the software and servers of the chosen kind. The search filters 
 categories (e.g. economy, management, optimization) and, for mods, those players don't have to install, and sorts by
 relevance, downloads, followers, newest or recently updated. The master picks the newest release for each server's
 software and Minecraft version, installs the projects it requires, and replaces an older version of the same project.
-Another version that suits the server, betas and alphas included, can be chosen instead, also to downgrade a project.
-Installed files are recognised by their hash, so the tab shows their project, version and available updates, also for
+Where no release suits a server, it installs the newest beta or alpha and the panel warns about it. Another version that
+suits the server, betas and alphas included, can be chosen instead, also to downgrade a project. Installed files are
+recognised by their hash, so the tab shows their project, version (marked as beta or alpha) and available updates, also for
 files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once. Own
 `.jar` files can be uploaded too. Servers load changes when they restart.
 
@@ -247,7 +250,8 @@ its worlds to disk first and pauses saving while they are archived, so players s
   and deletes its backups.
 - **Jobs.** The **Backups** page schedules backup jobs for servers or whole nodes (including servers created later):
   on chosen weekdays at one or more times of day in a time zone. A job keeps the newest backups per server and deletes
-  older ones; backups made by hand are never deleted that way. A job backs up one server per node at a time.
+  older ones; backups made by hand are never deleted that way. A job backs up one server per node at a time, and
+  skips servers without any of the selected data yet, e.g. new ones that never started: its last run lists them.
 - **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds
   and leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
   stopped while the files are swapped, and started again afterwards.
@@ -421,9 +425,10 @@ The master keeps a log of what happens on it and on its agents, so that it's cle
 
 - **Actions.** Every request of the panel that changes something, and every download of a file, folder, backup or
   export, is logged with the user, the IP address, the node and server it concerned (with their names at that time),
-  the outcome and how long it took. Denied requests are logged as warnings, failed ones as warnings or, if the master
-  or an agent failed, errors. Sign-ins, failed sign-ins, password changes, changes of two-factor authentication,
-  sign-outs, enrollments, certificate renewals and what backup jobs and policies did on each server are logged too.
+  the outcome and how long it took. Denied requests are logged as warnings, and failed ones as errors if the master or
+  an agent failed. Others, e.g. with an invalid input, are only information: the panel tells the user why. Sign-ins,
+  failed sign-ins, password changes, changes of two-factor authentication, sign-outs, enrollments, certificate
+  renewals and what backup jobs and policies did on each server are logged too.
 - **Agents.** An agent logs every call it receives with its origin (the master or its local CLI) and keeps its latest
   entries in memory. The master collects them over the mutually authenticated connection and continues where it left
   off, also after a restart of either. Calls that only read are logged at the debug level, downloads at the info level.
@@ -553,7 +558,9 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), and servers are only created after the operator accepts the Minecraft EULA. JVM options may only
   contain characters that the image's start script can't interpret as shell syntax, can't override the memory limit
-  and can't run code: Java agents, commands on errors, and debugging or JMX ports are refused.
+  and can't run code: Java agents, class and module paths, commands on errors, options read from files, class data
+  archives, JVMCI compilers, debugging or JMX ports, and the system properties of Java, JNDI, logging libraries and JNA,
+  which name classes, libraries or configurations to load (also from URLs), are refused.
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
   uploaded HTML file can't run scripts in the panel. Secrets of the server stay on the node: files that only hold

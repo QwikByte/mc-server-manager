@@ -34,12 +34,14 @@ func TestPlugins(t *testing.T) {
 	// The search only finds plugins for the server type, and icons come through the master.
 	var found struct {
 		Hits []struct {
-			ID   string `json:"id"`
-			Icon string `json:"icon"`
+			ID         string    `json:"id"`
+			Icon       string    `json:"icon"`
+			Categories *[]string `json:"categories"`
 		} `json:"hits"`
 	}
 	api.do("GET", "/api/plugins/search?type=paper&version=LATEST", nil, http.StatusOK, &found)
-	if len(found.Hits) != 3 || found.Hits[0].ID != "luckperms" || found.Hits[0].Icon != "/api/plugins/icons/luckperms/icon.png" {
+	if len(found.Hits) != 3 || found.Hits[0].ID != "luckperms" || found.Hits[0].Icon != "/api/plugins/icons/luckperms/icon.png" ||
+		found.Hits[0].Categories == nil { // a list, although the fake leaves them out
 		t.Fatalf("search = %+v", found)
 	}
 	res, err := http.Get(api.url + found.Hits[0].Icon)

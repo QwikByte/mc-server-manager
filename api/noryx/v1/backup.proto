@@ -70,6 +70,9 @@ message CreateBackupRequest {
   // Backups of the job to keep for the server, 0 for all. Older ones are deleted once the
   // new backup exists. Backups made by hand are never deleted this way.
   uint32 keep = 6;
+  // Whether a server without any of the selected data, e.g. one that never started, is
+  // skipped: the response has no backup then. Otherwise that is an error.
+  bool skip_without_data = 7;
 }
 
 message CreateBackupResponse {
