@@ -557,7 +557,7 @@ Users get their permissions from groups; a user can be in several groups and has
   Servers of a node can't reach each other: they share a Docker network without communication between containers
   (`noryx-servers`), and a Velocity proxy shares another one only with its backends on the node.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
-  (`os.Root`), and servers are only created after the operator accepts the Minecraft EULA. JVM options may only
+  (`os.Root`), and game servers are only created after the operator accepts the Minecraft EULA. JVM options may only
   contain characters that the image's start script can't interpret as shell syntax, can't override the memory limit
   and can't run code: Java agents, class and module paths, commands on errors, options read from files, class data
   archives, JVMCI compilers, debugging or JMX ports, and the system properties of Java, JNDI, logging libraries and JNA,

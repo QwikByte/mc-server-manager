@@ -2,7 +2,7 @@ import { t } from "i18next"
 import { StatusDot } from "@/components/status"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { NodeServer } from "@/features/servers/api"
-import { serverStates } from "@/features/servers/server-types"
+import { statusOf } from "@/features/servers/server-types"
 import { msg } from "@/lib/i18n"
 
 /**
@@ -21,7 +21,7 @@ export function ServerLabel({ server }: { server: NodeServer | null | undefined 
   }
   return (
     <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
-      <StatusDot status={serverStates[server.state]} label={t(serverStates[server.state].label)} />
+      <StatusDot status={statusOf(server)} label={t(statusOf(server).label)} />
       <span className="truncate font-medium">{server.name}</span>
       <span className="hidden truncate text-muted-foreground sm:inline">{server.nodeName}</span>
     </span>

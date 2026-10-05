@@ -4,14 +4,23 @@ import { lazy, Suspense, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-// The palette loads when it first opens, which keeps the panel's first load small.
-const Palette = lazy(() => import("./palette").then((m) => ({ default: m.Palette })))
+// The palette loads once the panel idles, which keeps its first load small. Once loaded, it
+// shows without Suspense, which reveals it only after a moment, so that what is typed right
+// after Ctrl+K reaches its search.
+let Loaded: typeof import("./palette").Palette | undefined
+const load = () => import("./palette").then((m) => (Loaded = m.Palette))
+const Lazy = lazy(() => load().then((Palette) => ({ default: Palette })))
 
 const mac = /mac|iphone|ipad/i.test(navigator.userAgent)
 
 /** Opens the palette with Ctrl+K or ⌘K anywhere in the panel, or with its button. */
 export function PaletteButton({ className, onOpen }: { className?: string; onOpen?: () => void }) {
   const [open, setOpen] = useState(false)
+  useEffect(() => {
+    const preload = () => void load()
+    if ("requestIdleCallback" in window) requestIdleCallback(preload)
+    else setTimeout(preload, 1000)
+  }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
@@ -38,11 +47,14 @@ export function PaletteButton({ className, onOpen }: { className?: string; onOpe
         <span className="flex-1 text-left max-md:sr-only">{t("Search…")}</span>
         <kbd className="rounded border bg-muted px-1.5 font-mono text-[0.6875rem] max-md:hidden">{mac ? "⌘K" : "Ctrl K"}</kbd>
       </Button>
-      {open && (
-        <Suspense>
-          <Palette onClose={() => setOpen(false)} />
-        </Suspense>
-      )}
+      {open &&
+        (Loaded ? (
+          <Loaded onClose={() => setOpen(false)} />
+        ) : (
+          <Suspense>
+            <Lazy onClose={() => setOpen(false)} />
+          </Suspense>
+        ))}
     </>
   )
 }

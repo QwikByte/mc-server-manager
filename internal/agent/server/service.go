@@ -132,8 +132,8 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 		LoaderVersion: req.GetLoaderVersion(),
 	}
 	switch {
-	case !req.GetAcceptEula():
-		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a server.")
+	case !req.GetAcceptEula() && !req.GetType().Proxy():
+		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a game server.")
 	case req.GetType() == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return nil, status.Error(codes.InvalidArgument, "Choose a server type.")
 	case !knownType:

@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import type { NodeServer } from "@/features/servers/api"
-import { serverStates } from "@/features/servers/server-types"
+import { statusOf } from "@/features/servers/server-types"
 import { cn } from "@/lib/utils"
 import type { Draft } from "./draft"
 import { hostError } from "./problems"
@@ -181,7 +181,7 @@ function Chain({
               )}
             >
               <span className="grid size-5 place-items-center rounded-md bg-card text-[0.6875rem] font-bold tabular-nums">{i + 1}</span>
-              {server ? <StatusDot status={serverStates[server.state]} label={t(serverStates[server.state].label)} /> : null}
+              {server ? <StatusDot status={statusOf(server)} label={t(statusOf(server).label)} /> : null}
               <span className="font-mono text-xs">{name}</span>
               {editable && i > 0 && (
                 <button

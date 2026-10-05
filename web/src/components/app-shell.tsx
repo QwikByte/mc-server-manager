@@ -1,6 +1,6 @@
 import { ListIcon, SignOutIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { Link, Outlet, useNavigate } from "@tanstack/react-router"
+import { Link, Outlet, useMatchRoute, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { Fragment, useEffect, useState } from "react"
 import { LanguageMenu } from "@/components/language-menu"
@@ -117,6 +117,8 @@ export function AppShell() {
 /** The sections of the panel the user may see. */
 function MainNav({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
   const access = useAccess()
+  // Servers open under their node, but belong to the servers section.
+  const onServer = !!useMatchRoute()({ to: "/nodes/$nodeId/servers/$serverId", fuzzy: true })
   return (
     <nav aria-label={t("Main")} className={cn("flex flex-col gap-1", className)}>
       {navigation
@@ -131,7 +133,8 @@ function MainNav({ className, onNavigate }: { className?: string; onNavigate?: (
               <Link
                 key={to}
                 to={to}
-                activeOptions={{ exact: to === "/" }}
+                activeOptions={{ exact: to === "/" || (to === "/nodes" && onServer) }}
+                {...(to === "/servers" && onServer && { "data-status": "active", "aria-current": "page" as const })}
                 onClick={onNavigate}
                 className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[status=active]:bg-primary/10 data-[status=active]:text-primary"
               >

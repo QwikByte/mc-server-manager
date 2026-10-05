@@ -130,7 +130,8 @@ message CreateServerRequest {
   string version = 3;
   uint32 memory_mb = 4;
   uint32 port = 5;
-  // The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA).
+  // The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA) for a game
+  // server; proxies don't run Minecraft.
   bool accept_eula = 6;
   // Storage location for the server's data; empty means the default location.
   string storage = 7;

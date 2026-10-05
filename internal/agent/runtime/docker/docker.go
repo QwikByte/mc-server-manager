@@ -246,8 +246,10 @@ func containerOptions(spec runtime.Spec, path, netName string) (client.Container
 	if err != nil {
 		return client.ContainerCreateOptions{}, err
 	}
-	// EULA=TRUE is only set because the operator accepted the EULA when creating the server.
-	env := []string{"EULA=TRUE", "TYPE=" + img.typ, "VERSION=" + spec.Version, fmt.Sprintf("MEMORY=%dM", spec.MemoryMB)}
+	env := []string{"TYPE=" + img.typ, "VERSION=" + spec.Version, fmt.Sprintf("MEMORY=%dM", spec.MemoryMB)}
+	if !spec.Type.Proxy() { // as the operator accepted the EULA when creating the server
+		env = append(env, "EULA=TRUE")
+	}
 	if spec.BehindProxy {
 		env = append(env, "ONLINE_MODE=FALSE") // the proxy authenticates players
 	}

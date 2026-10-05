@@ -556,7 +556,8 @@ type CreateServerRequest struct {
 	Version  string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
 	MemoryMb uint32                 `protobuf:"varint,4,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
 	Port     uint32                 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`
-	// The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA).
+	// The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA) for a game
+	// server; proxies don't run Minecraft.
 	AcceptEula bool `protobuf:"varint,6,opt,name=accept_eula,json=acceptEula,proto3" json:"accept_eula,omitempty"`
 	// Storage location for the server's data; empty means the default location.
 	Storage string `protobuf:"bytes,7,opt,name=storage,proto3" json:"storage,omitempty"`

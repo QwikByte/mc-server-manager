@@ -1,5 +1,6 @@
 import { type QueryClient, queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { ModpackChoice } from "@/features/modpacks/api"
+import { memoryLimitMb, type Node } from "@/features/nodes/api"
 import { type Operation, operate } from "@/features/operations/api"
 import { api } from "@/lib/api"
 
@@ -53,6 +54,18 @@ export interface NodeServer extends Server {
 
 /** Memory that servers take from their nodes: the limits of their containers, as the master counts them. */
 export const assignedMemoryMb = (servers: Server[]) => servers.reduce((sum, s) => sum + s.memoryLimitMb, 0)
+
+/**
+ * Memory in MB left on a node for the container of a new server, or of the server `except`
+ * instead of its current one, which may always keep or reduce its memory; undefined if the
+ * node doesn't limit it.
+ */
+export function freeMemoryMb(node: Node | undefined, servers: Server[] | undefined, except?: Server) {
+  const limit = node && memoryLimitMb(node)
+  if (limit === undefined || !servers) return undefined
+  const free = limit - assignedMemoryMb(servers.filter((s) => s.id !== except?.id))
+  return Math.max(free, except?.memoryLimitMb ?? 0)
+}
 
 /** How many servers run, not counting those that start or crash. */
 export const runningCount = (servers: Server[]) => servers.filter((s) => s.state === "running").length

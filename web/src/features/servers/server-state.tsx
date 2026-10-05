@@ -8,7 +8,7 @@ import { toneDots } from "@/components/tone"
 import { msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { type Server, type ServerState, usePendingAction } from "./api"
-import { serverStates, states } from "./server-types"
+import { serverStates, states, statusOf } from "./server-types"
 
 const pendingStates = {
   start: { tone: "warning", label: msg("Starting…"), pulse: true },
@@ -20,7 +20,7 @@ const pendingStates = {
 /** The state of a server, or the action this browser runs on it, e.g. stopping. */
 export function ServerStateBadge({ server, nodeId }: { server: Server; nodeId: string }) {
   const pending = usePendingAction(nodeId, server.id)
-  return <StatusBadge status={pending && pending !== "command" ? pendingStates[pending] : serverStates[server.state]} />
+  return <StatusBadge status={pending && pending !== "command" ? pendingStates[pending] : statusOf(server)} />
 }
 
 /** How many servers are in each state, as a bar of coloured parts and their counts. */

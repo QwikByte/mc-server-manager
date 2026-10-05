@@ -4,7 +4,7 @@ import { t } from "i18next"
 import { type ReactNode, useState } from "react"
 import { StatusDot } from "@/components/status"
 import type { NodeServer } from "@/features/servers/api"
-import { serverStates, serverType, states } from "@/features/servers/server-types"
+import { serverStates, serverType, states, statusOf } from "@/features/servers/server-types"
 import type { ServerUsage } from "@/features/usage/api"
 import type { Backend, Network } from "./api"
 import type { Draft } from "./draft"
@@ -87,7 +87,7 @@ export function Topology({
             const players = usage(b)?.players?.online
             return (
               <Item key={key(b)}>
-                {server ? <StatusDot status={serverStates[server.state]} label={t(serverStates[server.state].label)} /> : <StatusDot status={{ tone: "neutral", label: "" }} />}
+                {server ? <StatusDot status={statusOf(server)} label={t(statusOf(server).label)} /> : <StatusDot status={{ tone: "neutral", label: "" }} />}
                 <Link to="/nodes/$nodeId/servers/$serverId" params={b} className="min-w-0 flex-1 truncate font-mono text-xs hover:underline">
                   {b.name}
                 </Link>

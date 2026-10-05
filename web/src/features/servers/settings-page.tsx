@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { nodeQuery } from "@/features/nodes/api"
 import { useOperation } from "@/features/operations/use-operation"
 import { cn } from "@/lib/utils"
-import { type Server, type ServerSettings, useServer, useUpdateImage, useUpdateServer } from "./api"
+import { freeMemoryMb, type Server, type ServerSettings, serversQuery, useServer, useUpdateImage, useUpdateServer } from "./api"
 import { isModded, serverType, splitOptions } from "./server-types"
 import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField } from "./settings-fields"
 
@@ -85,6 +85,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   const update = useUpdateServer(nodeId, server.id)
   const operation = useOperation()
   const { data: node } = useQuery(nodeQuery(nodeId))
+  const { data: servers } = useQuery(serversQuery(nodeId))
   const game = !serverType(server.type).proxy
   const modded = isModded(server.type)
   const settings: ServerSettings = { ...form, jvmOptions: splitOptions(form.jvmOptions) }
@@ -132,7 +133,12 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
               />
             </Field>
           )}
-          <MemoryField id="settings-memory" value={form.memoryMb} onChange={(memoryMb) => set({ memoryMb })} />
+          <MemoryField
+            id="settings-memory"
+            value={form.memoryMb}
+            onChange={(memoryMb) => set({ memoryMb })}
+            freeMb={freeMemoryMb(node, servers, server)}
+          />
           <Field>
             <FieldLabel htmlFor="settings-port">{t("Port")}</FieldLabel>
             <Input

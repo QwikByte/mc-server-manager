@@ -206,3 +206,18 @@ func TestRefusedJVMOptions(t *testing.T) {
 		t.Fatalf("options = %q, want all of them", got)
 	}
 }
+
+// Game servers run Minecraft, so they need the EULA accepted; proxies don't.
+func TestCreateServerNeedsTheEULAForGameServers(t *testing.T) {
+	s := NewService(&slowRuntime{}, nil)
+	create := func(typ noryxv1.ServerType, port uint32) error {
+		_, err := s.CreateServer(t.Context(), &noryxv1.CreateServerRequest{Name: "Server", Type: typ, MemoryMb: 1024, Port: port})
+		return err
+	}
+	if err := create(noryxv1.ServerType_SERVER_TYPE_PAPER, 25565); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("game server without the EULA: %v", err)
+	}
+	if err := create(noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577); err != nil {
+		t.Fatalf("proxy without the EULA: %v", err)
+	}
+}

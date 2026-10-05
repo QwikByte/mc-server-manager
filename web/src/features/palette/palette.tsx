@@ -23,7 +23,7 @@ import { networksQuery } from "@/features/networks/api"
 import { nodesQuery } from "@/features/nodes/api"
 import { useOnlinePlayers } from "@/features/players/online"
 import { allServersQuery, type NodeServer, serverKey, useBulkAction } from "@/features/servers/api"
-import { serverLook, serverStates, serverType } from "@/features/servers/server-types"
+import { serverLook, serverType, statusOf } from "@/features/servers/server-types"
 import { msg } from "@/lib/i18n"
 
 /** Actions on a server that the palette offers once a search starts with their name, e.g. "restart lobby". */
@@ -131,7 +131,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
                 >
                   <IconTile {...serverLook(s.type)} size="sm" className="size-6 rounded-md [&>svg]:size-3.5" />
                   <span className="truncate font-medium">{s.name}</span>
-                  <StatusDot status={serverStates[s.state]} label={t(serverStates[s.state].label)} />
+                  <StatusDot status={statusOf(s)} label={t(statusOf(s).label)} />
                   <CommandShortcut className="truncate tracking-normal">
                     {[...s.tags.map((tag) => `#${tag}`), s.nodeName].join(" · ")}
                   </CommandShortcut>
