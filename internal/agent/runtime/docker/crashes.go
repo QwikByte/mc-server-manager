@@ -77,6 +77,10 @@ func (d *Docker) watch(ctx context.Context, inRow map[string]int) error {
 	}
 }
 
+// restarts reports whether Docker starts a container that exited again. It starts it again
+// right away after its first crash, so it may run already.
+func restarts(s *container.State) bool { return s != nil && (s.Restarting || s.Running) }
+
 // crashed closes the console of a container that exited and counts the exit, stopping its
 // server after maxCrashes in a row.
 func (d *Docker) crashed(ctx context.Context, actor events.Actor, inRow map[string]int) {
@@ -86,7 +90,7 @@ func (d *Docker) crashed(ctx context.Context, actor events.Actor, inRow map[stri
 		d.consoles.Close(spec.ID)
 	}
 	res, err := d.cli.ContainerInspect(ctx, actor.ID, client.ContainerInspectOptions{})
-	if err != nil || !ok || !res.Container.State.Restarting {
+	if err != nil || !ok || !restarts(res.Container.State) {
 		delete(inRow, actor.ID)
 		return
 	}
