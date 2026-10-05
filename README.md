@@ -307,7 +307,8 @@ reads the same `config.yml`.
 
 Vanilla servers can't tell forwarded players apart and can't join. Game servers in a network run with
 `online-mode=false`, as the proxy authenticates the players, and turn away anyone who doesn't come through the proxy.
-The panel installs the forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and
+A server that leaves its network, and a copy of one, get `online-mode=true` again. The overview warns about a server
+outside of networks that runs in offline mode, as anyone who reaches it can join under any name. The panel installs the forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and
 removes it when it leaves.
 
 - **Map and routing.** The network's page shows where players connect, the proxy and its servers with their state and

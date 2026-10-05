@@ -26,6 +26,8 @@ export interface ServerUsage {
   players?: { online: number; max: number; names: string[] }
   /** Ticks per second over the last minute; only Paper and its forks except Folia tell it. */
   tps?: number
+  /** A game server outside of networks runs in offline mode: anyone who reaches it joins under any name. */
+  offlineMode?: boolean
 }
 
 /** The latest measurement of a node's agent, with what the user may see. */

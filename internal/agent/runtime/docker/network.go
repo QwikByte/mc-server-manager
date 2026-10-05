@@ -47,10 +47,8 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 	running := c.State.Running
 	if behind := network.Forwarding != runtime.ForwardingNone; behind != spec.BehindProxy || network.ProxyOnNode != spec.ProxyOnNode ||
 		network.BedrockPlayers != spec.BedrockPlayers {
-		if spec.BedrockPlayers && !network.BedrockPlayers {
-			if err := mcnet.SecureChat(data); err != nil {
-				return false, err
-			}
+		if err := mcnet.Leave(data, spec.BehindProxy && !behind, spec.BedrockPlayers && !network.BedrockPlayers); err != nil {
+			return false, err
 		}
 		spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers = behind, network.ProxyOnNode, network.BedrockPlayers
 		return running, d.recreate(ctx, spec, running, placement(c, spec))

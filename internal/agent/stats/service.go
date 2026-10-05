@@ -59,6 +59,7 @@ type serverState struct {
 	rcon      *rcon
 	rconHost  string
 	rconRetry time.Time
+	offline   *bool // whether it runs in offline mode, read once per run
 }
 
 func NewService(rt runtime.Runtime) *Service {
@@ -196,6 +197,7 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 	if srv.Type.Proxy() {
 		return stats
 	}
+	stats.OfflineMode = !srv.BehindProxy && st.offlineMode(ctx, rt, srv.ID)
 	// The ping lists only some players, the console all of them.
 	if out, ok := st.command(ctx, rt, srv.ID, u.Host, now, "minecraft:list"); ok && stats.Players != nil {
 		if names, ok := listed(out); ok {
@@ -278,10 +280,27 @@ func openRCON(ctx context.Context, rt runtime.Runtime, id, host string) (*rcon, 
 	return dialRCON(ctx, net.JoinHostPort(host, cmp.Or(props["rcon.port"], "25575")), props["rcon.password"])
 }
 
+// offlineMode reports whether a running game server is in offline mode, as its
+// server.properties tells when first asked; changes apply when it starts again.
+func (st *serverState) offlineMode(ctx context.Context, rt runtime.Runtime, id string) bool {
+	if st.offline == nil {
+		dir, err := rt.Data(ctx, id)
+		if err != nil {
+			return false
+		}
+		props, err := properties.Read(dir)
+		if err = errors.Join(err, dir.Close()); err != nil {
+			return false
+		}
+		st.offline = new(props["online-mode"] == "false")
+	}
+	return *st.offline
+}
+
 // reset forgets a server that stopped.
 func (st *serverState) reset() {
 	st.closeRCON()
-	st.at = time.Time{}
+	st.at, st.offline = time.Time{}, nil
 }
 
 func (st *serverState) closeRCON() {

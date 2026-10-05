@@ -13,8 +13,9 @@ import (
 )
 
 func TestStandalone(t *testing.T) {
-	// A copied backend no longer trusts the proxy of the original, and demands signed chat
-	// messages again if Bedrock players joined the original.
+	// A copied backend no longer trusts the proxy of the original, authenticates its
+	// players again, and demands signed chat messages again if Bedrock players joined the
+	// original.
 	backend := t.TempDir()
 	dir, err := datadir.Open(backend)
 	if err != nil {
@@ -24,6 +25,9 @@ func TestStandalone(t *testing.T) {
 	if _, err := mcnet.WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_PAPER, runtime.ForwardingModern, "s3cretS3cretS3cret"); err != nil {
 		t.Fatal(err)
 	}
+	if err := dir.WriteFile("server.properties", []byte("online-mode=false\nenforce-secure-profile=false\n")); err != nil {
+		t.Fatal(err)
+	}
 	if err := standalone(backend, runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_PAPER, BehindProxy: true, BedrockPlayers: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +35,8 @@ func TestStandalone(t *testing.T) {
 	if err != nil || strings.Contains(string(data), "s3cret") || !strings.Contains(string(data), "enabled: false") {
 		t.Fatalf("paper-global.yml = %s, %v", data, err)
 	}
-	if data, err := os.ReadFile(filepath.Join(backend, "server.properties")); err != nil || !strings.Contains(string(data), "enforce-secure-profile=true") {
+	if data, err := os.ReadFile(filepath.Join(backend, "server.properties")); err != nil ||
+		!strings.Contains(string(data), "online-mode=true") || !strings.Contains(string(data), "enforce-secure-profile=true") {
 		t.Fatalf("server.properties = %s, %v", data, err)
 	}
 
