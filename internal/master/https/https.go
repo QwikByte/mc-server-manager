@@ -141,7 +141,7 @@ func (s *Server) Run(ctx context.Context, panelAddr string) {
 		if port != "443" {
 			origin = "https://" + net.JoinHostPort(s.domain, port)
 		}
-		srv := &http.Server{Handler: s.acme.HTTPHandler(redirect(origin)), ReadHeaderTimeout: 10 * time.Second}
+		srv := &http.Server{Handler: s.acme.HTTPHandler(redirect(origin)), ReadHeaderTimeout: 10 * time.Second, ErrorLog: logging.ServerErrors(slog.Default())}
 		go func() { _ = srv.Serve(ln) }()
 		defer srv.Close()
 	}

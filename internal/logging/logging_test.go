@@ -68,3 +68,24 @@ func TestLevelsAndLines(t *testing.T) {
 		t.Fatalf("line = %q, want %q", line, want)
 	}
 }
+
+func TestServerErrors(t *testing.T) {
+	var got []Entry
+	log := ServerErrors(slog.New(NewHandler(slog.LevelDebug, func(e Entry) { got = append(got, e) })))
+	log.Print("http: TLS handshake error from 10.0.0.1:5000: remote error: tls: unknown certificate")
+	log.Printf("http2: panic serving 10.0.0.1:5000: runtime error\ngoroutine 1 [running]:\nmain.go:1\n")
+	log.Print("http: Accept error: too many open files")
+
+	want := []slog.Level{slog.LevelDebug, slog.LevelError, slog.LevelWarn}
+	if len(got) != len(want) {
+		t.Fatalf("got %d entries, want %d", len(got), len(want))
+	}
+	for i, e := range got {
+		if e.Level != want[i] || strings.Contains(e.Message, "\n") {
+			t.Errorf("entry %d = %+v, want level %v", i, e, want[i])
+		}
+	}
+	if stack := got[1].Attrs["stack"]; stack != "goroutine 1 [running]:\nmain.go:1" {
+		t.Errorf("stack = %q", stack)
+	}
+}

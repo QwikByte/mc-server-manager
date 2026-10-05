@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,9 @@ import (
 )
 
 const maxBodyBytes = 1 << 20
+
+// statusClientClosed is nginx's status of requests whose client went away before the answer.
+const statusClientClosed = 499
 
 // Error is an error whose message is safe to show to API clients.
 type Error struct {
@@ -63,6 +67,11 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 			return
 		}
 	}
+	if r.Context().Err() != nil && (errors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled) {
+		// The client went away, e.g. it closed a console stream: no error of the master.
+		WriteJSON(w, statusClientClosed, map[string]string{"error": "canceled"})
+		return
+	}
 	slog.Error("Request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 }
@@ -76,6 +85,9 @@ func Message(err error) string {
 	}
 	if st, ok := status.FromError(err); ok {
 		return st.Message()
+	}
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
 	}
 	slog.Error("Unexpected error", "err", err)
 	return "internal error"
