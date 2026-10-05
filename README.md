@@ -23,7 +23,7 @@ servers keep running while an agent restarts.
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
 through the RCON connection the server image provides, and to proxies through their own console, whose answer follows
-in the output. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
+in the output. Commands typed in quick succession run one after the other, in their order. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
 settings.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
@@ -65,7 +65,9 @@ the server stays on its old node, stopped.
 
 Each node has settings for its servers: the storage location preselected for new servers, a port range (new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
-the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
+the node has minus a reserve for the system (1 GB unless changed). A server counts with the limit of its container,
+which gives Java about a quarter more than the server's memory and 256 MB for what it needs besides the heap, e.g.
+1.5 GB for 1 GB. Name and agent address can be changed too.
 
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use,
 the networks, the servers with the most players, and what needs attention: crashing servers, offline nodes, nodes with

@@ -298,8 +298,7 @@ func containerOptions(spec runtime.Spec, path, netName string) (client.Container
 			CapDrop:       []string{"ALL"},
 			CapAdd:        capAdd,
 			Resources: container.Resources{
-				// The JVM needs memory beyond its heap, so the hard limit gets some headroom.
-				Memory:    int64(spec.MemoryMB*5/4+256) << 20,
+				Memory:    noryxv1.ContainerMemoryMB(spec.MemoryMB) << 20,
 				NanoCPUs:  int64(spec.CPUMillis) * 1e6,
 				PidsLimit: new(int64(pidsLimit)),
 			},

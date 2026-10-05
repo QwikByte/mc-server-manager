@@ -1,10 +1,9 @@
 package access
 
 import (
-	"log/slog"
+	"fmt"
 	"net/http"
 
-	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
@@ -96,8 +95,7 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		}
 		g, err := s.Grants(r.Context(), user.ID)
 		if err != nil {
-			slog.Error("Can't load permissions", logging.Users, logging.KeyUser, user.Username, "err", err)
-			httpapi.WriteError(w, r, err)
+			httpapi.WriteError(w, r, fmt.Errorf("load the permissions of %s: %w", user.Username, err))
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(WithGrants(r.Context(), g)))

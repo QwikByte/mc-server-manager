@@ -30,6 +30,9 @@ func (c cli) logs() *cobra.Command {
 		Short: "Show the latest entries of the agent's log: the calls it received and what failed",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if lines < 0 {
+				return errors.New("--lines can't be negative")
+			}
 			least, err := logging.ParseLevel(level)
 			if err != nil {
 				return err

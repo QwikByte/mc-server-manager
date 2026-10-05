@@ -44,7 +44,7 @@ func TestNodeSettings(t *testing.T) {
 	api := apiClient{t: t, url: m.panel(t).URL}
 	path := "/api/nodes/" + a.node.ID
 	settings := func(change func(map[string]any)) map[string]any {
-		s := map[string]any{"name": "Frankfurt 1", "address": a.node.Address, "defaultStorage": "default", "portMin": 25565, "portMax": 25570, "memoryReserveMb": 4096}
+		s := map[string]any{"name": "Frankfurt 1", "address": a.node.Address, "defaultStorage": "default", "portMin": 25565, "portMax": 25570, "memoryReserveMb": 12288}
 		change(s)
 		return s
 	}
@@ -56,24 +56,25 @@ func TestNodeSettings(t *testing.T) {
 		Status          string `json:"status"`
 	}
 	api.do("PUT", path, settings(func(map[string]any) {}), http.StatusOK, &got)
-	if got.Name != "Frankfurt 1" || got.PortMin == nil || *got.PortMin != 25565 || *got.MemoryReserveMB != 4096 || got.Status != "online" {
+	if got.Name != "Frankfurt 1" || got.PortMin == nil || *got.PortMin != 25565 || *got.MemoryReserveMB != 12288 || got.Status != "online" {
 		t.Fatalf("updated node = %+v", got)
 	}
 	api.do("PUT", path, settings(func(s map[string]any) { s["name"] = "node-2" }), http.StatusConflict, nil)
 	api.do("PUT", path, settings(func(s map[string]any) { s["portMin"] = 30000 }), http.StatusBadRequest, nil)
 	api.do("PUT", path, settings(func(s map[string]any) { s["portMax"] = nil }), http.StatusBadRequest, nil)
 
-	// The node has 8 GB, of which 4 GB are kept free, and allows ports 25565 to 25570.
+	// The node has 16 GB, of which 12 GB are kept free, and allows ports 25565 to 25570. A
+	// server with 1 GB counts with the 1.5 GB of its container.
 	create := func(name string, memory, port, status int) string {
 		var srv struct{ ID string }
 		api.do("POST", path+"/servers", map[string]any{"name": name, "type": "paper", "memoryMb": memory, "port": port, "acceptEula": true}, status, &srv)
 		return srv.ID
 	}
 	create("Outside", 1024, 25600, http.StatusBadRequest)
-	lobby := create("Lobby", 2048, 25565, http.StatusCreated)
-	create("Big", 4096, 25566, http.StatusConflict)
-	create("Survival", 2048, 25566, http.StatusCreated)
-	update := map[string]any{"name": "Lobby", "version": "LATEST", "memoryMb": 3072, "port": 25565, "restartPolicy": "always"}
+	lobby := create("Lobby", 1024, 25565, http.StatusCreated)
+	create("Big", 2048, 25566, http.StatusConflict)
+	create("Survival", 1024, 25566, http.StatusCreated)
+	update := map[string]any{"name": "Lobby", "version": "LATEST", "memoryMb": 2048, "port": 25565, "restartPolicy": "always"}
 	api.do("PUT", path+"/servers/"+lobby, update, http.StatusConflict, nil)
 
 	// Without a reserve, memory isn't limited.

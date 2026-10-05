@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { NodeActivity } from "@/features/logs/activity"
-import { serversQuery } from "@/features/servers/api"
+import { assignedMemoryMb, serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
 import { usageQuery } from "@/features/usage/api"
 import { formatCores } from "@/features/usage/format"
@@ -143,7 +143,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   // Missing without the permission to see the node, empty if the agent can't measure the machine.
   const usage = useQuery(usageQuery(node.id)).data?.node
   const live = usage?.cpuCount && usage.memoryTotalBytes ? usage : undefined
-  const assignedMb = servers?.reduce((sum, s) => sum + s.memoryMb, 0)
+  const assignedMb = servers && assignedMemoryMb(servers)
   const capacityMb = memoryCapacityMb(node)
   const limitMb = memoryLimitMb(node)
   // Only there with the permission to see the node.
@@ -178,7 +178,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
           {assignedMb !== undefined && capacityMb ? (
             <div className="space-y-2">
               <Meter value={assignedMb / capacityMb} label={t("Memory assigned to servers")} />
-              <p>{t("of {{limit}}", { limit: formatMegabytes(capacityMb) })}</p>
+              <p>{t("of {{limit}}, including what Java needs besides the servers", { limit: formatMegabytes(capacityMb) })}</p>
             </div>
           ) : null}
         </StatCard>

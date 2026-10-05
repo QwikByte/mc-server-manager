@@ -171,6 +171,7 @@ func serve(ctx context.Context, cfg config) error {
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests themselves have no time limit, as uploads and streams last long.
 		IdleTimeout: 2 * time.Minute,
+		ErrorLog:    logging.ServerErrors(slog.Default()),
 	}
 	httpServer.RegisterOnShutdown(endRequests)
 	if panelCert != nil {

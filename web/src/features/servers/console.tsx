@@ -48,6 +48,8 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
   const frame = useRef(0)
   const history = useRef<string[]>([])
   const historyIndex = useRef(0)
+  // Commands are sent one after the other, so that they run and answer in the order typed.
+  const queue = useRef(Promise.resolve())
   // The ID of the latest line, so that connecting again continues after it.
   const lastId = useRef("")
 
@@ -111,10 +113,12 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
     setInput("")
     stickToBottom.current = true
     append("command", `> ${command}`)
-    send.mutate(command, {
-      onSuccess: ({ output }) => append("output", ...output.split("\n").filter((line) => line.trim())),
-      onError: (error) => append("error", error.message),
-    })
+    queue.current = queue.current.then(() =>
+      send.mutateAsync(command).then(
+        ({ output }) => append("output", ...output.split("\n").filter((line) => line.trim())),
+        (error: Error) => append("error", error.message),
+      ),
+    )
   }
 
   // Arrow keys walk through earlier commands, like in a terminal.

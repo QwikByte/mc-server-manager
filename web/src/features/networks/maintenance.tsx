@@ -13,14 +13,18 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { useOperation } from "@/features/operations/use-operation"
+import { allServersQuery } from "@/features/servers/api"
 import { maintenanceQuery, type Network, useMaintenancePlayer, useSetMaintenance } from "./api"
-import { isBungee } from "./servers"
+import { findServer, isBungee } from "./servers"
 
 /** Maintenance of a network with the Maintenance plugin on its proxy: on or off, and who may join meanwhile. */
 export function MaintenanceSection({ network }: { network: Network }) {
   const { can } = useAccess()
   const manage = can("networks.manage")
   const { data: m, isPending, error } = useQuery(maintenanceQuery(network.id))
+  // The list of servers is read more often, so it tells first when the proxy starts or stops.
+  const proxy = findServer(useQuery(allServersQuery).data, network.proxy)
+  const proxyRunning = proxy ? proxy.state === "running" : !!m?.proxyRunning
   const set = useSetMaintenance(network.id)
   const operation = useOperation()
   const [confirm, setConfirm] = useState(false)
@@ -46,8 +50,8 @@ export function MaintenanceSection({ network }: { network: Network }) {
         m && (
           <Button
             variant={m.enabled ? "default" : "outline"}
-            disabled={set.isPending || !m.proxyRunning}
-            title={m.proxyRunning ? undefined : t("Start the proxy first.")}
+            disabled={set.isPending || !proxyRunning}
+            title={proxyRunning ? undefined : t("Start the proxy first.")}
             onClick={() => (m.enabled ? toggle(false) : setConfirm(true))}
           >
             <WrenchIcon />
@@ -64,14 +68,14 @@ export function MaintenanceSection({ network }: { network: Network }) {
         <div className="surface grid gap-4 rounded-xl p-5">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <Pill tone={m.enabled ? "warning" : "neutral"}>{m.enabled ? t("In maintenance") : t("Open to all players")}</Pill>
-            {!m.proxyRunning && <span className="text-muted-foreground">{t("The proxy doesn't run.")}</span>}
-            {!m.installed && m.proxyRunning && (
+            {!proxyRunning && <span className="text-muted-foreground">{t("The proxy doesn't run.")}</span>}
+            {!m.installed && proxyRunning && (
               <span className="text-muted-foreground">{t("The first time, the panel installs the Maintenance plugin on the proxy.")}</span>
             )}
           </div>
           {m.installed && (
             <>
-              <Team network={network} players={m.players} editable={manage && m.proxyRunning} />
+              <Team network={network} players={m.players} editable={manage && proxyRunning} />
               {can("files.read", nodeId, serverId) && (
                 <p className="text-sm text-muted-foreground">
                   <Link
