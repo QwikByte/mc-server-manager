@@ -1,5 +1,5 @@
 import { t } from "i18next"
-import type { ReactElement, ReactNode } from "react"
+import { type ReactElement, type ReactNode, useRef } from "react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,11 +45,31 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
-          <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={onConfirm}>
+          <ConfirmAction destructive={destructive} onConfirm={onConfirm}>
             {action}
-          </AlertDialogAction>
+          </ConfirmAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/**
+ * Confirms once: the button stays clickable while the dialog closes, so a double click
+ * would run the action twice. The content is created anew each time the dialog opens.
+ */
+function ConfirmAction({ destructive, onConfirm, children }: { destructive: boolean; onConfirm: () => void; children: ReactNode }) {
+  const confirmed = useRef(false)
+  return (
+    <AlertDialogAction
+      variant={destructive ? "destructive" : "default"}
+      onClick={() => {
+        if (confirmed.current) return
+        confirmed.current = true
+        onConfirm()
+      }}
+    >
+      {children}
+    </AlertDialogAction>
   )
 }

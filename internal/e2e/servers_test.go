@@ -91,6 +91,8 @@ func TestBulkActionsAndTags(t *testing.T) {
 	var copied struct{ ID string }
 	api.do("POST", "/api/nodes/"+game.NodeID+"/servers/"+game.ServerID+"/duplicate", map[string]any{"name": "Game 2", "port": 25566}, http.StatusCreated, &copied)
 	api.do("DELETE", "/api/nodes/"+game.NodeID+"/servers/"+game.ServerID, nil, http.StatusNoContent, nil)
+	// Deleting it again, e.g. by the second request of a double click, finds it deleted.
+	api.do("DELETE", "/api/nodes/"+game.NodeID+"/servers/"+game.ServerID, nil, http.StatusNoContent, nil)
 	if tags, err := tag.NewStore(m.db).All(t.Context()); err != nil || len(tags) != 2 || !slices.Equal(tags[tag.Server{NodeID: b.node.ID, ServerID: copied.ID}], []string{"bedwars", "eu"}) {
 		t.Fatalf("tags = %v, %v", tags, err)
 	}

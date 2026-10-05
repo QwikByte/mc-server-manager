@@ -353,8 +353,10 @@ func (s *Service) RestartServer(ctx context.Context, req *noryxv1.RestartServerR
 	return &noryxv1.RestartServerResponse{}, s.apply(ctx, req.GetId(), s.rt.Restart)
 }
 
+// DeleteServer deletes a server, and succeeds for one that is gone already or is being
+// deleted, e.g. by the request of a double click.
 func (s *Service) DeleteServer(ctx context.Context, req *noryxv1.DeleteServerRequest) (*noryxv1.DeleteServerResponse, error) {
-	if err := s.apply(ctx, req.GetId(), s.rt.Remove); err != nil {
+	if err := s.apply(ctx, req.GetId(), s.rt.Remove); err != nil && status.Code(err) != codes.NotFound {
 		return nil, err
 	}
 	return &noryxv1.DeleteServerResponse{}, toStatus(s.backups.RemoveAll(req.GetId()))

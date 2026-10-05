@@ -375,6 +375,9 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 		return err
 	}
 	if _, err := d.cli.ContainerRemove(ctx, containerName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
+		if cerrdefs.IsConflict(err) {
+			return runtime.ErrNotFound // another request is removing it, which removes its data too
+		}
 		return notFound(err)
 	}
 	if spec.Type.Proxy() {
