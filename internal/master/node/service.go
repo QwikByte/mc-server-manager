@@ -96,8 +96,11 @@ type Service struct {
 	cert   *pki.Holder // the master's own certificate
 	config Config
 
-	mu      sync.Mutex
-	conns   map[string]*grpc.ClientConn
+	mu    sync.Mutex
+	conns map[string]*grpc.ClientConn
+	// gen counts the changes and removals of connections, so that Conn doesn't store a
+	// connection to a node that changed while it was loaded.
+	gen     uint64
 	renewMu sync.Mutex // one certificate renewal at a time
 	// enrolls throttles enrollments per client, as anyone who reaches the endpoint may try.
 	enrolls *ratelimit.Limiter
@@ -162,6 +165,7 @@ func (s *Service) Update(ctx context.Context, n Node) (Node, error) {
 		return n, uniqueName(err, n.Name)
 	}
 	s.mu.Lock()
+	s.gen++
 	if conn, ok := s.conns[n.ID]; ok && conn.Target() != n.Address {
 		conn.Close()
 		delete(s.conns, n.ID)
@@ -291,6 +295,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gen++
 	if conn, ok := s.conns[id]; ok {
 		conn.Close()
 		delete(s.conns, id)
@@ -299,32 +304,53 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 }
 
 // Conn returns the mutually authenticated connection to the agent of an enrolled node.
+// The node is loaded without holding s.mu, so that calls for other nodes don't wait for the
+// database.
 func (s *Service) Conn(ctx context.Context, id string) (grpc.ClientConnInterface, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if conn, ok := s.conns[id]; ok {
+	for {
+		s.mu.Lock()
+		conn, ok := s.conns[id]
+		gen := s.gen
+		s.mu.Unlock()
+		if ok {
+			return conn, nil
+		}
+		n, err := s.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if n.EnrolledAt == nil {
+			return nil, httpapi.Errorf(http.StatusConflict, "Node %q has not been enrolled yet.", n.Name)
+		}
+		creds := credentials.NewTLS(pki.NodeClientTLS(s.cert, s.ca.Cert, n.ID))
+		conn, err = grpc.NewClient(n.Address, append(s.explained(id), grpc.WithTransportCredentials(creds), grpc.WithConnectParams(reconnect))...)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		existing, ok := s.conns[id]
+		stale := s.gen != gen
+		if !ok && !stale {
+			s.conns[id] = conn
+		}
+		s.mu.Unlock()
+		switch {
+		case ok: // another call was faster
+			conn.Close()
+			return existing, nil
+		case stale: // the node changed or was removed meanwhile, so it's loaded again
+			conn.Close()
+			continue
+		}
 		return conn, nil
 	}
-	n, err := s.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if n.EnrolledAt == nil {
-		return nil, httpapi.Errorf(http.StatusConflict, "Node %q has not been enrolled yet.", n.Name)
-	}
-	creds := credentials.NewTLS(pki.NodeClientTLS(s.cert, s.ca.Cert, n.ID))
-	conn, err := grpc.NewClient(n.Address, append(s.explained(id), grpc.WithTransportCredentials(creds), grpc.WithConnectParams(reconnect))...)
-	if err != nil {
-		return nil, err
-	}
-	s.conns[id] = conn
-	return conn, nil
 }
 
 // Close closes all agent connections.
 func (s *Service) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gen++
 	for id, conn := range s.conns {
 		conn.Close()
 		delete(s.conns, id)
