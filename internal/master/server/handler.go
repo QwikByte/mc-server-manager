@@ -136,6 +136,8 @@ type view struct {
 	// because of a crash, and the exit code of the latest one, 0 if unknown.
 	Crashes  uint32 `json:"crashes"`
 	ExitCode int32  `json:"exitCode"`
+	// BedrockPort is the UDP port at which Bedrock players join a proxy, which its network sets.
+	BedrockPort uint32 `json:"bedrockPort,omitempty"`
 	settings
 }
 
@@ -166,6 +168,7 @@ func toView(s *noryxv1.Server) view {
 	return view{
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
 		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(), Crashes: s.GetCrashes(), ExitCode: s.GetExitCode(),
+		BedrockPort: s.GetBedrockPort(),
 		settings: settings{
 			Java: s.GetJava(), LoaderVersion: s.GetLoaderVersion(), RestartPolicy: s.GetRestartPolicy().Slug(), AikarFlags: s.GetAikarFlags(),
 			JVMOptions: append([]string{}, s.GetJvmOptions()...), CPULimit: float64(s.GetCpuMillis()) / 1000,

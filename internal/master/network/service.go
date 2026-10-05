@@ -105,7 +105,10 @@ type Network struct {
 	// Try names the backends players join and fall back to, in this order.
 	Try         []string     `json:"try"`
 	ForcedHosts []ForcedHost `json:"forcedHosts"`
-	CreatedAt   time.Time    `json:"createdAt"`
+	// BedrockPort lets Bedrock players join through Geyser on the proxy at this UDP port; 0
+	// for none.
+	BedrockPort uint32    `json:"bedrockPort"`
+	CreatedAt   time.Time `json:"createdAt"`
 	secret      string
 }
 
@@ -126,6 +129,7 @@ type Change struct {
 	Backends    []Backend    `json:"backends"`
 	Try         []string     `json:"try"`
 	ForcedHosts []ForcedHost `json:"forcedHosts"`
+	BedrockPort uint32       `json:"bedrockPort"`
 }
 
 // Nodes gives access to the nodes the servers of a network run on.
@@ -134,9 +138,12 @@ type Nodes interface {
 	Conn(ctx context.Context, id string) (grpc.ClientConnInterface, error)
 }
 
-// Mods installs and removes the forwarding mods of Fabric, Quilt, Forge and NeoForge servers.
+// Mods installs and removes the plugins and mods of networks: the forwarding mods of Fabric,
+// Quilt, Forge and NeoForge servers, and those that proxies run, such as Geyser.
 type Mods interface {
 	Ensure(ctx context.Context, ref plugin.Ref, project string) error
+	// Provide installs the newest releases, and reports whether it changed a file.
+	Provide(ctx context.Context, ref plugin.Ref, projects []string) (bool, error)
 	Uninstall(ctx context.Context, ref plugin.Ref, project string) error
 }
 
@@ -223,9 +230,14 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 	}
 	n := current
 	n.Name, n.Forwarding, n.Firewalled = c.Name, c.Forwarding, c.Firewalled
-	n.Backends, n.Try, n.ForcedHosts = c.Backends, c.Try, c.ForcedHosts
+	n.Backends, n.Try, n.ForcedHosts, n.BedrockPort = c.Backends, c.Try, c.ForcedHosts, c.BedrockPort
 	if err := n.validate(); err != nil {
 		return current, err
+	}
+	if n.BedrockPort != current.BedrockPort {
+		if err := s.checkBedrock(ctx, n.Proxy.NodeID, n.Proxy.ServerID, n.BedrockPort); err != nil {
+			return current, err
+		}
 	}
 	// Servers that join, or all if the forwarding changed, must support it.
 	for _, b := range n.Backends {
@@ -243,6 +255,12 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 			if err := s.leave(ctx, b); err != nil {
 				return current, httpapi.Errorf(http.StatusBadGateway, "%s could not be made standalone again: %s", b.Name, message(err))
 			}
+		}
+	}
+	// The proxy loses Geyser and Floodgate before it restarts without the Bedrock port.
+	if current.BedrockPort != 0 && n.BedrockPort == 0 {
+		if err := s.removeBedrock(ctx, n); err != nil {
+			return current, err
 		}
 	}
 	if err := s.inTx(ctx, func(tx *sql.Tx) error { return save(ctx, tx, n) }); err != nil {
@@ -268,9 +286,14 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
 		}
 	}
+	if n.BedrockPort != 0 {
+		if err := ignoreMissing(s.removeBedrock(ctx, n)); err != nil {
+			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted: %s", message(err))
+		}
+	}
 	operation.Step(ctx, "proxy")
 	detach := &noryxv1.ConfigureNetworkRequest{Id: n.Proxy.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE}
-	if err := ignoreMissing(s.configure(ctx, n.Proxy, detach)); err != nil {
+	if _, err := s.configure(ctx, n.Proxy, detach); ignoreMissing(err) != nil {
 		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because its proxy could not be updated: %s", message(err))
 	}
 	_, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID)
@@ -296,6 +319,10 @@ func (s *Service) CheckMove(ctx context.Context, serverID, from, to string) erro
 	n.moved(serverID, from, to)
 	if n.exposed() {
 		return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q, which forwards the legacy way. Confirm in the network that a firewall protects its servers on other nodes first.", n.Name)
+	}
+	// The proxy takes the Bedrock port of its network along.
+	if n.Proxy.ServerID == serverID {
+		return s.checkBedrock(ctx, to, serverID, n.BedrockPort)
 	}
 	return nil
 }
@@ -358,6 +385,8 @@ func (n *Network) validate() error {
 		return httpapi.Errorf(http.StatusBadRequest, "Choose at least one server that players join.")
 	case n.exposed():
 		return errExposed
+	case n.BedrockPort != 0 && (n.BedrockPort < minBedrockPort || n.BedrockPort > maxBedrockPort):
+		return httpapi.Errorf(http.StatusBadRequest, "Choose a Bedrock port from %d to %d.", minBedrockPort, maxBedrockPort)
 	}
 	names := map[string]bool{}
 	for i, b := range n.Backends {
@@ -463,10 +492,30 @@ func (s *Service) apply(ctx context.Context, n Network) error {
 		hosts = append(hosts, &noryxv1.ForcedHost{Host: h.Host, Servers: h.Servers})
 	}
 	req := n.request(n.Proxy)
-	req.Backends, req.Try, req.ForcedHosts = backends, n.Try, hosts
+	req.Backends, req.Try, req.ForcedHosts, req.BedrockPort = backends, n.Try, hosts, n.BedrockPort
+	var plugins bool
+	if n.BedrockPort != 0 {
+		var err error
+		if plugins, err = s.provideBedrock(ctx, n); err != nil {
+			return applyFailed("the proxy", err)
+		}
+	}
 	operation.Step(ctx, "proxy")
-	if err := s.configure(ctx, n.Proxy, req); err != nil {
+	res, err := s.configure(ctx, n.Proxy, req)
+	if err != nil {
 		return applyFailed("the proxy", err)
+	}
+	proxy, err := s.server(ctx, n.Proxy)
+	switch {
+	case err != nil:
+		return applyFailed("the proxy", err)
+	case proxy.GetBedrockPort() != n.BedrockPort: // agents of older versions don't know it
+		return applyFailed("the proxy", httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the proxy's node to let Bedrock players join."))
+	case plugins && !res.GetRestarted() && proxy.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING:
+		operation.Step(ctx, "proxy-restart")
+		if err := s.restart(ctx, []Backend{{Ref: n.Proxy, Name: "The proxy"}}); err != nil {
+			return applyFailed("the proxy", err)
+		}
 	}
 	return nil
 }
@@ -478,6 +527,7 @@ func (n *Network) request(ref Ref) *noryxv1.ConfigureNetworkRequest {
 		req.Forwarding, req.ForwardingSecret = noryxv1.Forwarding_FORWARDING_LEGACY, ""
 	}
 	req.ProxyOnNode = ref != n.Proxy && ref.NodeID == n.Proxy.NodeID
+	req.BedrockPlayers = ref != n.Proxy && n.BedrockPort != 0
 	return req
 }
 
@@ -493,7 +543,8 @@ func (s *Service) join(ctx context.Context, n Network, b Backend) error {
 			return fmt.Errorf("its forwarding mod could not be installed: %w", err)
 		}
 	}
-	return s.configure(ctx, b.Ref, n.request(b.Ref))
+	_, err = s.configure(ctx, b.Ref, n.request(b.Ref))
+	return err
 }
 
 // leave makes a backend standalone again and removes its forwarding mod. A deleted server
@@ -511,7 +562,8 @@ func (s *Service) leave(ctx context.Context, b Backend) error {
 			return fmt.Errorf("its forwarding mod could not be removed: %w", err)
 		}
 	}
-	return ignoreMissing(s.configure(ctx, b.Ref, &noryxv1.ConfigureNetworkRequest{Id: b.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE}))
+	_, err = s.configure(ctx, b.Ref, &noryxv1.ConfigureNetworkRequest{Id: b.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE})
+	return ignoreMissing(err)
 }
 
 // target tells the proxy how to reach a backend: on its own node by server ID, as the
@@ -538,15 +590,14 @@ func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*noryxv1.Ne
 	return target, nil
 }
 
-func (s *Service) configure(ctx context.Context, ref Ref, req *noryxv1.ConfigureNetworkRequest) error {
+func (s *Service) configure(ctx context.Context, ref Ref, req *noryxv1.ConfigureNetworkRequest) (*noryxv1.ConfigureNetworkResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, configureTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = noryxv1.NewServerServiceClient(conn).ConfigureNetwork(ctx, req)
-	return err
+	return noryxv1.NewServerServiceClient(conn).ConfigureNetwork(ctx, req)
 }
 
 var errServerNotFound = httpapi.Errorf(http.StatusNotFound, "Server not found.")
@@ -605,7 +656,7 @@ func (s *Service) find(ctx context.Context, serverID string) (*Network, error) {
 func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, proxy_node_id, proxy_server_id, proxy_type, forwarding, firewalled, try, forced_hosts,
-		       forwarding_secret, created_at
+		       bedrock_port, forwarding_secret, created_at
 		FROM networks WHERE ? IN ('', id) ORDER BY name`, id)
 	if err != nil {
 		return nil, err
@@ -618,7 +669,7 @@ func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 		var try, hosts string
 		var createdAt int64
 		if err := rows.Scan(&n.ID, &n.Name, &n.Proxy.NodeID, &n.Proxy.ServerID, &n.ProxyType, &n.Forwarding, &n.Firewalled,
-			&try, &hosts, &n.secret, &createdAt); err != nil {
+			&try, &hosts, &n.BedrockPort, &n.secret, &createdAt); err != nil {
 			return nil, err
 		}
 		if err := errors.Join(json.Unmarshal([]byte(try), &n.Try), json.Unmarshal([]byte(hosts), &n.ForcedHosts)); err != nil {
@@ -661,8 +712,8 @@ func save(ctx context.Context, tx *sql.Tx, n Network) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE networks SET name = ?, forwarding = ?, firewalled = ?, try = ?, forced_hosts = ? WHERE id = ?`,
-		n.Name, n.Forwarding, n.Firewalled, try, hosts, n.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE networks SET name = ?, forwarding = ?, firewalled = ?, try = ?, forced_hosts = ?, bedrock_port = ? WHERE id = ?`,
+		n.Name, n.Forwarding, n.Firewalled, try, hosts, n.BedrockPort, n.ID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM network_backends WHERE network_id = ?`, n.ID); err != nil {

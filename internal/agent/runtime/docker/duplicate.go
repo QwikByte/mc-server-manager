@@ -17,7 +17,7 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 	if err != nil {
 		return err
 	}
-	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode = source.Type, source.Storage, false, false
+	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers = source.Type, source.Storage, false, false, false
 	src, err := d.dataPath(source)
 	if err != nil {
 		return err
@@ -44,22 +44,33 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 
 // standalone resets the network role in the copy of a server's data. A backend stops
 // trusting the proxy of the original, a Velocity proxy loses the forwarding secret, which
-// Velocity creates anew, and BungeeCord stops forwarding.
+// Velocity creates anew, and BungeeCord stops forwarding. A proxy loses the key with which
+// Geyser vouches for Bedrock players, which Floodgate creates anew.
 func standalone(path string, original runtime.Spec) error {
 	data, err := datadir.Open(path)
 	if err != nil {
 		return err
 	}
 	defer data.Close()
+	remove := func(name string) error {
+		if err := data.Remove(name); !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
 	switch {
 	case original.BehindProxy:
 		_, err = mcnet.WriteBackend(data, original.Type, runtime.ForwardingNone, "")
 	case original.Type.Bungee():
 		_, _, err = mcnet.WriteProxy(data, original.Type, runtime.Network{})
 	case original.Type == noryxv1.ServerType_SERVER_TYPE_VELOCITY:
-		if err = data.Remove(mcnet.ForwardingSecretFile); errors.Is(err, fs.ErrNotExist) {
-			err = nil
-		}
+		err = remove(mcnet.ForwardingSecretFile)
+	}
+	switch {
+	case err == nil && original.Type.Proxy():
+		err = remove(mcnet.FloodgateKeyFile)
+	case err == nil && original.BedrockPlayers:
+		err = mcnet.SecureChat(data)
 	}
 	return err
 }

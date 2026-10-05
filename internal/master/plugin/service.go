@@ -17,8 +17,11 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/geysermc"
 	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
@@ -61,8 +64,8 @@ type Service struct {
 	catalogue catalogue
 }
 
-func NewService(nodes Nodes, modrinthClient *modrinth.Client, hangarClient *hangar.Client) *Service {
-	return &Service{nodes: nodes, catalogue: catalogue{modrinthClient, hangarClient}}
+func NewService(nodes Nodes, modrinthClient *modrinth.Client, hangarClient *hangar.Client, geysermcClient *geysermc.Client) *Service {
+	return &Service{nodes: nodes, catalogue: catalogue{modrinthClient, hangarClient, geysermcClient}}
 }
 
 // Projects looks up projects on Modrinth and Hangar; unknown ones are left out.
@@ -165,6 +168,7 @@ type Installed struct {
 	ProjectID string `json:"projectId"`
 	FileName  string `json:"fileName"`
 	Version   string `json:"version"`
+	written   bool   // rather than present already
 }
 
 // Result tells what was installed on a server, and why the rest wasn't.
@@ -239,17 +243,18 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 	installed := []Installed{}
 	for _, v := range versions {
 		f, _ := v.File()
-		if present[v.ProjectID] != f.Filename { // otherwise this version is installed already
+		old := present[v.ProjectID]
+		if !old.is(f) { // otherwise this version is installed already
 			data, err := r.downloads.get(f.URL, func() ([]byte, error) { return r.catalogue.Download(ctx, f) })
 			if err != nil {
 				return installed, err
 			}
-			header := &noryxv1.InstallPluginHeader{ServerId: ref.ServerID, FileName: f.Filename, Replaces: present[v.ProjectID]}
+			header := &noryxv1.InstallPluginHeader{ServerId: ref.ServerID, FileName: f.Filename, Replaces: old.GetFileName()}
 			if _, err := send(ctx, plugins, header, bytes.NewReader(data)); err != nil {
 				return installed, err
 			}
 		}
-		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber})
+		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, written: !old.is(f)})
 	}
 	return installed, nil
 }
@@ -257,31 +262,40 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 // present returns the file of each project of Modrinth or Hangar installed on a server. A
 // file on both is Modrinth's, and also Hangar's with hangarToo, so that installing a project
 // of Hangar replaces the file rather than adding another.
-func (r *installation) present(ctx context.Context, c noryxv1.PluginServiceClient, serverID string, t target, hangarToo bool) (map[string]string, error) {
+func (r *installation) present(ctx context.Context, c noryxv1.PluginServiceClient, serverID string, t target, hangarToo bool) (map[string]installedFile, error) {
 	res, err := c.ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: serverID})
 	if err != nil || len(res.GetPlugins()) == 0 {
-		return map[string]string{}, err
+		return map[string]installedFile{}, err
 	}
 	versions, _, err := r.catalogue.identify(ctx, res.GetPlugins(), t, false)
-	present := map[string]string{}
+	present := map[string]installedFile{}
 	for _, p := range res.GetPlugins() {
 		v, ok := versions[p.GetSha512()]
 		if ok {
-			present[v.ProjectID] = p.GetFileName()
+			present[v.ProjectID] = installedFile{p}
 		}
 		if ok && hangarToo && err == nil && !onHangar(v.ProjectID) {
 			var project string
 			project, err = r.catalogue.hangar.ProjectByHash(ctx, p.GetSha256())
 			if project != "" {
-				present[project] = p.GetFileName()
+				present[project] = installedFile{p}
 			}
 		}
 	}
 	return present, err
 }
 
+// installedFile is the file of a project on a server; the zero value is none.
+type installedFile struct{ *noryxv1.PluginFile }
+
+// is reports whether the file is the one of a version, by its hash, as many projects keep
+// the name of their file in every version.
+func (i installedFile) is(f modrinth.File) bool {
+	return i.PluginFile != nil && (f.Hashes.SHA512 != "" && i.GetSha512() == f.Hashes.SHA512 || f.Hashes.SHA256 != "" && i.GetSha256() == f.Hashes.SHA256)
+}
+
 // resolve picks the version of each project and of the projects they require.
-func (r *installation) resolve(ctx context.Context, t target, projects []string, present map[string]string) ([]modrinth.Version, error) {
+func (r *installation) resolve(ctx context.Context, t target, projects []string, present map[string]installedFile) ([]modrinth.Version, error) {
 	var picked []modrinth.Version
 	queue, seen := slices.Clone(projects), map[string]bool{}
 	for ; len(queue) > 0; queue = queue[1:] {
@@ -350,6 +364,8 @@ type Version struct {
 	Number    string    `json:"number"`
 	Channel   string    `json:"channel"` // release, beta or alpha
 	Published time.Time `json:"published"`
+	// GameVersions are the versions of Minecraft it supports, e.g. the one Geyser joins with.
+	GameVersions []string `json:"gameVersions,omitempty"`
 }
 
 // Versions returns the versions of a project that run on servers of a type and
@@ -363,7 +379,7 @@ func (s *Service) Versions(ctx context.Context, project string, typ noryxv1.Serv
 	versions := make([]Version, 0, len(found))
 	for _, v := range found {
 		if len(v.Files) > 0 {
-			versions = append(versions, Version{ID: v.ID, Number: v.VersionNumber, Channel: v.VersionType, Published: v.Published})
+			versions = append(versions, Version{ID: v.ID, Number: v.VersionNumber, Channel: v.VersionType, Published: v.Published, GameVersions: v.GameVersions})
 		}
 	}
 	return versions, err
@@ -414,15 +430,37 @@ func (s *Service) Ensure(ctx context.Context, ref Ref, project string) error {
 	return err
 }
 
-// Uninstall removes the file of a project of Modrinth from a server, if it has one.
+// Provide installs the newest release of projects on a server, also those of GeyserMC,
+// unless it has it, and reports whether it changed a file. A server loads it when it starts.
+func (s *Service) Provide(ctx context.Context, ref Ref, projects []string) (bool, error) {
+	installed, err := (&installation{Service: s}).install(ctx, ref, projects)
+	return slices.ContainsFunc(installed, func(i Installed) bool { return i.written }), err
+}
+
+// Uninstall removes the file of a project of Modrinth or GeyserMC from a server, if it has one.
 func (s *Service) Uninstall(ctx context.Context, ref Ref, project string) error {
-	conn, _, err := s.server(ctx, ref)
+	conn, srv, err := s.server(ctx, ref)
 	if err != nil {
 		return err
 	}
+	if onGeyserMC(project) {
+		// GeyserMC only tells its newest build, but its builds keep the name of their file.
+		t, err := s.target(ctx, srv.GetType(), srv.GetVersion())
+		var latest []modrinth.Version
+		if err == nil {
+			latest, err = s.catalogue.geysermc.Latest(ctx, project, t.loaders)
+		}
+		if err != nil || len(latest) == 0 {
+			return err
+		}
+		if err := s.Remove(ctx, ref, latest[0].Files[0].Filename); status.Code(err) != codes.NotFound {
+			return err
+		}
+		return nil
+	}
 	present, err := (&installation{Service: s}).present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID, target{}, false)
 	if file, ok := present[project]; ok && err == nil {
-		return s.Remove(ctx, ref, file)
+		return s.Remove(ctx, ref, file.GetFileName())
 	}
 	return err
 }
@@ -490,8 +528,6 @@ func (s *Service) server(ctx context.Context, ref Ref) (grpc.ClientConnInterface
 	}
 	return conn, res.GetServers()[i], nil
 }
-
-// message returns what administrators are told about an error.
 
 // memo runs a function once per key and shares its result, also between goroutines.
 type memo[T any] struct {

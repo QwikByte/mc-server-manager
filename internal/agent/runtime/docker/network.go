@@ -19,21 +19,22 @@ import (
 )
 
 // Configure writes the network configuration into the server's data directory. Game
-// servers are recreated when they join or leave a network, because the online mode is part
-// of the container's environment, and running ones restart to apply a changed
-// configuration. Running proxies reload theirs.
-func (d *Docker) Configure(ctx context.Context, id string, network runtime.Network) error {
+// servers are recreated when they join or leave a network, or Bedrock players start or
+// stop joining it, because the online mode and secure chat are part of the container's
+// environment, and running ones restart to apply a changed configuration. Running proxies
+// reload theirs, or restart if they must.
+func (d *Docker) Configure(ctx context.Context, id string, network runtime.Network) (bool, error) {
 	c, spec, err := d.inspect(ctx, id)
 	if err != nil {
-		return err
+		return false, err
 	}
 	path, err := d.dataPath(spec)
 	if err != nil {
-		return err
+		return false, err
 	}
 	data, err := datadir.Open(path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer data.Close()
 	if spec.Type.Proxy() {
@@ -41,54 +42,68 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 	}
 	changed, err := mcnet.WriteBackend(data, spec.Type, network.Forwarding, network.ForwardingSecret)
 	if err != nil {
-		return err
+		return false, err
 	}
 	running := c.State.Running
-	if behind := network.Forwarding != runtime.ForwardingNone; behind != spec.BehindProxy || network.ProxyOnNode != spec.ProxyOnNode {
-		spec.BehindProxy, spec.ProxyOnNode = behind, network.ProxyOnNode
-		return d.recreate(ctx, spec, running, placement(c, spec))
+	if behind := network.Forwarding != runtime.ForwardingNone; behind != spec.BehindProxy || network.ProxyOnNode != spec.ProxyOnNode ||
+		network.BedrockPlayers != spec.BedrockPlayers {
+		if spec.BedrockPlayers && !network.BedrockPlayers {
+			if err := mcnet.SecureChat(data); err != nil {
+				return false, err
+			}
+		}
+		spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers = behind, network.ProxyOnNode, network.BedrockPlayers
+		return running, d.recreate(ctx, spec, running, placement(c, spec))
 	}
 	if !running || !changed {
-		return nil // applying the same configuration again must not kick players
+		return false, nil // applying the same configuration again must not kick players
 	}
-	return d.Restart(ctx, id)
+	return true, d.Restart(ctx, id)
 }
 
 // configureProxy writes a network into the configuration of a proxy, with the backends of
-// this node in the proxy's Docker network, and makes a running proxy reload it.
-func (d *Docker) configureProxy(ctx context.Context, c container.InspectResponse, spec runtime.Spec, data *datadir.Dir, network runtime.Network) error {
+// this node in the proxy's Docker network, and makes a running proxy reload it. A proxy
+// whose Bedrock port changes is created again to publish it.
+func (d *Docker) configureProxy(ctx context.Context, c container.InspectResponse, spec runtime.Spec, data *datadir.Dir, network runtime.Network) (bool, error) {
 	if err := d.move(ctx, c, proxyNetwork(spec.ID)); err != nil { // proxies of older agents shared a network
-		return err
+		return false, err
 	}
 	local := network.Backends
 	network.Backends = make([]runtime.NetworkBackend, len(local))
 	for i, b := range local {
 		address, err := d.address(ctx, spec.ID, b)
 		if err != nil {
-			return err
+			return false, err
 		}
 		b.ServerID, b.Address = "", address
 		network.Backends[i] = b
 	}
 	changed, removed, err := mcnet.WriteProxy(data, spec.Type, network)
 	if err != nil {
-		return err
+		return false, err
+	}
+	geyser, err := mcnet.WriteGeyser(data, spec.Type, network.BedrockPort)
+	if err != nil {
+		return false, err
 	}
 	if err := d.release(ctx, spec.ID, local); err != nil {
-		return err
+		return false, err
 	}
 	running := c.State.Running
 	switch {
-	case !mounted(c, images[spec.Type].data) || !c.Config.OpenStdin:
-		// Created by an older agent that mounted the data and published the port wrongly,
-		// or that didn't let the proxy read console commands.
-		return d.recreate(ctx, spec, running, proxyNetwork(spec.ID))
-	case !running || !changed:
-		return nil
-	case removed && spec.Type.Bungee():
-		return d.Restart(ctx, spec.ID) // BungeeCord can't reload without a server it had
+	case network.BedrockPort != spec.BedrockPort || !mounted(c, images[spec.Type].data) || !c.Config.OpenStdin:
+		// A new Bedrock port, or created by an older agent that mounted the data and
+		// published the port wrongly, or that didn't let the proxy read console commands.
+		spec.BedrockPort = network.BedrockPort
+		return running, d.recreate(ctx, spec, running, proxyNetwork(spec.ID))
+	case !running || !changed && !geyser:
+		return false, nil
+	case geyser || removed && spec.Type.Bungee():
+		// Geyser reads its configuration when it starts, and BungeeCord can't reload without
+		// a server it had.
+		return true, d.Restart(ctx, spec.ID)
 	}
-	return d.Reload(ctx, spec.ID)
+	return false, d.Reload(ctx, spec.ID)
 }
 
 // address returns where a proxy reaches a backend: by container name over the network of

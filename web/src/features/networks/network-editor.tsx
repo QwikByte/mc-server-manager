@@ -13,6 +13,7 @@ import { useOperation } from "@/features/operations/use-operation"
 import { allServersQuery } from "@/features/servers/api"
 import { type Network, useUpdateNetwork } from "./api"
 import { BackendList } from "./backend-list"
+import { BedrockSection } from "./bedrock"
 import { type Draft, draftOf, effects, settingsOf } from "./draft"
 import { FirewallConfirmation, ForwardingChoice } from "./forwarding"
 import { exposed, isValid } from "./problems"
@@ -50,6 +51,7 @@ export function NetworkEditor({ network }: { network: Network }) {
   const change = (c: Partial<Draft>) => setDraft((d) => ({ ...d, ...c }))
   const proxyHost = hostOf(proxyNode?.address)
   const address = proxy && proxyHost ? `${proxyHost}:${proxy.port}` : undefined
+  const bedrockAddress = proxyHost && draft.bedrockPort ? `${proxyHost}:${draft.bedrockPort}` : undefined
 
   function save() {
     operation.run((onStart) => update.mutateAsync({ settings: settingsOf(draft), onStart }), {
@@ -62,7 +64,7 @@ export function NetworkEditor({ network }: { network: Network }) {
 
   return (
     <div className="pb-28">
-      <Topology network={network} draft={draft} servers={servers} usage={usage} address={address} />
+      <Topology network={network} draft={draft} servers={servers} usage={usage} address={address} bedrockAddress={bedrockAddress} />
       <Routing draft={draft} onChange={change} servers={entries} address={address} bungee={bungee} editable={editable} />
       <BackendList
         network={network}
@@ -90,6 +92,15 @@ export function NetworkEditor({ network }: { network: Network }) {
           )}
         </div>
       </Section>
+      <BedrockSection
+        network={network}
+        draft={draft}
+        onChange={change}
+        servers={servers}
+        proxyNode={proxyNode}
+        proxyHost={proxyHost}
+        editable={editable}
+      />
       {dirty && <SaveBar network={network} draft={draft} saving={update.isPending} onDiscard={() => setDraft(saved)} onSave={save} />}
       <ConfirmDialog
         open={blocker.status === "blocked"}
@@ -123,9 +134,15 @@ function SaveBar({
   const consequences = [
     e.restart.length > 0 && t("Restarts: {{names}}.", { names: names(e.restart) }),
     e.left.length > 0 && t("Accept players directly again: {{names}}.", { names: names(e.left) }),
-    e.proxyRestarts
-      ? t("The proxy restarts, which disconnects all players, as BungeeCord can't reload without a server it had.")
-      : t("The proxy reloads its configuration without disconnecting anyone."),
+    e.bedrock === "on"
+      ? t("The proxy restarts to load Geyser and Floodgate, which disconnects all players.")
+      : e.bedrock === "off"
+        ? t("The proxy restarts without Geyser and Floodgate, which disconnects all players.")
+        : e.bedrock === "port"
+          ? t("The proxy restarts to let Bedrock players in at the new port, which disconnects all players.")
+          : e.proxyRestarts
+            ? t("The proxy restarts, which disconnects all players, as BungeeCord can't reload without a server it had.")
+            : t("The proxy reloads its configuration without disconnecting anyone."),
   ].filter(Boolean)
 
   return (

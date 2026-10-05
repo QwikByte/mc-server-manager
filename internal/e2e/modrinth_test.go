@@ -54,10 +54,14 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	f.version("8dI2tmqs", "2.10", []string{"fabric"}, "fabricapi")
 	f.project("broken", "Broken", paper)
 	f.version("broken", "1.0", paper)
-	f.files["/cdn/data/broken/broken-1.0.jar"] = []byte("tampered")
+	f.files["/cdn/data/broken/versions/broken10/broken-1.0.jar"] = []byte("tampered")
 	proxies := []string{"velocity", "bungeecord", "waterfall"}
 	f.project("VCAqN1ln", "Maintenance", proxies)
 	f.version("VCAqN1ln", "5.1.0", proxies)
+	// Geyser keeps the name of its file, and each proxy has its own version on Modrinth.
+	f.project("wKkoqHrH", "Geyser", proxies)
+	f.release("wKkoqHrH", "2.11.3-velocity", "Geyser-Velocity.jar", []byte("geyser velocity"), []string{"velocity"})
+	f.release("wKkoqHrH", "2.11.3-bungeecord", "Geyser-BungeeCord.jar", []byte("geyser bungeecord"), []string{"bungeecord"})
 
 	mux.HandleFunc("GET /v2/search", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -124,13 +128,16 @@ func (f *fakeModrinth) version(project, number string, loaders []string, require
 	f.release(project, number, project+"-"+number+".jar", []byte(project+" "+number), loaders, requires...)
 }
 
-// release adds a version, newer than the ones before, with a file on the CDN.
+// release adds a version, newer than the ones before, with a file on the CDN at
+// /cdn/data/<project>/versions/<version>/<name>, like Modrinth's.
 func (f *fakeModrinth) release(project, number, name string, content []byte, loaders []string, requires ...string) modrinth.Version {
-	file := modrinth.File{URL: f.URL + "/cdn/data/" + project + "/" + name, Filename: name, Primary: true, Size: int64(len(content))}
+	id := project + strings.ReplaceAll(number, ".", "")
+	path := "/cdn/data/" + project + "/versions/" + id + "/" + name
+	file := modrinth.File{URL: f.URL + path, Filename: name, Primary: true, Size: int64(len(content))}
 	file.Hashes.SHA512 = sha512Hex(content)
-	f.files["/cdn/data/"+project+"/"+name] = content
+	f.files[path] = content
 	v := modrinth.Version{
-		ID: project + strings.ReplaceAll(number, ".", ""), ProjectID: project, VersionNumber: number, VersionType: "release",
+		ID: id, ProjectID: project, VersionNumber: number, VersionType: "release",
 		Published: time.Date(2026, 1, len(f.versions)+1, 0, 0, 0, 0, time.UTC), Files: []modrinth.File{file}, Loaders: loaders,
 		GameVersions: []string{"1.21.4"},
 	}
@@ -167,7 +174,8 @@ func sha512Hex(data []byte) string {
 
 // content returns the file of a version, e.g. content("luckperms", "1.0").
 func (f *fakeModrinth) content(project, number string) []byte {
-	return f.files["/cdn/data/"+project+"/"+project+"-"+number+".jar"]
+	id := project + strings.ReplaceAll(number, ".", "")
+	return f.files["/cdn/data/"+project+"/versions/"+id+"/"+project+"-"+number+".jar"]
 }
 
 // find returns the matching versions, the newest first.

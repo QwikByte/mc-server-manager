@@ -1,4 +1,4 @@
-import { ArrowsSplitIcon, GlobeIcon, StackIcon, UsersIcon, UsersThreeIcon } from "@phosphor-icons/react"
+import { ArrowsSplitIcon, DeviceMobileIcon, GlobeIcon, StackIcon, UsersIcon, UsersThreeIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type ReactNode, useState } from "react"
@@ -27,16 +27,20 @@ export function Topology({
   servers,
   usage,
   address,
+  bedrockAddress,
 }: {
   network: Network
   draft: Draft
   servers?: NodeServer[]
   usage: (ref: { nodeId: string; serverId: string }) => ServerUsage | undefined
   address?: string
+  /** Where Bedrock players connect, if they may. */
+  bedrockAddress?: string
 }) {
   const proxy = findServer(servers, network.proxy)
   const entries: { icon: typeof GlobeIcon; label: string }[] = [
     { icon: UsersThreeIcon, label: address ?? t("All players") },
+    ...(bedrockAddress ? [{ icon: DeviceMobileIcon, label: t("{{address}} (Bedrock)", { address: bedrockAddress }) }] : []),
     ...draft.forcedHosts.map((h) => ({ icon: GlobeIcon, label: h.host || "…" })),
   ]
   const [expanded, setExpanded] = useState(false)

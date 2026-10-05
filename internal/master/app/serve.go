@@ -23,6 +23,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/files"
+	"github.com/QwikByte/noryx/internal/master/geysermc"
 	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/https"
 	"github.com/QwikByte/noryx/internal/master/logs"
@@ -131,7 +132,8 @@ func serve(ctx context.Context, cfg config) error {
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	noryxv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	modrinthClient := modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN)
-	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(hangar.DefaultAPI, hangar.DefaultCDN))
+	geyser := geysermc.New(geysermc.DownloadAPI, geysermc.GlobalAPI, geysermc.CacheTime)
+	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(hangar.DefaultAPI, hangar.DefaultCDN), geyser)
 	moves := server.NewMoves()
 	// Requests whose operation takes longer are answered right away, and the operation goes on.
 	ops := operation.New(time.Second)
@@ -163,7 +165,7 @@ func serve(ctx context.Context, cfg config) error {
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes, plugins),
-			Plugins: plugins, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
+			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
 			Usage: usageStore, Tags: tag.NewStore(db), Operations: ops, Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -224,6 +226,7 @@ type Services struct {
 	Nodes     *node.Service
 	Networks  *network.Service
 	Plugins   *plugin.Service
+	GeyserMC  *geysermc.Client
 	Modpacks  *modpack.Service
 	Templates *template.Service
 	Tasks     *schedule.Service
@@ -267,7 +270,7 @@ func API(s Services) *http.ServeMux {
 	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations).Register(m)
-	player.NewHandler(player.NewService(s.Nodes, s.Networks), s.Operations).Register(m)
+	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
 	plugin.NewHandler(s.Plugins, s.Operations).Register(m)

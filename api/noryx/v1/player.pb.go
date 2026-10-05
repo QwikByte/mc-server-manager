@@ -295,7 +295,10 @@ type PlayerChange struct {
 	Action PlayerAction           `protobuf:"varint,1,opt,name=action,proto3,enum=noryx.v1.PlayerAction" json:"action,omitempty"`
 	Name   string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Shown to a player who is kicked or banned.
-	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The ID Floodgate gives a Bedrock player, whom the servers behind its proxy can't look
+	// up: whitelisting them writes it into the whitelist.
+	Uuid          string `protobuf:"bytes,4,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -347,6 +350,13 @@ func (x *PlayerChange) GetName() string {
 func (x *PlayerChange) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *PlayerChange) GetUuid() string {
+	if x != nil {
+		return x.Uuid
 	}
 	return ""
 }
@@ -475,11 +485,12 @@ const file_noryx_v1_player_proto_rawDesc = "" +
 	"\x04uuid\x18\x02 \x01(\tR\x04uuid\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12!\n" +
 	"\fcreated_unix\x18\x04 \x01(\x03R\vcreatedUnix\x12\x16\n" +
-	"\x06source\x18\x05 \x01(\tR\x06source\"j\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\"~\n" +
 	"\fPlayerChange\x12.\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x16.noryx.v1.PlayerActionR\x06action\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"b\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x12\n" +
+	"\x04uuid\x18\x04 \x01(\tR\x04uuid\"b\n" +
 	"\x13ChangePlayerRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12.\n" +
 	"\x06change\x18\x02 \x01(\v2\x16.noryx.v1.PlayerChangeR\x06change\"H\n" +

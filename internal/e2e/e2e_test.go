@@ -40,6 +40,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/geysermc"
 	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
@@ -192,6 +193,7 @@ type master struct {
 	enrollAddr string
 	modrinth   *fakeModrinth
 	hangar     *fakeHangar
+	geysermc   *fakeGeyserMC
 	update     update.Options
 	// quick is how long requests wait for their operations; tests get the result right away.
 	quick time.Duration
@@ -221,7 +223,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), update: update.Options{DataDir: dir}, quick: time.Minute,
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), update: update.Options{DataDir: dir}, quick: time.Minute,
 	}
 }
 
@@ -229,13 +231,14 @@ func startMaster(t *testing.T) *master {
 func (m *master) services(t *testing.T) masterapp.Services {
 	nodes := m.nodes
 	modrinthClient := modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/")
-	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(m.hangar.URL+"/api/v1", m.hangar.URL+"/cdn/"))
+	geyser := geysermc.New(m.geysermc.URL+"/v2", m.geysermc.URL+"/v2", 0)
+	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(m.hangar.URL+"/api/v1", m.hangar.URL+"/cdn/"), geyser)
 	moves := server.NewMoves()
 	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
-		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes), Tags: tag.NewStore(m.db), Operations: operation.New(m.quick),
 		Moves: moves,
 	}
@@ -553,14 +556,25 @@ func (f *fakeRuntime) spec(id string) runtime.Spec {
 	return runtime.Spec{}
 }
 
-func (f *fakeRuntime) Configure(_ context.Context, id string, network runtime.Network) error {
+// Configure keeps the network of a server; a running proxy whose Bedrock port changes
+// restarts, like a container created again.
+func (f *fakeRuntime) Configure(_ context.Context, id string, network runtime.Network) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.networks == nil {
 		f.networks = map[string]runtime.Network{}
 	}
 	f.networks[id] = network
-	return nil
+	i := slices.IndexFunc(f.servers, func(s runtime.Server) bool { return s.ID == id })
+	if i < 0 || f.servers[i].BedrockPort == network.BedrockPort && f.servers[i].BedrockPlayers == network.BedrockPlayers {
+		return false, nil
+	}
+	f.servers[i].BedrockPort, f.servers[i].BedrockPlayers = network.BedrockPort, network.BedrockPlayers
+	running := f.servers[i].State == noryxv1.ServerState_SERVER_STATE_RUNNING
+	if running {
+		f.restarts = append(f.restarts, id)
+	}
+	return running, nil
 }
 
 func (f *fakeRuntime) Reload(_ context.Context, id string) error {

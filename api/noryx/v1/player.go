@@ -14,6 +14,12 @@ const MaxReason = 256
 // Floodgate starts with a dot.
 var playerName = regexp.MustCompile(`^\.?[A-Za-z0-9_]{1,16}$`)
 
+// floodgateID matches the IDs Floodgate gives Bedrock players: their XUID as the last 64 bits.
+var floodgateID = regexp.MustCompile(`^00000000-0000-0000-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// BedrockPlayer reports whether a name is that of a Bedrock player.
+func BedrockPlayer(name string) bool { return strings.HasPrefix(name, ".") }
+
 // ValidPlayerName reports whether name is the name of a player that a console command can
 // take as it is: it can't name others, like @a, or add arguments.
 func ValidPlayerName(name string) bool { return playerName.MatchString(name) }
@@ -47,6 +53,8 @@ func (c *PlayerChange) Problem() string {
 		return "Enter the name of a player: up to 16 letters, digits and underscores."
 	case !ValidReason(c.GetReason()), c.GetReason() != "" && a != PlayerAction_PLAYER_ACTION_KICK && a != PlayerAction_PLAYER_ACTION_BAN:
 		return "Only kicks and bans take a reason, of up to 256 characters on one line."
+	case c.GetUuid() != "" && (a != PlayerAction_PLAYER_ACTION_WHITELIST_ADD || !BedrockPlayer(c.GetName()) || !floodgateID.MatchString(c.GetUuid())):
+		return "Only Bedrock players are whitelisted by their ID from Floodgate."
 	}
 	return ""
 }

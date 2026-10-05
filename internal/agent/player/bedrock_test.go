@@ -1,0 +1,79 @@
+package player
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+)
+
+func TestWhitelistBedrock(t *testing.T) {
+	ctx := t.Context()
+	rt := &fakeRuntime{dir: t.TempDir()}
+	rt.add(t, up, paper, running)
+	rt.add(t, down, paper, stopped)
+	s := NewService(rt)
+	const id = "00000000-0000-0000-0009-01f64f65c7c3"
+	add := &noryxv1.PlayerChange{Action: noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_ADD, Name: ".Tim203", Uuid: id}
+	remove := newChange(noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_REMOVE, ".tim203", "")
+	change := func(server string, c *noryxv1.PlayerChange) string {
+		t.Helper()
+		res, err := s.ChangePlayer(ctx, &noryxv1.ChangePlayerRequest{ServerId: server, Change: c})
+		if err != nil || res.GetPending() {
+			t.Fatalf("%v on %s = %v, %v", c, server[:1], res, err)
+		}
+		return res.GetOutput()
+	}
+	whitelist := func(server string) []*noryxv1.ListedPlayer {
+		t.Helper()
+		lists, err := s.GetPlayerLists(ctx, &noryxv1.GetPlayerListsRequest{ServerId: server})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return lists.GetWhitelisted()
+	}
+	check := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	check(os.WriteFile(filepath.Join(rt.dir, up, whitelistFile), []byte(`[{"uuid":"u1","name":"Alex"}]`), 0o600))
+
+	// The ID goes into the file, once, and a running server reloads it.
+	for range 2 {
+		if out := change(up, add); out != "Added .Tim203 to the whitelist" {
+			t.Fatalf("output = %q", out)
+		}
+	}
+	if w := whitelist(up); len(w) != 2 || w[0].GetName() != "Alex" || w[1].GetUuid() != id || w[1].GetName() != ".Tim203" {
+		t.Fatalf("whitelist = %v", w)
+	}
+	if got := rt.sent(); !slices.Equal(got, []string{"a minecraft:whitelist reload", "a minecraft:whitelist reload"}) {
+		t.Fatalf("commands = %q", got)
+	}
+	// A stopped server gets it at once; removing goes by name.
+	change(down, add)
+	if out := change(down, remove); out != "Removed .tim203 from the whitelist" || len(whitelist(down)) != 0 {
+		t.Fatalf("output = %q, whitelist = %v", out, whitelist(down))
+	}
+	if out := change(down, remove); out != "Player is not whitelisted" || len(rt.sent()) != 2 {
+		t.Fatalf("output = %q, commands = %q", out, rt.sent())
+	}
+
+	// Only Bedrock players are whitelisted by an ID, which must be Floodgate's.
+	for _, c := range []*noryxv1.PlayerChange{
+		{Action: noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_ADD, Name: "Alex", Uuid: id},
+		{Action: noryxv1.PlayerAction_PLAYER_ACTION_OP, Name: ".Tim203", Uuid: id},
+		{Action: noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_ADD, Name: ".Tim203", Uuid: "069a79f4-44e9-4726-a5be-fca90e38aaf5"},
+	} {
+		if _, err := s.ChangePlayer(ctx, &noryxv1.ChangePlayerRequest{ServerId: up, Change: c}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%v: %v", c, err)
+		}
+	}
+}

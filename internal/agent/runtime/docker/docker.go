@@ -236,6 +236,9 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 	if spec.BehindProxy {
 		env = append(env, "ONLINE_MODE=FALSE") // the proxy authenticates players
 	}
+	if spec.BedrockPlayers {
+		env = append(env, "ENFORCE_SECURE_PROFILE=FALSE")
+	}
 	if spec.AikarFlags {
 		env = append(env, "USE_AIKAR_FLAGS=TRUE")
 	}
@@ -246,9 +249,15 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 		env = append(env, "JVM_OPTS="+strings.Join(spec.JVMOptions, " "))
 	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", img.port))
+	exposed := network.PortSet{port: {}}
 	published := network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}}
 	if spec.BehindProxy && spec.ProxyOnNode {
 		published = nil // only its proxy connects, over their network
+	}
+	if spec.BedrockPort != 0 && spec.Type.Proxy() {
+		// Geyser listens at the same port inside the container, so that it tells it correctly.
+		bedrock := network.MustParsePort(fmt.Sprintf("%d/udp", spec.BedrockPort))
+		exposed[bedrock], published[bedrock] = struct{}{}, []network.PortBinding{{HostPort: strconv.Itoa(int(spec.BedrockPort))}}
 	}
 	_, err = d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: containerName(spec.ID),
@@ -256,7 +265,7 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 			Image:        imageRef(spec),
 			Env:          env,
 			Labels:       map[string]string{labelManaged: "true", labelSpec: string(specJSON)},
-			ExposedPorts: network.PortSet{port: {}},
+			ExposedPorts: exposed,
 			// Proxies read console commands from their standard input, as they have no RCON.
 			OpenStdin: spec.Type.Proxy(),
 		},
@@ -298,6 +307,7 @@ func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
 		return err
 	}
 	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode = current.Type, current.Storage, current.BehindProxy, current.ProxyOnNode
+	spec.BedrockPort, spec.BedrockPlayers = current.BedrockPort, current.BedrockPlayers
 	if imageRef(spec) != imageRef(current) {
 		if err := d.pull(ctx, imageRef(spec)); err != nil {
 			return err

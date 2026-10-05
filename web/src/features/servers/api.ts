@@ -26,6 +26,8 @@ export interface Server {
   cpuLimit: number
   /** Version of the mod loader of a modded server, e.g. one a modpack needs; empty for the newest. */
   loaderVersion: string
+  /** The UDP port at which Bedrock players join a proxy, which its network sets. */
+  bedrockPort?: number
   /** Labels such as lobby, sorted; only in lists of servers. */
   tags: string[]
 }

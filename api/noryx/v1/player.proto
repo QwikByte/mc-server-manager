@@ -56,6 +56,9 @@ message PlayerChange {
   string name = 2;
   // Shown to a player who is kicked or banned.
   string reason = 3;
+  // The ID Floodgate gives a Bedrock player, whom the servers behind its proxy can't look
+  // up: whitelisting them writes it into the whitelist.
+  string uuid = 4;
 }
 
 message ChangePlayerRequest {
