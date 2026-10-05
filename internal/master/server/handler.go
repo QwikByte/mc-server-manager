@@ -44,6 +44,8 @@ type Networks interface {
 	CheckRemovable(ctx context.Context, nodeID, serverID string) error
 	CheckMove(ctx context.Context, serverID, from, to string) error
 	Move(ctx context.Context, serverID, from, to string) error
+	// Reapply configures the network of a server again, e.g. as its port changed.
+	Reapply(ctx context.Context, serverID string) error
 }
 
 // Tags label servers, e.g. lobby, so that the panel finds and groups them.
@@ -449,6 +451,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	policy, cpuMillis, err := req.check()
+	var current *noryxv1.Server
+	if err == nil {
+		current, err = h.find(ctx, nodeID, id)
+	}
 	release := noRelease
 	if err == nil {
 		release, err = h.checkLimits(ctx, nodeID, id, req.Port, req.MemoryMB)
@@ -475,7 +481,17 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		return toView(res.GetServer()), nil
+		updated := struct {
+			view
+			// Warning tells what didn't follow the change, e.g. the proxy of the server's network.
+			Warning string `json:"warning,omitempty"`
+		}{view: toView(res.GetServer())}
+		if res.GetServer().GetPort() != current.GetPort() {
+			if err := h.networks.Reapply(ctx, id); err != nil {
+				updated.Warning = httpapi.Message(err)
+			}
+		}
+		return updated, nil
 	})
 }
 

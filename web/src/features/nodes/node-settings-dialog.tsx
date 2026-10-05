@@ -45,8 +45,8 @@ export function NodeSettingsDialog({ node, trigger }: { node: Node; trigger?: Re
     update.mutate(
       { name: form.name, address: form.address, defaultStorage: form.defaultStorage, ...limitsOf(form) },
       {
-        onSuccess: () => {
-          toast.success(t("Saved the settings of {{name}}", { name: form.name }))
+        onSuccess: ({ warning }) => {
+          ;(warning ? toast.warning : toast.success)(t("Saved the settings of {{name}}", { name: form.name }), { description: warning })
           setOpen(false)
         },
       },

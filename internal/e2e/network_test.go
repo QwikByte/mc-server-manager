@@ -236,3 +236,58 @@ func serverState(t *testing.T, api apiClient, ref network.Ref) string {
 	}
 	return ""
 }
+
+// The proxy follows a server on another node to its new port, and the servers of a node to
+// the node's new address, without applying the network again by hand.
+func TestNetworkFollowsAddresses(t *testing.T) {
+	m := startMaster(t)
+	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
+	proxy := m.createServer(t, a1, "Proxy", noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
+	survival := m.createServer(t, a2, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25570)
+	api := apiClient{t: t, url: m.panel(t).URL}
+	api.do("POST", "/api/networks", map[string]any{"name": "Main", "proxy": proxy, "servers": []network.Ref{survival}}, http.StatusCreated, nil)
+	wantAddress := func(host, port string) {
+		t.Helper()
+		if got := a1.runtime.network(proxy.ServerID).Backends[0].Address; got != net.JoinHostPort(host, port) {
+			t.Fatalf("the proxy reaches survival at %s, want %s", got, net.JoinHostPort(host, port))
+		}
+	}
+	host, port, _ := net.SplitHostPort(a2.node.Address)
+	wantAddress(host, "25570")
+
+	var updated struct{ Port int }
+	api.do("PUT", "/api/nodes/"+a2.node.ID+"/servers/"+survival.ServerID,
+		map[string]any{"name": "Survival", "version": "LATEST", "memoryMb": 1024, "port": 25571, "restartPolicy": "always"}, http.StatusOK, &updated)
+	wantAddress(host, "25571")
+
+	var node struct{ Status, Warning string }
+	api.do("PUT", "/api/nodes/"+a2.node.ID, map[string]any{"name": "node-2", "address": net.JoinHostPort("localhost", port), "defaultStorage": "default"}, http.StatusOK, &node)
+	if node.Status != "online" || node.Warning != "" {
+		t.Fatalf("node = %+v", node)
+	}
+	wantAddress("localhost", "25571")
+
+	// While the proxy's node is offline, the change is saved with a warning, and the network
+	// tells that its proxy may be out of date until it is applied again.
+	gone := listen(t)
+	gone.Close()
+	proxyNode := map[string]any{"name": "node-1", "address": gone.Addr().String(), "defaultStorage": "default"}
+	api.do("PUT", "/api/nodes/"+a1.node.ID, proxyNode, http.StatusOK, nil)
+	var saved struct{ Warning string }
+	api.do("PUT", "/api/nodes/"+a2.node.ID+"/servers/"+survival.ServerID,
+		map[string]any{"name": "Survival", "version": "LATEST", "memoryMb": 1024, "port": 25572, "restartPolicy": "always"}, http.StatusOK, &saved)
+	var n network.Network
+	api.do("GET", "/api/networks", nil, http.StatusOK, &[]*network.Network{&n})
+	if !strings.Contains(saved.Warning, "the proxy could not be configured") || n.ApplyError != saved.Warning {
+		t.Fatalf("warning %q, network %+v", saved.Warning, n)
+	}
+	proxyNode["address"] = a1.node.Address
+	api.do("PUT", "/api/nodes/"+a1.node.ID, proxyNode, http.StatusOK, nil)
+	api.do("POST", "/api/networks/"+n.ID+"/apply", nil, http.StatusOK, nil)
+	var applied network.Network
+	api.do("GET", "/api/networks/"+n.ID, nil, http.StatusOK, &applied)
+	if applied.ApplyError != "" {
+		t.Fatalf("network = %+v", applied)
+	}
+	wantAddress("localhost", "25572")
+}

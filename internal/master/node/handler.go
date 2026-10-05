@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"slices"
 	"sync"
@@ -15,9 +16,20 @@ import (
 
 const probeTimeout = 3 * time.Second
 
-type Handler struct{ svc *Service }
+// Networks point proxies at the servers of other nodes, through the address of their node.
+type Networks interface {
+	// ReapplyNode configures the networks again that reach servers of the node from another node.
+	ReapplyNode(ctx context.Context, nodeID string) error
+}
 
-func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
+type Handler struct {
+	svc      *Service
+	networks Networks
+}
+
+func NewHandler(svc *Service, networks Networks) *Handler {
+	return &Handler{svc: svc, networks: networks}
+}
 
 // Register adds the routes. Users see the nodes on which they may see the node or servers,
 // the details of a node only with the permission to see it.
@@ -36,6 +48,8 @@ type view struct {
 	Status               string     `json:"status"` // pending, online or offline
 	Info                 *info      `json:"info,omitempty"`
 	CertificateExpiresAt *time.Time `json:"certificateExpiresAt,omitempty"`
+	// Warning tells what didn't follow a change, e.g. the networks of a changed address.
+	Warning string `json:"warning,omitempty"`
 }
 
 type info struct {
@@ -161,12 +175,28 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	n, err := h.svc.Update(r.Context(), Node{ID: r.PathValue("id"), Name: req.Name, Address: req.Address, Settings: req.Settings})
+	old, err := h.svc.Get(r.Context(), r.PathValue("id"))
+	var n Node
+	if err == nil {
+		n, err = h.svc.Update(r.Context(), Node{ID: old.ID, Name: req.Name, Address: req.Address, Settings: req.Settings})
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, h.probeFor(r.Context(), n))
+	v := h.probeFor(r.Context(), n)
+	// Proxies on other nodes reach the node's servers at the host of its address.
+	if host(old.Address) != host(n.Address) {
+		if err := h.networks.ReapplyNode(r.Context(), n.ID); err != nil {
+			v.Warning = err.Error()
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, v)
+}
+
+func host(address string) string {
+	h, _, _ := net.SplitHostPort(address)
+	return h
 }
 
 func (h *Handler) joinToken(w http.ResponseWriter, r *http.Request) {

@@ -92,7 +92,9 @@ export function useCreateNode() {
 export function useUpdateNode(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: NodeSettings & { name: string; address: string }) => api<Node>(`/nodes/${id}`, { method: "PUT", body: input }),
+    /** warning tells which networks couldn't follow a new address. */
+    mutationFn: (input: NodeSettings & { name: string; address: string }) =>
+      api<Node & { warning?: string }>(`/nodes/${id}`, { method: "PUT", body: input }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey }),
   })
 }

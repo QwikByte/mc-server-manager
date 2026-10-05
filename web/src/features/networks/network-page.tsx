@@ -8,13 +8,14 @@ import {
   ShieldCheckIcon,
   SlidersHorizontalIcon,
   UsersThreeIcon,
+  WarningCircleIcon,
   WrenchIcon,
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link, Outlet } from "@tanstack/react-router"
 import { t } from "i18next"
 import { BackLink } from "@/components/back-link"
-import { ErrorCallout } from "@/components/callout"
+import { Callout, ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
@@ -100,6 +101,11 @@ export function NetworkPage() {
         actions={<NetworkActions network={network} />}
       />
       <EndOfLifeNotice type={network.proxyType} className="mb-6" />
+      {network.applyError && (
+        <Callout tone="warning" icon={WarningCircleIcon} role="alert" title={t("The proxy may send players to the wrong address")} className="mb-6">
+          {network.applyError}
+        </Callout>
+      )}
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
         <StatCard icon={UsersThreeIcon} tone="info" label={t("Players online")} value={players ?? "–"} />
         <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={`${running} / ${network.backends.length}`} />

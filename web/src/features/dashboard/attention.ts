@@ -128,6 +128,15 @@ export function problemsOf(
         link: { to: "/networks/$networkId", params: { networkId: network.id } },
       })
     }
+    if (network.applyError) {
+      add({
+        key: `apply/${network.id}`,
+        tone: "warning",
+        title: t("The proxy of {{name}} may send players to the wrong address", { name: network.name }),
+        detail: t("Its servers couldn't be configured. Apply the network again."),
+        link: { to: "/networks/$networkId", params: { networkId: network.id } },
+      })
+    }
   }
   return problems.sort((a, b) => Number(a.tone !== "destructive") - Number(b.tone !== "destructive"))
 }

@@ -97,7 +97,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
     operation.run((onStart) => update.mutateAsync({ settings, onStart }), {
       title: server.state === "stopped" ? t("Saving…") : t("Saving and restarting {{name}}…", { name: server.name }),
       notify: true,
-      done: () => ({ message: t("Saved the settings of {{name}}", { name: form.name }) }),
+      done: ({ warning }) => ({ message: t("Saved the settings of {{name}}", { name: form.name }), description: warning, warning: !!warning }),
     })
   }
 

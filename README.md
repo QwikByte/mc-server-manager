@@ -323,7 +323,9 @@ removes it when it leaves.
   join or leave restart, all of them when the forwarding changes. The proxy reloads its configuration through its
   console (`velocity reload`, `greload`), which disconnects nobody; BungeeCord can't reload without a server it had, so
   removing or renaming a server restarts it. If a node is offline, the change is saved and **Apply again** configures
-  its servers later. Proxies created by earlier versions are created again once, to read console commands.
+  its servers later; until then, the network's page and the overview tell that its proxy may be out of date. The
+  proxy reaches servers on other nodes at the host of their node's address and their port, so changing either
+  configures the network again. Proxies created by earlier versions are created again once, to read console commands.
 - **Proxy configuration.** The proxy's tab of the network, and the **Configuration** tab of every proxy, edit the other
   settings of its file as a form: MOTD, the shown maximum of players, online mode, ping passthrough, compression,
   timeouts, rate limits, the HAProxy protocol, query, BungeeCord's permissions and more. Settings that aren't known

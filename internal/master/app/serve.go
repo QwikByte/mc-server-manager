@@ -266,7 +266,7 @@ func API(s Services) *http.ServeMux {
 	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
-	node.NewHandler(s.Nodes).Register(m)
+	node.NewHandler(s.Nodes, s.Networks).Register(m)
 	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations).Register(m)
