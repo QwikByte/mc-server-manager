@@ -242,8 +242,9 @@ export function useServerAction(nodeId: string) {
 export function useUpdateServer(nodeId: string, serverId: string) {
   const queryClient = useQueryClient()
   return useMutation({
+    /** warning tells what didn't follow the change, e.g. the proxy of the server's network. */
     mutationFn: ({ settings, onStart }: { settings: ServerSettings } & Followed) =>
-      operate<Server>(`/nodes/${nodeId}/servers/${serverId}`, { method: "PUT", body: settings }, onStart),
+      operate<Server & { warning?: string }>(`/nodes/${nodeId}/servers/${serverId}`, { method: "PUT", body: settings }, onStart),
     onSettled: () => refreshServers(queryClient, nodeId),
   })
 }

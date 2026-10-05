@@ -206,7 +206,10 @@ type ServerStats struct {
 	Players *Players `protobuf:"bytes,9,opt,name=players,proto3" json:"players,omitempty"`
 	// Ticks per second over the last minute, 20 at best; 0 if unknown. Only Paper and
 	// Purpur tell it.
-	Tps           float64 `protobuf:"fixed64,10,opt,name=tps,proto3" json:"tps,omitempty"`
+	Tps float64 `protobuf:"fixed64,10,opt,name=tps,proto3" json:"tps,omitempty"`
+	// A running game server outside of networks that runs in offline mode: anyone who
+	// reaches its port can join under any name.
+	OfflineMode   bool `protobuf:"varint,11,opt,name=offline_mode,json=offlineMode,proto3" json:"offline_mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -311,6 +314,13 @@ func (x *ServerStats) GetTps() float64 {
 	return 0
 }
 
+func (x *ServerStats) GetOfflineMode() bool {
+	if x != nil {
+		return x.OfflineMode
+	}
+	return false
+}
+
 type Players struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Online uint32                 `protobuf:"varint,1,opt,name=online,proto3" json:"online,omitempty"`
@@ -388,7 +398,7 @@ const file_noryx_v1_stats_proto_rawDesc = "" +
 	"cpu_millis\x18\x01 \x01(\rR\tcpuMillis\x12\x1b\n" +
 	"\tcpu_count\x18\x02 \x01(\rR\bcpuCount\x12*\n" +
 	"\x11memory_used_bytes\x18\x03 \x01(\x04R\x0fmemoryUsedBytes\x12,\n" +
-	"\x12memory_total_bytes\x18\x04 \x01(\x04R\x10memoryTotalBytes\"\x91\x03\n" +
+	"\x12memory_total_bytes\x18\x04 \x01(\x04R\x10memoryTotalBytes\"\xb4\x03\n" +
 	"\vServerStats\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\arunning\x18\x02 \x01(\bR\arunning\x12\x1d\n" +
@@ -402,7 +412,8 @@ const file_noryx_v1_stats_proto_rawDesc = "" +
 	"disk_bytes\x18\b \x01(\x04R\tdiskBytes\x12+\n" +
 	"\aplayers\x18\t \x01(\v2\x11.noryx.v1.PlayersR\aplayers\x12\x10\n" +
 	"\x03tps\x18\n" +
-	" \x01(\x01R\x03tps\"I\n" +
+	" \x01(\x01R\x03tps\x12!\n" +
+	"\foffline_mode\x18\v \x01(\bR\vofflineMode\"I\n" +
 	"\aPlayers\x12\x16\n" +
 	"\x06online\x18\x01 \x01(\rR\x06online\x12\x10\n" +
 	"\x03max\x18\x02 \x01(\rR\x03max\x12\x14\n" +

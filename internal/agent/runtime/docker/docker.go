@@ -61,13 +61,17 @@ var loaderVariables = map[noryxv1.ServerType]string{
 	noryxv1.ServerType_SERVER_TYPE_NEOFORGE: "NEOFORGE_VERSION",
 }
 
-// capabilities are all the images need: they start as root to hand the data directory to
-// the server's user and switch to it. The proxy image works on as root in the directory
-// it handed over, which needs reading it regardless of its permissions.
-var capabilities = map[string][]string{
-	serverImage: {"CHOWN", "SETUID", "SETGID"},
-	proxyImage:  {"CHOWN", "SETUID", "SETGID", "DAC_READ_SEARCH"},
-}
+// serverCapabilities are all the server image needs: it starts as root to hand the data
+// directory to the server's user and switch to it.
+var serverCapabilities = []string{"CHOWN", "SETUID", "SETGID"}
+
+// The proxy image would download and configure as root in a directory it handed to its
+// user before, which root without DAC_OVERRIDE can't write to. So proxies run as that
+// user from the start, which owns their data, and need no capabilities.
+const (
+	proxyUID  = 1000
+	proxyUser = "1000:1000"
+)
 
 var images = map[noryxv1.ServerType]image{
 	noryxv1.ServerType_SERVER_TYPE_VANILLA:    {serverImage, "VANILLA", 25565, "/data"},
@@ -226,10 +230,21 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 	if err := d.ensureNetwork(ctx, netName); err != nil {
 		return err
 	}
+	opts, err := containerOptions(spec, path, netName)
+	if err != nil {
+		return err
+	}
+	_, err = d.cli.ContainerCreate(ctx, opts)
+	return err
+}
+
+// containerOptions describes the container of a server with the data at path, in the
+// network netName.
+func containerOptions(spec runtime.Spec, path, netName string) (client.ContainerCreateOptions, error) {
 	img := images[spec.Type]
 	specJSON, err := json.Marshal(spec)
 	if err != nil {
-		return err
+		return client.ContainerCreateOptions{}, err
 	}
 	// EULA=TRUE is only set because the operator accepted the EULA when creating the server.
 	env := []string{"EULA=TRUE", "TYPE=" + img.typ, "VERSION=" + spec.Version, fmt.Sprintf("MEMORY=%dM", spec.MemoryMB)}
@@ -259,10 +274,15 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 		bedrock := network.MustParsePort(fmt.Sprintf("%d/udp", spec.BedrockPort))
 		exposed[bedrock], published[bedrock] = struct{}{}, []network.PortBinding{{HostPort: strconv.Itoa(int(spec.BedrockPort))}}
 	}
-	_, err = d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	user, capAdd := "", serverCapabilities
+	if img.ref == proxyImage {
+		user, capAdd = proxyUser, nil
+	}
+	return client.ContainerCreateOptions{
 		Name: containerName(spec.ID),
 		Config: &container.Config{
 			Image:        imageRef(spec),
+			User:         user,
 			Env:          env,
 			Labels:       map[string]string{labelManaged: "true", labelSpec: string(specJSON)},
 			ExposedPorts: exposed,
@@ -276,7 +296,7 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 			RestartPolicy: container.RestartPolicy{Name: restartPolicies[spec.RestartPolicy]},
 			SecurityOpt:   []string{"no-new-privileges:true"},
 			CapDrop:       []string{"ALL"},
-			CapAdd:        capabilities[img.ref],
+			CapAdd:        capAdd,
 			Resources: container.Resources{
 				// The JVM needs memory beyond its heap, so the hard limit gets some headroom.
 				Memory:    int64(spec.MemoryMB*5/4+256) << 20,
@@ -284,8 +304,7 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 				PidsLimit: new(int64(pidsLimit)),
 			},
 		},
-	})
-	return err
+	}, nil
 }
 
 func (d *Docker) Start(ctx context.Context, id string) error {
@@ -338,13 +357,12 @@ func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-// Restart stops a server gracefully and starts it again.
+// Restart stops a server gracefully and starts it again, prepared like any start.
 func (d *Docker) Restart(ctx context.Context, id string) error {
-	if err := d.prepare(ctx, id); err != nil {
+	if err := d.Stop(ctx, id); err != nil {
 		return err
 	}
-	_, err := d.cli.ContainerRestart(ctx, containerName(id), client.ContainerRestartOptions{Timeout: new(stopTimeoutSeconds)})
-	return notFound(err)
+	return d.Start(ctx, id)
 }
 
 // Remove deletes the container and all server data.
@@ -357,6 +375,9 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 		return err
 	}
 	if _, err := d.cli.ContainerRemove(ctx, containerName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
+		if cerrdefs.IsConflict(err) {
+			return runtime.ErrNotFound // another request is removing it, which removes its data too
+		}
 		return notFound(err)
 	}
 	if spec.Type.Proxy() {

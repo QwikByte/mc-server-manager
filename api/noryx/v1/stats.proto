@@ -46,6 +46,9 @@ message ServerStats {
   // Ticks per second over the last minute, 20 at best; 0 if unknown. Only Paper and
   // Purpur tell it.
   double tps = 10;
+  // A running game server outside of networks that runs in offline mode: anyone who
+  // reaches its port can join under any name.
+  bool offline_mode = 11;
 }
 
 message Players {

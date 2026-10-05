@@ -51,7 +51,7 @@ export function DashboardPage() {
     gameServers.filter((s) => !networkOf(ref(s))).reduce((sum, s) => sum + (usage(ref(s))?.players?.online ?? 0), 0)
   const assignedMb = servers.reduce((sum, s) => sum + s.memoryMb, 0)
   const capacityMb = online.reduce((sum, n) => sum + (memoryCapacityMb(n) ?? 0), 0)
-  const problems = problemsOf(nodes, servers, networks, usages.node)
+  const problems = problemsOf(nodes, servers, networks, usages)
   const busiest = gameServers
     .filter((s) => usage(ref(s))?.players?.online)
     .sort((a, b) => usage(ref(b))!.players!.online - usage(ref(a))!.players!.online)

@@ -1,9 +1,11 @@
 package docker
 
 import (
+	"slices"
 	"testing"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 func TestEveryServerTypeHasAnImage(t *testing.T) {
@@ -18,6 +20,29 @@ func TestEveryModdedTypeHasALoaderVariable(t *testing.T) {
 	for value, name := range noryxv1.ServerType_name {
 		if typ := noryxv1.ServerType(value); typ.Modded() != (loaderVariables[typ] != "") {
 			t.Errorf("%s: loader variable %q", name, loaderVariables[typ])
+		}
+	}
+}
+
+// Proxies run as the user of their image, which owns their data, without capabilities, so
+// that they can write to it on every start; game servers start as root to hand their data
+// to the server's user.
+func TestContainerUser(t *testing.T) {
+	for value, name := range noryxv1.ServerType_name {
+		typ := noryxv1.ServerType(value)
+		if typ == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED {
+			continue
+		}
+		opts, err := containerOptions(runtime.Spec{ID: "server", Type: typ, Port: 25565}, "/data", sharedNetwork)
+		if err != nil {
+			t.Fatal(err)
+		}
+		user, caps := "", serverCapabilities
+		if typ.Proxy() {
+			user, caps = proxyUser, nil
+		}
+		if opts.Config.User != user || !slices.Equal(opts.HostConfig.CapAdd, caps) || !slices.Equal(opts.HostConfig.CapDrop, []string{"ALL"}) {
+			t.Errorf("%s: user %q, capabilities +%v -%v", name, opts.Config.User, opts.HostConfig.CapAdd, opts.HostConfig.CapDrop)
 		}
 	}
 }

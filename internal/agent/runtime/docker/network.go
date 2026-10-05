@@ -47,10 +47,8 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 	running := c.State.Running
 	if behind := network.Forwarding != runtime.ForwardingNone; behind != spec.BehindProxy || network.ProxyOnNode != spec.ProxyOnNode ||
 		network.BedrockPlayers != spec.BedrockPlayers {
-		if spec.BedrockPlayers && !network.BedrockPlayers {
-			if err := mcnet.SecureChat(data); err != nil {
-				return false, err
-			}
+		if err := mcnet.Leave(data, spec.BehindProxy && !behind, spec.BedrockPlayers && !network.BedrockPlayers); err != nil {
+			return false, err
 		}
 		spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers = behind, network.ProxyOnNode, network.BedrockPlayers
 		return running, d.recreate(ctx, spec, running, placement(c, spec))
@@ -206,10 +204,12 @@ func (d *Docker) release(ctx context.Context, proxyID string, backends []runtime
 	return nil
 }
 
-// prepare readies a server that is about to start: a proxy listens on the port its
-// container publishes, as the default configuration of the Velocity image listens on another one.
+// prepare readies a server that is about to start. A proxy gets its data handed to the
+// user it runs as, and listens on the port its container publishes, as the default
+// configuration of the Velocity image listens on another one. A stopped proxy of an older
+// agent, which ran it as root, is created again to run as that user.
 func (d *Docker) prepare(ctx context.Context, id string) error {
-	_, spec, err := d.inspect(ctx, id)
+	c, spec, err := d.inspect(ctx, id)
 	if err != nil || !spec.Type.Proxy() {
 		return err
 	}
@@ -222,8 +222,16 @@ func (d *Docker) prepare(ctx context.Context, id string) error {
 		return err
 	}
 	defer data.Close()
-	_, err = mcnet.ProxyBind(data, spec.Type, images[spec.Type].port)
-	return err
+	if err := data.HandOver(proxyUID, proxyUID); err != nil {
+		return err
+	}
+	if _, err := mcnet.ProxyBind(data, spec.Type, images[spec.Type].port); err != nil {
+		return err
+	}
+	if c.Config.User != proxyUser && !c.State.Running {
+		return d.recreate(ctx, spec, false, placement(c, spec))
+	}
+	return nil
 }
 
 // ensureNetwork creates a network of the agent if it doesn't exist yet. Containers in the

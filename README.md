@@ -307,7 +307,8 @@ reads the same `config.yml`.
 
 Vanilla servers can't tell forwarded players apart and can't join. Game servers in a network run with
 `online-mode=false`, as the proxy authenticates the players, and turn away anyone who doesn't come through the proxy.
-The panel installs the forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and
+A server that leaves its network, and a copy of one, get `online-mode=true` again. The overview warns about a server
+outside of networks that runs in offline mode, as anyone who reaches it can join under any name. The panel installs the forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and
 removes it when it leaves.
 
 - **Map and routing.** The network's page shows where players connect, the proxy and its servers with their state and
@@ -322,7 +323,9 @@ removes it when it leaves.
   join or leave restart, all of them when the forwarding changes. The proxy reloads its configuration through its
   console (`velocity reload`, `greload`), which disconnects nobody; BungeeCord can't reload without a server it had, so
   removing or renaming a server restarts it. If a node is offline, the change is saved and **Apply again** configures
-  its servers later. Proxies created by earlier versions are created again once, to read console commands.
+  its servers later; until then, the network's page and the overview tell that its proxy may be out of date. The
+  proxy reaches servers on other nodes at the host of their node's address and their port, so changing either
+  configures the network again. Proxies created by earlier versions are created again once, to read console commands.
 - **Proxy configuration.** The proxy's tab of the network, and the **Configuration** tab of every proxy, edit the other
   settings of its file as a form: MOTD, the shown maximum of players, online mode, ping passthrough, compression,
   timeouts, rate limits, the HAProxy protocol, query, BungeeCord's permissions and more. Settings that aren't known
@@ -541,7 +544,8 @@ Users get their permissions from groups; a user can be in several groups and has
   their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent writes to through
   Docker; no RCON plugin is added.
 - **Containers.** Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images
-  need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`, for proxies also `DAC_READ_SEARCH`.
+  need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`. Proxies run as the user of their image
+  (uid 1000) from the start, which owns their data, without any capabilities.
   Servers of a node can't reach each other: they share a Docker network without communication between containers
   (`noryx-servers`), and a Velocity proxy shares another one only with its backends on the node.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory

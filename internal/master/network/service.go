@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
@@ -26,6 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
@@ -107,9 +109,12 @@ type Network struct {
 	ForcedHosts []ForcedHost `json:"forcedHosts"`
 	// BedrockPort lets Bedrock players join through Geyser on the proxy at this UDP port; 0
 	// for none.
-	BedrockPort uint32    `json:"bedrockPort"`
-	CreatedAt   time.Time `json:"createdAt"`
-	secret      string
+	BedrockPort uint32 `json:"bedrockPort"`
+	// ApplyError tells why its servers were last configured in vain, e.g. after the port of
+	// a server changed while a node was offline; empty once they are configured again.
+	ApplyError string    `json:"applyError,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	secret     string
 }
 
 // Draft is a new network: its proxy and the servers behind it; players join the first.
@@ -355,6 +360,39 @@ func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
 	return s.apply(ctx, n, false)
 }
 
+// Reapply configures the network of a server again, if it is part of one, e.g. as the
+// proxy reaches the server at its port, which changed.
+func (s *Service) Reapply(ctx context.Context, serverID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, err := s.find(ctx, serverID)
+	if err != nil || n == nil {
+		return err
+	}
+	return s.apply(ctx, *n, false)
+}
+
+// ReapplyNode configures the networks again whose proxies reach servers of a node from
+// another node, at the node's address, e.g. as it changed. It tells which ones failed.
+func (s *Service) ReapplyNode(ctx context.Context, nodeID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	networks, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, n := range networks {
+		if n.Proxy.NodeID == nodeID || !slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.NodeID == nodeID }) {
+			continue
+		}
+		if err := s.apply(ctx, n, false); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %s", n.Name, httpapi.Message(err)))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // Apply configures all servers of a network again, e.g. after a node was offline, and
 // updates Geyser and Floodgate.
 func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
@@ -483,6 +521,19 @@ func (n *Network) moved(serverID, from, to string) {
 // Geyser and Floodgate, which it restarts for; other changes don't disconnect players.
 func (s *Service) apply(ctx context.Context, n Network, refresh bool) error {
 	ctx = context.WithoutCancel(ctx) // finish even if the client goes away
+	err := s.configureAll(ctx, n, refresh)
+	var applyError any // NULL once applied
+	if err != nil {
+		applyError = httpapi.Message(err)
+	}
+	if _, dbErr := s.db.ExecContext(ctx, `UPDATE networks SET apply_error = ? WHERE id = ?`, applyError, n.ID); dbErr != nil {
+		slog.Warn("Can't remember how applying a network ended", logging.Networks, "network", n.ID, "err", dbErr)
+	}
+	return err
+}
+
+// configureAll configures the backends of a network and then its proxy.
+func (s *Service) configureAll(ctx context.Context, n Network, refresh bool) error {
 	operation.Step(ctx, "servers")
 	for i, b := range n.Backends {
 		operation.Count(ctx, int64(i), int64(len(n.Backends)), "servers")
@@ -672,7 +723,7 @@ func (s *Service) find(ctx context.Context, serverID string) (*Network, error) {
 func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, proxy_node_id, proxy_server_id, proxy_type, forwarding, firewalled, try, forced_hosts,
-		       bedrock_port, forwarding_secret, created_at
+		       bedrock_port, COALESCE(apply_error, ''), forwarding_secret, created_at
 		FROM networks WHERE ? IN ('', id) ORDER BY name`, id)
 	if err != nil {
 		return nil, err
@@ -685,7 +736,7 @@ func (s *Service) load(ctx context.Context, id string) ([]Network, error) {
 		var try, hosts string
 		var createdAt int64
 		if err := rows.Scan(&n.ID, &n.Name, &n.Proxy.NodeID, &n.Proxy.ServerID, &n.ProxyType, &n.Forwarding, &n.Firewalled,
-			&try, &hosts, &n.BedrockPort, &n.secret, &createdAt); err != nil {
+			&try, &hosts, &n.BedrockPort, &n.ApplyError, &n.secret, &createdAt); err != nil {
 			return nil, err
 		}
 		if err := errors.Join(json.Unmarshal([]byte(try), &n.Try), json.Unmarshal([]byte(hosts), &n.ForcedHosts)); err != nil {

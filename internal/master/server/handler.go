@@ -44,6 +44,8 @@ type Networks interface {
 	CheckRemovable(ctx context.Context, nodeID, serverID string) error
 	CheckMove(ctx context.Context, serverID, from, to string) error
 	Move(ctx context.Context, serverID, from, to string) error
+	// Reapply configures the network of a server again, e.g. as its port changed.
+	Reapply(ctx context.Context, serverID string) error
 }
 
 // Tags label servers, e.g. lobby, so that the panel finds and groups them.
@@ -81,6 +83,7 @@ type Handler struct {
 	ops      *operation.Operations
 	moves    *Moves
 	refs     []References
+	reserved reservations
 }
 
 func NewHandler(nodes Nodes, networks Networks, tags Tags, plugins Plugins, modpacks Modpacks, ops *operation.Operations, moves *Moves, refs ...References) *Handler {
@@ -296,8 +299,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if err == nil && (len(req.Plugins) > 0 || req.Modpack != nil) && !access.From(r.Context()).On(access.Plugins, nodeID, "") {
 		err = access.Denied(access.Plugins)
 	}
+	release := noRelease
 	if err == nil {
-		err = h.checkLimits(ctx, nodeID, "", req.Port, req.MemoryMB)
+		release, err = h.checkLimits(ctx, nodeID, "", req.Port, req.MemoryMB)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -315,6 +319,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, ""),
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		defer release()
 		create := &noryxv1.CreateServerRequest{
 			Name: req.Name, Type: noryxv1.ParseServerType(req.Type), Version: req.Version, MemoryMb: req.MemoryMB,
 			Port: req.Port, AcceptEula: req.AcceptEULA, Storage: req.Storage, Java: req.Java, RestartPolicy: policy,
@@ -395,7 +400,8 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	source := list.GetServers()[i]
-	if err := h.checkLimits(ctx, nodeID, "", req.Port, source.GetMemoryMb()); err != nil {
+	release, err := h.checkLimits(ctx, nodeID, "", req.Port, source.GetMemoryMb())
+	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
@@ -408,6 +414,7 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		defer release()
 		var res *noryxv1.DuplicateServerResponse
 		err := h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) (err error) {
 			res, err = c.DuplicateServer(ctx, &noryxv1.DuplicateServerRequest{Id: id, Name: req.Name, Port: req.Port})
@@ -444,8 +451,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	policy, cpuMillis, err := req.check()
+	var current *noryxv1.Server
 	if err == nil {
-		err = h.checkLimits(ctx, nodeID, id, req.Port, req.MemoryMB)
+		current, err = h.find(ctx, nodeID, id)
+	}
+	release := noRelease
+	if err == nil {
+		release, err = h.checkLimits(ctx, nodeID, id, req.Port, req.MemoryMB)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -456,6 +468,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Status: http.StatusOK, Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		defer release()
 		var res *noryxv1.UpdateServerResponse
 		err := h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) (err error) {
 			res, err = c.UpdateServer(ctx, &noryxv1.UpdateServerRequest{
@@ -468,7 +481,17 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		return toView(res.GetServer()), nil
+		updated := struct {
+			view
+			// Warning tells what didn't follow the change, e.g. the proxy of the server's network.
+			Warning string `json:"warning,omitempty"`
+		}{view: toView(res.GetServer())}
+		if res.GetServer().GetPort() != current.GetPort() {
+			if err := h.networks.Reapply(ctx, id); err != nil {
+				updated.Warning = httpapi.Message(err)
+			}
+		}
+		return updated, nil
 	})
 }
 

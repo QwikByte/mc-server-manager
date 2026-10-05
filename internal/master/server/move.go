@@ -162,7 +162,7 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	from, id := r.PathValue("node"), r.PathValue("id")
 	var src *noryxv1.Server
-	err := h.checkMove(ctx, from, id, &req, &src)
+	release, err := h.checkMove(ctx, from, id, &req, &src)
 	var mv *Move
 	if err == nil {
 		mv = &Move{ServerID: id, ServerName: src.GetName(), From: from, To: req.Node, Phase: "stopping", Warnings: []string{}, StartedAt: time.Now()}
@@ -170,6 +170,7 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
 			mv.ToName = to.Name
 		}
 		if !h.moves.start(mv) {
+			release()
 			err = errMoving
 		}
 	}
@@ -180,56 +181,59 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
 	logging.Note(ctx, slog.String("to", mv.ToName), slog.Bool("backups", req.Backups))
 	user, _ := auth.UserFrom(ctx)
 	started := *mv // the move changes mv from now on
-	go h.runMove(context.WithoutCancel(r.Context()), started, src, req, user.Username)
+	go func() {
+		defer release()
+		h.runMove(context.WithoutCancel(r.Context()), started, src, req, user.Username)
+	}()
 	httpapi.WriteJSON(w, http.StatusAccepted, started)
 }
 
 // checkMove finds the server and checks that it can move to the node of the request with
 // its port and storage location, which default to the server's port and the node's default
-// storage.
-func (h *Handler) checkMove(ctx context.Context, from, id string, req *moveRequest, src **noryxv1.Server) error {
+// storage. Its memory is reserved on the node until release is called; see checkLimits.
+func (h *Handler) checkMove(ctx context.Context, from, id string, req *moveRequest, src **noryxv1.Server) (release func(), err error) {
 	switch {
 	case req.Node == "" || req.Node == from:
-		return httpapi.Errorf(http.StatusBadRequest, "Choose another node.")
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose another node.")
 	case !access.From(ctx).On(access.ServersCreate, req.Node, ""):
-		return access.Denied(access.ServersCreate)
+		return nil, access.Denied(access.ServersCreate)
 	}
 	source, err := h.find(ctx, from, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := h.networks.CheckMove(ctx, id, from, req.Node); err != nil {
-		return err
+		return nil, err
 	}
 	*src = source
 	to, err := h.nodes.Get(ctx, req.Node)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Port = cmp.Or(req.Port, source.GetPort())
 	req.Storage = cmp.Or(req.Storage, to.DefaultStorage)
 	conn, err := h.nodes.Conn(ctx, to.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	list, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	used := slices.IndexFunc(list.GetServers(), func(s *noryxv1.Server) bool { return s.GetPort() == req.Port })
 	switch {
 	case !slices.ContainsFunc(info.GetStorage(), func(l *noryxv1.StorageLocation) bool { return l.GetName() == req.Storage }):
-		return httpapi.Errorf(http.StatusBadRequest, "Choose a storage location of %s.", to.Name)
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose a storage location of %s.", to.Name)
 	case info.GetCpuCount() > 0 && source.GetCpuMillis() > info.GetCpuCount()*1000:
-		return httpapi.Errorf(http.StatusConflict, "%s has %d CPU cores. Lower the CPU limit of the server first.", to.Name, info.GetCpuCount())
+		return nil, httpapi.Errorf(http.StatusConflict, "%s has %d CPU cores. Lower the CPU limit of the server first.", to.Name, info.GetCpuCount())
 	case used >= 0:
-		return httpapi.Errorf(http.StatusConflict, "Port %d is used by %q on %s. Choose another port.", req.Port, list.GetServers()[used].GetName(), to.Name)
+		return nil, httpapi.Errorf(http.StatusConflict, "Port %d is used by %q on %s. Choose another port.", req.Port, list.GetServers()[used].GetName(), to.Name)
 	case slices.ContainsFunc(list.GetServers(), func(s *noryxv1.Server) bool { return s.GetId() == id }):
-		return httpapi.Errorf(http.StatusConflict, "The server exists on %s already.", to.Name)
+		return nil, httpapi.Errorf(http.StatusConflict, "The server exists on %s already.", to.Name)
 	}
 	return h.checkLimits(ctx, to.ID, "", req.Port, source.GetMemoryMb())
 }

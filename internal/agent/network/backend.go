@@ -5,6 +5,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/properties"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
@@ -63,4 +64,23 @@ func WriteBackend(dir *datadir.Dir, typ noryxv1.ServerType, f runtime.Forwarding
 		})
 	}
 	return false, runtime.ErrUnsupported
+}
+
+// Leave gives a game server back Minecraft's defaults that the environment of its
+// container turned off while it was in a network: online mode once it left its proxy,
+// which authenticated the players, and signed chat once Bedrock players, who can't sign
+// their messages, no longer join it. They are written once, so the operator may turn them
+// off again.
+func Leave(dir *datadir.Dir, proxy, bedrock bool) error {
+	changes := map[string]string{}
+	if proxy {
+		changes["online-mode"] = "true"
+	}
+	if bedrock {
+		changes["enforce-secure-profile"] = "true"
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	return properties.Write(dir, changes)
 }

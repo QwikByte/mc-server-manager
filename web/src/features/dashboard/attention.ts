@@ -3,7 +3,7 @@ import type { Tone } from "@/components/tone"
 import type { Network } from "@/features/networks/api"
 import { type Node, memoryCapacityMb } from "@/features/nodes/api"
 import type { NodeServer } from "@/features/servers/api"
-import type { NodeUsage } from "@/features/usage/api"
+import type { useUsages } from "@/features/usage/api"
 import { formatMegabytes } from "@/lib/format"
 
 /** Something that needs an operator, with where to look into it. */
@@ -25,7 +25,7 @@ export function problemsOf(
   nodes: Node[],
   servers: NodeServer[],
   networks: Network[],
-  nodeUsage: (nodeId: string) => NodeUsage | undefined,
+  usages: ReturnType<typeof useUsages>,
 ): Problem[] {
   const problems: Problem[] = []
   const add = (p: Problem) => problems.push(p)
@@ -46,6 +46,15 @@ export function problemsOf(
         tone: "warning",
         title: t("{{name}} stopped after crashing", { name: s.name }),
         detail: [s.nodeName, exit].filter(Boolean).join(" · "),
+        link,
+      })
+    }
+    if (usages.server(s.nodeId, s.id)?.offlineMode) {
+      add({
+        key: `offline-mode/${s.id}`,
+        tone: "destructive",
+        title: t("{{name}} runs in offline mode", { name: s.name }),
+        detail: t("Anyone who reaches it can join under any name. Turn online-mode on in server.properties."),
         link,
       })
     }
@@ -83,7 +92,7 @@ export function problemsOf(
         link,
       })
     }
-    const usage = nodeUsage(n.id)
+    const usage = usages.node(n.id)
     if (usage?.memoryTotalBytes && usage.memoryUsedBytes / usage.memoryTotalBytes > full) {
       add({
         key: `memory/${n.id}`,
@@ -116,6 +125,15 @@ export function problemsOf(
         tone: "destructive",
         title: t("The proxy of {{name}} is stopped", { name: network.name }),
         detail: t("Players can't join the network, although its servers run."),
+        link: { to: "/networks/$networkId", params: { networkId: network.id } },
+      })
+    }
+    if (network.applyError) {
+      add({
+        key: `apply/${network.id}`,
+        tone: "warning",
+        title: t("The proxy of {{name}} may send players to the wrong address", { name: network.name }),
+        detail: t("Its servers couldn't be configured. Apply the network again."),
         link: { to: "/networks/$networkId", params: { networkId: network.id } },
       })
     }

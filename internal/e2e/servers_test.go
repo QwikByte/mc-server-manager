@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,9 +91,26 @@ func TestBulkActionsAndTags(t *testing.T) {
 	var copied struct{ ID string }
 	api.do("POST", "/api/nodes/"+game.NodeID+"/servers/"+game.ServerID+"/duplicate", map[string]any{"name": "Game 2", "port": 25566}, http.StatusCreated, &copied)
 	api.do("DELETE", "/api/nodes/"+game.NodeID+"/servers/"+game.ServerID, nil, http.StatusNoContent, nil)
+	// Deleting it again, e.g. by the second request of a double click, finds it deleted.
+	api.do("DELETE", "/api/nodes/"+game.NodeID+"/servers/"+game.ServerID, nil, http.StatusNoContent, nil)
 	if tags, err := tag.NewStore(m.db).All(t.Context()); err != nil || len(tags) != 2 || !slices.Equal(tags[tag.Server{NodeID: b.node.ID, ServerID: copied.ID}], []string{"bedwars", "eu"}) {
 		t.Fatalf("tags = %v, %v", tags, err)
 	}
+}
+
+// waitForOperation waits until an operation is as ok wants it.
+func waitForOperation(t *testing.T, api apiClient, id string, ok func(operation.Operation) bool) operation.Operation {
+	t.Helper()
+	var op operation.Operation
+	for range 500 {
+		api.do("GET", "/api/operations/"+id, nil, http.StatusOK, &op)
+		if ok(op) {
+			return op
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("operation = %+v", op)
+	return op
 }
 
 // Long operations are answered right away and go on, with the progress the agent reports.
@@ -114,27 +132,13 @@ func TestOperations(t *testing.T) {
 		}
 		return op
 	}
-	wait := func(id string, ok func(operation.Operation) bool) operation.Operation {
-		t.Helper()
-		var op operation.Operation
-		for range 500 {
-			api.do("GET", "/api/operations/"+id, nil, http.StatusOK, &op)
-			if ok(op) {
-				return op
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		t.Fatalf("operation = %+v", op)
-		return op
-	}
-
 	op := create("Lobby", 25565)
-	got := wait(op.ID, func(op operation.Operation) bool { return op.Done == 50 })
+	got := waitForOperation(t, api, op.ID, func(op operation.Operation) bool { return op.Done == 50 })
 	if got.Steps[got.Step] != "image" || got.Total != 100 || got.Unit != "bytes" {
 		t.Fatalf("operation = %+v", got)
 	}
 	close(hold)
-	got = wait(op.ID, func(op operation.Operation) bool { return op.FinishedAt != nil })
+	got = waitForOperation(t, api, op.ID, func(op operation.Operation) bool { return op.FinishedAt != nil })
 	result, _ := got.Result.(map[string]any)
 	if got.Error != "" || result["name"] != "Lobby" || got.ServerID != result["id"] || got.NodeID != a.node.ID {
 		t.Fatalf("operation = %+v", got)
@@ -150,8 +154,52 @@ func TestOperations(t *testing.T) {
 	a.runtime.createErr = errors.New("no space left on device")
 	a.runtime.mu.Unlock()
 	op = create("Survival", 25566)
-	if got := wait(op.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); got.Error == "" || got.Steps[got.Step] != "container" {
+	if got := waitForOperation(t, api, op.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); got.Error == "" || got.Steps[got.Step] != "container" {
 		t.Fatalf("operation = %+v", got)
 	}
 	api.do("GET", "/api/operations/unknown", nil, http.StatusNotFound, nil)
+}
+
+// Servers created at the same time, e.g. after a double click, can't take the same port,
+// nor more memory together than the node has left.
+func TestConcurrentCreates(t *testing.T) {
+	m := startMaster(t)
+	m.quick = 0
+	a := m.startAgent(t, "node-1")
+	api := apiClient{t: t, url: m.panel(t).URL}
+	path := "/api/nodes/" + a.node.ID
+	// The node has 8 GB, of which 4 GB are kept free.
+	api.do("PUT", path, map[string]any{"name": "node-1", "address": a.node.Address, "defaultStorage": "default", "memoryReserveMb": 4096}, http.StatusOK, nil)
+	hold := make(chan struct{})
+	a.runtime.mu.Lock()
+	a.runtime.hold = hold
+	a.runtime.mu.Unlock()
+	create := func(name string, memory, port, status int) operation.Operation {
+		t.Helper()
+		var op operation.Operation
+		api.do("POST", path+"/servers", map[string]any{"name": name, "type": "paper", "memoryMb": memory, "port": port, "acceptEula": true}, status, &op)
+		return op
+	}
+	finished := func(op operation.Operation) bool { return op.FinishedAt != nil }
+
+	// While the lobby is being created, its port and memory are taken.
+	lobby := create("Lobby", 2048, 25565, http.StatusAccepted)
+	waitForOperation(t, api, lobby.ID, func(op operation.Operation) bool { return op.Done == 50 })
+	if got := waitForOperation(t, api, create("Lobby", 1024, 25565, http.StatusAccepted).ID, finished); !strings.Contains(got.Error, "Port 25565") {
+		t.Fatalf("second server at the same port: %+v", got)
+	}
+	create("Survival", 3072, 25566, http.StatusConflict)
+
+	close(hold)
+	if got := waitForOperation(t, api, lobby.ID, finished); got.Error != "" {
+		t.Fatalf("lobby: %+v", got)
+	}
+	if got := waitForOperation(t, api, create("Survival", 2048, 25566, http.StatusAccepted).ID, finished); got.Error != "" {
+		t.Fatalf("survival: %+v", got)
+	}
+	var servers []map[string]any
+	api.do("GET", path+"/servers", nil, http.StatusOK, &servers)
+	if len(servers) != 2 {
+		t.Fatalf("servers = %v", servers)
+	}
 }

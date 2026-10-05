@@ -128,7 +128,7 @@ export function NetworkActions({ network }: { network: Network }) {
               </Button>
             }
             title={t("Delete {{name}}?", { name: network.name })}
-            description={t("Its servers restart and accept players directly again. The proxy keeps running without forwarding.")}
+            description={t("Its servers restart and accept players directly again, in online mode. The proxy keeps running without forwarding.")}
             action={t("Delete network")}
             destructive
             onConfirm={() =>

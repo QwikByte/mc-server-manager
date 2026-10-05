@@ -44,6 +44,7 @@ type serverView struct {
 	DiskBytes        uint64   `json:"diskBytes"`
 	Players          *players `json:"players,omitempty"`
 	TPS              float64  `json:"tps,omitempty"`
+	OfflineMode      bool     `json:"offlineMode,omitempty"`
 }
 
 type players struct {
@@ -72,7 +73,7 @@ func (h *Handler) latest(w http.ResponseWriter, r *http.Request) {
 		v := serverView{
 			ID: s.GetId(), Running: s.GetRunning(), CPUMillis: s.GetCpuMillis(), MemoryBytes: s.GetMemoryBytes(),
 			MemoryLimitBytes: s.GetMemoryLimitBytes(), NetworkReceived: s.GetNetworkReceivedBytesPerSecond(),
-			NetworkSent: s.GetNetworkSentBytesPerSecond(), DiskBytes: s.GetDiskBytes(), TPS: s.GetTps(),
+			NetworkSent: s.GetNetworkSentBytesPerSecond(), DiskBytes: s.GetDiskBytes(), TPS: s.GetTps(), OfflineMode: s.GetOfflineMode(),
 		}
 		if p := s.GetPlayers(); p != nil {
 			v.Players = &players{p.GetOnline(), p.GetMax(), append([]string{}, p.GetNames()...)}

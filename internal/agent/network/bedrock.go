@@ -6,7 +6,6 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
-	"github.com/QwikByte/noryx/internal/agent/properties"
 )
 
 // Files of Geyser and Floodgate on a proxy, which let Bedrock players join a network.
@@ -63,10 +62,4 @@ func WriteGeyser(dir *datadir.Dir, typ noryxv1.ServerType, port uint32) (bool, e
 		child(s, "java")["auth-type"] = "floodgate"
 		return nil
 	})
-}
-
-// SecureChat makes a game server demand signed chat messages again, Minecraft's default,
-// once Bedrock players no longer join it: the environment of its container turned that off.
-func SecureChat(dir *datadir.Dir) error {
-	return properties.Write(dir, map[string]string{"enforce-secure-profile": "true"})
 }

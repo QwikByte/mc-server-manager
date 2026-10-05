@@ -98,7 +98,7 @@ export function DuplicateServerDialog({
             <DialogHeader>
               <DialogTitle>{t("Duplicate {{name}}", { name: server.name })}</DialogTitle>
               <DialogDescription>
-                {t("The copy gets the worlds, plugins and settings of {{name}}, but not its place in a network. It starts stopped.", {
+                {t("The copy gets the worlds, plugins and settings of {{name}}, but not its place in a network, so it authenticates its players itself. It starts stopped.", {
                   name: server.name,
                 })}
               </DialogDescription>

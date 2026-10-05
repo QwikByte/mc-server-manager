@@ -105,3 +105,25 @@ func TestWriteBackendMods(t *testing.T) {
 		t.Fatalf("vanilla: err = %v", err)
 	}
 }
+
+// A server that leaves its network authenticates its players again and demands signed
+// chat; one that stays as it was keeps what the operator chose.
+func TestLeave(t *testing.T) {
+	const offline = "motd=Lobby\nonline-mode=false\nenforce-secure-profile=false\n"
+	for _, tc := range []struct {
+		proxy, bedrock bool
+		want           string
+	}{
+		{false, false, offline},
+		{true, false, "motd=Lobby\nonline-mode=true\nenforce-secure-profile=false\n"},
+		{true, true, "motd=Lobby\nonline-mode=true\nenforce-secure-profile=true\n"},
+	} {
+		dir := dataDir(t, map[string]string{"server.properties": offline})
+		if err := Leave(dir, tc.proxy, tc.bedrock); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := dir.ReadOptional("server.properties"); string(got) != tc.want {
+			t.Errorf("Leave(proxy %v, bedrock %v): server.properties = %q, want %q", tc.proxy, tc.bedrock, got, tc.want)
+		}
+	}
+}

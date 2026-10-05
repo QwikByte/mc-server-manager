@@ -43,9 +43,10 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 }
 
 // standalone resets the network role in the copy of a server's data. A backend stops
-// trusting the proxy of the original, a Velocity proxy loses the forwarding secret, which
-// Velocity creates anew, and BungeeCord stops forwarding. A proxy loses the key with which
-// Geyser vouches for Bedrock players, which Floodgate creates anew.
+// trusting the proxy of the original and authenticates its players again, a Velocity
+// proxy loses the forwarding secret, which Velocity creates anew, and BungeeCord stops
+// forwarding. A proxy loses the key with which Geyser vouches for Bedrock players, which
+// Floodgate creates anew.
 func standalone(path string, original runtime.Spec) error {
 	data, err := datadir.Open(path)
 	if err != nil {
@@ -71,8 +72,8 @@ func standalone(path string, original runtime.Spec) error {
 			err = errors.Join(err, remove(name))
 		}
 	}
-	if err == nil && original.BedrockPlayers {
-		err = mcnet.SecureChat(data)
+	if err == nil {
+		err = mcnet.Leave(data, original.BehindProxy, original.BedrockPlayers)
 	}
 	return err
 }
