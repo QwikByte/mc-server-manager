@@ -23,7 +23,7 @@ servers keep running while an agent restarts.
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
 through the RCON connection the server image provides, and to proxies through their own console, whose answer follows
-in the output. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
+in the output. Commands typed in quick succession run one after the other, in their order. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
 settings.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
