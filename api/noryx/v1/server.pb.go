@@ -305,9 +305,12 @@ type Server struct {
 	LoaderVersion string `protobuf:"bytes,16,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
 	// For a proxy whose network lets Bedrock players join: the UDP port at which Geyser
 	// listens for them; 0 for none.
-	BedrockPort   uint32 `protobuf:"varint,17,opt,name=bedrock_port,json=bedrockPort,proto3" json:"bedrock_port,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	BedrockPort uint32 `protobuf:"varint,17,opt,name=bedrock_port,json=bedrockPort,proto3" json:"bedrock_port,omitempty"`
+	// JVM options that were set before the agent refused them, e.g. as they can run code. The
+	// server still starts with them until they are removed in its settings.
+	RefusedJvmOptions []string `protobuf:"bytes,18,rep,name=refused_jvm_options,json=refusedJvmOptions,proto3" json:"refused_jvm_options,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Server) Reset() {
@@ -457,6 +460,13 @@ func (x *Server) GetBedrockPort() uint32 {
 		return x.BedrockPort
 	}
 	return 0
+}
+
+func (x *Server) GetRefusedJvmOptions() []string {
+	if x != nil {
+		return x.RefusedJvmOptions
+	}
+	return nil
 }
 
 type ListServersRequest struct {
@@ -2102,7 +2112,7 @@ var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\x9e\x04\n" +
+	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xce\x04\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
@@ -2124,7 +2134,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\acrashes\x18\x0e \x01(\rR\acrashes\x12\x1b\n" +
 	"\texit_code\x18\x0f \x01(\x05R\bexitCode\x12%\n" +
 	"\x0eloader_version\x18\x10 \x01(\tR\rloaderVersion\x12!\n" +
-	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\"\x14\n" +
+	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\x12.\n" +
+	"\x13refused_jvm_options\x18\x12 \x03(\tR\x11refusedJvmOptions\"\x14\n" +
 	"\x12ListServersRequest\"A\n" +
 	"\x13ListServersResponse\x12*\n" +
 	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\xc3\x04\n" +

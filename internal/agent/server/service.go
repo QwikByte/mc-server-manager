@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"regexp"
@@ -28,6 +29,7 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/properties"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 const (
@@ -587,16 +589,45 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 		return fmt.Sprintf("The node has %d CPU cores.", cpus)
 	}
 	for _, option := range spec.JVMOptions {
-		switch {
-		case !jvmOptionPattern.MatchString(option):
-			return fmt.Sprintf("The JVM option %q is invalid. Options start with '-' and contain no spaces or quotes.", option)
-		case memoryOption.MatchString(option):
-			return fmt.Sprintf("Set the memory in the settings instead of with %s.", option)
-		case runsCode(option):
-			return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
+		if msg := checkJVMOption(option); msg != "" {
+			return msg
 		}
 	}
 	return ""
+}
+
+// checkJVMOption returns a message for the operator if a JVM option is refused.
+func checkJVMOption(option string) string {
+	switch {
+	case !jvmOptionPattern.MatchString(option):
+		return fmt.Sprintf("The JVM option %q is invalid. Options start with '-' and contain no spaces or quotes.", option)
+	case memoryOption.MatchString(option):
+		return fmt.Sprintf("Set the memory in the settings instead of with %s.", option)
+	case runsCode(option):
+		return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
+	}
+	return ""
+}
+
+// refusedOptions returns the JVM options of a server that are refused now, as they were set
+// before an update of the agent refused them.
+func refusedOptions(options []string) []string {
+	return slices.DeleteFunc(slices.Clone(options), func(o string) bool { return checkJVMOption(o) == "" })
+}
+
+// WarnRefusedOptions logs the servers whose JVM options are refused now, e.g. after an update
+// of the agent. They still start with them, until they are removed in their settings.
+func (s *Service) WarnRefusedOptions(ctx context.Context) {
+	servers, err := s.rt.List(ctx)
+	if err != nil {
+		return
+	}
+	for _, srv := range servers {
+		if refused := refusedOptions(srv.JVMOptions); len(refused) > 0 {
+			slog.Warn("A server starts with JVM options that are refused now; remove them in its settings", logging.Servers,
+				logging.KeyServer, srv.ID, logging.KeyServerName, srv.Name, "options", refused)
+		}
+	}
 }
 
 // runsCode reports whether a JVM option can run code, by its name.
@@ -616,7 +647,7 @@ func toProto(s runtime.Server) *noryxv1.Server {
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
 		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
-		LoaderVersion: s.LoaderVersion, BedrockPort: s.BedrockPort,
+		LoaderVersion: s.LoaderVersion, BedrockPort: s.BedrockPort, RefusedJvmOptions: refusedOptions(s.JVMOptions),
 	}
 }
 

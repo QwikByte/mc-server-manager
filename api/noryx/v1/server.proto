@@ -113,6 +113,9 @@ message Server {
   // For a proxy whose network lets Bedrock players join: the UDP port at which Geyser
   // listens for them; 0 for none.
   uint32 bedrock_port = 17;
+  // JVM options that were set before the agent refused them, e.g. as they can run code. The
+  // server still starts with them until they are removed in its settings.
+  repeated string refused_jvm_options = 18;
 }
 
 message ListServersRequest {}

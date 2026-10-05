@@ -190,3 +190,19 @@ func TestCreateServerReservesThePort(t *testing.T) {
 		t.Fatalf("ports still reserved: %v", s.reserved)
 	}
 }
+
+// A server keeps JVM options set before the agent refused them, and the list reports them.
+func TestRefusedJVMOptions(t *testing.T) {
+	options := []string{"-Dfile.encoding=UTF-8", "-XX:VMOptionsFile=/data/opts", "-Djava.system.class.loader=Evil"}
+	rt := &slowRuntime{servers: []runtime.Server{{Spec: runtime.Spec{ID: runtime.NewID(), JVMOptions: options}}}}
+	res, err := NewService(rt, nil).ListServers(t.Context(), &noryxv1.ListServersRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.GetServers()[0].GetRefusedJvmOptions(); !slices.Equal(got, options[1:]) {
+		t.Fatalf("refused options = %q, want %q", got, options[1:])
+	}
+	if got := res.GetServers()[0].GetJvmOptions(); !slices.Equal(got, options) {
+		t.Fatalf("options = %q, want all of them", got)
+	}
+}

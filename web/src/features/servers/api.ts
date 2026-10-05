@@ -25,6 +25,8 @@ export interface Server {
   restartPolicy: RestartPolicy
   aikarFlags: boolean
   jvmOptions: string[]
+  /** JVM options set before the agent refused them, which the server starts with until they are removed. */
+  refusedJvmOptions?: string[]
   /** CPU cores the server may use; 0 means no limit. */
   cpuLimit: number
   /** Version of the mod loader of a modded server, e.g. one a modpack needs; empty for the newest. */

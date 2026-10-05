@@ -1,5 +1,7 @@
-import { WarningCircleIcon } from "@phosphor-icons/react"
+import { WarningCircleIcon, WarningIcon } from "@phosphor-icons/react"
+import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
+import { Trans } from "react-i18next"
 import { Callout } from "@/components/callout"
 import { StatusBadge, StatusDot } from "@/components/status"
 import { toneDots } from "@/components/tone"
@@ -82,6 +84,40 @@ export function CrashNotice({ server }: { server: Server }) {
         ]
           .filter(Boolean)
           .join(" ")}
+      </p>
+    </Callout>
+  )
+}
+
+/** Warns that a server starts with JVM options set before the agent refused them, until they are removed. */
+export function RefusedOptionsNotice({ server, nodeId, canEdit }: { server: Server; nodeId: string; canEdit: boolean }) {
+  const refused = server.refusedJvmOptions ?? []
+  if (refused.length === 0) return null
+  return (
+    <Callout
+      tone="warning"
+      icon={WarningIcon}
+      role="note"
+      className="mb-6"
+      title={t("{{name}} starts with JVM options that are refused now", { name: server.name })}
+    >
+      <p className="font-mono break-all">{refused.join(" ")}</p>
+      <p>
+        {t("They can load or run code, so they can't be set anymore. The server keeps them until they are removed.")}{" "}
+        {canEdit && (
+          <Trans
+            i18nKey="<link>Remove them in the settings.</link>"
+            components={{
+              link: (
+                <Link
+                  to="/nodes/$nodeId/servers/$serverId/settings"
+                  params={{ nodeId, serverId: server.id }}
+                  className="font-medium underline-offset-4 hover:underline"
+                />
+              ),
+            }}
+          />
+        )}
       </p>
     </Callout>
   )

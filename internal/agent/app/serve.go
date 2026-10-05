@@ -63,6 +63,7 @@ func serve(ctx context.Context, cfg config) error {
 	remote := svc.grpcServer(agentlogs.FromMaster, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
 	localSrv := svc.grpcServer(agentlogs.FromLocal, grpc.Creds(local.NewCredentials()))
 	go svc.stats.Run(ctx)
+	go svc.server.WarnRefusedOptions(ctx)
 	go svc.player.Run(ctx)
 	go rt.Watch(ctx)
 

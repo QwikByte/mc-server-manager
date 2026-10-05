@@ -29,7 +29,7 @@ import { useServer } from "./api"
 import { Console } from "./console"
 import { MoveStatus } from "./move-status"
 import { ServerActions } from "./server-actions"
-import { CrashNotice, ServerStateBadge } from "./server-state"
+import { CrashNotice, RefusedOptionsNotice, ServerStateBadge } from "./server-state"
 import { displayVersion, memoryTitle, serverLook, serverType } from "./server-types"
 import { EndOfLifeNotice } from "./software"
 import { TagList } from "./tags"
@@ -137,6 +137,7 @@ export function ServerPage() {
             }
           />
           <CrashNotice server={server} />
+          <RefusedOptionsNotice server={server} nodeId={nodeId} canEdit={can("servers.settings", nodeId, serverId)} />
           <EndOfLifeNotice type={server.type} className="mb-6" />
           <Tabs label={t("Server")}>
             {tabs
