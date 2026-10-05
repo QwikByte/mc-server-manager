@@ -2,7 +2,7 @@ import { t } from "i18next"
 import type { Tone } from "@/components/tone"
 import type { Network } from "@/features/networks/api"
 import { type Node, memoryCapacityMb } from "@/features/nodes/api"
-import type { NodeServer } from "@/features/servers/api"
+import { assignedMemoryMb, type NodeServer } from "@/features/servers/api"
 import type { useUsages } from "@/features/usage/api"
 import { formatMegabytes } from "@/lib/format"
 
@@ -82,7 +82,7 @@ export function problemsOf(
       continue
     }
     const capacity = memoryCapacityMb(n)
-    const assigned = servers.filter((s) => s.nodeId === n.id).reduce((sum, s) => sum + s.memoryMb, 0)
+    const assigned = assignedMemoryMb(servers.filter((s) => s.nodeId === n.id))
     if (capacity !== undefined && assigned > capacity) {
       add({
         key: `assigned/${n.id}`,

@@ -384,7 +384,7 @@ func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
 	if f.down {
 		return runtime.Info{}, errDown
 	}
-	return runtime.Info{Name: "fake", CPUs: 4, MemoryBytes: 8 << 30}, nil
+	return runtime.Info{Name: "fake", CPUs: 4, MemoryBytes: 16 << 30}, nil
 }
 
 func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) {

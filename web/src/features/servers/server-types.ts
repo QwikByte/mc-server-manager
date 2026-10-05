@@ -1,6 +1,7 @@
 import { ArrowsSplitIcon, CubeIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import type { Status } from "@/components/status"
+import { formatMegabytes } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import type { ServerState } from "./api"
 
@@ -46,6 +47,13 @@ export const isPaper = (type: string) => ["paper", "purpur", "folia", "leaf"].in
 export const isFabric = (type: string) => type === "fabric" || type === "quilt"
 
 export const memoryOptionsMb = [512, 1024, 2048, 4096, 6144, 8192, 12288, 16384]
+
+/** Tells the memory of a server: its heap, and the limit of its container. */
+export const memoryTitle = (s: { memoryMb: number; memoryLimitMb: number }) =>
+  t("{{memory}} for the server, and up to {{limit}} with what Java needs besides it", {
+    memory: formatMegabytes(s.memoryMb),
+    limit: formatMegabytes(s.memoryLimitMb),
+  })
 
 export function serverType(value: string): ServerType {
   return serverTypes.find((type) => type.value === value) ?? { value, label: value, proxy: false }

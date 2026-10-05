@@ -168,8 +168,9 @@ func TestConcurrentCreates(t *testing.T) {
 	a := m.startAgent(t, "node-1")
 	api := apiClient{t: t, url: m.panel(t).URL}
 	path := "/api/nodes/" + a.node.ID
-	// The node has 8 GB, of which 4 GB are kept free.
-	api.do("PUT", path, map[string]any{"name": "node-1", "address": a.node.Address, "defaultStorage": "default", "memoryReserveMb": 4096}, http.StatusOK, nil)
+	// The node has 16 GB, of which 12 GB are kept free: room for two servers with 1 GB, whose
+	// containers may use 1.5 GB each.
+	api.do("PUT", path, map[string]any{"name": "node-1", "address": a.node.Address, "defaultStorage": "default", "memoryReserveMb": 12288}, http.StatusOK, nil)
 	hold := make(chan struct{})
 	a.runtime.mu.Lock()
 	a.runtime.hold = hold
@@ -183,18 +184,18 @@ func TestConcurrentCreates(t *testing.T) {
 	finished := func(op operation.Operation) bool { return op.FinishedAt != nil }
 
 	// While the lobby is being created, its port and memory are taken.
-	lobby := create("Lobby", 2048, 25565, http.StatusAccepted)
+	lobby := create("Lobby", 1024, 25565, http.StatusAccepted)
 	waitForOperation(t, api, lobby.ID, func(op operation.Operation) bool { return op.Done == 50 })
 	if got := waitForOperation(t, api, create("Lobby", 1024, 25565, http.StatusAccepted).ID, finished); !strings.Contains(got.Error, "Port 25565") {
 		t.Fatalf("second server at the same port: %+v", got)
 	}
-	create("Survival", 3072, 25566, http.StatusConflict)
+	create("Survival", 2048, 25566, http.StatusConflict)
 
 	close(hold)
 	if got := waitForOperation(t, api, lobby.ID, finished); got.Error != "" {
 		t.Fatalf("lobby: %+v", got)
 	}
-	if got := waitForOperation(t, api, create("Survival", 2048, 25566, http.StatusAccepted).ID, finished); got.Error != "" {
+	if got := waitForOperation(t, api, create("Survival", 1024, 25566, http.StatusAccepted).ID, finished); got.Error != "" {
 		t.Fatalf("survival: %+v", got)
 	}
 	var servers []map[string]any

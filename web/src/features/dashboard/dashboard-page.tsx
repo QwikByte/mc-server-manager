@@ -23,7 +23,7 @@ import { networksQuery } from "@/features/networks/api"
 import { useNetworkOf } from "@/features/networks/servers"
 import { playersOnline } from "@/features/networks/usage"
 import { memoryCapacityMb, nodesQuery } from "@/features/nodes/api"
-import { allServersQuery, type NodeServer } from "@/features/servers/api"
+import { allServersQuery, assignedMemoryMb, type NodeServer } from "@/features/servers/api"
 import { StateBar } from "@/features/servers/server-state"
 import { serverLook, serverType } from "@/features/servers/server-types"
 import { useUsages } from "@/features/usage/api"
@@ -49,7 +49,7 @@ export function DashboardPage() {
   const players =
     networks.reduce((sum, n) => sum + (playersOnline(n, usage) ?? 0), 0) +
     gameServers.filter((s) => !networkOf(ref(s))).reduce((sum, s) => sum + (usage(ref(s))?.players?.online ?? 0), 0)
-  const assignedMb = servers.reduce((sum, s) => sum + s.memoryMb, 0)
+  const assignedMb = assignedMemoryMb(servers)
   const capacityMb = online.reduce((sum, n) => sum + (memoryCapacityMb(n) ?? 0), 0)
   const problems = problemsOf(nodes, servers, networks, usages)
   const busiest = gameServers

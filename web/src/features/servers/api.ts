@@ -10,7 +10,10 @@ export interface Server {
   name: string
   type: string
   version: string
+  /** The heap that Java gets. */
   memoryMb: number
+  /** The limit of the server's container: its heap and what Java needs besides. Nodes count it against their memory. */
+  memoryLimitMb: number
   port: number
   state: ServerState
   /** Crashes since the server was last started, while it crashes or after it stopped because of one. */
@@ -45,6 +48,9 @@ export interface NodeServer extends Server {
   nodeId: string
   nodeName: string
 }
+
+/** Memory that servers take from their nodes: the limits of their containers, as the master counts them. */
+export const assignedMemoryMb = (servers: Server[]) => servers.reduce((sum, s) => sum + s.memoryLimitMb, 0)
 
 /** Identifies a server across nodes, e.g. to select it. */
 export const serverKey = (s: { nodeId: string; id: string }) => `${s.nodeId}/${s.id}`

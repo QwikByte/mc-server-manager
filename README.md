@@ -65,7 +65,9 @@ the server stays on its old node, stopped.
 
 Each node has settings for its servers: the storage location preselected for new servers, a port range (new
 servers get the first free port in it) and a memory limit, so that servers together can't get more memory than
-the node has minus a reserve for the system (1 GB unless changed). Name and agent address can be changed too.
+the node has minus a reserve for the system (1 GB unless changed). A server counts with the limit of its container,
+which gives Java about a quarter more than the server's memory and 256 MB for what it needs besides the heap, e.g.
+1.5 GB for 1 GB. Name and agent address can be changed too.
 
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use,
 the networks, the servers with the most players, and what needs attention: crashing servers, offline nodes, nodes with

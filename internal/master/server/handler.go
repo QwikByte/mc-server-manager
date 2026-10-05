@@ -132,9 +132,11 @@ type view struct {
 	Type     string `json:"type"`
 	Version  string `json:"version"`
 	MemoryMB uint32 `json:"memoryMb"`
-	Port     uint32 `json:"port"`
-	State    string `json:"state"`
-	Storage  string `json:"storage"`
+	// MemoryLimitMB is the limit of the server's container, which the memory limit of its node counts.
+	MemoryLimitMB int64  `json:"memoryLimitMb"`
+	Port          uint32 `json:"port"`
+	State         string `json:"state"`
+	Storage       string `json:"storage"`
 	// Crashes since the server was last started, while it crashes or after it stopped
 	// because of a crash, and the exit code of the latest one, 0 if unknown.
 	Crashes  uint32 `json:"crashes"`
@@ -169,7 +171,7 @@ func (s settings) check() (noryxv1.RestartPolicy, uint32, error) {
 
 func toView(s *noryxv1.Server) view {
 	return view{
-		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
+		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), MemoryLimitMB: noryxv1.ContainerMemoryMB(s.GetMemoryMb()), Port: s.GetPort(),
 		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(), Crashes: s.GetCrashes(), ExitCode: s.GetExitCode(),
 		BedrockPort: s.GetBedrockPort(),
 		settings: settings{

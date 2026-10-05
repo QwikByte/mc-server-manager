@@ -11,7 +11,8 @@ import (
 
 // reservations hold the memory of servers that are being created, changed or moved,
 // until their node's agent lists them with it, so that concurrent requests can't exceed
-// the memory limit of a node together.
+// the memory limit of a node together. Memory is counted as the limits of the servers'
+// containers, which include what Java needs besides the heap.
 type reservations struct {
 	mu    sync.Mutex
 	nodes map[string]*reserved
@@ -39,7 +40,8 @@ var noRelease = func() {}
 
 // checkLimits enforces the port range and the memory limit of a node for a server that
 // is created (serverID is empty) or changed, and reserves its memory until release is
-// called, once the operation that creates or changes it ended.
+// called, once the operation that creates or changes it ended. A change that needs no
+// more memory is always allowed, e.g. on a node whose limit was lowered.
 func (h *Handler) checkLimits(ctx context.Context, nodeID, serverID string, port, memoryMB uint32) (release func(), err error) {
 	n, err := h.nodes.Get(ctx, nodeID)
 	if err != nil {
@@ -69,21 +71,24 @@ func (h *Handler) checkLimits(ctx context.Context, nodeID, serverID string, port
 	if err != nil {
 		return nil, err
 	}
-	limit := int64(info.GetMemoryBytes()>>20) - int64(*n.MemoryReserveMB) //nolint:gosec // memory sizes fit easily
-	assigned := int64(memoryMB) + reserved.memoryMB
+	left := int64(info.GetMemoryBytes()>>20) - int64(*n.MemoryReserveMB) - reserved.memoryMB //nolint:gosec // memory sizes fit easily
 	for _, s := range res.GetServers() {
-		if s.GetId() != serverID {
-			assigned += int64(s.GetMemoryMb())
+		switch {
+		case s.GetId() != serverID:
+			left -= noryxv1.ContainerMemoryMB(s.GetMemoryMb())
+		case memoryMB <= s.GetMemoryMb():
+			return noRelease, nil
 		}
 	}
-	if assigned > limit {
-		return nil, httpapi.Errorf(http.StatusConflict, "%s has %d MB of memory left for servers. Choose less memory, or change the memory limit in the node's settings.",
-			n.Name, max(0, limit-assigned+int64(memoryMB)))
+	needed := noryxv1.ContainerMemoryMB(memoryMB)
+	if needed > left {
+		return nil, httpapi.Errorf(http.StatusConflict, "%s has room for a server with up to %d MB of memory, as Java needs about a quarter of it and 256 MB more. Choose less memory, or change the memory limit in the node's settings.",
+			n.Name, noryxv1.MaxHeapMB(left))
 	}
-	reserved.memoryMB += int64(memoryMB)
+	reserved.memoryMB += needed
 	return func() {
 		reserved.Lock()
 		defer reserved.Unlock()
-		reserved.memoryMB -= int64(memoryMB)
+		reserved.memoryMB -= needed
 	}, nil
 }

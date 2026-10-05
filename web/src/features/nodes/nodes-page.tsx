@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
-import { allServersQuery, type NodeServer } from "@/features/servers/api"
+import { allServersQuery, assignedMemoryMb, type NodeServer } from "@/features/servers/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { AddNodeDialog } from "./add-node-dialog"
 import { memoryCapacityMb, type Node, nodesQuery } from "./api"
@@ -57,7 +57,7 @@ export function NodesPage() {
 function Overview({ nodes, servers }: { nodes: Node[]; servers?: NodeServer[] }) {
   const online = nodes.filter((n) => n.status === "online")
   const running = servers?.filter((s) => s.state === "running").length
-  const assignedMb = servers?.reduce((sum, s) => sum + s.memoryMb, 0)
+  const assignedMb = servers && assignedMemoryMb(servers)
   const memoryBytes = online.reduce((sum, n) => sum + (n.info?.memoryBytes ?? 0), 0)
   return (
     <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -79,7 +79,7 @@ function Overview({ nodes, servers }: { nodes: Node[]; servers?: NodeServer[] })
 function NodeCard({ node, servers }: { node: Node; servers?: NodeServer[] }) {
   const info = node.info
   const capacityMb = memoryCapacityMb(node)
-  const assignedMb = servers?.reduce((sum, s) => sum + s.memoryMb, 0) ?? 0
+  const assignedMb = assignedMemoryMb(servers ?? [])
   return (
     <Link
       to="/nodes/$nodeId"

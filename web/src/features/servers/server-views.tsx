@@ -13,7 +13,7 @@ import { type NodeServer, serverKey } from "./api"
 import type { Facts, Group } from "./browse"
 import { ServerActions } from "./server-actions"
 import { ServerStateBadge } from "./server-state"
-import { displayVersion, serverLook, serverType } from "./server-types"
+import { displayVersion, memoryTitle, serverLook, serverType } from "./server-types"
 import { TagList } from "./tags"
 
 /** How the servers of a list are shown and selected. */
@@ -194,7 +194,7 @@ function ServerCard({
           <span className="font-mono">{server.port}</span>
         </Chip>
         {/* While it runs, its memory of the container's limit, which includes what Java needs besides the heap. */}
-        <Chip icon={MemoryIcon}>
+        <Chip icon={MemoryIcon} title={memoryTitle(server)}>
           {usage?.memoryLimitBytes
             ? `${formatBytes(usage.memoryBytes)} / ${formatBytes(usage.memoryLimitBytes)}`
             : formatMegabytes(server.memoryMb)}

@@ -30,7 +30,7 @@ import { Console } from "./console"
 import { MoveStatus } from "./move-status"
 import { ServerActions } from "./server-actions"
 import { CrashNotice, ServerStateBadge } from "./server-state"
-import { displayVersion, serverLook, serverType } from "./server-types"
+import { displayVersion, memoryTitle, serverLook, serverType } from "./server-types"
 import { EndOfLifeNotice } from "./software"
 import { TagList } from "./tags"
 
@@ -125,7 +125,9 @@ export function ServerPage() {
                 <Chip icon={HashIcon}>
                   <span className="font-mono">{server.port}</span>
                 </Chip>
-                <Chip icon={MemoryIcon}>{formatMegabytes(server.memoryMb)}</Chip>
+                <Chip icon={MemoryIcon} title={memoryTitle(server)}>
+                  {formatMegabytes(server.memoryMb)}
+                </Chip>
                 {node && <Chip icon={HardDrivesIcon}>{node.name}</Chip>}
                 <TagList tags={server.tags} className="items-center" />
               </span>
