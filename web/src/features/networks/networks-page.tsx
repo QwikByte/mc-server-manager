@@ -42,7 +42,7 @@ export function NetworksPage() {
           icon={GraphIcon}
           tone="violet"
           title={t("No networks yet")}
-          description={t("Create a Velocity, BungeeCord or Waterfall proxy and game servers on your nodes, then connect them to a network.")}
+          description={t("Create a Velocity or BungeeCord proxy and game servers on your nodes, then connect them to a network.")}
         >
           {manage && <CreateNetworkDialog />}
         </EmptyState>

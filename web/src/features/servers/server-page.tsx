@@ -31,6 +31,7 @@ import { MoveStatus } from "./move-status"
 import { ServerActions } from "./server-actions"
 import { CrashNotice, ServerStateBadge } from "./server-state"
 import { displayVersion, serverLook, serverType } from "./server-types"
+import { EndOfLifeNotice } from "./software"
 import { TagList } from "./tags"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
@@ -134,6 +135,7 @@ export function ServerPage() {
             }
           />
           <CrashNotice server={server} />
+          <EndOfLifeNotice type={server.type} className="mb-6" />
           <Tabs label={t("Server")}>
             {tabs
               .map((tab) => ({ ...tab, label: tab.label(server.type) }))

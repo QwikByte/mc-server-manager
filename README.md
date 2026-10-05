@@ -18,7 +18,8 @@ controls **agents** on any number of dedicated servers.
 
 Servers run as containers based on [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server)
 (Vanilla, Paper, Purpur, Folia, Leaf, Fabric, Quilt, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy)
-(Velocity, BungeeCord, Waterfall). Container labels are the agent's only state, so servers keep running while an agent restarts.
+(Velocity, BungeeCord; Waterfall only for existing proxies, see below). Container labels are the agent's only state, so
+servers keep running while an agent restarts.
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
 through the RCON connection the server image provides, and to proxies through their own console, whose answer follows
@@ -291,6 +292,12 @@ stores the network and configures each server through its agent.
 | --------------------- | --------------- | -------------------------------------------- |
 | Velocity              | `velocity.toml` | modern (recommended) or legacy               |
 | BungeeCord, Waterfall | `config.yml`    | legacy (`ip_forward`), BungeeCord's only way |
+
+Waterfall reached its [end of life](https://forums.papermc.io/threads/1088/) and can no longer download its command
+modules, whose API PaperMC shut down. A new Waterfall proxy has no `send`, `/server`, `/glist`, `/alert` and `/find`, so
+the panel no longer offers Waterfall for new servers and templates. Existing proxies keep running, and those that
+downloaded their modules before keep them; their pages recommend Velocity with modern forwarding, or BungeeCord, which
+reads the same `config.yml`.
 
 | Game server                | Accepts the players of the proxy through                                                       |
 | -------------------------- | ---------------------------------------------------------------------------------------------- |

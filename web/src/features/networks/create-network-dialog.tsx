@@ -161,7 +161,7 @@ export function CreateNetworkDialog() {
                       <SelectValue
                         placeholder={
                           proxies.length === 0
-                            ? t("No free proxy; create a Velocity, BungeeCord or Waterfall server first")
+                            ? t("No free proxy; create a Velocity or BungeeCord server first")
                             : t("Choose a proxy")
                         }
                       />
