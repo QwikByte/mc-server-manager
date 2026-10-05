@@ -321,7 +321,7 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, re
 	header := &noryxv1.Server{
 		Id: mv.ServerID, Name: src.GetName(), Type: src.GetType(), Version: src.GetVersion(), MemoryMb: src.GetMemoryMb(),
 		Port: req.Port, Storage: req.Storage, Java: src.GetJava(), RestartPolicy: src.GetRestartPolicy(),
-		AikarFlags: src.GetAikarFlags(), JvmOptions: src.GetJvmOptions(), CpuMillis: src.GetCpuMillis(),
+		AikarFlags: src.GetAikarFlags(), JvmOptions: src.GetJvmOptions(), CpuMillis: src.GetCpuMillis(), LoaderVersion: src.GetLoaderVersion(),
 	}
 	err = relay(ctx,
 		func(ctx context.Context) (grpc.ServerStreamingClient[noryxv1.ArchiveDirectoryResponse], error) {

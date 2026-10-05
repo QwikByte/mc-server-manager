@@ -69,6 +69,15 @@ func TestMoveServer(t *testing.T) {
 		t.Fatalf("group targets = %+v", mods.Targets)
 	}
 
+	// The settings move with the server, also the version of a mod loader.
+	created := must(noryxv1.NewServerServiceClient(must(m.nodes.Conn(t.Context(), a1.node.ID))).CreateServer(t.Context(), &noryxv1.CreateServerRequest{
+		Name: "Modded", Type: noryxv1.ServerType_SERVER_TYPE_FABRIC, MemoryMb: 1024, Port: 25570, AcceptEula: true, LoaderVersion: "0.16.10",
+	}))
+	api.do("POST", "/api/nodes/"+a1.node.ID+"/servers/"+created.GetServer().GetId()+"/move", map[string]any{"node": a2.node.ID}, http.StatusAccepted, nil)
+	if mv := waitForMove(t, api, created.GetServer().GetId()); mv.Phase != "done" || a2.runtime.spec(created.GetServer().GetId()).LoaderVersion != "0.16.10" {
+		t.Fatalf("move = %+v, spec = %+v", mv, a2.runtime.spec(created.GetServer().GetId()))
+	}
+
 	// If the new node fails, the server stays where it was and runs again.
 	a1.runtime.mu.Lock()
 	a1.runtime.createErr = errors.New("no space left on device")

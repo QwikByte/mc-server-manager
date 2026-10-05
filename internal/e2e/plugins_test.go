@@ -155,3 +155,28 @@ func TestPlugins(t *testing.T) {
 	api.do("DELETE", base+"missing.jar", nil, http.StatusNotFound, nil)
 	api.do("GET", "/api/nodes/"+vanilla.NodeID+"/servers/"+vanilla.ServerID+"/plugins", nil, http.StatusConflict, nil)
 }
+
+// Projects that keep the name of their file in every version, e.g. Geyser, are updated too.
+func TestPluginWithTheSameFileName(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	lobby := plugin.Ref(m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565))
+	paper := []string{"paper", "spigot", "bukkit"}
+	m.modrinth.project("same", "Same", paper)
+	old := m.modrinth.release("same", "1.0", "Same.jar", []byte("same 1.0"), paper)
+	m.modrinth.release("same", "2.0", "Same.jar", []byte("same 2.0"), paper)
+	api := apiClient{t: t, url: m.panel(t).URL}
+	install := func(versions map[string]string) {
+		t.Helper()
+		var installed struct{ Results []plugin.Result }
+		api.do("POST", "/api/plugins/install", map[string]any{"projects": []string{"same"}, "versions": versions, "servers": []plugin.Ref{lobby}}, http.StatusOK, &installed)
+		if r := installed.Results[0]; r.Error != "" {
+			t.Fatalf("result = %+v", r)
+		}
+	}
+	install(map[string]string{"same": old.ID})
+	install(nil)
+	if data, _ := os.ReadFile(filepath.Join(a.runtime.dir, lobby.ServerID, "plugins", "Same.jar")); string(data) != "same 2.0" {
+		t.Fatalf("Same.jar = %q", data)
+	}
+}
