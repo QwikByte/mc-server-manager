@@ -44,7 +44,9 @@ of Fabric, Quilt, Forge and NeoForge servers (the newest unless set), memory, po
 the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
 The agent creates the container again with the same data; the old container is only removed once the new one
 exists. A server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it
-changed, creates the container again the same way. The old image is removed once no server uses it.
+changed, creates the container again the same way. The old image is removed once no server uses it. New servers get
+the newest image too: creating one pulls it, which downloads its changes if it was updated since. Deleting servers
+keeps their images.
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
 crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.
@@ -731,6 +733,17 @@ go run ./cmd/noryx-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 | `make lint`     | golangci-lint, oxlint, the translation checks and the TypeScript type check    |
 | `make generate` | Regenerates the gRPC code after changing `api/**/*.proto`                      |
 | `make packages` | Builds the packages and archives of a release into `dist/`, without publishing |
+
+**Windows.** Noryx runs on Linux. On Windows, develop in WSL 2, e.g. with `scripts/ubuntu-test.sh`. Natively, only the
+master builds and runs, e.g. for `make dev-web`; the agent and `go build ./...` need `GOOS=linux`, which also checks the
+code with `GOOS=linux go vet ./...`. The tests need Linux, as some check file permissions and Unix sockets, and
+`npm run lint` may fail on `i18next-cli`, whose native SWC binding doesn't load on every Windows; `oxlint` and `tsc -b`
+run.
+
+**Test machines.** `scripts/deploy-dev.sh --master root@vm1 --agent root@vm1 --agent root@vm2` builds the panel and both
+programs of the checkout for Linux and installs them over SSH on machines with Noryx installed, restarting their
+services; servers keep running. Turn off **Check for updates** in the panel's settings, so that it doesn't offer the
+latest release as an update of the test build.
 
 **Translations.** The panel's texts are English and serve as the keys of their translations
 ([i18next](https://www.i18next.com)): components show them with `t("…")`, or `<Trans>` for texts with markup, and
