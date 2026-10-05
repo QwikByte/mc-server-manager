@@ -17,8 +17,11 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/geysermc"
 	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
@@ -61,8 +64,8 @@ type Service struct {
 	catalogue catalogue
 }
 
-func NewService(nodes Nodes, modrinthClient *modrinth.Client, hangarClient *hangar.Client) *Service {
-	return &Service{nodes: nodes, catalogue: catalogue{modrinthClient, hangarClient}}
+func NewService(nodes Nodes, modrinthClient *modrinth.Client, hangarClient *hangar.Client, geysermcClient *geysermc.Client) *Service {
+	return &Service{nodes: nodes, catalogue: catalogue{modrinthClient, hangarClient, geysermcClient}}
 }
 
 // Projects looks up projects on Modrinth and Hangar; unknown ones are left out.
@@ -165,6 +168,7 @@ type Installed struct {
 	ProjectID string `json:"projectId"`
 	FileName  string `json:"fileName"`
 	Version   string `json:"version"`
+	written   bool   // rather than present already
 }
 
 // Result tells what was installed on a server, and why the rest wasn't.
@@ -239,7 +243,8 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 	installed := []Installed{}
 	for _, v := range versions {
 		f, _ := v.File()
-		if old := present[v.ProjectID]; !old.is(f) { // otherwise this version is installed already
+		old := present[v.ProjectID]
+		if !old.is(f) { // otherwise this version is installed already
 			data, err := r.downloads.get(f.URL, func() ([]byte, error) { return r.catalogue.Download(ctx, f) })
 			if err != nil {
 				return installed, err
@@ -249,7 +254,7 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 				return installed, err
 			}
 		}
-		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber})
+		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, written: !old.is(f)})
 	}
 	return installed, nil
 }
@@ -359,6 +364,8 @@ type Version struct {
 	Number    string    `json:"number"`
 	Channel   string    `json:"channel"` // release, beta or alpha
 	Published time.Time `json:"published"`
+	// GameVersions are the versions of Minecraft it supports, e.g. the one Geyser joins with.
+	GameVersions []string `json:"gameVersions,omitempty"`
 }
 
 // Versions returns the versions of a project that run on servers of a type and
@@ -372,7 +379,7 @@ func (s *Service) Versions(ctx context.Context, project string, typ noryxv1.Serv
 	versions := make([]Version, 0, len(found))
 	for _, v := range found {
 		if len(v.Files) > 0 {
-			versions = append(versions, Version{ID: v.ID, Number: v.VersionNumber, Channel: v.VersionType, Published: v.Published})
+			versions = append(versions, Version{ID: v.ID, Number: v.VersionNumber, Channel: v.VersionType, Published: v.Published, GameVersions: v.GameVersions})
 		}
 	}
 	return versions, err
@@ -423,11 +430,33 @@ func (s *Service) Ensure(ctx context.Context, ref Ref, project string) error {
 	return err
 }
 
-// Uninstall removes the file of a project of Modrinth from a server, if it has one.
+// Provide installs the newest release of projects on a server, also those of GeyserMC,
+// unless it has it, and reports whether it changed a file. A server loads it when it starts.
+func (s *Service) Provide(ctx context.Context, ref Ref, projects []string) (bool, error) {
+	installed, err := (&installation{Service: s}).install(ctx, ref, projects)
+	return slices.ContainsFunc(installed, func(i Installed) bool { return i.written }), err
+}
+
+// Uninstall removes the file of a project of Modrinth or GeyserMC from a server, if it has one.
 func (s *Service) Uninstall(ctx context.Context, ref Ref, project string) error {
-	conn, _, err := s.server(ctx, ref)
+	conn, srv, err := s.server(ctx, ref)
 	if err != nil {
 		return err
+	}
+	if onGeyserMC(project) {
+		// GeyserMC only tells its newest build, but its builds keep the name of their file.
+		t, err := s.target(ctx, srv.GetType(), srv.GetVersion())
+		var latest []modrinth.Version
+		if err == nil {
+			latest, err = s.catalogue.geysermc.Latest(ctx, project, t.loaders)
+		}
+		if err != nil || len(latest) == 0 {
+			return err
+		}
+		if err := s.Remove(ctx, ref, latest[0].Files[0].Filename); status.Code(err) != codes.NotFound {
+			return err
+		}
+		return nil
 	}
 	present, err := (&installation{Service: s}).present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID, target{}, false)
 	if file, ok := present[project]; ok && err == nil {

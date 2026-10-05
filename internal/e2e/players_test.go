@@ -59,6 +59,24 @@ func TestPlayers(t *testing.T) {
 		t.Fatalf("all game servers = %+v", lists.Servers)
 	}
 
+	// Bedrock players are whitelisted with their ID from GeyserMC, as the servers behind the
+	// proxy can't look them up: their file changes, and a running server reloads it.
+	whitelist := map[string]any{"action": "whitelist_add", "name": ".Tim_203", "servers": []network.Ref{lobby, game}}
+	var added struct{ Results []player.Result }
+	api.do("POST", "/api/players/actions", whitelist, http.StatusOK, &added)
+	if r := added.Results; len(r) != 2 || r[0].Output != "Added .Tim_203 to the whitelist" || r[1].Pending || r[1].Error != "" {
+		t.Fatalf("results = %+v", r)
+	}
+	api.do("GET", "/api/players/lists?network="+n.ID, nil, http.StatusOK, &lists)
+	if w := lists.Whitelisted; len(w) != 1 || w[0].UUID != "00000000-0000-0000-0009-01f64f65c7c3" || len(w[0].Servers) != 2 {
+		t.Fatalf("whitelisted = %+v", w)
+	}
+	if got := a.runtime.commandsTo(lobby.ServerID); got[len(got)-1] != "minecraft:whitelist reload" {
+		t.Fatalf("lobby commands = %q", got)
+	}
+	whitelist["name"] = ".Nobody"
+	api.do("POST", "/api/players/actions", whitelist, http.StatusNotFound, nil)
+
 	// The proxy sends players to servers of its network.
 	api.do("POST", "/api/networks/"+n.ID+"/players/send", map[string]string{"name": "Alex", "server": "game"}, http.StatusNoContent, nil)
 	if got := a.runtime.commandsTo(proxy.ServerID); !slices.Equal(got, []string{"send Alex game"}) {

@@ -110,6 +110,9 @@ message Server {
   // Version of the mod loader of Fabric, Quilt, Forge and NeoForge servers, e.g. "0.16.10";
   // empty for the newest.
   string loader_version = 16;
+  // For a proxy whose network lets Bedrock players join: the UDP port at which Geyser
+  // listens for them; 0 for none.
+  uint32 bedrock_port = 17;
 }
 
 message ListServersRequest {}
@@ -236,6 +239,12 @@ message ConfigureNetworkRequest {
   repeated string try = 6;
   // For a proxy: the backends players join when they connect through a host name.
   repeated ForcedHost forced_hosts = 7;
+  // For a proxy: the UDP port at which Geyser lets Bedrock players join, which the node
+  // publishes; 0 for none. The master installs Geyser and Floodgate.
+  uint32 bedrock_port = 8;
+  // For a backend: Bedrock players join it through the proxy. They can't sign their chat
+  // messages, so the server must not demand it.
+  bool bedrock_players = 9;
 }
 
 enum Forwarding {
@@ -272,7 +281,10 @@ message ForcedHost {
   repeated string servers = 2;
 }
 
-message ConfigureNetworkResponse {}
+message ConfigureNetworkResponse {
+  // A running server restarted to apply the configuration, rather than reloading it.
+  bool restarted = 1;
+}
 
 message DuplicateServerRequest {
   // The server to copy.

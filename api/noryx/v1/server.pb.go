@@ -303,6 +303,9 @@ type Server struct {
 	// Version of the mod loader of Fabric, Quilt, Forge and NeoForge servers, e.g. "0.16.10";
 	// empty for the newest.
 	LoaderVersion string `protobuf:"bytes,16,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
+	// For a proxy whose network lets Bedrock players join: the UDP port at which Geyser
+	// listens for them; 0 for none.
+	BedrockPort   uint32 `protobuf:"varint,17,opt,name=bedrock_port,json=bedrockPort,proto3" json:"bedrock_port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -447,6 +450,13 @@ func (x *Server) GetLoaderVersion() string {
 		return x.LoaderVersion
 	}
 	return ""
+}
+
+func (x *Server) GetBedrockPort() uint32 {
+	if x != nil {
+		return x.BedrockPort
+	}
+	return 0
 }
 
 type ListServersRequest struct {
@@ -1532,9 +1542,15 @@ type ConfigureNetworkRequest struct {
 	// the first backend, as older masters sent it.
 	Try []string `protobuf:"bytes,6,rep,name=try,proto3" json:"try,omitempty"`
 	// For a proxy: the backends players join when they connect through a host name.
-	ForcedHosts   []*ForcedHost `protobuf:"bytes,7,rep,name=forced_hosts,json=forcedHosts,proto3" json:"forced_hosts,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ForcedHosts []*ForcedHost `protobuf:"bytes,7,rep,name=forced_hosts,json=forcedHosts,proto3" json:"forced_hosts,omitempty"`
+	// For a proxy: the UDP port at which Geyser lets Bedrock players join, which the node
+	// publishes; 0 for none. The master installs Geyser and Floodgate.
+	BedrockPort uint32 `protobuf:"varint,8,opt,name=bedrock_port,json=bedrockPort,proto3" json:"bedrock_port,omitempty"`
+	// For a backend: Bedrock players join it through the proxy. They can't sign their chat
+	// messages, so the server must not demand it.
+	BedrockPlayers bool `protobuf:"varint,9,opt,name=bedrock_players,json=bedrockPlayers,proto3" json:"bedrock_players,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ConfigureNetworkRequest) Reset() {
@@ -1614,6 +1630,20 @@ func (x *ConfigureNetworkRequest) GetForcedHosts() []*ForcedHost {
 		return x.ForcedHosts
 	}
 	return nil
+}
+
+func (x *ConfigureNetworkRequest) GetBedrockPort() uint32 {
+	if x != nil {
+		return x.BedrockPort
+	}
+	return 0
+}
+
+func (x *ConfigureNetworkRequest) GetBedrockPlayers() bool {
+	if x != nil {
+		return x.BedrockPlayers
+	}
+	return false
 }
 
 type NetworkBackend struct {
@@ -1783,7 +1813,9 @@ func (x *ForcedHost) GetServers() []string {
 }
 
 type ConfigureNetworkResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A running server restarted to apply the configuration, rather than reloading it.
+	Restarted     bool `protobuf:"varint,1,opt,name=restarted,proto3" json:"restarted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1816,6 +1848,13 @@ func (x *ConfigureNetworkResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ConfigureNetworkResponse.ProtoReflect.Descriptor instead.
 func (*ConfigureNetworkResponse) Descriptor() ([]byte, []int) {
 	return file_noryx_v1_server_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ConfigureNetworkResponse) GetRestarted() bool {
+	if x != nil {
+		return x.Restarted
+	}
+	return false
 }
 
 type DuplicateServerRequest struct {
@@ -2053,7 +2092,7 @@ var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xfb\x03\n" +
+	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\x9e\x04\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
@@ -2074,7 +2113,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"cpu_millis\x18\r \x01(\rR\tcpuMillis\x12\x18\n" +
 	"\acrashes\x18\x0e \x01(\rR\acrashes\x12\x1b\n" +
 	"\texit_code\x18\x0f \x01(\x05R\bexitCode\x12%\n" +
-	"\x0eloader_version\x18\x10 \x01(\tR\rloaderVersion\"\x14\n" +
+	"\x0eloader_version\x18\x10 \x01(\tR\rloaderVersion\x12!\n" +
+	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\"\x14\n" +
 	"\x12ListServersRequest\"A\n" +
 	"\x13ListServersResponse\x12*\n" +
 	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\xc3\x04\n" +
@@ -2150,7 +2190,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\"-\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\"\xb1\x02\n" +
+	"\x06output\x18\x01 \x01(\tR\x06output\"\xfd\x02\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x124\n" +
@@ -2160,7 +2200,9 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"forwarding\x18\x05 \x01(\x0e2\x14.noryx.v1.ForwardingR\n" +
 	"forwarding\x12\x10\n" +
 	"\x03try\x18\x06 \x03(\tR\x03try\x127\n" +
-	"\fforced_hosts\x18\a \x03(\v2\x14.noryx.v1.ForcedHostR\vforcedHosts\"\x9d\x01\n" +
+	"\fforced_hosts\x18\a \x03(\v2\x14.noryx.v1.ForcedHostR\vforcedHosts\x12!\n" +
+	"\fbedrock_port\x18\b \x01(\rR\vbedrockPort\x12'\n" +
+	"\x0fbedrock_players\x18\t \x01(\bR\x0ebedrockPlayers\"\x9d\x01\n" +
 	"\x0eNetworkBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\tserver_id\x18\x02 \x01(\tH\x00R\bserverId\x12\x1a\n" +
@@ -2173,8 +2215,9 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
 	"ForcedHost\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x18\n" +
-	"\aservers\x18\x02 \x03(\tR\aservers\"\x1a\n" +
-	"\x18ConfigureNetworkResponse\"P\n" +
+	"\aservers\x18\x02 \x03(\tR\aservers\"8\n" +
+	"\x18ConfigureNetworkResponse\x12\x1c\n" +
+	"\trestarted\x18\x01 \x01(\bR\trestarted\"P\n" +
 	"\x16DuplicateServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +

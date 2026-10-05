@@ -58,6 +58,10 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	proxies := []string{"velocity", "bungeecord", "waterfall"}
 	f.project("VCAqN1ln", "Maintenance", proxies)
 	f.version("VCAqN1ln", "5.1.0", proxies)
+	// Geyser keeps the name of its file, and each proxy has its own version on Modrinth.
+	f.project("wKkoqHrH", "Geyser", proxies)
+	f.release("wKkoqHrH", "2.11.3-velocity", "Geyser-Velocity.jar", []byte("geyser velocity"), []string{"velocity"})
+	f.release("wKkoqHrH", "2.11.3-bungeecord", "Geyser-BungeeCord.jar", []byte("geyser bungeecord"), []string{"bungeecord"})
 
 	mux.HandleFunc("GET /v2/search", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

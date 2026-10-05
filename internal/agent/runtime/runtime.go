@@ -55,6 +55,9 @@ type Spec struct {
 	// ProxyOnNode tells that the proxy of a backend runs on the same node, which reaches it
 	// without a published port.
 	ProxyOnNode bool `json:"proxyOnNode,omitempty"`
+	// BedrockPlayers tells that Bedrock players join a game server through its proxy. They
+	// can't sign their chat messages, so the server doesn't demand it.
+	BedrockPlayers bool `json:"bedrockPlayers,omitempty"`
 	// Storage is the storage location of the server's data; empty means the default.
 	Storage string `json:"storage,omitempty"`
 	// Java selects the Java version of a game server, e.g. "21"; empty means the newest.
@@ -67,6 +70,15 @@ type Spec struct {
 	// LoaderVersion selects the version of the mod loader of a modded server, e.g. one a
 	// modpack needs; empty means the newest.
 	LoaderVersion string `json:"loaderVersion,omitempty"`
+	// BedrockPort is the UDP port of Geyser on a proxy whose network lets Bedrock players
+	// join; 0 for none. The network sets it.
+	BedrockPort uint32 `json:"bedrockPort,omitempty"`
+}
+
+// Uses reports whether a server uses a port of the node: its own, or the UDP port at which
+// Bedrock players join a proxy.
+func (s Spec) Uses(port uint32) bool {
+	return s.Port == port || s.BedrockPort != 0 && s.BedrockPort == port
 }
 
 // Server is a server managed by a runtime.
@@ -100,12 +112,17 @@ type Network struct {
 	ForwardingSecret string
 	// ProxyOnNode is set for a backend whose proxy runs on the same node.
 	ProxyOnNode bool
+	// BedrockPlayers is set for the backends of a network that lets Bedrock players join.
+	BedrockPlayers bool
 	// Backends, Try and ForcedHosts are set for the proxy. Players join the backends of
 	// Try and fall back to them in this order, or to those of a forced host if they
 	// connect through its host name.
 	Backends    []NetworkBackend
 	Try         []string
 	ForcedHosts []ForcedHost
+	// BedrockPort is set for the proxy of a network that lets Bedrock players join through
+	// Geyser at this UDP port.
+	BedrockPort uint32
 }
 
 // NetworkBackend is a server behind the proxy, either on the same node (ServerID) or
@@ -182,8 +199,9 @@ type Runtime interface {
 	// Restart stops a server gracefully and starts it again.
 	Restart(ctx context.Context, id string) error
 	// Configure gives a server its role in a network. A running game server restarts if
-	// that changed it, a running proxy reloads its configuration.
-	Configure(ctx context.Context, id string, network Network) error
+	// that changed it, a running proxy reloads its configuration or restarts if it must. It
+	// reports whether the server restarted.
+	Configure(ctx context.Context, id string, network Network) (restarted bool, err error)
 	// Data opens the data directory of a server; the caller closes it.
 	Data(ctx context.Context, id string) (*datadir.Dir, error)
 	// Duplicate creates a stopped server with a copy of the data of the server from, in

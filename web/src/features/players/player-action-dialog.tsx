@@ -116,6 +116,7 @@ export function PlayerActionDialog({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
+                  <FieldDescription>{t("Players of the Bedrock Edition have a dot in front of their name, e.g. .Steve.")}</FieldDescription>
                 </Field>
               )}
               {info.reason && (

@@ -27,6 +27,11 @@ export function exposed(network: Network, draft: Draft) {
   return draft.forwarding === "legacy" && draft.backends.some((b) => b.nodeId !== network.proxy.nodeId)
 }
 
+/** Why the Bedrock port can't be used, if it can't; the master also checks that it is free. */
+export function bedrockPortError(port: number): string | undefined {
+  if (port !== 0 && !(Number.isInteger(port) && port >= 1024 && port <= 65535)) return t("Choose a port from 1024 to 65535.")
+}
+
 /** Whether the draft of a network can be saved. */
 export function isValid(network: Network, draft: Draft) {
   return (
@@ -35,6 +40,7 @@ export function isValid(network: Network, draft: Draft) {
     draft.try.length > 0 &&
     draft.backends.every((b, i) => !nameError(draft.backends, i) && b.motd.length <= 256) &&
     draft.forcedHosts.every((_, i) => !hostError(draft.forcedHosts, i)) &&
-    (!exposed(network, draft) || draft.firewalled)
+    (!exposed(network, draft) || draft.firewalled) &&
+    !bedrockPortError(draft.bedrockPort)
   )
 }

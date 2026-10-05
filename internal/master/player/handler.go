@@ -74,6 +74,9 @@ func (h *Handler) change(w http.ResponseWriter, r *http.Request) {
 		Status: http.StatusOK, Timeout: changeTimeout, Category: logging.Players,
 		Visible: func(g access.Grants) bool { return seesAll(g, req.Servers) },
 	}, func(ctx context.Context) (any, error) {
+		if err := h.svc.identify(ctx, c); err != nil {
+			return nil, err
+		}
 		return map[string]any{"results": h.svc.Change(ctx, c, req.Servers)}, nil
 	})
 }

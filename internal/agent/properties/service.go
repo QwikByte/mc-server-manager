@@ -45,6 +45,9 @@ func locked(spec runtime.Spec) map[string]string {
 	if spec.BehindProxy {
 		l["online-mode"] = "The proxy of the server's network authenticates players."
 	}
+	if spec.BedrockPlayers {
+		l["enforce-secure-profile"] = "Bedrock players join through the proxy of the server's network, and they can't sign their chat messages."
+	}
 	return l
 }
 

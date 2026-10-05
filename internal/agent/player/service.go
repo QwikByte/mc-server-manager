@@ -86,6 +86,9 @@ func (s *Service) ChangePlayer(ctx context.Context, req *noryxv1.ChangePlayerReq
 		return nil, err
 	}
 	defer dir.Close()
+	if bedrockWhitelist(change) {
+		return s.whitelistBedrock(ctx, srv, dir, change)
+	}
 	if srv.State == running {
 		out, err := s.rt.SendCommand(ctx, srv.ID, command(change))
 		if err != nil {

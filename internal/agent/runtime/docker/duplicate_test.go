@@ -13,7 +13,8 @@ import (
 )
 
 func TestStandalone(t *testing.T) {
-	// A copied backend no longer trusts the proxy of the original.
+	// A copied backend no longer trusts the proxy of the original, and demands signed chat
+	// messages again if Bedrock players joined the original.
 	backend := t.TempDir()
 	dir, err := datadir.Open(backend)
 	if err != nil {
@@ -23,25 +24,37 @@ func TestStandalone(t *testing.T) {
 	if _, err := mcnet.WriteBackend(dir, noryxv1.ServerType_SERVER_TYPE_PAPER, runtime.ForwardingModern, "s3cretS3cretS3cret"); err != nil {
 		t.Fatal(err)
 	}
-	if err := standalone(backend, runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_PAPER, BehindProxy: true}); err != nil {
+	if err := standalone(backend, runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_PAPER, BehindProxy: true, BedrockPlayers: true}); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(backend, "config", "paper-global.yml"))
 	if err != nil || strings.Contains(string(data), "s3cret") || !strings.Contains(string(data), "enabled: false") {
 		t.Fatalf("paper-global.yml = %s, %v", data, err)
 	}
+	if data, err := os.ReadFile(filepath.Join(backend, "server.properties")); err != nil || !strings.Contains(string(data), "enforce-secure-profile=true") {
+		t.Fatalf("server.properties = %s, %v", data, err)
+	}
 
-	// A copied proxy loses the forwarding secret; Velocity creates a new one.
+	// A copied proxy loses the forwarding secret and Floodgate's key; Velocity and Floodgate
+	// create new ones.
 	proxy := t.TempDir()
 	if err := os.WriteFile(filepath.Join(proxy, mcnet.ForwardingSecretFile), []byte("s3cret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(proxy, "plugins", "floodgate"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proxy, mcnet.FloodgateKeyFile), []byte("0123456789abcdef"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	spec := runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_VELOCITY}
 	if err := standalone(proxy, spec); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(proxy, mcnet.ForwardingSecretFile)); !os.IsNotExist(err) {
-		t.Fatalf("the forwarding secret was copied: %v", err)
+	for _, secret := range []string{mcnet.ForwardingSecretFile, mcnet.FloodgateKeyFile} {
+		if _, err := os.Stat(filepath.Join(proxy, secret)); !os.IsNotExist(err) {
+			t.Fatalf("%s was copied: %v", secret, err)
+		}
 	}
 	if err := standalone(proxy, spec); err != nil {
 		t.Fatalf("proxy without a secret: %v", err)

@@ -37,10 +37,11 @@ type Networks interface {
 type Service struct {
 	nodes    Nodes
 	networks Networks
+	bedrock  BedrockPlayers
 }
 
-func NewService(nodes Nodes, networks Networks) *Service {
-	return &Service{nodes: nodes, networks: networks}
+func NewService(nodes Nodes, networks Networks, bedrock BedrockPlayers) *Service {
+	return &Service{nodes: nodes, networks: networks, bedrock: bedrock}
 }
 
 // Result tells how a change ended on a server.

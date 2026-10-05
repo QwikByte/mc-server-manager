@@ -1,6 +1,7 @@
 import {
   ArrowsSplitIcon,
   CubeIcon,
+  DeviceMobileIcon,
   GraphIcon,
   HardDrivesIcon,
   HashIcon,
@@ -86,6 +87,11 @@ export function NetworkPage() {
             {proxy && (
               <Chip icon={HashIcon}>
                 <span className="font-mono">{proxy.port}</span>
+              </Chip>
+            )}
+            {network.bedrockPort > 0 && (
+              <Chip icon={DeviceMobileIcon}>
+                {t("Bedrock")} <span className="font-mono">{network.bedrockPort}</span>
               </Chip>
             )}
           </span>

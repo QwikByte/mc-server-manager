@@ -14,14 +14,23 @@ export interface Draft {
   try: string[]
   /** Host names with the keys of their servers. */
   forcedHosts: ForcedHost[]
+  bedrockPort: number
 }
 
-export function draftOf({ name, forwarding, firewalled, backends, try: tried, forcedHosts }: NetworkSettings): Draft {
+export function draftOf({ name, forwarding, firewalled, backends, try: tried, forcedHosts, bedrockPort }: NetworkSettings): Draft {
   const keyOf = (name: string) => {
     const b = backends.find((b) => b.name === name)
     return b ? key(b) : name
   }
-  return { name, forwarding, firewalled, backends, try: tried.map(keyOf), forcedHosts: forcedHosts.map((h) => ({ ...h, servers: h.servers.map(keyOf) })) }
+  return {
+    name,
+    forwarding,
+    firewalled,
+    backends,
+    try: tried.map(keyOf),
+    forcedHosts: forcedHosts.map((h) => ({ ...h, servers: h.servers.map(keyOf) })),
+    bedrockPort,
+  }
 }
 
 export function settingsOf(d: Draft): NetworkSettings {
@@ -47,10 +56,13 @@ export function effects(network: Network, d: Draft, bungee: boolean) {
   const left = network.backends.filter((b) => !after.has(key(b)))
   const renamed = d.backends.some((b) => before.has(key(b)) && before.get(key(b))?.name !== b.name)
   return {
-    // Game servers restart when they join or leave, or when the forwarding changes.
-    restart: d.forwarding !== network.forwarding ? d.backends : joined,
+    // Game servers restart when they join or leave, or when the forwarding changes or Bedrock
+    // players start or stop joining, who can't sign their chat messages.
+    restart: d.forwarding !== network.forwarding || !d.bedrockPort !== !network.bedrockPort ? d.backends : joined,
     left,
     // BungeeCord can't reload without a server it had.
     proxyRestarts: bungee && (left.length > 0 || renamed),
+    // The proxy restarts to publish another Bedrock port and to load or unload Geyser.
+    bedrock: d.bedrockPort === network.bedrockPort ? undefined : !d.bedrockPort ? "off" : !network.bedrockPort ? "on" : "port",
   }
 }

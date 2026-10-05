@@ -65,6 +65,8 @@ export interface ProjectVersion {
   number: string
   channel: "release" | "beta" | "alpha"
   published: string
+  /** The versions of Minecraft it supports. */
+  gameVersions?: string[]
 }
 
 /** A plugin file on a server; files from Modrinth and Hangar are recognised by their hash. */

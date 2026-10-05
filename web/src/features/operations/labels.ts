@@ -118,6 +118,10 @@ export function stepOf(op: Operation, step: string): string {
       return t("Restart the proxy")
     case "plugin":
       return t("Install the Maintenance plugin")
+    case "bedrock":
+      return t("Install Geyser and Floodgate")
+    case "bedrock-remove":
+      return t("Remove Geyser and Floodgate")
     case "maintenance":
       return op.kind === "network.maintenance-off" ? t("Turn maintenance off") : t("Turn maintenance on")
     case "servers":

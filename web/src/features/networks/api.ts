@@ -36,6 +36,8 @@ export interface NetworkSettings {
   /** Names of the servers players join and fall back to, in this order. */
   try: string[]
   forcedHosts: ForcedHost[]
+  /** The UDP port at which Bedrock players join through Geyser on the proxy; 0 lets none join. */
+  bedrockPort: number
 }
 
 export interface Network extends NetworkSettings {

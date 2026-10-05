@@ -33,10 +33,10 @@ MOTD editor with colour codes and preview, and a search. Only properties of the 
 shown, comments in the file are kept, and properties the manager relies on (container port, RCON) are locked.
 
 Secrets such as the RCON password and the forwarding secret of a network never reach the panel. The file manager
-hides files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`) and shows
-`server.properties`, `config/paper-global.yml` and the configuration of the forwarding mods of networks with their
-secrets as `<hidden>`, which saving keeps. Downloads of
-folders and backups leave them out the same way. Plugins and mods run with the server, though, and can read them.
+hides files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`, Floodgate's `key.pem`)
+and shows `server.properties`, `config/paper-global.yml`, Geyser's `config.yml` and the configuration of the
+forwarding mods of networks with their secrets as `<hidden>`, which saving keeps. Downloads of folders and backups
+leave them out the same way. Plugins and mods run with the server, though, and can read them.
 
 The settings of a server can be changed after it was created: name, Minecraft version, the version of the mod loader
 of Fabric, Quilt, Forge and NeoForge servers (the newest unless set), memory, port, Java version (8, 11, 17, 21, 25 or
@@ -221,7 +221,8 @@ files uploaded by hand; it searches, filters (updates, not from Modrinth) and so
 [Hangar](https://hangar.papermc.io), PaperMC's plugin repository, too: the search switches between Modrinth and Hangar.
 They are installed, updated, chosen in another version and kept in templates like those of Modrinth, with the plugins
 they require from Hangar. Installed files are recognised by their hash on both; a file that is on both counts as
-Modrinth's, and installing it from Hangar replaces it rather than adding another copy.
+Modrinth's, and installing it from Hangar replaces it rather than adding another copy. Floodgate, which lets Bedrock
+players join a network, comes from GeyserMC's download server; the panel installs it on the proxy with Geyser.
 
 **Modpacks.** A server can be created from a [Modrinth modpack](https://modrinth.com/modpacks) for Fabric, Quilt,
 Forge or NeoForge: **Create server** searches the modpacks and offers the versions of the chosen one, the newest release
@@ -331,6 +332,21 @@ removes it when it leaves.
   proxy to load it, which disconnects all players once. The team is edited in the panel (the plugin's `maintenance add`
   and `remove`), the texts in the plugin's `config.yml`, which the panel links to. The panel reads the state from the
   plugin's files, so it also shows maintenance turned on in the game.
+- **Bedrock players.** The network's overview lets players of the Bedrock Edition join, on phones, consoles and
+  Windows, at a UDP port of the proxy's node: the panel installs [Geyser](https://geysermc.org), from Modrinth, and
+  Floodgate, from GeyserMC's download server, on the proxy, publishes the port and writes it with
+  `auth-type: floodgate` into Geyser's `config.yml`. Geyser translates their game, and Floodgate lets them join
+  without a Java account, which needs no plugin on the game servers: Floodgate's key stays on the proxy. Applying the
+  network updates both to their newest build. The proxy restarts when Bedrock players are let in or no longer, their
+  port changes or a plugin is updated; the game servers restart when they are let in or no longer, as they stop
+  demanding signed chat messages, which Bedrock players can't send (`ENFORCE_SECURE_PROFILE=FALSE`, locked in their
+  properties; afterwards `enforce-secure-profile=true` again). The panel shows where Bedrock players connect and
+  warns about what keeps them out: Geyser joins as one Minecraft version (it tells which), so game servers of older
+  versions need ViaVersion and newer ones ViaVersion and ViaBackwards; Geyser needs about 1 GB of memory on the proxy;
+  and the UDP port must be open on the proxy's node, e.g. in the provider's firewall. Geyser also needs to reach
+  Mojang's and Microsoft's servers from the proxy, and Bedrock players can't join servers whose mods players must
+  install. In the panel and the game, Floodgate starts their names with a dot, e.g. `.Steve`. Turning Bedrock off
+  removes both plugins, but keeps their settings and Floodgate's key for later.
 - **Reaching the servers.** On its own node, the proxy reaches a server by container name over a Docker network that only
   the two of them share; such a server's port isn't published at all. A server on another node is reached at that
   node's host and the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as
@@ -357,6 +373,10 @@ how many servers have each player, and the changes that wait for stopped servers
 - **How.** The agents run Minecraft's own commands (`minecraft:ban` and so on) through the server's console port, so the
   lists stay in the server's files, also where plugins replace the commands, and read the lists from those files.
   Names are checked before they become part of a command: 16 letters, digits and underscores, or Floodgate's dot before.
+- **Bedrock players** have Floodgate's dot before their name. The servers behind the proxy can't look them up, so the
+  whitelist gets them with the ID Floodgate gives them, which the master asks GeyserMC's global API for: GeyserMC
+  knows the players who joined a server with Geyser before. The agent writes them into `whitelist.json`, which a
+  running server reloads (`whitelist reload`). Other actions work by name once a player joined the server.
 - **Permissions.** Acting on players needs the permission to manage players on each server; making operators also needs
   the permission to send console commands, as operators may run any command in the game.
 
@@ -521,17 +541,21 @@ Users get their permissions from groups; a user can be in several groups and has
   moved where they would show, and archives leave them out. Only moving a server to another node copies them.
 - **Plugins.** The master downloads only from Modrinth's CDN, up to 256 MB, and only uses a file whose SHA-512 hash
   matches the one Modrinth's API lists; from Hangar, only from its CDN and with the SHA-256 hash its API lists, and
-  versions that only link elsewhere can't be installed. A modpack is checked the same way, and each of its files against the SHA-512
+  versions that only link elsewhere can't be installed. Floodgate only comes from GeyserMC's download server, with the
+  SHA-256 hash its API lists. A modpack is checked the same way, and each of its files against the SHA-512
   hash in the pack; packs with files elsewhere than on Modrinth's CDN or with paths that leave the server's folder are
   refused before a server is created, and the agent confines the files like those of the file manager. The version of
   a mod loader ends up in a variable of the server image, so the agent only accepts letters, digits, `.`, `_`, `+`
   and `-`. The agent decides the folder from the server type and only accepts plain
   `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth or Hangar
-  and the Content Security Policy stays unchanged.
+  and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the master sends their gamertag to
+  GeyserMC's global API, and the agent only accepts the IDs Floodgate gives Bedrock players.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
   directory. A copied Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a
-  copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. A copied Fabric or Quilt
-  server keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab.
+  copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. Copied proxies also
+  lose Floodgate's key, with which Geyser vouches for Bedrock players, and copied game servers demand signed chat
+  again. A copied Fabric or Quilt server keeps FabricProxy-Lite, which turns players away until it is removed in the
+  **Mods** tab.
 - **Backups.** The agent keeps backups outside of the servers' folders, accessible to itself only (mode `0700`), so a
   compromised server can't read or tamper with them. The master can only choose among the storage locations the
   node's administrator allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry
@@ -604,7 +628,7 @@ internal/master/
   tag/                  tags of servers, which the panel finds and groups them by
   operation/            long actions run in the background, with their steps and progress, and the API that follows them
   network/              networks of servers behind a proxy, applied through the agents; actions on their servers,
-                        rolling restarts, maintenance and the settings of proxies
+                        rolling restarts, maintenance, Bedrock players and the settings of proxies
   player/               kicks, bans, whitelists and operators on many servers at once, their joined lists, and sending
                         players to another server of a network
   files/                file manager, streamed between the browser and the agent
@@ -612,6 +636,7 @@ internal/master/
   plugin/               installs, lists and removes plugins and mods of servers, from Modrinth and Hangar
   modrinth/             client for the Modrinth API and CDN
   hangar/               client for the Hangar API and CDN, with projects and versions shaped like Modrinth's
+  geysermc/             client for GeyserMC's download server (Floodgate) and global API (IDs of Bedrock players)
   modpack/              creates servers from Modrinth modpacks: checks a pack and writes its files into the server
   template/             templates for new servers
   schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API
@@ -628,8 +653,8 @@ internal/agent/
   server/               server lifecycle and input validation
   storage/              storage locations allowed for server data
   datadir/              confined access to a server's data, owned by the server's user
-  network/              configuration of proxies and game servers for networks, the settings of proxies, and the
-                        Maintenance plugin
+  network/              configuration of proxies and game servers for networks, the settings of proxies, Geyser's
+                        configuration, and the Maintenance plugin
   player/               kicks, bans, whitelists and operators with Minecraft's commands; changes for stopped servers
   files/                file access for the file manager
   properties/           reads and updates server.properties, keeping comments

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/network"
 	"github.com/QwikByte/noryx/internal/agent/properties"
@@ -21,8 +22,19 @@ import (
 const Placeholder = "<hidden>"
 
 // hidden are the files that only hold secrets: those of rcon-cli, which the server image
-// writes, and the forwarding secret of a proxy.
-var hidden = []string{".rcon-cli.env", ".rcon-cli.yaml", network.ForwardingSecretFile}
+// writes, the forwarding secret of a proxy, the key with which Geyser vouches for Bedrock
+// players to Floodgate, and the Microsoft sign-ins Geyser keeps.
+var hidden = []string{
+	".rcon-cli.env", ".rcon-cli.yaml", network.ForwardingSecretFile, network.FloodgateKeyFile,
+	geyserVelocity + "/saved-refresh-tokens.json", geyserBungee + "/saved-refresh-tokens.json",
+}
+
+var (
+	geyserVelocity = network.GeyserFolder(noryxv1.ServerType_SERVER_TYPE_VELOCITY)
+	geyserBungee   = network.GeyserFolder(noryxv1.ServerType_SERVER_TYPE_BUNGEECORD)
+	// geyserSecrets are the keys of Geyser's configuration for external signaling and HTTPS.
+	geyserSecrets = []string{"token", "password", "private-key"}
+)
 
 // redacted are the files with secrets among other settings, with the pattern of a line with
 // a secret: the key with its separator, the key, and the value.
@@ -30,9 +42,11 @@ var redacted = map[string]*regexp.Regexp{
 	"server.properties": lines(slices.Collect(maps.Keys(properties.Secret))),
 	// The forwarding secret of a network on game servers: in Paper's configuration or in
 	// that of the forwarding mod of Fabric, Quilt, Forge or NeoForge.
-	network.PaperGlobalFile: lines([]string{"secret"}),
-	network.FabricProxyFile: lines([]string{"secret"}),
-	network.ForgeProxyFile:  lines([]string{"secret"}),
+	network.PaperGlobalFile:        lines([]string{"secret"}),
+	network.FabricProxyFile:        lines([]string{"secret"}),
+	network.ForgeProxyFile:         lines([]string{"secret"}),
+	geyserVelocity + "/config.yml": lines(slices.Clone(geyserSecrets)),
+	geyserBungee + "/config.yml":   lines(slices.Clone(geyserSecrets)),
 }
 
 func lines(keys []string) *regexp.Regexp {

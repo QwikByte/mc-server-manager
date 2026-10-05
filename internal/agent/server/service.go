@@ -156,6 +156,7 @@ func (s *Service) DuplicateServer(ctx context.Context, req *noryxv1.DuplicateSer
 	}
 	spec := source.Spec
 	spec.ID, spec.Name, spec.Port, spec.BehindProxy, spec.ProxyOnNode = runtime.NewID(), req.GetName(), req.GetPort(), false, false
+	spec.BedrockPort, spec.BedrockPlayers = 0, false // the copy isn't part of the network
 	if err := s.check(ctx, spec); err != nil {
 		return nil, err
 	}
@@ -298,7 +299,9 @@ func (s *Service) check(ctx context.Context, spec runtime.Spec) error {
 	if err != nil {
 		return toStatus(err)
 	}
-	if i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.Port == spec.Port && srv.ID != spec.ID }); i >= 0 {
+	if i := slices.IndexFunc(servers, func(srv runtime.Server) bool {
+		return srv.Uses(spec.Port) && (srv.ID != spec.ID || spec.BedrockPort == spec.Port)
+	}); i >= 0 {
 		return status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another port.", spec.Port, servers[i].Name)
 	}
 	return nil
@@ -369,7 +372,10 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNe
 	if msg != "" {
 		return nil, status.Error(codes.InvalidArgument, msg)
 	}
-	err := s.rt.Configure(ctx, req.GetId(), network)
+	if err := s.checkBedrock(ctx, req.GetId(), network.BedrockPort); err != nil {
+		return nil, err
+	}
+	restarted, err := s.rt.Configure(ctx, req.GetId(), network)
 	switch {
 	case errors.Is(err, runtime.ErrUnsupported):
 		return nil, status.Error(codes.FailedPrecondition, "Vanilla servers can't be part of a network, as they can't verify the players a proxy forwards.")
@@ -378,12 +384,36 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNe
 	case err != nil:
 		return nil, toStatus(err)
 	}
-	return &noryxv1.ConfigureNetworkResponse{}, nil
+	return &noryxv1.ConfigureNetworkResponse{Restarted: restarted}, nil
+}
+
+// checkBedrock checks that only a proxy gets a Bedrock port, and one no other server uses.
+func (s *Service) checkBedrock(ctx context.Context, id string, port uint32) error {
+	if port == 0 {
+		return nil
+	}
+	servers, err := s.rt.List(ctx)
+	if err != nil {
+		return toStatus(err)
+	}
+	i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.ID == id })
+	switch {
+	case i < 0:
+		return toStatus(runtime.ErrNotFound)
+	case !servers[i].Type.Proxy():
+		return status.Error(codes.InvalidArgument, "Only proxies let Bedrock players join.")
+	case port < minPort || port > maxPort:
+		return status.Errorf(codes.InvalidArgument, "The Bedrock port must be between %d and %d.", minPort, maxPort)
+	}
+	if other := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.Uses(port) && (srv.ID != id || srv.Port == port) }); other >= 0 {
+		return status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another Bedrock port.", port, servers[other].Name)
+	}
+	return nil
 }
 
 // networkOf validates a network configuration, which ends up in configuration files.
 func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
-	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret(), Try: req.GetTry()}
+	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret(), Try: req.GetTry(), BedrockPort: req.GetBedrockPort()}
 	switch req.GetForwarding() {
 	case noryxv1.Forwarding_FORWARDING_UNSPECIFIED: // sent by older masters
 		network.Forwarding = runtime.ForwardingNone
@@ -398,7 +428,8 @@ func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
 	default:
 		return network, "invalid forwarding"
 	}
-	network.ProxyOnNode = req.GetProxyOnNode() && network.Forwarding != runtime.ForwardingNone
+	behind := network.Forwarding != runtime.ForwardingNone
+	network.ProxyOnNode, network.BedrockPlayers = req.GetProxyOnNode() && behind, req.GetBedrockPlayers() && behind
 	switch {
 	case !runtime.ValidID(req.GetId()):
 		return network, "invalid server ID"
@@ -521,7 +552,7 @@ func toProto(s runtime.Server) *noryxv1.Server {
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
 		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
-		LoaderVersion: s.LoaderVersion,
+		LoaderVersion: s.LoaderVersion, BedrockPort: s.BedrockPort,
 	}
 }
 
