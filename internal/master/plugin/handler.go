@@ -65,7 +65,8 @@ type hit struct {
 }
 
 // search finds plugins or mods, or both, for a server type and Minecraft version, both
-// optional, in categories, sorted and limited to those players don't need.
+// optional, in categories, sorted and limited to those players don't need; on Modrinth, or
+// plugins on Hangar with the source hangar.
 func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
@@ -82,7 +83,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	case q.Get("type") != "":
 		t, err = h.svc.target(ctx, noryxv1.ParseServerType(q.Get("type")), t.gameVersion)
 	case t.gameVersion == "LATEST":
-		t.gameVersion, err = h.svc.modrinth.LatestRelease(ctx)
+		t.gameVersion, err = h.svc.catalogue.modrinth.LatestRelease(ctx)
 	}
 	var res modrinth.SearchResult
 	if err == nil {
@@ -90,7 +91,11 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		if len(s.Loaders) == 0 {
 			s.Loaders = modrinth.AllLoaders(s.Kind)
 		}
-		res, err = h.svc.modrinth.Search(ctx, s)
+		if q.Get("source") == "hangar" {
+			res, err = h.svc.catalogue.hangar.Search(ctx, s)
+		} else {
+			res, err = h.svc.catalogue.modrinth.Search(ctx, s)
+		}
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -113,7 +118,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) gameVersions(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
-	releases, err := h.svc.modrinth.Releases(ctx)
+	releases, err := h.svc.catalogue.modrinth.Releases(ctx)
 	write(w, r, http.StatusOK, releases, err)
 }
 
@@ -134,7 +139,12 @@ func (h *Handler) versions(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) icon(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
-	data, contentType, err := h.svc.modrinth.Icon(ctx, r.PathValue("project")+"/"+r.PathValue("file"))
+	icon := h.svc.catalogue.modrinth.Icon
+	name := r.PathValue("project") + "/" + r.PathValue("file")
+	if r.PathValue("project")+"/" == hangarIcons {
+		icon, name = h.svc.catalogue.hangar.Icon, r.PathValue("file")
+	}
+	data, contentType, err := icon(ctx, name)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -157,7 +167,7 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	badVersion := func(project string) bool {
-		return !slices.Contains(req.Projects, project) || !modrinth.ValidProjectID(req.Versions[project])
+		return !slices.Contains(req.Projects, project) || !ValidProjectID(req.Versions[project])
 	}
 	grants := access.From(r.Context())
 	switch err := checkProjects(req.Projects); {
@@ -191,7 +201,7 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 
 // checkProjects checks the Modrinth projects to install, before anything is looked up.
 func checkProjects(projects []string) error {
-	if len(projects) == 0 || len(projects) > maxProjects || slices.ContainsFunc(projects, func(id string) bool { return !modrinth.ValidProjectID(id) }) {
+	if len(projects) == 0 || len(projects) > maxProjects || slices.ContainsFunc(projects, func(id string) bool { return !ValidProjectID(id) }) {
 		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d projects to install.", maxProjects)
 	}
 	return nil

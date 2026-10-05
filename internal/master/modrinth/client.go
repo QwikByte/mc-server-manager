@@ -161,6 +161,8 @@ type File struct {
 	Size     int64  `json:"size"`
 	Hashes   struct {
 		SHA512 string `json:"sha512"`
+		// SHA256 is set instead for files of Hangar, see package hangar.
+		SHA256 string `json:"-"`
 	} `json:"hashes"`
 }
 

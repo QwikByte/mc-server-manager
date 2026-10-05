@@ -15,6 +15,7 @@ import { Choice } from "@/components/choice"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { FilterChip } from "@/components/filter-chip"
+import { Segmented } from "@/components/segmented"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
@@ -25,7 +26,17 @@ import { serverType, serverTypes } from "@/features/servers/server-types"
 import { formatDate } from "@/lib/format"
 import { locale, msg } from "@/lib/i18n"
 import { useDebounced } from "@/lib/use-debounced"
-import { gameVersionsQuery, type Kind, type Search, type SearchHit, type Sort, searchQuery } from "./api"
+import {
+  gameVersionsQuery,
+  type Kind,
+  onHangar,
+  projectUrl,
+  type Search,
+  type SearchHit,
+  type Sort,
+  type Source,
+  searchQuery,
+} from "./api"
 import { categories } from "./categories"
 import { PluginIcon } from "./plugin-icon"
 
@@ -45,7 +56,7 @@ const modLoaders = serverTypes.flatMap((s) => (s.addons?.kind === "mods" ? s.add
 type Filters = Omit<Search, "query" | "kind">
 
 /**
- * Searches Modrinth for plugins and mods, in categories and sorted. A given server type and Minecraft version are
+ * Searches Modrinth for plugins and mods, in categories and sorted, or Hangar for plugins. A given server type and Minecraft version are
  * fixed, otherwise they can be chosen, among the software of a kind if given. Without a query, the most downloaded
  * ones come first.
  */
@@ -62,7 +73,11 @@ export function PluginSearch({
   action: (hit: SearchHit) => ReactNode
   autoFocus?: boolean
 }) {
-  const choices = serverTypes.filter((s) => s.addons && (!kind || s.addons.kind === kind))
+  const [source, setSource] = useState<Source>("modrinth")
+  // Hangar has no mods, and plugins only of some software, e.g. not of Folia.
+  const sources = kind !== "mods" && (type === undefined || onHangar(type))
+  const hangar = sources && source === "hangar"
+  const choices = serverTypes.filter((s) => s.addons && (!kind || s.addons.kind === kind) && (!hangar || onHangar(s.value)))
   const [input, setInput] = useState("")
   const query = useDebounced(input.trim())
   // The first software is searched first, the most common one.
@@ -70,14 +85,22 @@ export function PluginSearch({
   const set = (change: Partial<Filters>) => setFilters((f) => ({ ...f, ...change }))
   const software = type ?? filters.type
   // Players may have to install mods too, never plugins.
-  const mods = software ? serverType(software).addons?.kind === "mods" : kind !== "plugins"
+  const mods = !hangar && (software ? serverType(software).addons?.kind === "mods" : kind !== "plugins")
   const search: Search = {
     ...filters,
+    source: hangar ? "hangar" : "modrinth",
     query,
     kind,
     type: software,
     version: version ?? filters.version,
+    // Hangar's categories differ, and it has no mods.
+    categories: hangar ? [] : filters.categories,
     serverOnly: filters.serverOnly && mods,
+  }
+
+  function changeSource(next: Source) {
+    setSource(next)
+    if (next === "hangar" && filters.type && !onHangar(filters.type)) set({ type: "paper" })
   }
   const { data: releases = [] } = useQuery({ ...gameVersionsQuery, enabled: version === undefined })
   const { data, error, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery(searchQuery(search))
@@ -97,13 +120,25 @@ export function PluginSearch({
             </InputGroupAddon>
             <InputGroupInput
               type="search"
-              placeholder={t("Search Modrinth, e.g. LuckPerms")}
+              placeholder={hangar ? t("Search Hangar, e.g. Chunky") : t("Search Modrinth, e.g. LuckPerms")}
               aria-label={t("Search plugins and mods")}
               autoFocus={autoFocus}
               value={input}
               onChange={(e) => setInput(e.target.value)}
             />
           </InputGroup>
+          {sources && (
+            <Segmented
+              label={t("Source")}
+              value={hangar ? "hangar" : "modrinth"}
+              options={[
+                { value: "modrinth", label: "Modrinth" },
+                { value: "hangar", label: "Hangar" },
+              ]}
+              onChange={changeSource}
+              className="self-center"
+            />
+          )}
           <Select value={filters.sort} onValueChange={(sort) => set({ sort: sort as Sort })}>
             <SelectTrigger aria-label={t("Sort")} className="max-sm:flex-1">
               <ArrowsDownUpIcon className="text-muted-foreground" />
@@ -148,31 +183,33 @@ export function PluginSearch({
               ))}
             </Choice>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="font-normal max-sm:flex-1">
-                <SquaresFourIcon className="text-muted-foreground" />
-                {t("Categories")}
-                {filters.categories.length > 0 && (
-                  <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{filters.categories.length}</span>
-                )}
-                <CaretDownIcon className="text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="max-h-80 w-56">
-              {Object.entries(categories).map(([value, { label, icon: Icon }]) => (
-                <DropdownMenuCheckboxItem
-                  key={value}
-                  checked={filters.categories.includes(value)}
-                  onCheckedChange={(on) => toggle(value, on)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  <Icon className="text-muted-foreground" weight="duotone" />
-                  {t(label)}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!hangar && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="font-normal max-sm:flex-1">
+                  <SquaresFourIcon className="text-muted-foreground" />
+                  {t("Categories")}
+                  {filters.categories.length > 0 && (
+                    <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{filters.categories.length}</span>
+                  )}
+                  <CaretDownIcon className="text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="max-h-80 w-56">
+                {Object.entries(categories).map(([value, { label, icon: Icon }]) => (
+                  <DropdownMenuCheckboxItem
+                    key={value}
+                    checked={filters.categories.includes(value)}
+                    onCheckedChange={(on) => toggle(value, on)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    <Icon className="text-muted-foreground" weight="duotone" />
+                    {t(label)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {mods && (
             <label className="flex h-9 cursor-pointer items-center gap-2 px-1 text-sm" title={t("Only mods that players don't have to install")}>
               <Switch checked={filters.serverOnly} onCheckedChange={(serverOnly) => set({ serverOnly })} />
@@ -230,7 +267,7 @@ function Hit({ hit, loaders, action }: { hit: SearchHit; loaders: boolean; actio
       <PluginIcon src={hit.icon} />
       <div className="min-w-0 flex-1 space-y-1">
         <p className="truncate text-sm font-semibold">
-          <a href={`https://modrinth.com/project/${hit.slug}`} target="_blank" rel="noreferrer" className="hover:underline">
+          <a href={projectUrl(hit)} target="_blank" rel="noreferrer" className="hover:underline">
             {hit.title}
           </a>
           <span className="font-normal text-muted-foreground"> {t("by {{author}}", { author: hit.author })}</span>

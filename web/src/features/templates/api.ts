@@ -23,7 +23,7 @@ export interface Template extends TemplateSettings {
   id: string
   name: string
   description: string
-  /** Modrinth projects; each new server gets the newest release that suits it. */
+  /** Projects of Modrinth or Hangar; each new server gets the newest release that suits it. */
   plugins: Project[]
   createdAt: string
 }
@@ -31,7 +31,7 @@ export interface Template extends TemplateSettings {
 export interface TemplateInput extends TemplateSettings {
   name: string
   description: string
-  /** Modrinth project IDs. */
+  /** IDs of projects of Modrinth or Hangar. */
   plugins: string[]
 }
 

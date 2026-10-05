@@ -8,7 +8,7 @@ import { PluginSearch } from "./plugin-search"
 
 const route = getRouteApi("/_app/plugins")
 
-/** Finds plugins or mods on Modrinth and installs them on several servers at once. */
+/** Finds plugins or mods on Modrinth, or plugins on Hangar, and installs them on several servers at once. */
 export function PluginsPage() {
   const { kind = "plugins" } = route.useSearch()
   const navigate = route.useNavigate()

@@ -217,6 +217,12 @@ Installed files are recognised by their hash, so the tab shows their project, ve
 files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once. Own
 `.jar` files can be uploaded too. Servers load changes when they restart.
 
+**Hangar.** Plugins of Paper and its forks except Folia, Velocity, BungeeCord and Waterfall can come from
+[Hangar](https://hangar.papermc.io), PaperMC's plugin repository, too: the search switches between Modrinth and Hangar.
+They are installed, updated, chosen in another version and kept in templates like those of Modrinth, with the plugins
+they require from Hangar. Installed files are recognised by their hash on both; a file that is on both counts as
+Modrinth's, and installing it from Hangar replaces it rather than adding another copy.
+
 **Modpacks.** A server can be created from a [Modrinth modpack](https://modrinth.com/modpacks) for Fabric, Quilt,
 Forge or NeoForge: **Create server** searches the modpacks and offers the versions of the chosen one, the newest release
 first. The pack decides the software, the Minecraft version and the version of the mod loader. The master downloads the
@@ -514,13 +520,14 @@ Users get their permissions from groups; a user can be in several groups and has
   them can't be listed, read, written or moved, others show them as `<hidden>`, no file or folder with secrets can be
   moved where they would show, and archives leave them out. Only moving a server to another node copies them.
 - **Plugins.** The master downloads only from Modrinth's CDN, up to 256 MB, and only uses a file whose SHA-512 hash
-  matches the one Modrinth's API lists. A modpack is checked the same way, and each of its files against the SHA-512
+  matches the one Modrinth's API lists; from Hangar, only from its CDN and with the SHA-256 hash its API lists, and
+  versions that only link elsewhere can't be installed. A modpack is checked the same way, and each of its files against the SHA-512
   hash in the pack; packs with files elsewhere than on Modrinth's CDN or with paths that leave the server's folder are
   refused before a server is created, and the agent confines the files like those of the file manager. The version of
   a mod loader ends up in a variable of the server image, so the agent only accepts letters, digits, `.`, `_`, `+`
   and `-`. The agent decides the folder from the server type and only accepts plain
-  `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth and the
-  Content Security Policy stays unchanged.
+  `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth or Hangar
+  and the Content Security Policy stays unchanged.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
   directory. A copied Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a
   copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. A copied Fabric or Quilt
@@ -602,8 +609,9 @@ internal/master/
                         players to another server of a network
   files/                file manager, streamed between the browser and the agent
   properties/           server.properties editor
-  plugin/               installs, lists and removes plugins and mods of servers
+  plugin/               installs, lists and removes plugins and mods of servers, from Modrinth and Hangar
   modrinth/             client for the Modrinth API and CDN
+  hangar/               client for the Hangar API and CDN, with projects and versions shaped like Modrinth's
   modpack/              creates servers from Modrinth modpacks: checks a pack and writes its files into the server
   template/             templates for new servers
   schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API

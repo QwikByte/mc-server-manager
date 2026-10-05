@@ -40,6 +40,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
@@ -190,6 +191,7 @@ type master struct {
 	logs       *logs.Store
 	enrollAddr string
 	modrinth   *fakeModrinth
+	hangar     *fakeHangar
 	update     update.Options
 	// quick is how long requests wait for their operations; tests get the result right away.
 	quick time.Duration
@@ -219,7 +221,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), update: update.Options{DataDir: dir}, quick: time.Minute,
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), update: update.Options{DataDir: dir}, quick: time.Minute,
 	}
 }
 
@@ -227,7 +229,7 @@ func startMaster(t *testing.T) *master {
 func (m *master) services(t *testing.T) masterapp.Services {
 	nodes := m.nodes
 	modrinthClient := modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/")
-	plugins := plugin.NewService(nodes, modrinthClient)
+	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(m.hangar.URL+"/api/v1", m.hangar.URL+"/cdn/"))
 	moves := server.NewMoves()
 	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))

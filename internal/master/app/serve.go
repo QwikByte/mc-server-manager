@@ -23,6 +23,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/files"
+	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/https"
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
@@ -130,7 +131,7 @@ func serve(ctx context.Context, cfg config) error {
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	noryxv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	modrinthClient := modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN)
-	plugins := plugin.NewService(nodes, modrinthClient)
+	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(hangar.DefaultAPI, hangar.DefaultCDN))
 	moves := server.NewMoves()
 	// Requests whose operation takes longer are answered right away, and the operation goes on.
 	ops := operation.New(time.Second)

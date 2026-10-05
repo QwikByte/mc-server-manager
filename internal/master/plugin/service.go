@@ -1,6 +1,7 @@
-// Package plugin installs plugins and mods from Modrinth on servers, and lists, updates
-// and removes the installed ones. The master downloads each file once, checks its hash
-// and streams it to the agents, which write it into the plugin folder of the server.
+// Package plugin installs plugins and mods from Modrinth, and plugins from Hangar, on
+// servers, and lists, updates and removes the installed ones. The master downloads each
+// file once, checks its hash and streams it to the agents, which write it into the plugin
+// folder of the server.
 package plugin
 
 import (
@@ -8,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/operation"
@@ -29,6 +30,8 @@ const (
 	// maxProjects limits the projects installed at once, including required ones.
 	maxProjects = 50
 	iconRoute   = "/api/plugins/icons/"
+	// hangarIcons is the folder of Hangar's icons in iconRoute, beside Modrinth's projects.
+	hangarIcons = "hangar/"
 )
 
 var errVanilla = httpapi.Errorf(http.StatusConflict, "Vanilla servers can't load plugins or mods.")
@@ -54,17 +57,17 @@ type Project struct {
 }
 
 type Service struct {
-	nodes    Nodes
-	modrinth *modrinth.Client
+	nodes     Nodes
+	catalogue catalogue
 }
 
-func NewService(nodes Nodes, client *modrinth.Client) *Service {
-	return &Service{nodes: nodes, modrinth: client}
+func NewService(nodes Nodes, modrinthClient *modrinth.Client, hangarClient *hangar.Client) *Service {
+	return &Service{nodes: nodes, catalogue: catalogue{modrinthClient, hangarClient}}
 }
 
-// Projects looks up projects on Modrinth; unknown ones are left out.
+// Projects looks up projects on Modrinth and Hangar; unknown ones are left out.
 func (s *Service) Projects(ctx context.Context, ids []string) ([]modrinth.Project, error) {
-	return s.modrinth.Projects(ctx, ids)
+	return s.catalogue.Projects(ctx, ids)
 }
 
 // Describe returns a project as the panel shows it.
@@ -73,8 +76,11 @@ func (s *Service) Describe(p modrinth.Project) Project {
 }
 
 func (s *Service) icon(url string) string {
-	if name := s.modrinth.IconName(url); name != "" {
+	if name := s.catalogue.modrinth.IconName(url); name != "" {
 		return iconRoute + name
+	}
+	if name := s.catalogue.hangar.IconName(url); name != "" {
+		return iconRoute + hangarIcons + name
 	}
 	return ""
 }
@@ -120,21 +126,13 @@ func (s *Service) List(ctx context.Context, ref Ref) (Listing, error) {
 	return l, nil
 }
 
-// describe adds the Modrinth project, version and available update to each plugin.
+// describe adds the project, version and available update to each plugin from Modrinth or Hangar.
 func (s *Service) describe(ctx context.Context, srv *noryxv1.Server, files []*noryxv1.PluginFile, plugins []Plugin) error {
-	hashes := make([]string, len(files))
-	for i, f := range files {
-		hashes[i] = f.GetSha512()
-	}
 	t, err := s.target(ctx, srv.GetType(), srv.GetVersion())
 	if err != nil {
 		return err
 	}
-	versions, err := s.modrinth.VersionsByHash(ctx, hashes)
-	if err != nil {
-		return err
-	}
-	updates, err := s.modrinth.Updates(ctx, hashes, t.loaders, t.gameVersion)
+	versions, updates, err := s.catalogue.identify(ctx, files, t, true)
 	if err != nil {
 		return err
 	}
@@ -142,11 +140,12 @@ func (s *Service) describe(ctx context.Context, srv *noryxv1.Server, files []*no
 	for _, v := range versions {
 		ids = append(ids, v.ProjectID)
 	}
-	projects, err := s.modrinth.Projects(ctx, slices.Compact(slices.Sorted(slices.Values(ids))))
+	projects, err := s.catalogue.Projects(ctx, slices.Compact(slices.Sorted(slices.Values(ids))))
 	if err != nil {
 		return err
 	}
-	for i, hash := range hashes {
+	for i, f := range files {
+		hash := f.GetSha512()
 		v, known := versions[hash]
 		j := slices.IndexFunc(projects, func(p modrinth.Project) bool { return p.ID == v.ProjectID })
 		if !known || j < 0 {
@@ -229,7 +228,7 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 		return nil, err
 	}
 	plugins := noryxv1.NewPluginServiceClient(conn)
-	present, err := r.present(ctx, plugins, ref.ServerID)
+	present, err := r.present(ctx, plugins, ref.ServerID, t, slices.ContainsFunc(projects, onHangar))
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +240,7 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 	for _, v := range versions {
 		f, _ := v.File()
 		if present[v.ProjectID] != f.Filename { // otherwise this version is installed already
-			data, err := r.downloads.get(f.URL, func() ([]byte, error) { return r.modrinth.Download(ctx, f) })
+			data, err := r.downloads.get(f.URL, func() ([]byte, error) { return r.catalogue.Download(ctx, f) })
 			if err != nil {
 				return installed, err
 			}
@@ -255,20 +254,28 @@ func (r *installation) install(ctx context.Context, ref Ref, projects []string) 
 	return installed, nil
 }
 
-// present returns the file of each Modrinth project installed on a server.
-func (r *installation) present(ctx context.Context, c noryxv1.PluginServiceClient, serverID string) (map[string]string, error) {
+// present returns the file of each project of Modrinth or Hangar installed on a server. A
+// file on both is Modrinth's, and also Hangar's with hangarToo, so that installing a project
+// of Hangar replaces the file rather than adding another.
+func (r *installation) present(ctx context.Context, c noryxv1.PluginServiceClient, serverID string, t target, hangarToo bool) (map[string]string, error) {
 	res, err := c.ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: serverID})
 	if err != nil || len(res.GetPlugins()) == 0 {
 		return map[string]string{}, err
 	}
-	files := map[string]string{}
-	for _, p := range res.GetPlugins() {
-		files[p.GetSha512()] = p.GetFileName()
-	}
-	versions, err := r.modrinth.VersionsByHash(ctx, slices.Collect(maps.Keys(files)))
+	versions, _, err := r.catalogue.identify(ctx, res.GetPlugins(), t, false)
 	present := map[string]string{}
-	for hash, v := range versions {
-		present[v.ProjectID] = files[hash]
+	for _, p := range res.GetPlugins() {
+		v, ok := versions[p.GetSha512()]
+		if ok {
+			present[v.ProjectID] = p.GetFileName()
+		}
+		if ok && hangarToo && err == nil && !onHangar(v.ProjectID) {
+			var project string
+			project, err = r.catalogue.hangar.ProjectByHash(ctx, p.GetSha256())
+			if project != "" {
+				present[project] = p.GetFileName()
+			}
+		}
 	}
 	return present, err
 }
@@ -317,7 +324,7 @@ func (r *installation) pick(ctx context.Context, project string, t target) (modr
 		return versions[i], nil
 	}
 	title, _ := r.titles.get(project, func() (string, error) {
-		projects, err := r.modrinth.Projects(ctx, []string{project})
+		projects, err := r.catalogue.Projects(ctx, []string{project})
 		if err != nil || len(projects) == 0 {
 			return project, err
 		}
@@ -333,7 +340,7 @@ func (r *installation) pick(ctx context.Context, project string, t target) (modr
 func (r *installation) compatible(ctx context.Context, project string, t target) ([]modrinth.Version, error) {
 	key := project + "|" + strings.Join(t.loaders, ",") + "|" + t.gameVersion
 	return r.versions.get(key, func() ([]modrinth.Version, error) {
-		return r.modrinth.Versions(ctx, project, t.loaders, t.gameVersion)
+		return r.catalogue.Versions(ctx, project, t.loaders, t.gameVersion)
 	})
 }
 
@@ -352,7 +359,7 @@ func (s *Service) Versions(ctx context.Context, project string, typ noryxv1.Serv
 	if err != nil {
 		return nil, err
 	}
-	found, err := s.modrinth.Versions(ctx, project, t.loaders, t.gameVersion)
+	found, err := s.catalogue.Versions(ctx, project, t.loaders, t.gameVersion)
 	versions := make([]Version, 0, len(found))
 	for _, v := range found {
 		if len(v.Files) > 0 {
@@ -384,22 +391,22 @@ func (s *Service) target(ctx context.Context, typ noryxv1.ServerType, gameVersio
 		return t, nil
 	case gameVersion == "LATEST":
 		var err error
-		t.gameVersion, err = s.modrinth.LatestRelease(ctx)
+		t.gameVersion, err = s.catalogue.modrinth.LatestRelease(ctx)
 		return t, err
 	}
 	t.gameVersion = gameVersion
 	return t, nil
 }
 
-// Ensure installs the newest suitable release of a project on a server, together with the
-// projects it requires, unless the project is installed already.
+// Ensure installs the newest suitable release of a project of Modrinth on a server, together
+// with the projects it requires, unless the project is installed already.
 func (s *Service) Ensure(ctx context.Context, ref Ref, project string) error {
 	conn, _, err := s.server(ctx, ref)
 	if err != nil {
 		return err
 	}
 	run := &installation{Service: s}
-	present, err := run.present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID)
+	present, err := run.present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID, target{}, false) // no loaders, no Hangar
 	if _, ok := present[project]; ok || err != nil {
 		return err
 	}
@@ -407,13 +414,13 @@ func (s *Service) Ensure(ctx context.Context, ref Ref, project string) error {
 	return err
 }
 
-// Uninstall removes the file of a project from a server, if it has one.
+// Uninstall removes the file of a project of Modrinth from a server, if it has one.
 func (s *Service) Uninstall(ctx context.Context, ref Ref, project string) error {
 	conn, _, err := s.server(ctx, ref)
 	if err != nil {
 		return err
 	}
-	present, err := (&installation{Service: s}).present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID)
+	present, err := (&installation{Service: s}).present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID, target{}, false)
 	if file, ok := present[project]; ok && err == nil {
 		return s.Remove(ctx, ref, file)
 	}

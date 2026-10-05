@@ -91,7 +91,7 @@ export interface Followed {
 }
 
 /**
- * Creates a server, with the Modrinth projects to install on it, e.g. the plugins of a
+ * Creates a server, with the projects of Modrinth or Hangar to install on it, e.g. the plugins of a
  * template. pluginError tells why they couldn't be installed; the server exists anyway.
  */
 export function useCreateServer() {

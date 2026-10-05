@@ -221,7 +221,7 @@ func check(t Template, typ noryxv1.ServerType, in Input) string {
 		}
 	}
 	for _, id := range in.Plugins {
-		if !modrinth.ValidProjectID(id) {
+		if !plugin.ValidProjectID(id) {
 			return "Invalid plugin " + id + "."
 		}
 	}

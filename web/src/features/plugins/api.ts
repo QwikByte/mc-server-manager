@@ -5,12 +5,12 @@ import { serverType } from "@/features/servers/server-types"
 import { type Operation, operate } from "@/features/operations/api"
 import { api, responseError } from "@/lib/api"
 
-/** A plugin or mod on Modrinth. */
+/** A plugin or mod on Modrinth, or a plugin on Hangar. */
 export interface Project {
   id: string
   slug: string
   title: string
-  /** Served by the panel, which fetches it from Modrinth. */
+  /** Served by the panel, which fetches it from Modrinth or Hangar. */
   icon?: string
 }
 
@@ -33,8 +33,20 @@ export type Sort = "relevance" | "downloads" | "follows" | "newest" | "updated"
 /** What servers load from Modrinth. */
 export type Kind = "plugins" | "mods"
 
-/** A search on Modrinth; without a kind, type or version, projects for any of them are found. */
+/** Where plugins come from: Modrinth has plugins and mods, Hangar plugins of Paper, Velocity and Waterfall. */
+export type Source = "modrinth" | "hangar"
+
+/** The page of a project on Modrinth or Hangar, whose project IDs start with "hangar-". */
+export const projectUrl = (project: Project) =>
+  project.id.startsWith("hangar-") ? `https://hangar.papermc.io/${project.slug}` : `https://modrinth.com/project/${project.slug}`
+
+/** Whether Hangar has plugins for a server type: Paper and its forks except Folia, and the proxies. */
+export const onHangar = (type: string) =>
+  serverType(type).addons?.loaders.some((l) => ["paper", "velocity", "waterfall"].includes(l)) ?? false
+
+/** A search on Modrinth or Hangar; without a kind, type or version, projects for any of them are found. */
 export interface Search {
+  source?: Source
   query: string
   /** Modpacks are searched to create servers from them. */
   kind?: Kind | "modpacks"
@@ -55,7 +67,7 @@ export interface ProjectVersion {
   published: string
 }
 
-/** A plugin file on a server; files from Modrinth are recognised by their hash. */
+/** A plugin file on a server; files from Modrinth and Hangar are recognised by their hash. */
 export interface InstalledPlugin {
   fileName: string
   size: number
@@ -69,7 +81,7 @@ export interface InstalledPlugin {
 export interface PluginListing {
   folder: "plugins" | "mods"
   plugins: InstalledPlugin[]
-  /** Why the plugins couldn't be looked up on Modrinth. */
+  /** Why the plugins couldn't be looked up on Modrinth or Hangar. */
   catalogueError?: string
 }
 
@@ -83,13 +95,13 @@ export function supports(loaders: string[], type: string) {
   return serverType(type).addons?.loaders.some((l) => loaders.includes(l)) ?? false
 }
 
-/** Searches Modrinth for plugins and mods. */
+/** Searches Modrinth for plugins and mods, or Hangar for plugins. */
 export const searchQuery = (search: Search) =>
   infiniteQueryOptions({
     queryKey: ["plugins", "search", search],
     queryFn: ({ pageParam }) => {
-      const { query, kind = "", type = "", version = "", categories, sort, serverOnly } = search
-      const params = new URLSearchParams({ query, kind, type, version, sort, offset: String(pageParam) })
+      const { source = "modrinth", query, kind = "", type = "", version = "", categories, sort, serverOnly } = search
+      const params = new URLSearchParams({ source, query, kind, type, version, sort, offset: String(pageParam) })
       for (const category of categories) params.append("category", category)
       if (serverOnly) params.set("serverOnly", "true")
       return api<{ hits: SearchHit[]; total: number }>(`/plugins/search?${params}`)
@@ -130,7 +142,7 @@ export const pluginsQuery = (ref: ServerRef) =>
  * Installs or updates projects, with the projects they require, on servers: the newest release that suits each
  * server, or the version chosen for a project.
  */
-/** Installs Modrinth projects on servers; on many, it takes a while. */
+/** Installs projects of Modrinth and Hangar on servers; on many, it takes a while. */
 export function useInstallPlugins() {
   const queryClient = useQueryClient()
   return useMutation({
