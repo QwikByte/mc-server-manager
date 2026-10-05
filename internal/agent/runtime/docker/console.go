@@ -55,9 +55,13 @@ func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, e
 		return "", d.command(ctx, id, spec.Type, command)
 	}
 	host := hostOf(c)
-	return d.consoles.Command(ctx, id, host+" "+c.State.StartedAt, func(ctx context.Context) (string, string, error) {
+	out, err := d.consoles.Command(ctx, id, host+" "+c.State.StartedAt, func(ctx context.Context) (string, string, error) {
 		return d.rconTarget(ctx, id, host)
 	}, command)
+	if err != nil && c.State.Health != nil && c.State.Health.Status == container.Starting {
+		err = fmt.Errorf("%w: %w", runtime.ErrNotReady, err) // its console opens once it started
+	}
+	return out, err
 }
 
 // rconTarget returns the address and password of the console of a game server, which the

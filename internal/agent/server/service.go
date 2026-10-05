@@ -659,6 +659,8 @@ func toStatus(err error) error {
 		return status.Error(codes.NotFound, "Server not found.")
 	case errors.Is(err, runtime.ErrNotRunning):
 		return status.Error(codes.FailedPrecondition, "Start the server to send commands.")
+	case errors.Is(err, runtime.ErrNotReady):
+		return status.Error(codes.FailedPrecondition, "The server is starting. Wait until it runs to send commands.")
 	case errors.Is(err, runtime.ErrUnsupported):
 		return status.Error(codes.FailedPrecondition, "This type of server does not support that.")
 	case errors.Is(err, storage.ErrUnknown):
