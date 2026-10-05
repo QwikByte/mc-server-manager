@@ -37,7 +37,7 @@ import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Template, templatesQuery } from "@/features/templates/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { type NewServer, serversQuery, useCreateServer } from "./api"
-import { defaults, memoryOptionsMb, modpack, serverType, serverTypes, suggestPort } from "./server-types"
+import { defaults, memoryOptionsMb, modpack, serverType, serverTypes, suggestPort, usedPorts } from "./server-types"
 
 // Node, port and storage stay unset until chosen, so that the suggestions apply.
 type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string; nodeId?: string; templateId?: string; modpack?: ModpackChoice }
@@ -96,7 +96,7 @@ export function CreateServerDialog({
   const chooseModpack = useCallback((choice?: ModpackChoice) => setForm((f) => ({ ...f, modpack: choice })), [])
   const port =
     form.port ??
-    suggestPort(servers?.map((s) => s.port) ?? [], defaults(form.type).port, node?.portMin ?? undefined, node?.portMax ?? undefined)
+    suggestPort(usedPorts(servers), defaults(form.type).port, node?.portMin ?? undefined, node?.portMax ?? undefined)
   const storage = form.storage ?? locations.find((l) => l.name === node?.defaultStorage)?.name ?? "default"
 
   const title = t("Create {{name}}", { name: form.name })

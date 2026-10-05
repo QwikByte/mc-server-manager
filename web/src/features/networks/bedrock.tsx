@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import type { Node } from "@/features/nodes/api"
 import { gameVersionsQuery, versionsQuery } from "@/features/plugins/api"
 import type { NodeServer } from "@/features/servers/api"
-import { suggestPort } from "@/features/servers/server-types"
+import { suggestPort, usedPorts } from "@/features/servers/server-types"
 import type { Network } from "./api"
 import type { Draft } from "./draft"
 import { bedrockPortError } from "./problems"
@@ -50,9 +50,9 @@ export function BedrockSection({
   const { data: geyserVersions } = useQuery({ ...versionsQuery(geyser, network.proxyType, ""), enabled: on })
   const error = bedrockPortError(port)
   // Ports of the proxy's node, except the one its proxy has for Bedrock players already.
-  const used = (servers ?? [])
-    .filter((s) => s.nodeId === network.proxy.nodeId)
-    .flatMap((s) => (s.bedrockPort && s.id !== network.proxy.serverId ? [s.port, s.bedrockPort] : [s.port]))
+  const used = usedPorts(
+    servers?.filter((s) => s.nodeId === network.proxy.nodeId).map((s) => (s.id === network.proxy.serverId ? { port: s.port } : s)),
+  )
   const suggested =
     network.bedrockPort || suggestPort(used, bedrockDefault, proxyNode?.portMin ?? undefined, proxyNode?.portMax ?? undefined)
   // Geyser joins with a version of Minecraft: servers of older versions need ViaVersion, and newer ones also ViaBackwards.
@@ -82,7 +82,7 @@ export function BedrockSection({
             <FieldLabel htmlFor="bedrock">{t("Let Bedrock players join")}</FieldLabel>
             <FieldDescription>
               {t(
-                "Geyser translates their game and Floodgate lets them join without a Java account. The panel installs both on the proxy and updates them whenever the network is applied.",
+                "Geyser translates their game and Floodgate lets them join without a Java account. The panel installs both on the proxy and updates them when the network is applied again.",
               )}
             </FieldDescription>
           </FieldContent>

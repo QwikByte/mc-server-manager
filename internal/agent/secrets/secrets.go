@@ -22,12 +22,8 @@ import (
 const Placeholder = "<hidden>"
 
 // hidden are the files that only hold secrets: those of rcon-cli, which the server image
-// writes, the forwarding secret of a proxy, the key with which Geyser vouches for Bedrock
-// players to Floodgate, and the Microsoft sign-ins Geyser keeps.
-var hidden = []string{
-	".rcon-cli.env", ".rcon-cli.yaml", network.ForwardingSecretFile, network.FloodgateKeyFile,
-	geyserVelocity + "/saved-refresh-tokens.json", geyserBungee + "/saved-refresh-tokens.json",
-}
+// writes, the forwarding secret of a proxy, and those of Geyser and Floodgate.
+var hidden = append([]string{".rcon-cli.env", ".rcon-cli.yaml", network.ForwardingSecretFile}, network.BedrockSecretFiles...)
 
 var (
 	geyserVelocity = network.GeyserFolder(noryxv1.ServerType_SERVER_TYPE_VELOCITY)

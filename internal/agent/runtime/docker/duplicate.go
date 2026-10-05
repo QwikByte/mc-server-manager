@@ -66,10 +66,12 @@ func standalone(path string, original runtime.Spec) error {
 	case original.Type == noryxv1.ServerType_SERVER_TYPE_VELOCITY:
 		err = remove(mcnet.ForwardingSecretFile)
 	}
-	switch {
-	case err == nil && original.Type.Proxy():
-		err = remove(mcnet.FloodgateKeyFile)
-	case err == nil && original.BedrockPlayers:
+	if original.Type.Proxy() {
+		for _, name := range mcnet.BedrockSecretFiles {
+			err = errors.Join(err, remove(name))
+		}
+	}
+	if err == nil && original.BedrockPlayers {
 		err = mcnet.SecureChat(data)
 	}
 	return err

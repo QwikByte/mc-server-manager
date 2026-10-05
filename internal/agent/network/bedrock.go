@@ -17,15 +17,26 @@ const (
 	// geyserConfigVersion is the version of Geyser's configuration that new files get, so
 	// that Geyser takes them as they are.
 	geyserConfigVersion = 8
+
+	geyserVelocity = "plugins/Geyser-Velocity"
+	geyserBungee   = "plugins/Geyser-BungeeCord"
 )
+
+// BedrockSecretFiles are the files of a proxy that only hold secrets: Floodgate's key, and
+// the Microsoft sign-ins Geyser keeps, in saved-refresh-tokens.json before Geyser 2.2.
+var BedrockSecretFiles = []string{
+	FloodgateKeyFile,
+	geyserVelocity + "/saved-auth-chains.json", geyserVelocity + "/saved-refresh-tokens.json",
+	geyserBungee + "/saved-auth-chains.json", geyserBungee + "/saved-refresh-tokens.json",
+}
 
 // GeyserFolder returns the folder of Geyser on a type of proxy, or "".
 func GeyserFolder(typ noryxv1.ServerType) string {
 	switch {
 	case typ == noryxv1.ServerType_SERVER_TYPE_VELOCITY:
-		return "plugins/Geyser-Velocity"
+		return geyserVelocity
 	case typ.Bungee():
-		return "plugins/Geyser-BungeeCord"
+		return geyserBungee
 	}
 	return ""
 }

@@ -35,23 +35,23 @@ func TestStandalone(t *testing.T) {
 		t.Fatalf("server.properties = %s, %v", data, err)
 	}
 
-	// A copied proxy loses the forwarding secret and Floodgate's key; Velocity and Floodgate
-	// create new ones.
+	// A copied proxy loses the forwarding secret, Floodgate's key and Geyser's sign-ins;
+	// Velocity and Floodgate create new ones.
 	proxy := t.TempDir()
-	if err := os.WriteFile(filepath.Join(proxy, mcnet.ForwardingSecretFile), []byte("s3cret"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(proxy, "plugins", "floodgate"), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(proxy, mcnet.FloodgateKeyFile), []byte("0123456789abcdef"), 0o600); err != nil {
-		t.Fatal(err)
+	secrets := []string{mcnet.ForwardingSecretFile, mcnet.FloodgateKeyFile, "plugins/Geyser-Velocity/saved-auth-chains.json"}
+	for _, secret := range secrets {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(proxy, secret)), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(proxy, secret), []byte("s3cret"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	spec := runtime.Spec{Type: noryxv1.ServerType_SERVER_TYPE_VELOCITY}
 	if err := standalone(proxy, spec); err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{mcnet.ForwardingSecretFile, mcnet.FloodgateKeyFile} {
+	for _, secret := range secrets {
 		if _, err := os.Stat(filepath.Join(proxy, secret)); !os.IsNotExist(err) {
 			t.Fatalf("%s was copied: %v", secret, err)
 		}

@@ -64,10 +64,13 @@ func (s *Service) provideBedrock(ctx context.Context, n Network) (bool, error) {
 	return changed, nil
 }
 
-// removeBedrock removes Geyser and Floodgate from the proxy of a network. Their settings and
-// Floodgate's key stay, in case Bedrock players are let in again.
+// removeBedrock removes Geyser and Floodgate from the proxy of a network, unless it is gone.
+// Their settings and Floodgate's key stay, in case Bedrock players are let in again.
 func (s *Service) removeBedrock(ctx context.Context, n Network) error {
 	operation.Step(ctx, "bedrock-remove")
+	if _, err := s.server(ctx, n.Proxy); gone(err) {
+		return nil
+	}
 	for _, project := range bedrockPlugins {
 		if err := ignoreMissing(s.mods.Uninstall(ctx, plugin.Ref(n.Proxy), project)); err != nil {
 			return httpapi.Errorf(http.StatusBadGateway, "Geyser and Floodgate could not be removed from the proxy: %s", message(err))

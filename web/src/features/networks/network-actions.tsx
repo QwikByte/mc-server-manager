@@ -109,7 +109,12 @@ export function NetworkActions({ network }: { network: Network }) {
           <Button
             variant="outline"
             disabled={action.isPending}
-            title={t("Configure all servers again, e.g. after a node was offline. Only changed servers restart.")}
+            title={[
+              t("Configure all servers again, e.g. after a node was offline. Only changed servers restart."),
+              network.bedrockPort > 0 && t("Geyser and Floodgate are updated, and the proxy restarts for an update."),
+            ]
+              .filter(Boolean)
+              .join(" ")}
             onClick={() => run({ action: "apply" }, t("Applying {{name}}…", { name: network.name }), t("Applied {{name}}", { name: network.name }))}
           >
             <ArrowsClockwiseIcon />

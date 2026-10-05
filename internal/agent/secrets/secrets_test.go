@@ -42,8 +42,10 @@ func TestFiles(t *testing.T) {
 		"plugins":                              {false, false, true}, // Floodgate's key
 		"plugins/floodgate/key.pem":            {true, false, true},
 		"plugins/Geyser-BungeeCord/config.yml": {false, true, true},
-		"plugins/Example":                      {false, false, false},
-		"world/server.properties":              {false, false, false},
+		"plugins/Geyser-Velocity/saved-auth-chains.json":      {true, false, true},
+		"plugins/Geyser-BungeeCord/saved-refresh-tokens.json": {true, false, true},
+		"plugins/Example":         {false, false, false},
+		"world/server.properties": {false, false, false},
 	} {
 		if got := [3]bool{Hidden(name), Redacted(name), len(Under(name)) > 0}; got != want {
 			t.Errorf("%s: hidden, redacted, holds secrets = %v, want %v", name, got, want)

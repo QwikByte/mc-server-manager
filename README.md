@@ -336,18 +336,19 @@ removes it when it leaves.
   Windows, at a UDP port of the proxy's node: the panel installs [Geyser](https://geysermc.org), from Modrinth, and
   Floodgate, from GeyserMC's download server, on the proxy, publishes the port and writes it with
   `auth-type: floodgate` into Geyser's `config.yml`. Geyser translates their game, and Floodgate lets them join
-  without a Java account, which needs no plugin on the game servers: Floodgate's key stays on the proxy. Applying the
-  network updates both to their newest build. The proxy restarts when Bedrock players are let in or no longer, their
-  port changes or a plugin is updated; the game servers restart when they are let in or no longer, as they stop
-  demanding signed chat messages, which Bedrock players can't send (`ENFORCE_SECURE_PROFILE=FALSE`, locked in their
-  properties; afterwards `enforce-secure-profile=true` again). Java players who only show secure chat don't see what
-  Bedrock players write. The panel shows where Bedrock players connect and
-  warns about what keeps them out: Geyser joins as one Minecraft version (it tells which), so game servers of older
-  versions need ViaVersion and newer ones ViaVersion and ViaBackwards; Geyser needs about 1 GB of memory on the proxy;
-  and the UDP port must be open on the proxy's node, e.g. in the provider's firewall. Geyser also needs to reach
-  Mojang's and Microsoft's servers from the proxy, and Bedrock players can't join servers whose mods players must
-  install. In the panel and the game, Floodgate starts their names with a dot, e.g. `.Steve`. Turning Bedrock off
-  removes both plugins, but keeps their settings and Floodgate's key for later.
+  without a Java account, which needs no plugin on the game servers: Floodgate's key stays on the proxy. Letting
+  Bedrock players in, a new port and **Apply again** update both to their newest build; other changes of the network
+  leave them be, so that they don't disconnect players. The proxy restarts when Bedrock players are let in or no
+  longer, their port changes or a plugin is updated; the game servers restart when they are let in or no longer, as
+  they stop demanding signed chat messages, which Bedrock players can't send (`ENFORCE_SECURE_PROFILE=FALSE`, locked
+  in their properties; afterwards `enforce-secure-profile=true` again). Java players who only show secure chat don't
+  see what Bedrock players write. The panel shows where Bedrock players connect and warns about what keeps them out:
+  Geyser joins as one Minecraft version (it tells which), so game servers of older versions need ViaVersion and newer
+  ones ViaVersion and ViaBackwards; Geyser needs about 1 GB of memory on the proxy; and the UDP port must be open on
+  the proxy's node, e.g. in the provider's firewall. Geyser also needs to reach Mojang's and Microsoft's servers from
+  the proxy, and Bedrock players can't join servers whose mods players must install. In the panel and the game,
+  Floodgate starts their names with a dot, e.g. `.Steve`. Turning Bedrock off removes both plugins, but keeps their
+  settings and Floodgate's key for later.
 - **Reaching the servers.** On its own node, the proxy reaches a server by container name over a Docker network that only
   the two of them share; such a server's port isn't published at all. A server on another node is reached at that
   node's host and the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as
@@ -376,8 +377,9 @@ how many servers have each player, and the changes that wait for stopped servers
   Names are checked before they become part of a command: 16 letters, digits and underscores, or Floodgate's dot before.
 - **Bedrock players** have Floodgate's dot before their name. The servers behind the proxy can't look them up, so the
   whitelist gets them with the ID Floodgate gives them, which the master asks GeyserMC's global API for: GeyserMC
-  knows the players who joined a server with Geyser before. The agent writes them into `whitelist.json`, which a
-  running server reloads (`whitelist reload`). Other actions work by name once a player joined the server.
+  knows the players who joined a server with Geyser before. The agent writes them into `whitelist.json` and makes the
+  server reload it (`whitelist reload`); stopped servers get the change once they run. Other actions work by name once
+  a player joined the server.
 - **Permissions.** Acting on players needs the permission to manage players on each server; making operators also needs
   the permission to send console commands, as operators may run any command in the game.
 

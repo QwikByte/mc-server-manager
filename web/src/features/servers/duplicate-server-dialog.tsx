@@ -10,7 +10,7 @@ import { nodeQuery } from "@/features/nodes/api"
 import { OperationStatus } from "@/features/operations/operation-status"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Server, serversQuery, useDuplicateServer } from "./api"
-import { nextName, serverType, suggestPort } from "./server-types"
+import { nextName, serverType, suggestPort, usedPorts } from "./server-types"
 
 /** Copies a server with all its data into a new server on the same node. */
 export function DuplicateServerDialog({
@@ -42,7 +42,7 @@ export function DuplicateServerDialog({
     port:
       port ??
       suggestPort(
-        servers.map((s) => s.port),
+        usedPorts(servers),
         server.port + 1,
         node?.portMin ?? undefined,
         node?.portMax ?? undefined,

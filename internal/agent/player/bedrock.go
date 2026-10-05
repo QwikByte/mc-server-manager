@@ -11,7 +11,6 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
-	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 // whitelisted is a player on Minecraft's whitelist.
@@ -26,11 +25,10 @@ func bedrockWhitelist(c *noryxv1.PlayerChange) bool {
 	return c.GetUuid() != "" || noryxv1.BedrockPlayer(c.GetName()) && c.GetAction() == noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_REMOVE
 }
 
-// whitelistBedrock changes the whitelist file for a Bedrock player, at once also on a
-// stopped server, and makes a running server reload it. Its messages are Minecraft's.
-func (s *Service) whitelistBedrock(ctx context.Context, srv runtime.Server, dir *datadir.Dir, c *noryxv1.PlayerChange) (*noryxv1.ChangePlayerResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// whitelistBedrock changes the whitelist file of a running server for a Bedrock player and
+// makes it reload the file. The caller holds s.mu, so that no other change of the whitelist
+// makes the server write its own list in between. Its messages are Minecraft's.
+func (s *Service) whitelistBedrock(ctx context.Context, id string, dir *datadir.Dir, c *noryxv1.PlayerChange) (*noryxv1.ChangePlayerResponse, error) {
 	list := []whitelisted{}
 	if err := readJSON(dir, whitelistFile, &list); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -53,10 +51,8 @@ func (s *Service) whitelistBedrock(ctx context.Context, srv runtime.Server, dir 
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if srv.State == running {
-		if _, err := s.rt.SendCommand(ctx, srv.ID, "minecraft:whitelist reload"); err != nil {
-			return nil, status.Errorf(codes.Unavailable, "The whitelist changed, but the server can't reload it: %v", err)
-		}
+	if _, err := s.rt.SendCommand(ctx, id, "minecraft:whitelist reload"); err != nil {
+		return nil, status.Errorf(codes.Unavailable, "The whitelist changed, but the server can't reload it: %v", err)
 	}
 	return &noryxv1.ChangePlayerResponse{Output: out}, nil
 }

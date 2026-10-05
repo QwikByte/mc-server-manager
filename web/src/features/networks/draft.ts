@@ -1,4 +1,5 @@
 import type { Backend, ForcedHost, Forwarding, Network, NetworkSettings } from "./api"
+import { bedrockPortError } from "./problems"
 import { key } from "./servers"
 
 /**
@@ -50,6 +51,8 @@ export function withoutBackend(d: Draft, k: string): Draft {
 
 /** What saving the draft does to the servers of the network, for the operator to know before. */
 export function effects(network: Network, d: Draft, bungee: boolean) {
+  // An invalid port, e.g. while it is typed, changes nothing yet.
+  const port = bedrockPortError(d.bedrockPort) ? network.bedrockPort : d.bedrockPort
   const before = new Map(network.backends.map((b) => [key(b), b]))
   const after = new Set(d.backends.map(key))
   const joined = d.backends.filter((b) => !before.has(key(b)))
@@ -58,11 +61,11 @@ export function effects(network: Network, d: Draft, bungee: boolean) {
   return {
     // Game servers restart when they join or leave, or when the forwarding changes or Bedrock
     // players start or stop joining, who can't sign their chat messages.
-    restart: d.forwarding !== network.forwarding || !d.bedrockPort !== !network.bedrockPort ? d.backends : joined,
+    restart: d.forwarding !== network.forwarding || (port === 0) !== (network.bedrockPort === 0) ? d.backends : joined,
     left,
     // BungeeCord can't reload without a server it had.
     proxyRestarts: bungee && (left.length > 0 || renamed),
     // The proxy restarts to publish another Bedrock port and to load or unload Geyser.
-    bedrock: d.bedrockPort === network.bedrockPort ? undefined : !d.bedrockPort ? "off" : !network.bedrockPort ? "on" : "port",
+    bedrock: port === network.bedrockPort ? undefined : port === 0 ? "off" : network.bedrockPort === 0 ? "on" : "port",
   }
 }

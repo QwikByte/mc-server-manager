@@ -29,14 +29,15 @@ func TestWhitelistBedrock(t *testing.T) {
 		}
 		return res.GetOutput()
 	}
-	whitelist := func(server string) []*noryxv1.ListedPlayer {
+	lists := func(server string) *noryxv1.GetPlayerListsResponse {
 		t.Helper()
 		lists, err := s.GetPlayerLists(ctx, &noryxv1.GetPlayerListsRequest{ServerId: server})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return lists.GetWhitelisted()
+		return lists
 	}
+	whitelist := func(server string) []*noryxv1.ListedPlayer { return lists(server).GetWhitelisted() }
 	check := func(err error) {
 		t.Helper()
 		if err != nil {
@@ -57,12 +58,20 @@ func TestWhitelistBedrock(t *testing.T) {
 	if got := rt.sent(); !slices.Equal(got, []string{"a minecraft:whitelist reload", "a minecraft:whitelist reload"}) {
 		t.Fatalf("commands = %q", got)
 	}
-	// A stopped server gets it at once; removing goes by name.
-	change(down, add)
+	// A server that doesn't run gets it once it does, as it reads the file when it starts;
+	// removing goes by name.
+	if res, err := s.ChangePlayer(ctx, &noryxv1.ChangePlayerRequest{ServerId: down, Change: add}); err != nil || !res.GetPending() {
+		t.Fatalf("change on a stopped server = %v, %v", res, err)
+	}
+	rt.servers[1].State = running
+	s.applyWaiting(ctx)
+	if w := whitelist(down); len(w) != 1 || w[0].GetUuid() != id || len(lists(down).GetPending()) != 0 {
+		t.Fatalf("whitelist = %v", w)
+	}
 	if out := change(down, remove); out != "Removed .tim203 from the whitelist" || len(whitelist(down)) != 0 {
 		t.Fatalf("output = %q, whitelist = %v", out, whitelist(down))
 	}
-	if out := change(down, remove); out != "Player is not whitelisted" || len(rt.sent()) != 2 {
+	if out := change(down, remove); out != "Player is not whitelisted" || len(rt.sent()) != 4 {
 		t.Fatalf("output = %q, commands = %q", out, rt.sent())
 	}
 
