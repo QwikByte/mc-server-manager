@@ -49,12 +49,17 @@ func TestBedrock(t *testing.T) {
 	if restarts := a.runtime.restarted(); !slices.Equal(restarts, []string{proxy.ServerID}) {
 		t.Fatalf("restarts = %q", restarts)
 	}
-	// Applying it again changes nothing; a new build of Floodgate restarts the proxy to load it.
+	// Applying it again changes nothing. A new build of Floodgate waits for the network to be
+	// applied again, rather than restarting the proxy when it is changed, and then restarts it.
 	api.do("POST", "/api/networks/"+n.ID+"/apply", nil, http.StatusOK, nil)
 	if restarts := a.runtime.restarted(); len(restarts) != 1 {
 		t.Fatalf("restarts = %q", restarts)
 	}
 	m.geysermc.publish(142)
+	update(19132, http.StatusOK)
+	if restarts := a.runtime.restarted(); len(restarts) != 1 || file("floodgate-velocity.jar") != "floodgate velocity 141" {
+		t.Fatalf("restarts = %q, Floodgate = %q", restarts, file("floodgate-velocity.jar"))
+	}
 	api.do("POST", "/api/networks/"+n.ID+"/apply", nil, http.StatusOK, nil)
 	if restarts := a.runtime.restarted(); len(restarts) != 2 || file("floodgate-velocity.jar") != "floodgate velocity 142" {
 		t.Fatalf("restarts = %q, Floodgate = %q", restarts, file("floodgate-velocity.jar"))
@@ -96,4 +101,11 @@ func TestBedrock(t *testing.T) {
 	if file("Geyser-Velocity.jar") != "" || file("floodgate-velocity.jar") != "" || a.runtime.spec(proxy.ServerID).BedrockPort != 0 {
 		t.Fatalf("plugins = %q, proxy = %+v", files(t, plugins), a.runtime.spec(proxy.ServerID))
 	}
+
+	// A network whose proxy is gone can still be deleted.
+	api.do("POST", "/api/networks", map[string]any{"name": "Main", "proxy": proxy, "servers": []network.Ref{lobby}}, http.StatusCreated, &n)
+	change.Backends, change.Try = n.Backends, n.Try
+	update(19132, http.StatusOK)
+	check(t, a.runtime.Remove(t.Context(), proxy.ServerID))
+	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusNoContent, nil)
 }

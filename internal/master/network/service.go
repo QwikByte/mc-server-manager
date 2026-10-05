@@ -216,7 +216,7 @@ func (s *Service) Create(ctx context.Context, d Draft) (Network, error) {
 	if err != nil {
 		return n, conflict(err, n.Name)
 	}
-	return n, s.apply(ctx, n)
+	return n, s.apply(ctx, n, false)
 }
 
 // Update replaces the settings of a network and configures its servers: servers that
@@ -266,7 +266,7 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 	if err := s.inTx(ctx, func(tx *sql.Tx) error { return save(ctx, tx, n) }); err != nil {
 		return current, conflict(err, n.Name)
 	}
-	return n, s.apply(ctx, n)
+	return n, s.apply(ctx, n, n.BedrockPort != current.BedrockPort)
 }
 
 // Delete makes all servers standalone again and removes the network. The proxy keeps
@@ -352,10 +352,11 @@ func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
 	if err != nil {
 		return err
 	}
-	return s.apply(ctx, n)
+	return s.apply(ctx, n, false)
 }
 
-// Apply configures all servers of a network again, e.g. after a node was offline.
+// Apply configures all servers of a network again, e.g. after a node was offline, and
+// updates Geyser and Floodgate.
 func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -363,7 +364,7 @@ func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
 	if err != nil {
 		return n, err
 	}
-	return n, s.apply(ctx, n)
+	return n, s.apply(ctx, n, true)
 }
 
 // validate checks the settings of a network and puts them into their canonical form.
@@ -469,8 +470,9 @@ func (n *Network) moved(serverID, from, to string) {
 
 // apply configures the backends first, so that they accept the proxy before it sends
 // players to them, then the proxy. Game servers only restart if their configuration
-// changed, the proxy reloads its configuration.
-func (s *Service) apply(ctx context.Context, n Network) error {
+// changed, the proxy reloads its configuration. With refresh, the proxy gets the newest
+// Geyser and Floodgate, which it restarts for; other changes don't disconnect players.
+func (s *Service) apply(ctx context.Context, n Network, refresh bool) error {
 	ctx = context.WithoutCancel(ctx) // finish even if the client goes away
 	operation.Step(ctx, "servers")
 	for i, b := range n.Backends {
@@ -494,7 +496,7 @@ func (s *Service) apply(ctx context.Context, n Network) error {
 	req := n.request(n.Proxy)
 	req.Backends, req.Try, req.ForcedHosts, req.BedrockPort = backends, n.Try, hosts, n.BedrockPort
 	var plugins bool
-	if n.BedrockPort != 0 {
+	if n.BedrockPort != 0 && refresh {
 		var err error
 		if plugins, err = s.provideBedrock(ctx, n); err != nil {
 			return applyFailed("the proxy", err)
@@ -551,7 +553,7 @@ func (s *Service) join(ctx context.Context, n Network, b Backend) error {
 // needs nothing.
 func (s *Service) leave(ctx context.Context, b Backend) error {
 	srv, err := s.server(ctx, b.Ref)
-	if status.Code(err) == codes.NotFound || errors.Is(err, errServerNotFound) {
+	if gone(err) {
 		return nil
 	}
 	if err != nil {
@@ -601,6 +603,11 @@ func (s *Service) configure(ctx context.Context, ref Ref, req *noryxv1.Configure
 }
 
 var errServerNotFound = httpapi.Errorf(http.StatusNotFound, "Server not found.")
+
+// gone reports whether an error tells that a server doesn't exist, e.g. as it was deleted.
+func gone(err error) bool {
+	return status.Code(err) == codes.NotFound || errors.Is(err, errServerNotFound)
+}
 
 // server looks up a server on its node.
 func (s *Service) server(ctx context.Context, ref Ref) (*noryxv1.Server, error) {

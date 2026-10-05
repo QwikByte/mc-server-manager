@@ -62,6 +62,7 @@ type change struct {
 	Action string `json:"action"`
 	Name   string `json:"name,omitempty"`
 	Reason string `json:"reason,omitempty"`
+	UUID   string `json:"uuid,omitempty"`
 }
 
 // readPending returns the changes that wait for a server. Those that aren't valid, e.g.
@@ -73,7 +74,7 @@ func readPending(dir *datadir.Dir) ([]*noryxv1.PlayerChange, error) {
 	}
 	var pending []*noryxv1.PlayerChange
 	for _, c := range changes {
-		p := &noryxv1.PlayerChange{Action: noryxv1.ParsePlayerAction(c.Action), Name: c.Name, Reason: c.Reason}
+		p := &noryxv1.PlayerChange{Action: noryxv1.ParsePlayerAction(c.Action), Name: c.Name, Reason: c.Reason, Uuid: c.UUID}
 		if p.Problem() == "" && p.GetAction() != noryxv1.PlayerAction_PLAYER_ACTION_KICK {
 			pending = append(pending, p)
 		}
@@ -110,7 +111,7 @@ func writePending(dir *datadir.Dir, pending []*noryxv1.PlayerChange) error {
 	}
 	changes := make([]change, len(pending))
 	for i, p := range pending {
-		changes[i] = change{p.GetAction().Slug(), p.GetName(), p.GetReason()}
+		changes[i] = change{p.GetAction().Slug(), p.GetName(), p.GetReason(), p.GetUuid()}
 	}
 	data, err := json.MarshalIndent(changes, "", "  ")
 	if err != nil {

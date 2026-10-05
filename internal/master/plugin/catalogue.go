@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/geysermc"
@@ -12,8 +13,12 @@ import (
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 )
 
-// hangarLookups is how many files are identified on Hangar at once, one request each.
-const hangarLookups = 4
+const (
+	// hangarLookups is how many files are identified on Hangar at once, one request each.
+	hangarLookups = 4
+	// geysermcLookup is how long identifying Floodgate may take.
+	geysermcLookup = 10 * time.Second
+)
 
 // catalogue finds plugins and mods on Modrinth, plugins on Hangar, whose IDs start with
 // hangar.Prefix, and Floodgate on GeyserMC's download server, which isn't searched.
@@ -23,9 +28,11 @@ type catalogue struct {
 	geysermc *geysermc.Client
 }
 
-// ValidProjectID reports whether id is a well-formed ID of a project or version of Modrinth
-// or Hangar.
-func ValidProjectID(id string) bool { return modrinth.ValidProjectID(id) || hangar.ValidID(id) }
+// ValidProjectID reports whether id is a well-formed ID of a project or version of Modrinth,
+// Hangar or GeyserMC.
+func ValidProjectID(id string) bool {
+	return modrinth.ValidProjectID(id) || hangar.ValidID(id) || geysermc.ValidID(id)
+}
 
 func onHangar(id string) bool { return strings.HasPrefix(id, hangar.Prefix) }
 
@@ -124,14 +131,24 @@ func (c catalogue) identify(ctx context.Context, files []*noryxv1.PluginFile, t 
 		})
 	}
 	wg.Wait()
-	// GeyserMC's download server only tells its newest builds; a file it can't tell is unknown.
+	unknown = slices.DeleteFunc(unknown, func(f *noryxv1.PluginFile) bool { _, ok := known[f.GetSha512()]; return ok })
+	if len(unknown) > 0 {
+		c.identifyOnGeyserMC(ctx, unknown, t, known)
+	}
+	return known, newer, err
+}
+
+// identifyOnGeyserMC recognises the newest build of Floodgate among files, at best: GeyserMC's
+// download server only tells its newest builds, and a slow one mustn't hold up the listing.
+func (c catalogue) identifyOnGeyserMC(ctx context.Context, files []*noryxv1.PluginFile, t target, known map[string]modrinth.Version) {
+	ctx, cancel := context.WithTimeout(ctx, geysermcLookup)
+	defer cancel()
 	floodgate, _ := c.geysermc.Latest(ctx, geysermc.Floodgate, t.loaders)
-	for _, f := range unknown {
-		if _, ok := known[f.GetSha512()]; !ok && len(floodgate) > 0 && floodgate[0].Files[0].Hashes.SHA256 == f.GetSha256() {
+	for _, f := range files {
+		if len(floodgate) > 0 && floodgate[0].Files[0].Hashes.SHA256 == f.GetSha256() {
 			known[f.GetSha512()] = floodgate[0]
 		}
 	}
-	return known, newer, err
 }
 
 // identifyOnHangar returns the version of a file on Hangar among the newest of its project,

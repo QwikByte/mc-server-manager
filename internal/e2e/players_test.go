@@ -60,15 +60,15 @@ func TestPlayers(t *testing.T) {
 	}
 
 	// Bedrock players are whitelisted with their ID from GeyserMC, as the servers behind the
-	// proxy can't look them up: their file changes, and a running server reloads it.
+	// proxy can't look them up: the file of a running server changes, and it reloads it.
 	whitelist := map[string]any{"action": "whitelist_add", "name": ".Tim_203", "servers": []network.Ref{lobby, game}}
 	var added struct{ Results []player.Result }
 	api.do("POST", "/api/players/actions", whitelist, http.StatusOK, &added)
-	if r := added.Results; len(r) != 2 || r[0].Output != "Added .Tim_203 to the whitelist" || r[1].Pending || r[1].Error != "" {
+	if r := added.Results; len(r) != 2 || r[0].Output != "Added .Tim_203 to the whitelist" || !r[1].Pending || r[1].Error != "" {
 		t.Fatalf("results = %+v", r)
 	}
 	api.do("GET", "/api/players/lists?network="+n.ID, nil, http.StatusOK, &lists)
-	if w := lists.Whitelisted; len(w) != 1 || w[0].UUID != "00000000-0000-0000-0009-01f64f65c7c3" || len(w[0].Servers) != 2 {
+	if w := lists.Whitelisted; len(w) != 1 || w[0].UUID != "00000000-0000-0000-0009-01f64f65c7c3" || !slices.Equal(w[0].Servers, []network.Ref{lobby}) {
 		t.Fatalf("whitelisted = %+v", w)
 	}
 	if got := a.runtime.commandsTo(lobby.ServerID); got[len(got)-1] != "minecraft:whitelist reload" {

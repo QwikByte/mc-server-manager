@@ -86,15 +86,8 @@ func (s *Service) ChangePlayer(ctx context.Context, req *noryxv1.ChangePlayerReq
 		return nil, err
 	}
 	defer dir.Close()
-	if bedrockWhitelist(change) {
-		return s.whitelistBedrock(ctx, srv, dir, change)
-	}
 	if srv.State == running {
-		out, err := s.rt.SendCommand(ctx, srv.ID, command(change))
-		if err != nil {
-			return nil, status.Error(codes.Unavailable, err.Error())
-		}
-		return &noryxv1.ChangePlayerResponse{Output: strings.TrimSpace(formatting.ReplaceAllString(out, ""))}, nil
+		return s.run(ctx, srv.ID, dir, change)
 	}
 	if change.GetAction() == noryxv1.PlayerAction_PLAYER_ACTION_KICK {
 		return nil, status.Error(codes.FailedPrecondition, "The server doesn't run.")
@@ -106,6 +99,23 @@ func (s *Service) ChangePlayer(ctx context.Context, req *noryxv1.ChangePlayerReq
 	}
 	s.waiting[srv.ID] = true
 	return &noryxv1.ChangePlayerResponse{Pending: true}, nil
+}
+
+// run changes a player on a running server. Changes of the whitelist hold s.mu, as those of
+// Bedrock players replace its file, which the server overwrites when its list changes.
+func (s *Service) run(ctx context.Context, id string, dir *datadir.Dir, change *noryxv1.PlayerChange) (*noryxv1.ChangePlayerResponse, error) {
+	if a := change.GetAction(); a == noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_ADD || a == noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_REMOVE {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+	}
+	if bedrockWhitelist(change) {
+		return s.whitelistBedrock(ctx, id, dir, change)
+	}
+	out, err := s.rt.SendCommand(ctx, id, command(change))
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+	return &noryxv1.ChangePlayerResponse{Output: strings.TrimSpace(formatting.ReplaceAllString(out, ""))}, nil
 }
 
 // Run runs the waiting changes of servers once they run, until ctx ends.
@@ -152,7 +162,13 @@ func (s *Service) apply(ctx context.Context, srv runtime.Server) bool {
 		return err != nil || len(pending) > 0
 	}
 	for i, change := range pending {
-		if _, err := s.rt.SendCommand(ctx, srv.ID, command(change)); err != nil {
+		var err error
+		if bedrockWhitelist(change) {
+			_, err = s.whitelistBedrock(ctx, srv.ID, dir, change)
+		} else {
+			_, err = s.rt.SendCommand(ctx, srv.ID, command(change))
+		}
+		if err != nil {
 			slog.Warn("Can't change a player on a server that started", "server", srv.ID, "err", err)
 			_ = writePending(dir, pending[i:]) // if it fails, the done changes run again, which changes nothing
 			return true

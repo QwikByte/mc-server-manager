@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,8 +41,14 @@ const (
 	maxResponseBytes = 1 << 20
 )
 
-// platforms are GeyserMC's names of Modrinth's loaders of proxies.
-var platforms = map[string]string{"velocity": "velocity", "bungeecord": "bungee", "waterfall": "bungee"}
+var (
+	// platforms are GeyserMC's names of Modrinth's loaders of proxies.
+	platforms = map[string]string{"velocity": "velocity", "bungeecord": "bungee", "waterfall": "bungee"}
+	id        = regexp.MustCompile(`^geysermc-[a-z]{1,32}(-[0-9A-Za-z.+-]{1,64})?$`)
+)
+
+// ValidID reports whether id is a well-formed ID of a project or version of GeyserMC.
+func ValidID(s string) bool { return id.MatchString(s) }
 
 // Platform returns GeyserMC's platform of the first of loaders it has, or "".
 func Platform(loaders []string) (platform, loader string) {
