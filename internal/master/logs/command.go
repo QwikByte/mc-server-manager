@@ -3,6 +3,7 @@ package logs
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -31,6 +32,9 @@ func Command(store func() (*Store, error)) *cobra.Command {
 		Short: "Show the log of the master and its agents: actions, warnings and errors",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if lines < 0 || since < 0 {
+				return errors.New("--lines and --since can't be negative")
+			}
 			if f.Level != "" {
 				if _, err := logging.ParseLevel(f.Level); err != nil {
 					return err
@@ -62,7 +66,7 @@ func Command(store func() (*Store, error)) *cobra.Command {
 				fmt.Fprintln(out, logging.Line(e.Time, e.Level, e.Category, e.Message, attrs))
 			}
 
-			entries, err := s.List(ctx, f, false, min(max(lines, 0), maxExport))
+			entries, err := s.List(ctx, f, false, min(lines, maxExport))
 			if err != nil {
 				return err
 			}
