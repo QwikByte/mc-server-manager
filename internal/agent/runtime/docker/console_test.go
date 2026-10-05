@@ -52,20 +52,17 @@ func TestReloaded(t *testing.T) {
 }
 
 func TestSent(t *testing.T) {
-	line := func(text string) string { return "\x1b[m> 10:12:01 [\x1b[0;34;1mINFO\x1b[m] \x1b[0;31;1m" + text }
 	for _, tt := range []struct {
 		name  string
-		lines []string // as the console of BungeeCord answers, after a player joined
+		lines []string // as Waterfall 615 answered send commands, without and with its modules
 		err   error
 		msg   string
 	}{
-		{"sent", []string{
-			"\x1b[m>send Steve lobby10:12:01 [\x1b[0;34;1mINFO\x1b[m] [Steve] <-> ServerConnector [lobby] has connected",
-			"\x1b[m10:12:01 [\x1b[0;34;1mINFO\x1b[m] \x1b[0;32mAttempting to send 1 players to lobby",
-		}, nil, ""},
-		{"no module", []string{line("Command not found")}, runtime.ErrNoSend, runtime.ErrNoSend.Error()},
-		{"offline", []string{line("That user is not online.")}, runtime.ErrNotSent, runtime.ErrNotSent.Error() + ": That user is not online."},
-		{"unknown server", []string{line("The specified server does not exist.")}, runtime.ErrNotSent, runtime.ErrNotSent.Error() + ": The specified server does not exist."},
+		{"sent", []string{"[14:49:12 INFO]: Attempting to send 0 players to lobby"}, nil, ""},
+		{"no module", []string{"[14:48:53 INFO]: Command not found"}, runtime.ErrNoSend, runtime.ErrNoSend.Error()},
+		{"offline", []string{"[14:49:08 INFO]: That user is not online."}, runtime.ErrNotSent, runtime.ErrNotSent.Error() + ": That user is not online."},
+		{"unknown server", []string{"[14:49:10 INFO]: The specified server does not exist."}, runtime.ErrNotSent, runtime.ErrNotSent.Error() + ": The specified server does not exist."},
+		{"coloured", []string{"\x1b[m> 10:12:01 [\x1b[0;34;1mINFO\x1b[m] \x1b[0;31;1mThat user is not online."}, runtime.ErrNotSent, runtime.ErrNotSent.Error() + ": That user is not online."},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			done, err := false, error(nil)
@@ -82,7 +79,7 @@ func TestSent(t *testing.T) {
 			}
 		})
 	}
-	if done, _ := sent("\x1b[m10:12:00 [\x1b[0;34;1mINFO\x1b[m] Steve has connected"); done {
+	if done, _ := sent("[14:49:16 INFO]: Closing listener [id: 0xe1ef5df3, L:/0.0.0.0:25577]"); done {
 		t.Fatal("other lines end the answer")
 	}
 }
