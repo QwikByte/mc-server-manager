@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"regexp"
@@ -152,15 +153,30 @@ type Mods interface {
 	Uninstall(ctx context.Context, ref plugin.Ref, project string) error
 }
 
-type Service struct {
-	db    *sql.DB
-	nodes Nodes
-	mods  Mods
-	mu    sync.Mutex // one change at a time, as changes reconfigure servers
+// Overlay is the private network of the nodes, over which a proxy reaches the servers of
+// another node if both nodes are members.
+type Overlay interface {
+	// Addresses returns the addresses of the members in it, by node.
+	Addresses(ctx context.Context) (map[string]string, error)
 }
 
-func NewService(db *sql.DB, nodes Nodes, mods Mods) *Service {
-	return &Service{db: db, nodes: nodes, mods: mods}
+// members are the addresses of the nodes in the private network, by node.
+type members map[string]string
+
+// private reports whether a proxy on node a reaches the servers of node b over the private
+// network: their ports are only published there, and only for it.
+func (m members) private(a, b string) bool { return a != b && m[a] != "" && m[b] != "" }
+
+type Service struct {
+	db      *sql.DB
+	nodes   Nodes
+	mods    Mods
+	overlay Overlay
+	mu      sync.Mutex // one change at a time, as changes reconfigure servers
+}
+
+func NewService(db *sql.DB, nodes Nodes, mods Mods, overlay Overlay) *Service {
+	return &Service{db: db, nodes: nodes, mods: mods, overlay: overlay}
 }
 
 func (s *Service) List(ctx context.Context) ([]Network, error) { return s.load(ctx, "") }
@@ -202,7 +218,11 @@ func (s *Service) Create(ctx context.Context, d Draft) (Network, error) {
 	if len(n.Backends) > 0 {
 		n.Try = []string{n.Backends[0].Name}
 	}
-	if err := n.validate(); err != nil {
+	m, err := s.members(ctx)
+	if err == nil {
+		err = n.validate(m)
+	}
+	if err != nil {
 		return n, err
 	}
 	err = s.inTx(ctx, func(tx *sql.Tx) error {
@@ -232,7 +252,11 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 	n := current
 	n.Name, n.Forwarding, n.Firewalled = c.Name, c.Forwarding, c.Firewalled
 	n.Backends, n.Try, n.ForcedHosts, n.BedrockPort = c.Backends, c.Try, c.ForcedHosts, c.BedrockPort
-	if err := n.validate(); err != nil {
+	m, err := s.members(ctx)
+	if err == nil {
+		err = n.validate(m)
+	}
+	if err != nil {
 		return current, err
 	}
 	if n.BedrockPort != current.BedrockPort {
@@ -320,14 +344,19 @@ func (s *Service) CheckRemovable(ctx context.Context, nodeID, serverID string) e
 }
 
 // CheckMove fails if a server can't move to another node because its network forwards the
-// legacy way and the operator didn't confirm that the servers on other nodes are protected.
+// legacy way and the operator didn't confirm that the servers on other nodes are protected,
+// which the private network of the nodes only does for its members.
 func (s *Service) CheckMove(ctx context.Context, serverID, from, to string) error {
 	n, err := s.find(ctx, serverID)
 	if err != nil || n == nil {
 		return err
 	}
 	n.moved(serverID, from, to)
-	if n.exposed() {
+	m, err := s.members(ctx)
+	if err != nil {
+		return err
+	}
+	if n.exposed(m) {
 		return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q, which forwards the legacy way. Confirm in the network that a firewall protects its servers on other nodes first.", n.Name)
 	}
 	// The proxy takes the Bedrock port of its network along.
@@ -398,6 +427,58 @@ func (s *Service) ReapplyNode(ctx context.Context, nodeID string) error {
 	return errors.Join(errs...)
 }
 
+// CheckLeave fails if a node can't leave the private network of the nodes, as a network
+// with legacy forwarding would then reach servers at ports that no firewall protects.
+func (s *Service) CheckLeave(ctx context.Context, nodeID string) error {
+	m, err := s.members(ctx)
+	if err != nil {
+		return err
+	}
+	without := maps.Clone(m)
+	delete(without, nodeID)
+	networks, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range networks {
+		if n.exposed(without) && !n.exposed(m) {
+			return httpapi.Errorf(http.StatusConflict, "The network %q forwards the legacy way and would reach servers outside of the private network. Confirm in the network that a firewall protects them first.", n.Name)
+		}
+	}
+	return nil
+}
+
+// ApplyAcross configures the networks again that have servers on the node and on other
+// nodes, e.g. as it joined or left the private network of the nodes. It tells which failed.
+func (s *Service) ApplyAcross(ctx context.Context, nodeID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	networks, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, n := range networks {
+		refs := append([]Ref{n.Proxy}, refs(n.Backends)...)
+		on := func(r Ref) bool { return r.NodeID == nodeID }
+		if !slices.ContainsFunc(refs, on) || !slices.ContainsFunc(refs, func(r Ref) bool { return !on(r) }) {
+			continue
+		}
+		if err := s.apply(ctx, n, false); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %s", n.Name, httpapi.Message(err)))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return httpapi.Errorf(http.StatusBadGateway, "%s", strings.ReplaceAll(err.Error(), "\n", " · "))
+	}
+	return nil
+}
+
+// members returns the addresses of the nodes in the private network, by node.
+func (s *Service) members(ctx context.Context) (members, error) {
+	return s.overlay.Addresses(ctx)
+}
+
 // Apply configures all servers of a network again, e.g. after a node was offline, and
 // updates Geyser and Floodgate.
 func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
@@ -410,8 +491,9 @@ func (s *Service) Apply(ctx context.Context, id string) (Network, error) {
 	return n, s.apply(ctx, n, true)
 }
 
-// validate checks the settings of a network and puts them into their canonical form.
-func (n *Network) validate() error {
+// validate checks the settings of a network, whose proxy reaches servers of the members of
+// the private network over it, and puts them into their canonical form.
+func (n *Network) validate(m members) error {
 	bungee := noryxv1.ParseServerType(n.ProxyType).Bungee()
 	n.Name = strings.TrimSpace(n.Name)
 	switch {
@@ -427,7 +509,7 @@ func (n *Network) validate() error {
 		return httpapi.Errorf(http.StatusBadRequest, "A network can have up to %d servers and %d host names.", maxBackends, maxForcedHosts)
 	case len(n.Try) == 0:
 		return httpapi.Errorf(http.StatusBadRequest, "Choose at least one server that players join.")
-	case n.exposed():
+	case n.exposed(m):
 		return errExposed
 	case n.BedrockPort != 0 && (n.BedrockPort < minBedrockPort || n.BedrockPort > maxBedrockPort):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose a Bedrock port from %d to %d.", minBedrockPort, maxBedrockPort)
@@ -475,10 +557,11 @@ func (n *Network) validate() error {
 }
 
 // exposed reports whether backends on other nodes than the proxy's can be reached by others
-// than the proxy, which legacy forwarding can't tell apart from it.
-func (n *Network) exposed() bool {
+// than the proxy, which legacy forwarding can't tell apart from it: unless a firewall or the
+// private network of the nodes protects them.
+func (n *Network) exposed(m members) bool {
 	return n.Forwarding == Legacy && !n.Firewalled &&
-		slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.NodeID != n.Proxy.NodeID })
+		slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.NodeID != n.Proxy.NodeID && !m.private(n.Proxy.NodeID, b.NodeID) })
 }
 
 // forwardingOr returns the chosen forwarding, or else the default of a type of proxy:
@@ -548,16 +631,20 @@ func (s *Service) apply(ctx context.Context, n Network, refresh bool) error {
 
 // configureAll configures the backends of a network and then its proxy.
 func (s *Service) configureAll(ctx context.Context, n Network, refresh bool) error {
+	m, err := s.members(ctx)
+	if err != nil {
+		return err
+	}
 	operation.Step(ctx, "servers")
 	for i, b := range n.Backends {
 		operation.Count(ctx, int64(i), int64(len(n.Backends)), "servers")
-		if err := s.join(ctx, n, b); err != nil {
+		if err := s.join(ctx, n, b, m); err != nil {
 			return applyFailed(b.Name, err)
 		}
 	}
 	backends := make([]*noryxv1.NetworkBackend, 0, len(n.Backends))
 	for _, b := range n.Backends {
-		target, err := s.target(ctx, n.Proxy, b)
+		target, err := s.target(ctx, n.Proxy, b, m)
 		if err != nil {
 			return applyFailed(b.Name, err)
 		}
@@ -567,7 +654,7 @@ func (s *Service) configureAll(ctx context.Context, n Network, refresh bool) err
 	for _, h := range n.ForcedHosts {
 		hosts = append(hosts, &noryxv1.ForcedHost{Host: h.Host, Servers: h.Servers})
 	}
-	req := n.request(n.Proxy)
+	req := n.request(n.Proxy, m)
 	req.Backends, req.Try, req.ForcedHosts, req.BedrockPort = backends, n.Try, hosts, n.BedrockPort
 	var plugins bool
 	if n.BedrockPort != 0 && refresh {
@@ -596,20 +683,24 @@ func (s *Service) configureAll(ctx context.Context, n Network, refresh bool) err
 	return nil
 }
 
-// request returns the configuration of a server of the network.
-func (n *Network) request(ref Ref) *noryxv1.ConfigureNetworkRequest {
+// request returns the configuration of a server of the network. A backend that its proxy
+// reaches over the private network publishes its port there, only for the proxy's node.
+func (n *Network) request(ref Ref, m members) *noryxv1.ConfigureNetworkRequest {
 	req := &noryxv1.ConfigureNetworkRequest{Id: ref.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_MODERN, ForwardingSecret: n.secret}
 	if n.Forwarding == Legacy {
 		req.Forwarding, req.ForwardingSecret = noryxv1.Forwarding_FORWARDING_LEGACY, ""
 	}
 	req.ProxyOnNode = ref != n.Proxy && ref.NodeID == n.Proxy.NodeID
 	req.BedrockPlayers = ref != n.Proxy && n.BedrockPort != 0
+	if ref != n.Proxy && m.private(n.Proxy.NodeID, ref.NodeID) {
+		req.OverlayClient = m[n.Proxy.NodeID]
+	}
 	return req
 }
 
 // join gives a backend its role in the network, after installing the forwarding mod it
 // needs.
-func (s *Service) join(ctx context.Context, n Network, b Backend) error {
+func (s *Service) join(ctx context.Context, n Network, b Backend, m members) error {
 	srv, err := s.server(ctx, b.Ref)
 	if err != nil {
 		return err
@@ -619,7 +710,7 @@ func (s *Service) join(ctx context.Context, n Network, b Backend) error {
 			return fmt.Errorf("its forwarding mod could not be installed: %w", err)
 		}
 	}
-	_, err = s.configure(ctx, b.Ref, n.request(b.Ref))
+	_, err = s.configure(ctx, b.Ref, n.request(b.Ref, m))
 	return err
 }
 
@@ -643,24 +734,27 @@ func (s *Service) leave(ctx context.Context, b Backend) error {
 }
 
 // target tells the proxy how to reach a backend: on its own node by server ID, as the
-// agent knows the local route, otherwise at the node's address and the server's port.
-func (s *Service) target(ctx context.Context, proxy Ref, b Backend) (*noryxv1.NetworkBackend, error) {
+// agent knows the local route, otherwise at the node's address in the private network or,
+// for nodes outside, the host of its agent's address, and the server's port.
+func (s *Service) target(ctx context.Context, proxy Ref, b Backend, m members) (*noryxv1.NetworkBackend, error) {
 	target := &noryxv1.NetworkBackend{Name: b.Name, Restricted: b.Restricted, Motd: b.Motd}
 	if b.NodeID == proxy.NodeID {
 		target.Target = &noryxv1.NetworkBackend_ServerId{ServerId: b.ServerID}
 		return target, nil
 	}
-	n, err := s.nodes.Get(ctx, b.NodeID)
-	if err != nil {
-		return nil, err
-	}
 	srv, err := s.server(ctx, b.Ref)
 	if err != nil {
 		return nil, err
 	}
-	host, _, err := net.SplitHostPort(n.Address)
-	if err != nil {
-		return nil, err
+	host := m[b.NodeID]
+	if !m.private(proxy.NodeID, b.NodeID) {
+		n, err := s.nodes.Get(ctx, b.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		if host, _, err = net.SplitHostPort(n.Address); err != nil {
+			return nil, err
+		}
 	}
 	target.Target = &noryxv1.NetworkBackend_Address{Address: net.JoinHostPort(host, strconv.Itoa(int(srv.GetPort())))}
 	return target, nil

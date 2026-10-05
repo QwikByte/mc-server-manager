@@ -9,12 +9,13 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { nodesQuery } from "@/features/nodes/api"
 import { OperationStatus } from "@/features/operations/operation-status"
+import { usePrivateRoute } from "@/features/overlay/api"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
 import { type Forwarding, maintenanceQuery, type Network, networksQuery, type ServerRef, useSwapProxy } from "./api"
 import { FirewallConfirmation, ForwardingChoice } from "./forwarding"
-import { availableServers, findServer, hostOf, isBungee, key, proxyTypes, refOf } from "./servers"
+import { availableServers, findServer, hostOf, isBungee, key, proxyTypes, refOf, routeOf } from "./servers"
 
 /** Gives a network another proxy, e.g. BungeeCord or Velocity instead of Waterfall, and tells first what that does. */
 export function SwapProxyDialog({ network, trigger }: { network: Network; trigger: ReactElement }) {
@@ -29,7 +30,8 @@ export function SwapProxyDialog({ network, trigger }: { network: Network; trigge
   const chosen = proxy && findServer(servers, proxy)
   // Software at its end of life can't be chosen.
   const proxies = availableServers(servers, networks, (s) => proxyTypes.includes(s.type) && !serverType(s.type).endOfLife)
-  const exposed = forwarding === "legacy" && network.backends.some((b) => b.nodeId !== proxy?.nodeId)
+  const isPrivate = usePrivateRoute()
+  const exposed = forwarding === "legacy" && !!proxy && network.backends.some((b) => routeOf({ ...network, proxy }, b, isPrivate) === "public")
   const title = t("Change the proxy of {{name}}", { name: network.name })
 
   function onOpenChange(next: boolean) {
@@ -110,7 +112,7 @@ export function SwapProxyDialog({ network, trigger }: { network: Network; trigge
               <>
                 <ForwardingChoice value={forwarding} bungee={isBungee(chosen.type)} onChange={setForwarding} />
                 {exposed && <FirewallConfirmation checked={firewalled} onChange={setFirewalled} proxyNode={chosen.nodeName} />}
-                <SwapEffects network={network} old={findServer(servers, network.proxy)} proxy={chosen} forwarding={forwarding} />
+                <SwapEffects network={network} old={findServer(servers, network.proxy)} proxy={chosen} forwarding={forwarding} isPrivate={isPrivate} />
               </>
             )}
             {swap.error && <FieldError>{swap.error.message}</FieldError>}
@@ -128,14 +130,26 @@ export function SwapProxyDialog({ network, trigger }: { network: Network; trigge
 }
 
 /** Tells what changing the proxy does: what the new one takes over, which servers restart and where players join. */
-function SwapEffects({ network, old, proxy, forwarding }: { network: Network; old?: NodeServer | null; proxy: NodeServer; forwarding: Forwarding }) {
+function SwapEffects({
+  network,
+  old,
+  proxy,
+  forwarding,
+  isPrivate,
+}: {
+  network: Network
+  old?: NodeServer | null
+  proxy: NodeServer
+  forwarding: Forwarding
+  isPrivate: (a: string, b: string) => boolean
+}) {
   const { data: maintenance } = useQuery(maintenanceQuery(network.id))
   const { data: nodes } = useQuery(nodesQuery)
   const host = hostOf(nodes?.find((n) => n.id === proxy.nodeId)?.address)
-  const onOldNode = (nodeId: string) => nodeId === network.proxy.nodeId
-  // Game servers restart for another forwarding, and when their proxy comes to or leaves their node, which publishes their port.
+  // Game servers restart for another forwarding, and when the proxy reaches them another way, for which they publish their port.
+  const swapped = { ...network, proxy: refOf(proxy) }
   const restart = network.backends.filter(
-    (b) => forwarding !== network.forwarding || onOldNode(b.nodeId) !== (b.nodeId === proxy.nodeId),
+    (b) => forwarding !== network.forwarding || routeOf(network, b, isPrivate) !== routeOf(swapped, b, isPrivate),
   )
   const oldName = old?.name ?? t("The old proxy")
   const sameConfig = isBungee(network.proxyType) === isBungee(proxy.type)

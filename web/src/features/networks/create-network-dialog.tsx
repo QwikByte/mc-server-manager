@@ -12,6 +12,7 @@ import { allServersQuery } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
 import { cn } from "@/lib/utils"
 import { OperationStatus } from "@/features/operations/operation-status"
+import { usePrivateRoute } from "@/features/overlay/api"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Forwarding, networksQuery, type ServerRef, useCreateNetwork } from "./api"
 import { FirewallConfirmation, ForwardingChoice } from "./forwarding"
@@ -40,7 +41,8 @@ export function CreateNetworkDialog() {
   const proxies = availableServers(servers, networks, (s) => proxyTypes.includes(s.type))
   const candidates = availableServers(servers, networks, (s) => !proxyTypes.includes(s.type))
   const selected = picked.filter((r) => canJoin(findServer(servers, r)?.type ?? "", forwarding))
-  const exposed = forwarding === "legacy" && selected.some((r) => r.nodeId !== proxy?.nodeId)
+  const isPrivate = usePrivateRoute()
+  const exposed = forwarding === "legacy" && !!proxy && selected.some((r) => r.nodeId !== proxy.nodeId && !isPrivate(proxy.nodeId, r.nodeId))
 
   function onOpenChange(next: boolean) {
     setOpen(next)

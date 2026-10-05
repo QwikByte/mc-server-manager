@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -268,6 +269,9 @@ func containerOptions(spec runtime.Spec, path, netName string) (client.Container
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", img.port))
 	exposed := network.PortSet{port: {}}
 	published := network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}}
+	if addr, err := netip.ParseAddr(spec.Overlay); err == nil {
+		published[port][0].HostIP = addr // only the proxy's node reaches it, over the private network
+	}
 	if spec.BehindProxy && spec.ProxyOnNode {
 		published = nil // only its proxy connects, over their network
 	}
@@ -327,7 +331,7 @@ func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
 		return err
 	}
 	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode = current.Type, current.Storage, current.BehindProxy, current.ProxyOnNode
-	spec.BedrockPort, spec.BedrockPlayers = current.BedrockPort, current.BedrockPlayers
+	spec.BedrockPort, spec.BedrockPlayers, spec.Overlay = current.BedrockPort, current.BedrockPlayers, current.Overlay
 	if imageRef(spec) != imageRef(current) {
 		if err := d.pull(ctx, imageRef(spec)); err != nil {
 			return err

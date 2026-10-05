@@ -19,9 +19,10 @@ import (
 )
 
 // Configure writes the network configuration into the server's data directory. Game
-// servers are recreated when they join or leave a network, or Bedrock players start or
-// stop joining it, because the online mode and secure chat are part of the container's
-// environment, and running ones restart to apply a changed configuration. Running proxies
+// servers are recreated when they join or leave a network, Bedrock players start or stop
+// joining it, or their port moves to or from the private network of the nodes, because the
+// online mode, secure chat and published ports are part of the container, and running ones
+// restart to apply a changed configuration. Running proxies
 // reload theirs, or restart if they must.
 func (d *Docker) Configure(ctx context.Context, id string, network runtime.Network) (bool, error) {
 	c, spec, err := d.inspect(ctx, id)
@@ -46,11 +47,11 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 	}
 	running := c.State.Running
 	if behind := network.Forwarding != runtime.ForwardingNone; behind != spec.BehindProxy || network.ProxyOnNode != spec.ProxyOnNode ||
-		network.BedrockPlayers != spec.BedrockPlayers {
+		network.BedrockPlayers != spec.BedrockPlayers || network.Overlay != spec.Overlay {
 		if err := mcnet.Leave(data, spec.BehindProxy && !behind, spec.BedrockPlayers && !network.BedrockPlayers); err != nil {
 			return false, err
 		}
-		spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers = behind, network.ProxyOnNode, network.BedrockPlayers
+		spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers, spec.Overlay = behind, network.ProxyOnNode, network.BedrockPlayers, network.Overlay
 		return running, d.recreate(ctx, spec, running, placement(c, spec))
 	}
 	if !running || !changed {

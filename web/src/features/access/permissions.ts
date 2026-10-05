@@ -5,6 +5,7 @@ export const permissionIds = [
   "nodes.certificates",
   "nodes.delete",
   "nodes.enroll",
+  "overlay.manage",
   "servers.view",
   "servers.create",
   "servers.start",

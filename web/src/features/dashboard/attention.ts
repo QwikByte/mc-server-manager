@@ -2,6 +2,7 @@ import { t } from "i18next"
 import type { Tone } from "@/components/tone"
 import type { Network } from "@/features/networks/api"
 import { type Node, memoryCapacityMb } from "@/features/nodes/api"
+import type { Overlay } from "@/features/overlay/api"
 import { assignedMemoryMb, type NodeServer } from "@/features/servers/api"
 import type { useUsages } from "@/features/usage/api"
 import { formatMegabytes } from "@/lib/format"
@@ -20,12 +21,13 @@ export interface Problem {
 
 const full = 0.9
 
-/** What needs attention across nodes, servers and networks, the most urgent first. */
+/** What needs attention across nodes, servers, networks and the private network of the nodes, the most urgent first. */
 export function problemsOf(
   nodes: Node[],
   servers: NodeServer[],
   networks: Network[],
   usages: ReturnType<typeof useUsages>,
+  overlay?: Overlay,
 ): Problem[] {
   const problems: Problem[] = []
   const add = (p: Problem) => problems.push(p)
@@ -144,6 +146,29 @@ export function problemsOf(
         title: t("The proxy of {{name}} may send players to the wrong address", { name: network.name }),
         detail: t("Its servers couldn't be configured. Apply the network again."),
         link: { to: "/networks/$networkId", params: { networkId: network.id } },
+      })
+    }
+  }
+  // Offline nodes are a problem of their own.
+  const nameOf = (id: string) => nodes.find((n) => n.id === id)?.name ?? id
+  for (const m of overlay?.members ?? []) {
+    const link = { to: "/nodes/$nodeId", params: { nodeId: m.nodeId } } as const
+    if (nodes.find((n) => n.id === m.nodeId)?.status === "offline") continue
+    if (m.problem) {
+      add({
+        key: `overlay/${m.nodeId}`,
+        tone: "warning",
+        title: t("{{name}} isn't configured in the private network", { name: nameOf(m.nodeId) }),
+        detail: m.problem,
+        link,
+      })
+    } else if (m.unreached?.length) {
+      add({
+        key: `overlay-unreached/${m.nodeId}`,
+        tone: "warning",
+        title: t("{{name}} doesn't reach {{nodes}} over the private network", { name: nameOf(m.nodeId), nodes: m.unreached.map(nameOf).join(", ") }),
+        detail: t("No handshake for 5 minutes, e.g. as UDP port {{port}} is closed between them.", { port: overlay?.port }),
+        link,
       })
     }
   }

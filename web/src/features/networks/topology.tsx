@@ -1,4 +1,4 @@
-import { ArrowsSplitIcon, DeviceMobileIcon, GlobeIcon, StackIcon, UsersIcon, UsersThreeIcon } from "@phosphor-icons/react"
+import { ArrowsSplitIcon, DeviceMobileIcon, GlobeIcon, PlugIcon, ShieldCheckIcon, StackIcon, UsersIcon, UsersThreeIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type ReactNode, useState } from "react"
@@ -9,7 +9,7 @@ import type { ServerUsage } from "@/features/usage/api"
 import type { Backend, Network } from "./api"
 import type { Draft } from "./draft"
 import { ServerLabel } from "./server-label"
-import { findServer, key } from "./servers"
+import { findServer, key, routeOf } from "./servers"
 
 const row = 56 // height of an entry or a server, in pixels
 const gap = 64 // width of the connections
@@ -28,6 +28,7 @@ export function Topology({
   usage,
   address,
   bedrockAddress,
+  isPrivate,
 }: {
   network: Network
   draft: Draft
@@ -36,6 +37,7 @@ export function Topology({
   address?: string
   /** Where Bedrock players connect, if they may. */
   bedrockAddress?: string
+  isPrivate: (a: string, b: string) => boolean
 }) {
   const proxy = findServer(servers, network.proxy)
   const entries: { icon: typeof GlobeIcon; label: string }[] = [
@@ -85,6 +87,7 @@ export function Topology({
             const position = draft.try.indexOf(key(b))
             const hosts = draft.forcedHosts.filter((h) => h.servers.includes(key(b))).length
             const players = usage(b)?.players?.online
+            const route = routeOf(network, b, isPrivate)
             return (
               <Item key={key(b)}>
                 {server ? <StatusDot status={statusOf(server)} label={t(statusOf(server).label)} /> : <StatusDot status={{ tone: "neutral", label: "" }} />}
@@ -97,6 +100,16 @@ export function Topology({
                   </span>
                 )}
                 {hosts > 0 && <GlobeIcon aria-label={t("Host names lead here")} className="size-4 text-violet" weight="duotone" />}
+                {route === "private" && (
+                  <ShieldCheckIcon aria-label={t("Over the private network")} className="size-4 text-success" weight="duotone">
+                    <title>{t("Over the private network")}</title>
+                  </ShieldCheckIcon>
+                )}
+                {route === "public" && (
+                  <PlugIcon aria-label={t("At a public port")} className="size-4 text-muted-foreground" weight="duotone">
+                    <title>{t("At a public port")}</title>
+                  </PlugIcon>
+                )}
                 {players !== undefined && (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <UsersIcon className="size-3.5" />

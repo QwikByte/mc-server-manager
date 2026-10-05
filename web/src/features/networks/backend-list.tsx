@@ -21,7 +21,7 @@ import type { Backend, Network } from "./api"
 import { type Draft, withoutBackend } from "./draft"
 import { nameError } from "./problems"
 import { ServerLabel } from "./server-label"
-import { findServer, firewallCommand, forwardingMod, key } from "./servers"
+import { findServer, firewallCommand, forwardingMod, key, routeOf } from "./servers"
 
 /**
  * The game servers behind the proxy, one row each with the name players use, searchable for
@@ -34,6 +34,7 @@ export function BackendList({
   servers,
   usage,
   proxyHost,
+  isPrivate,
   editable,
 }: {
   network: Network
@@ -43,6 +44,8 @@ export function BackendList({
   usage: (b: Backend) => ServerUsage | undefined
   /** The address of the proxy's node, which servers on other nodes must let in. */
   proxyHost?: string
+  /** Whether a proxy on node a reaches the servers of node b over the private network. */
+  isPrivate: (a: string, b: string) => boolean
   editable: boolean
 }) {
   const [search, setSearch] = useState("")
@@ -93,11 +96,11 @@ export function BackendList({
           const k = key(backend)
           const position = draft.try.indexOf(k)
           const hosts = draft.forcedHosts.filter((h) => h.servers.includes(k)).map((h) => h.host)
-          const remote = backend.nodeId !== network.proxy.nodeId
+          const route = routeOf(network, backend, isPrivate)
           const players = usage(backend)?.players
           const mod = server && forwardingMod(server.type)
           const error = nameError(draft.backends, i)
-          const firewall = remote && draft.forwarding === "legacy" && server && proxyHost
+          const firewall = route === "public" && draft.forwarding === "legacy" && server && proxyHost
           const details = bungee || firewall
           return (
             <li key={k} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_15rem_auto] md:items-start">
@@ -125,12 +128,16 @@ export function BackendList({
                         {t("Firewall rule")}
                       </Pill>
                     )}
+                    {route === "private" && server && !server.overlay && <Pill tone="info">{t("Moves to the private network when applied")}</Pill>}
                     {server && <TagList tags={server.tags} />}
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {[
                       server && `${serverType(server.type).label} ${displayVersion(server.version)}`,
-                      server && (remote ? t("port {{port}}", { port: server.port }) : t("internal")),
+                      server &&
+                        { local: t("internal"), private: t("private network, port {{port}}", { port: server.port }), public: t("port {{port}}", { port: server.port }) }[
+                          route
+                        ],
                       players && t("{{count}} players", { count: players.online, defaultValue_one: "{{count}} player" }),
                       mod,
                     ]

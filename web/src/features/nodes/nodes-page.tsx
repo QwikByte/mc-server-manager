@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header"
 import { StatCard } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
+import { OverlaySettingsSection } from "@/features/overlay/overlay-settings"
 import { allServersQuery, assignedMemoryMb, type NodeServer, runningCount } from "@/features/servers/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { AddNodeDialog } from "./add-node-dialog"
@@ -47,6 +48,7 @@ export function NodesPage() {
               </li>
             ))}
           </ul>
+          <OverlaySettingsSection />
         </>
       )}
     </>

@@ -309,8 +309,11 @@ type Server struct {
 	// JVM options that were set before the agent refused them, e.g. as they can run code. The
 	// server still starts with them until they are removed in its settings.
 	RefusedJvmOptions []string `protobuf:"bytes,18,rep,name=refused_jvm_options,json=refusedJvmOptions,proto3" json:"refused_jvm_options,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The node publishes the port of the backend only at its address in the private network of
+	// the nodes, for the node of its proxy.
+	Overlay       bool `protobuf:"varint,19,opt,name=overlay,proto3" json:"overlay,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Server) Reset() {
@@ -467,6 +470,13 @@ func (x *Server) GetRefusedJvmOptions() []string {
 		return x.RefusedJvmOptions
 	}
 	return nil
+}
+
+func (x *Server) GetOverlay() bool {
+	if x != nil {
+		return x.Overlay
+	}
+	return false
 }
 
 type ListServersRequest struct {
@@ -1570,8 +1580,12 @@ type ConfigureNetworkRequest struct {
 	// For a backend: Bedrock players join it through the proxy. They can't sign their chat
 	// messages, so the server must not demand it.
 	BedrockPlayers bool `protobuf:"varint,9,opt,name=bedrock_players,json=bedrockPlayers,proto3" json:"bedrock_players,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// For a backend on another node than its proxy, both in the private network of the nodes:
+	// the address of the proxy's node in it. The node publishes the backend's port only at its
+	// own address in the network, and only for this one.
+	OverlayClient string `protobuf:"bytes,10,opt,name=overlay_client,json=overlayClient,proto3" json:"overlay_client,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConfigureNetworkRequest) Reset() {
@@ -1665,6 +1679,13 @@ func (x *ConfigureNetworkRequest) GetBedrockPlayers() bool {
 		return x.BedrockPlayers
 	}
 	return false
+}
+
+func (x *ConfigureNetworkRequest) GetOverlayClient() string {
+	if x != nil {
+		return x.OverlayClient
+	}
+	return ""
 }
 
 type NetworkBackend struct {
@@ -2113,7 +2134,7 @@ var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xce\x04\n" +
+	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xe8\x04\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
@@ -2136,7 +2157,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\texit_code\x18\x0f \x01(\x05R\bexitCode\x12%\n" +
 	"\x0eloader_version\x18\x10 \x01(\tR\rloaderVersion\x12!\n" +
 	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\x12.\n" +
-	"\x13refused_jvm_options\x18\x12 \x03(\tR\x11refusedJvmOptions\"\x14\n" +
+	"\x13refused_jvm_options\x18\x12 \x03(\tR\x11refusedJvmOptions\x12\x18\n" +
+	"\aoverlay\x18\x13 \x01(\bR\aoverlay\"\x14\n" +
 	"\x12ListServersRequest\"A\n" +
 	"\x13ListServersResponse\x12*\n" +
 	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\xc3\x04\n" +
@@ -2213,7 +2235,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\acommand\x18\x02 \x01(\tR\acommand\x12\x17\n" +
 	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"-\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\"\xfd\x02\n" +
+	"\x06output\x18\x01 \x01(\tR\x06output\"\xa4\x03\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x124\n" +
@@ -2225,7 +2247,9 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x03try\x18\x06 \x03(\tR\x03try\x127\n" +
 	"\fforced_hosts\x18\a \x03(\v2\x14.noryx.v1.ForcedHostR\vforcedHosts\x12!\n" +
 	"\fbedrock_port\x18\b \x01(\rR\vbedrockPort\x12'\n" +
-	"\x0fbedrock_players\x18\t \x01(\bR\x0ebedrockPlayers\"\x9d\x01\n" +
+	"\x0fbedrock_players\x18\t \x01(\bR\x0ebedrockPlayers\x12%\n" +
+	"\x0eoverlay_client\x18\n" +
+	" \x01(\tR\roverlayClient\"\x9d\x01\n" +
 	"\x0eNetworkBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\tserver_id\x18\x02 \x01(\tH\x00R\bserverId\x12\x1a\n" +

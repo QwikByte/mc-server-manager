@@ -20,6 +20,7 @@ import (
 	agentlogs "github.com/QwikByte/noryx/internal/agent/logs"
 	"github.com/QwikByte/noryx/internal/agent/network"
 	"github.com/QwikByte/noryx/internal/agent/node"
+	"github.com/QwikByte/noryx/internal/agent/overlay"
 	"github.com/QwikByte/noryx/internal/agent/player"
 	"github.com/QwikByte/noryx/internal/agent/plugin"
 	"github.com/QwikByte/noryx/internal/agent/progress"
@@ -59,7 +60,7 @@ func serve(ctx context.Context, cfg config) error {
 	defer rt.Close()
 
 	// The master connects via mutual TLS, the local CLI via the Unix socket.
-	svc := newServices(rt, identity, locations, buf, slog.Default())
+	svc := newServices(rt, identity, locations, overlay.NewService(cfg.dataDir, overlay.Linux{}), buf, slog.Default())
 	remote := svc.grpcServer(agentlogs.FromMaster, grpc.Creds(credentials.NewTLS(pki.AgentServerTLS(identity.Holder, identity.CA))))
 	localSrv := svc.grpcServer(agentlogs.FromLocal, grpc.Creds(local.NewCredentials()))
 	go svc.stats.Run(ctx)
@@ -116,6 +117,7 @@ type services struct {
 	plugin     *plugin.Service
 	player     *player.Service
 	backup     *backup.Service
+	overlay    *overlay.Service
 	stats      *stats.Service
 	log        *agentlogs.Service
 	progress   *progress.Registry
@@ -123,18 +125,19 @@ type services struct {
 }
 
 // newServices returns the services, which log the calls they receive to calls.
-func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, buf *agentlogs.Buffer, calls *slog.Logger) *services {
+func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, ov *overlay.Service, buf *agentlogs.Buffer, calls *slog.Logger) *services {
 	backups := backup.NewService(rt, locations)
 	return &services{
 		rt:         rt,
 		node:       node.NewService(rt, identity, locations),
-		server:     server.NewService(rt, backups),
+		server:     server.NewService(rt, backups, ov),
 		files:      files.NewService(rt),
 		properties: properties.NewService(rt),
 		proxy:      network.NewService(rt),
 		plugin:     plugin.NewService(rt),
 		player:     player.NewService(rt),
 		backup:     backups,
+		overlay:    ov,
 		stats:      stats.NewService(rt),
 		log:        agentlogs.NewService(buf),
 		progress:   progress.NewRegistry(),
@@ -155,6 +158,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 	noryxv1.RegisterPluginServiceServer(srv, s.plugin)
 	noryxv1.RegisterPlayerServiceServer(srv, s.player)
 	noryxv1.RegisterBackupServiceServer(srv, s.backup)
+	noryxv1.RegisterOverlayServiceServer(srv, s.overlay)
 	noryxv1.RegisterStatsServiceServer(srv, s.stats)
 	noryxv1.RegisterLogServiceServer(srv, s.log)
 	noryxv1.RegisterProgressServiceServer(srv, s.progress)
@@ -163,7 +167,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 
 // NewGRPCServer registers all agent services on a new gRPC server for the master. The calls
 // are logged to buf, which the log service reads.
-func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, buf *agentlogs.Buffer, opts ...grpc.ServerOption) *grpc.Server {
+func NewGRPCServer(rt runtime.Runtime, identity *node.Identity, locations *storage.Locations, ov *overlay.Service, buf *agentlogs.Buffer, opts ...grpc.ServerOption) *grpc.Server {
 	calls := slog.New(buf.Handler(slog.LevelDebug))
-	return newServices(rt, identity, locations, buf, calls).grpcServer(agentlogs.FromMaster, opts...)
+	return newServices(rt, identity, locations, ov, buf, calls).grpcServer(agentlogs.FromMaster, opts...)
 }

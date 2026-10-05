@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
 import { useOperation } from "@/features/operations/use-operation"
+import { usePrivateRoute } from "@/features/overlay/api"
 import { allServersQuery } from "@/features/servers/api"
 import { type Network, useUpdateNetwork } from "./api"
 import { BackendList } from "./backend-list"
@@ -40,6 +41,7 @@ export function NetworkEditor({ network }: { network: Network }) {
   }
   const dirty = !same(draft, saved)
   const update = useUpdateNetwork(network.id)
+  const isPrivate = usePrivateRoute()
   const operation = useOperation()
   const { data: servers } = useQuery(allServersQuery)
   const { data: proxyNode } = useQuery(nodeQuery(network.proxy.nodeId))
@@ -64,7 +66,15 @@ export function NetworkEditor({ network }: { network: Network }) {
 
   return (
     <div className="pb-28">
-      <Topology network={network} draft={draft} servers={servers} usage={usage} address={address} bedrockAddress={bedrockAddress} />
+      <Topology
+        network={network}
+        draft={draft}
+        servers={servers}
+        usage={usage}
+        address={address}
+        bedrockAddress={bedrockAddress}
+        isPrivate={isPrivate}
+      />
       <Routing draft={draft} onChange={change} servers={entries} address={address} bungee={bungee} editable={editable} />
       <BackendList
         network={network}
@@ -73,6 +83,7 @@ export function NetworkEditor({ network }: { network: Network }) {
         servers={servers}
         usage={usage}
         proxyHost={proxyHost}
+        isPrivate={isPrivate}
         editable={editable}
       />
       <Section title={t("Network")} description={t("The name of the network and how the proxy tells the servers who a player is.")}>
@@ -82,7 +93,7 @@ export function NetworkEditor({ network }: { network: Network }) {
             <Input id="network-name" value={draft.name} maxLength={64} disabled={!editable} onChange={(e) => change({ name: e.target.value })} />
           </Field>
           <ForwardingChoice value={draft.forwarding} bungee={bungee} disabled={!editable} onChange={(forwarding) => change({ forwarding })} />
-          {exposed(network, draft) && (
+          {exposed(network, draft, isPrivate) && (
             <FirewallConfirmation
               checked={draft.firewalled}
               proxyNode={proxyNode?.name}
@@ -101,7 +112,16 @@ export function NetworkEditor({ network }: { network: Network }) {
         proxyHost={proxyHost}
         editable={editable}
       />
-      {dirty && <SaveBar network={network} draft={draft} saving={update.isPending} onDiscard={() => setDraft(saved)} onSave={save} />}
+      {dirty && (
+        <SaveBar
+          network={network}
+          draft={draft}
+          saving={update.isPending}
+          valid={isValid(network, draft, isPrivate)}
+          onDiscard={() => setDraft(saved)}
+          onSave={save}
+        />
+      )}
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}
@@ -120,12 +140,14 @@ function SaveBar({
   network,
   draft,
   saving,
+  valid,
   onDiscard,
   onSave,
 }: {
   network: Network
   draft: Draft
   saving: boolean
+  valid: boolean
   onDiscard: () => void
   onSave: () => void
 }) {
@@ -158,7 +180,7 @@ function SaveBar({
         <Button variant="ghost" onClick={onDiscard}>
           {t("Discard")}
         </Button>
-        <Button disabled={saving || !isValid(network, draft)} onClick={onSave}>
+        <Button disabled={saving || !valid} onClick={onSave}>
           {t("Save and apply")}
         </Button>
       </div>

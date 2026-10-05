@@ -33,7 +33,7 @@ func TestValidate(t *testing.T) {
 		}
 	}
 	n := valid("velocity")
-	if err := n.validate(); err != nil {
+	if err := n.validate(nil); err != nil {
 		t.Fatal(err)
 	}
 	// Host names are compared in lower case, and Velocity has no settings of BungeeCord.
@@ -62,7 +62,7 @@ func TestValidate(t *testing.T) {
 	} {
 		n := valid("velocity")
 		edit(&n)
-		if n.validate() == nil {
+		if n.validate(nil) == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -71,34 +71,58 @@ func TestValidate(t *testing.T) {
 	n = valid("waterfall")
 	n.Forwarding, n.Firewalled = Legacy, true
 	n.ForcedHosts[0].Servers = []string{"survival"}
-	if err := n.validate(); err != nil || !n.Backends[0].Restricted || n.Backends[0].Motd != "Hi" {
+	if err := n.validate(nil); err != nil || !n.Backends[0].Restricted || n.Backends[0].Motd != "Hi" {
 		t.Fatalf("BungeeCord network = %+v, %v", n, err)
 	}
 	n.ForcedHosts[0].Servers = []string{"survival", "lobby"}
-	if n.validate() == nil {
+	if n.validate(nil) == nil {
 		t.Error("BungeeCord accepted two servers for a host name")
 	}
 }
 
 func TestExposed(t *testing.T) {
 	n := Network{Proxy: Ref{"n1", "proxy"}, Forwarding: Legacy, Backends: []Backend{{Ref: Ref{"n1", "lobby"}}}}
-	if n.exposed() {
+	if n.exposed(nil) {
 		t.Fatal("a server on the proxy's node is exposed")
 	}
-	// Moving the server, or the proxy, to another node exposes the server.
+	// Moving the server, or the proxy, to another node exposes the server, unless a firewall
+	// or the private network protects it.
 	for _, move := range []string{"lobby", "proxy"} {
 		moved := n
 		moved.Backends = slices.Clone(n.Backends)
 		moved.moved(move, "n1", "n2")
-		if !moved.exposed() {
+		if !moved.exposed(nil) || !moved.exposed(members{"n1": "10.213.0.1"}) {
 			t.Errorf("moving %s didn't expose the server", move)
 		}
-		if moved.Firewalled = true; moved.exposed() {
+		if moved.exposed(members{"n1": "10.213.0.1", "n2": "10.213.0.2"}) {
+			t.Errorf("moving %s exposed the server in the private network", move)
+		}
+		if moved.Firewalled = true; moved.exposed(nil) {
 			t.Errorf("moving %s exposed the server behind a firewall", move)
 		}
 	}
-	if n.Forwarding = Modern; n.exposed() {
+	if n.Forwarding = Modern; n.exposed(nil) {
 		t.Fatal("modern forwarding is exposed")
+	}
+}
+
+// A backend that its proxy reaches over the private network publishes its port there for the
+// proxy's node; one on the proxy's node, or outside the network, doesn't.
+func TestRequest(t *testing.T) {
+	n := Network{Proxy: Ref{"n1", "proxy"}, Forwarding: Modern, secret: "s3cret"}
+	m := members{"n1": "10.213.0.1", "n2": "10.213.0.2"}
+	for _, tc := range []struct {
+		ref  Ref
+		want string
+	}{
+		{Ref{"n2", "survival"}, "10.213.0.1"},
+		{Ref{"n3", "skyblock"}, ""},
+		{Ref{"n1", "lobby"}, ""},
+		{n.Proxy, ""},
+	} {
+		if got := n.request(tc.ref, m).GetOverlayClient(); got != tc.want {
+			t.Errorf("%s: overlay client %q, want %q", tc.ref.ServerID, got, tc.want)
+		}
 	}
 }
 

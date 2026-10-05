@@ -17,7 +17,7 @@ func (d *Docker) Duplicate(ctx context.Context, from string, spec runtime.Spec) 
 	if err != nil {
 		return err
 	}
-	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers = source.Type, source.Storage, false, false, false
+	spec.Type, spec.Storage, spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers, spec.Overlay = source.Type, source.Storage, false, false, false, ""
 	src, err := d.dataPath(source)
 	if err != nil {
 		return err

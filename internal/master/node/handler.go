@@ -22,13 +22,21 @@ type Networks interface {
 	ReapplyNode(ctx context.Context, nodeID string) error
 }
 
+// Overlay is the private network of the nodes, whose members reach each other at the
+// addresses of their agents unless set otherwise.
+type Overlay interface {
+	// Reconcile configures its members again, e.g. without a node that was removed.
+	Reconcile(ctx context.Context)
+}
+
 type Handler struct {
 	svc      *Service
 	networks Networks
+	overlay  Overlay
 }
 
-func NewHandler(svc *Service, networks Networks) *Handler {
-	return &Handler{svc: svc, networks: networks}
+func NewHandler(svc *Service, networks Networks, overlay Overlay) *Handler {
+	return &Handler{svc: svc, networks: networks, overlay: overlay}
 }
 
 // Register adds the routes. Users see the nodes on which they may see the node or servers,
@@ -185,8 +193,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := h.probeFor(r.Context(), n)
-	// Proxies on other nodes reach the node's servers at the host of its address.
+	// Proxies on other nodes reach the node's servers at the host of its address, and so
+	// does the private network.
 	if host(old.Address) != host(n.Address) {
+		go h.overlay.Reconcile(context.WithoutCancel(r.Context()))
 		if err := h.networks.ReapplyNode(r.Context(), n.ID); err != nil {
 			v.Warning = err.Error()
 		}
@@ -213,6 +223,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
+	// The other members of the private network drop it right away.
+	go h.overlay.Reconcile(context.WithoutCancel(r.Context()))
 	w.WriteHeader(http.StatusNoContent)
 }
 

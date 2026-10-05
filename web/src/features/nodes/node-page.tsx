@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { NodeActivity } from "@/features/logs/activity"
+import { OverlaySection } from "@/features/overlay/overlay-section"
 import { assignedMemoryMb, serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
 import { usageQuery } from "@/features/usage/api"
@@ -103,6 +104,7 @@ export function NodePage() {
                 />
               )}
               {node.info.storage && can("nodes.view", node.id) && <StorageList locations={node.info.storage} />}
+              {can("nodes.view", node.id) && <OverlaySection node={node} />}
             </>
           ) : node.status === "pending" ? (
             <EmptyState

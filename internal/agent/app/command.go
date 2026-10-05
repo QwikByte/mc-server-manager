@@ -72,7 +72,12 @@ func Command() *cobra.Command {
 	}
 
 	root.AddCommand(serve, enrollCmd, storageCommand(&cfg))
-	root.AddCommand(agentcli.Commands(cfg.local)...)
+	for _, c := range agentcli.Commands(cfg.local) {
+		if c.Name() == "overlay" {
+			c.AddCommand(overlayCommands(&cfg)...)
+		}
+		root.AddCommand(c)
+	}
 	return root
 }
 
