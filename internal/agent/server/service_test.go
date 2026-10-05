@@ -149,7 +149,8 @@ func (r *slowRuntime) Create(_ context.Context, spec runtime.Spec) error {
 	return nil
 }
 
-// Of concurrent requests for the same port, e.g. after a double click, only one creates a server.
+// Of concurrent requests for the same port, e.g. after a double click, only one creates a
+// server.
 func TestCreateServerReservesThePort(t *testing.T) {
 	rt := &slowRuntime{}
 	s := NewService(rt, nil)
