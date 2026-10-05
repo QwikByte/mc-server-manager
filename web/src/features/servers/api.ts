@@ -1,4 +1,5 @@
 import { type QueryClient, queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query"
+import type { ModpackChoice } from "@/features/modpacks/api"
 import { type Operation, operate } from "@/features/operations/api"
 import { api } from "@/lib/api"
 
@@ -23,6 +24,8 @@ export interface Server {
   jvmOptions: string[]
   /** CPU cores the server may use; 0 means no limit. */
   cpuLimit: number
+  /** Version of the mod loader of a modded server, e.g. one a modpack needs; empty for the newest. */
+  loaderVersion: string
   /** Labels such as lobby, sorted; only in lists of servers. */
   tags: string[]
 }
@@ -32,7 +35,7 @@ export type RestartPolicy = "always" | "on_crash" | "never"
 /** Settings of a server that can be changed after it was created. */
 export type ServerSettings = Pick<
   Server,
-  "name" | "version" | "memoryMb" | "port" | "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit"
+  "name" | "version" | "memoryMb" | "port" | "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit" | "loaderVersion"
 >
 
 /** A server together with the node it runs on. */
@@ -44,7 +47,8 @@ export interface NodeServer extends Server {
 /** Identifies a server across nodes, e.g. to select it. */
 export const serverKey = (s: { nodeId: string; id: string }) => `${s.nodeId}/${s.id}`
 
-export interface NewServer extends Partial<Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit">> {
+export interface NewServer
+  extends Partial<Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit" | "loaderVersion">> {
   name: string
   type: string
   version: string
@@ -54,6 +58,8 @@ export interface NewServer extends Partial<Pick<Server, "java" | "restartPolicy"
   storage: string
   /** Written to server.properties before the first start. */
   properties?: Record<string, string>
+  /** A modpack decides the type and the versions of the server. */
+  modpack?: ModpackChoice
 }
 
 /** How often lists of servers are checked: more often while servers start, to show them running soon. */

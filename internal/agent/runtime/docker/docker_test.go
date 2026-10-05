@@ -13,3 +13,11 @@ func TestEveryServerTypeHasAnImage(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryModdedTypeHasALoaderVariable(t *testing.T) {
+	for value, name := range noryxv1.ServerType_name {
+		if typ := noryxv1.ServerType(value); typ.Modded() != (loaderVariables[typ] != "") {
+			t.Errorf("%s: loader variable %q", name, loaderVariables[typ])
+		}
+	}
+}

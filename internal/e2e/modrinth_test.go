@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
@@ -24,21 +26,19 @@ import (
 //   - 8dI2tmqs: FabricProxy-Lite, a Fabric mod that requires fabricapi
 //   - broken: a Paper plugin whose download doesn't match its hash
 //   - VCAqN1ln: Maintenance, a plugin for proxies
+//
+// Tests add modpacks with modpack.
 type fakeModrinth struct {
 	*httptest.Server
 	projects []modrinth.Project
-	versions []fakeVersion
+	packs    map[string]bool // the projects that are modpacks
+	versions []modrinth.Version
 	files    map[string][]byte          // by CDN path
 	search   atomic.Pointer[url.Values] // the query of the last search
 }
 
-type fakeVersion struct {
-	modrinth.Version
-	Loaders []string `json:"loaders"`
-}
-
 func startModrinth(t *testing.T) *fakeModrinth {
-	f := &fakeModrinth{files: map[string][]byte{"/cdn/data/luckperms/icon.png": []byte("\x89PNG")}}
+	f := &fakeModrinth{files: map[string][]byte{"/cdn/data/luckperms/icon.png": []byte("\x89PNG")}, packs: map[string]bool{}}
 	mux := http.NewServeMux()
 	f.Server = httptest.NewServer(mux)
 	t.Cleanup(f.Close)
@@ -64,7 +64,8 @@ func startModrinth(t *testing.T) *fakeModrinth {
 		f.search.Store(&q)
 		hits := []modrinth.SearchHit{}
 		for _, p := range f.projects {
-			if strings.Contains(r.URL.Query().Get("facets"), "categories:"+p.Loaders[0]) {
+			facets := r.URL.Query().Get("facets")
+			if strings.Contains(facets, "categories:"+p.Loaders[0]) && strings.Contains(facets, "project_type:modpack") == f.packs[p.ID] {
 				hits = append(hits, modrinth.SearchHit{ProjectID: p.ID, Slug: p.Slug, Title: p.Title, IconURL: p.IconURL, Categories: p.Loaders})
 			}
 		}
@@ -78,14 +79,22 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	mux.HandleFunc("GET /v2/project/{id}/version", func(w http.ResponseWriter, r *http.Request) {
 		var loaders []string
 		_ = json.Unmarshal([]byte(r.URL.Query().Get("loaders")), &loaders)
-		writeJSON(w, f.find(func(v fakeVersion) bool { return v.ProjectID == r.PathValue("id") && overlaps(v.Loaders, loaders) }))
+		writeJSON(w, f.find(func(v modrinth.Version) bool { return v.ProjectID == r.PathValue("id") && overlaps(v.Loaders, loaders) }))
+	})
+	mux.HandleFunc("GET /v2/version/{id}", func(w http.ResponseWriter, r *http.Request) {
+		found := f.find(func(v modrinth.Version) bool { return v.ID == r.PathValue("id") })
+		if len(found) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, found[0])
 	})
 	mux.HandleFunc("POST /v2/version_files", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, f.byHash(r, func(found fakeVersion, _ []string) (fakeVersion, bool) { return found, true }))
+		writeJSON(w, f.byHash(r, func(found modrinth.Version, _ []string) (modrinth.Version, bool) { return found, true }))
 	})
 	mux.HandleFunc("POST /v2/version_files/update", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, f.byHash(r, func(found fakeVersion, loaders []string) (fakeVersion, bool) {
-			newer := f.find(func(v fakeVersion) bool { return v.ProjectID == found.ProjectID && overlaps(v.Loaders, loaders) })
+		writeJSON(w, f.byHash(r, func(found modrinth.Version, loaders []string) (modrinth.Version, bool) {
+			newer := f.find(func(v modrinth.Version) bool { return v.ProjectID == found.ProjectID && overlaps(v.Loaders, loaders) })
 			if len(newer) == 0 {
 				return found, false
 			}
@@ -112,20 +121,48 @@ func (f *fakeModrinth) project(id, title string, loaders []string) {
 
 // version adds a version, newer than the ones before, with a file named <project>-<number>.jar.
 func (f *fakeModrinth) version(project, number string, loaders []string, requires ...string) {
-	content := []byte(project + " " + number)
-	sum := sha512.Sum512(content)
-	name := project + "-" + number + ".jar"
+	f.release(project, number, project+"-"+number+".jar", []byte(project+" "+number), loaders, requires...)
+}
+
+// release adds a version, newer than the ones before, with a file on the CDN.
+func (f *fakeModrinth) release(project, number, name string, content []byte, loaders []string, requires ...string) modrinth.Version {
 	file := modrinth.File{URL: f.URL + "/cdn/data/" + project + "/" + name, Filename: name, Primary: true, Size: int64(len(content))}
-	file.Hashes.SHA512 = hex.EncodeToString(sum[:])
+	file.Hashes.SHA512 = sha512Hex(content)
 	f.files["/cdn/data/"+project+"/"+name] = content
 	v := modrinth.Version{
 		ID: project + strings.ReplaceAll(number, ".", ""), ProjectID: project, VersionNumber: number, VersionType: "release",
-		Published: time.Date(2026, 1, len(f.versions)+1, 0, 0, 0, 0, time.UTC), Files: []modrinth.File{file},
+		Published: time.Date(2026, 1, len(f.versions)+1, 0, 0, 0, 0, time.UTC), Files: []modrinth.File{file}, Loaders: loaders,
+		GameVersions: []string{"1.21.4"},
 	}
 	for _, dep := range requires {
 		v.Dependencies = append(v.Dependencies, modrinth.Dependency{ProjectID: dep, Type: "required"})
 	}
-	f.versions = append(f.versions, fakeVersion{v, loaders})
+	f.versions = append(f.versions, v)
+	return v
+}
+
+// modpack adds a Fabric modpack with a version whose .mrpack holds the index and the files.
+func (f *fakeModrinth) modpack(t *testing.T, project string, index any, files map[string]string) modrinth.Version {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	data, err := json.Marshal(index)
+	check(t, err)
+	files["modrinth.index.json"] = string(data)
+	for name, content := range files {
+		w, err := zw.Create(name)
+		check(t, err)
+		_, err = w.Write([]byte(content))
+		check(t, err)
+	}
+	check(t, zw.Close())
+	f.project(project, project, []string{"fabric"})
+	f.packs[project] = true
+	return f.release(project, "1.0", project+"-1.0.mrpack", buf.Bytes(), []string{"fabric"})
+}
+
+func sha512Hex(data []byte) string {
+	sum := sha512.Sum512(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // content returns the file of a version, e.g. content("luckperms", "1.0").
@@ -134,22 +171,22 @@ func (f *fakeModrinth) content(project, number string) []byte {
 }
 
 // find returns the matching versions, the newest first.
-func (f *fakeModrinth) find(match func(fakeVersion) bool) []fakeVersion {
-	found := slices.DeleteFunc(slices.Clone(f.versions), func(v fakeVersion) bool { return !match(v) })
+func (f *fakeModrinth) find(match func(modrinth.Version) bool) []modrinth.Version {
+	found := slices.DeleteFunc(slices.Clone(f.versions), func(v modrinth.Version) bool { return !match(v) })
 	slices.Reverse(found)
 	return found
 }
 
 // byHash answers a lookup of files by hash with the version that pick chooses.
-func (f *fakeModrinth) byHash(r *http.Request, pick func(found fakeVersion, loaders []string) (fakeVersion, bool)) map[string]fakeVersion {
+func (f *fakeModrinth) byHash(r *http.Request, pick func(found modrinth.Version, loaders []string) (modrinth.Version, bool)) map[string]modrinth.Version {
 	var req struct {
 		Hashes  []string `json:"hashes"`
 		Loaders []string `json:"loaders"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
-	res := map[string]fakeVersion{}
+	res := map[string]modrinth.Version{}
 	for _, hash := range req.Hashes {
-		found := f.find(func(v fakeVersion) bool { return v.Files[0].Hashes.SHA512 == hash })
+		found := f.find(func(v modrinth.Version) bool { return v.Files[0].Hashes.SHA512 == hash })
 		if len(found) == 0 {
 			continue
 		}

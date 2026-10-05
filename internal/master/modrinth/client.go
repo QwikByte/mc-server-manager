@@ -52,11 +52,6 @@ var (
 		noryxv1.ServerType_SERVER_TYPE_FORGE:      {"forge"},
 		noryxv1.ServerType_SERVER_TYPE_NEOFORGE:   {"neoforge"},
 	}
-	// modded are the server types that load mods; the others load plugins.
-	modded = []noryxv1.ServerType{
-		noryxv1.ServerType_SERVER_TYPE_FABRIC, noryxv1.ServerType_SERVER_TYPE_QUILT,
-		noryxv1.ServerType_SERVER_TYPE_FORGE, noryxv1.ServerType_SERVER_TYPE_NEOFORGE,
-	}
 	projectID = regexp.MustCompile(`^[A-Za-z0-9]{1,32}$`)
 	category  = regexp.MustCompile(`^[a-z-]{1,32}$`)
 	// Sorts are the orders of search results; without a query, relevance means downloads.
@@ -71,12 +66,12 @@ var (
 // vanilla servers.
 func Loaders(t noryxv1.ServerType) []string { return loaders[t] }
 
-// AllLoaders returns the loaders of the server types that load a kind, plugins or mods,
-// or of all server types if kind is empty.
+// AllLoaders returns the loaders of the server types that load a kind, plugins, mods or
+// modpacks, or of all server types if kind is empty.
 func AllLoaders(kind string) []string {
 	var all []string
 	for t, names := range loaders {
-		if kind == "" || slices.Contains(modded, t) == (kind == "mods") {
+		if kind == "" || t.Modded() == (kind != "plugins") { // mods and modpacks need a mod loader
 			all = append(all, names...)
 		}
 	}
@@ -118,10 +113,10 @@ type SearchHit struct {
 	DisplayCategories []string `json:"display_categories"`
 }
 
-// Search is a search for server-side plugins and mods.
+// Search is a search for server-side plugins, mods and modpacks.
 type Search struct {
 	Query string
-	Kind  string // plugins or mods, both if empty
+	Kind  string // plugins, mods or modpacks; plugins and mods if empty
 	// Loaders are those the projects must support, one of them.
 	Loaders     []string
 	GameVersion string // empty for any version
@@ -135,7 +130,7 @@ type Search struct {
 
 // Valid reports whether the kind, the categories and the sort are well-formed.
 func (s Search) Valid() bool {
-	return (s.Kind == "" || s.Kind == "plugins" || s.Kind == "mods") && (s.Sort == "" || slices.Contains(Sorts, s.Sort)) &&
+	return slices.Contains([]string{"", "plugins", "mods", "modpacks"}, s.Kind) && (s.Sort == "" || slices.Contains(Sorts, s.Sort)) &&
 		len(s.Categories) <= 10 && !slices.ContainsFunc(s.Categories, func(c string) bool { return !category.MatchString(c) })
 }
 
@@ -147,6 +142,8 @@ type Version struct {
 	Published     time.Time    `json:"date_published"`
 	Files         []File       `json:"files"`
 	Dependencies  []Dependency `json:"dependencies"`
+	GameVersions  []string     `json:"game_versions"`
+	Loaders       []string     `json:"loaders"`
 }
 
 // File returns the primary file of a version.
@@ -241,6 +238,15 @@ func (c *Client) Versions(ctx context.Context, project string, loaderNames []str
 	return versions, err
 }
 
+// Version returns a version by its ID.
+func (c *Client) Version(ctx context.Context, id string) (Version, error) {
+	var v Version
+	if !ValidProjectID(id) {
+		return v, errUnknown
+	}
+	return v, c.call(ctx, http.MethodGet, "/version/"+id, nil, &v)
+}
+
 // VersionsByHash identifies files by their SHA-512 hashes. Unknown files are left out.
 func (c *Client) VersionsByHash(ctx context.Context, hashes []string) (map[string]Version, error) {
 	versions := map[string]Version{}
@@ -298,9 +304,12 @@ type gameVersion struct {
 	Type    string `json:"version_type"` // release or snapshot
 }
 
+// OnCDN reports whether a file is on Modrinth's CDN, from which Download downloads.
+func (c *Client) OnCDN(fileURL string) bool { return strings.HasPrefix(fileURL, c.cdn) }
+
 // Download fetches a file from the CDN and checks its size and hash.
 func (c *Client) Download(ctx context.Context, f File) ([]byte, error) {
-	if !strings.HasPrefix(f.URL, c.cdn) || f.Size > MaxFileSize || len(f.Hashes.SHA512) != sha512.Size*2 {
+	if !c.OnCDN(f.URL) || f.Size > MaxFileSize || len(f.Hashes.SHA512) != sha512.Size*2 {
 		return nil, httpapi.Errorf(http.StatusBadGateway, "%s can't be downloaded: it isn't on Modrinth's CDN or is larger than %d MB.", f.Filename, MaxFileSize>>20)
 	}
 	data, err := c.fetch(ctx, f.URL, MaxFileSize)

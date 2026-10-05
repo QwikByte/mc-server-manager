@@ -53,6 +53,14 @@ type image struct {
 	data string // data directory inside the container
 }
 
+// loaderVariables are the variables of the server image that select the version of a mod loader.
+var loaderVariables = map[noryxv1.ServerType]string{
+	noryxv1.ServerType_SERVER_TYPE_FABRIC:   "FABRIC_LOADER_VERSION",
+	noryxv1.ServerType_SERVER_TYPE_QUILT:    "QUILT_LOADER_VERSION",
+	noryxv1.ServerType_SERVER_TYPE_FORGE:    "FORGE_VERSION",
+	noryxv1.ServerType_SERVER_TYPE_NEOFORGE: "NEOFORGE_VERSION",
+}
+
 // capabilities are all the images need: they start as root to hand the data directory to
 // the server's user and switch to it. The proxy image works on as root in the directory
 // it handed over, which needs reading it regardless of its permissions.
@@ -230,6 +238,9 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 	}
 	if spec.AikarFlags {
 		env = append(env, "USE_AIKAR_FLAGS=TRUE")
+	}
+	if spec.LoaderVersion != "" {
+		env = append(env, loaderVariables[spec.Type]+"="+spec.LoaderVersion)
 	}
 	if len(spec.JVMOptions) > 0 {
 		env = append(env, "JVM_OPTS="+strings.Join(spec.JVMOptions, " "))

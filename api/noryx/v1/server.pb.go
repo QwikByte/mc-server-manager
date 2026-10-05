@@ -299,7 +299,10 @@ type Server struct {
 	// last started; 0 for servers that run or stopped cleanly.
 	Crashes uint32 `protobuf:"varint,14,opt,name=crashes,proto3" json:"crashes,omitempty"`
 	// Exit code of the latest crash, if known.
-	ExitCode      int32 `protobuf:"varint,15,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	ExitCode int32 `protobuf:"varint,15,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	// Version of the mod loader of Fabric, Quilt, Forge and NeoForge servers, e.g. "0.16.10";
+	// empty for the newest.
+	LoaderVersion string `protobuf:"bytes,16,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -439,6 +442,13 @@ func (x *Server) GetExitCode() int32 {
 	return 0
 }
 
+func (x *Server) GetLoaderVersion() string {
+	if x != nil {
+		return x.LoaderVersion
+	}
+	return ""
+}
+
 type ListServersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -538,6 +548,7 @@ type CreateServerRequest struct {
 	CpuMillis     uint32        `protobuf:"varint,12,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
 	// Properties of server.properties for a game server, written before its first start.
 	Properties    map[string]string `protobuf:"bytes,13,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	LoaderVersion string            `protobuf:"bytes,14,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -661,6 +672,13 @@ func (x *CreateServerRequest) GetProperties() map[string]string {
 		return x.Properties
 	}
 	return nil
+}
+
+func (x *CreateServerRequest) GetLoaderVersion() string {
+	if x != nil {
+		return x.LoaderVersion
+	}
+	return ""
 }
 
 type CreateServerResponse struct {
@@ -959,6 +977,7 @@ type UpdateServerRequest struct {
 	AikarFlags    bool                   `protobuf:"varint,8,opt,name=aikar_flags,json=aikarFlags,proto3" json:"aikar_flags,omitempty"`
 	JvmOptions    []string               `protobuf:"bytes,9,rep,name=jvm_options,json=jvmOptions,proto3" json:"jvm_options,omitempty"`
 	CpuMillis     uint32                 `protobuf:"varint,10,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	LoaderVersion string                 `protobuf:"bytes,11,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1061,6 +1080,13 @@ func (x *UpdateServerRequest) GetCpuMillis() uint32 {
 		return x.CpuMillis
 	}
 	return 0
+}
+
+func (x *UpdateServerRequest) GetLoaderVersion() string {
+	if x != nil {
+		return x.LoaderVersion
+	}
+	return ""
 }
 
 type UpdateServerResponse struct {
@@ -2027,7 +2053,7 @@ var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xd4\x03\n" +
+	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xfb\x03\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
@@ -2047,10 +2073,11 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
 	"cpu_millis\x18\r \x01(\rR\tcpuMillis\x12\x18\n" +
 	"\acrashes\x18\x0e \x01(\rR\acrashes\x12\x1b\n" +
-	"\texit_code\x18\x0f \x01(\x05R\bexitCode\"\x14\n" +
+	"\texit_code\x18\x0f \x01(\x05R\bexitCode\x12%\n" +
+	"\x0eloader_version\x18\x10 \x01(\tR\rloaderVersion\"\x14\n" +
 	"\x12ListServersRequest\"A\n" +
 	"\x13ListServersResponse\x12*\n" +
-	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\x9c\x04\n" +
+	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\xc3\x04\n" +
 	"\x13CreateServerRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12(\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x14.noryx.v1.ServerTypeR\x04type\x12\x18\n" +
@@ -2071,7 +2098,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"cpu_millis\x18\f \x01(\rR\tcpuMillis\x12M\n" +
 	"\n" +
 	"properties\x18\r \x03(\v2-.noryx.v1.CreateServerRequest.PropertiesEntryR\n" +
-	"properties\x1a=\n" +
+	"properties\x12%\n" +
+	"\x0eloader_version\x18\x0e \x01(\tR\rloaderVersion\x1a=\n" +
 	"\x0fPropertiesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"@\n" +
@@ -2085,7 +2113,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x12StopServerResponse\"&\n" +
 	"\x14RestartServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15RestartServerResponse\"\xb9\x02\n" +
+	"\x15RestartServerResponse\"\xe0\x02\n" +
 	"\x13UpdateServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -2100,7 +2128,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"jvmOptions\x12\x1d\n" +
 	"\n" +
 	"cpu_millis\x18\n" +
-	" \x01(\rR\tcpuMillis\"@\n" +
+	" \x01(\rR\tcpuMillis\x12%\n" +
+	"\x0eloader_version\x18\v \x01(\tR\rloaderVersion\"@\n" +
 	"\x14UpdateServerResponse\x12(\n" +
 	"\x06server\x18\x01 \x01(\v2\x10.noryx.v1.ServerR\x06server\"$\n" +
 	"\x12UpdateImageRequest\x12\x0e\n" +

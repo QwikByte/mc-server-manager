@@ -36,7 +36,8 @@ export type Kind = "plugins" | "mods"
 /** A search on Modrinth; without a kind, type or version, projects for any of them are found. */
 export interface Search {
   query: string
-  kind?: Kind
+  /** Modpacks are searched to create servers from them. */
+  kind?: Kind | "modpacks"
   type?: string
   version?: string
   /** Categories the projects must all be in. */

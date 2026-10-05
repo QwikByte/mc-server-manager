@@ -107,6 +107,9 @@ message Server {
   uint32 crashes = 14;
   // Exit code of the latest crash, if known.
   int32 exit_code = 15;
+  // Version of the mod loader of Fabric, Quilt, Forge and NeoForge servers, e.g. "0.16.10";
+  // empty for the newest.
+  string loader_version = 16;
 }
 
 message ListServersRequest {}
@@ -133,6 +136,7 @@ message CreateServerRequest {
   uint32 cpu_millis = 12;
   // Properties of server.properties for a game server, written before its first start.
   map<string, string> properties = 13;
+  string loader_version = 14;
 }
 
 message CreateServerResponse {
@@ -168,6 +172,7 @@ message UpdateServerRequest {
   bool aikar_flags = 8;
   repeated string jvm_options = 9;
   uint32 cpu_millis = 10;
+  string loader_version = 11;
 }
 
 message UpdateServerResponse {

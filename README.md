@@ -38,8 +38,9 @@ hides files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwardi
 secrets as `<hidden>`, which saving keeps. Downloads of
 folders and backups leave them out the same way. Plugins and mods run with the server, though, and can read them.
 
-The settings of a server can be changed after it was created: name, Minecraft version, memory, port, Java
-version (8, 11, 17, 21, 25 or the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
+The settings of a server can be changed after it was created: name, Minecraft version, the version of the mod loader
+of Fabric, Quilt, Forge and NeoForge servers (the newest unless set), memory, port, Java version (8, 11, 17, 21, 25 or
+the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
 The agent creates the container again with the same data; the old container is only removed once the new one
 exists. A server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it
 changed, creates the container again the same way. The old image is removed once no server uses it.
@@ -215,6 +216,14 @@ Another version that suits the server, betas and alphas included, can be chosen 
 Installed files are recognised by their hash, so the tab shows their project, version and available updates, also for
 files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once. Own
 `.jar` files can be uploaded too. Servers load changes when they restart.
+
+**Modpacks.** A server can be created from a [Modrinth modpack](https://modrinth.com/modpacks) for Fabric, Quilt,
+Forge or NeoForge: **Create server** searches the modpacks and offers the versions of the chosen one, the newest release
+first. The pack decides the software, the Minecraft version and the version of the mod loader. The master downloads the
+pack, then the files servers need (not those for players only) and writes them into the new server, with the files the
+pack brings itself (`overrides`, then `server-overrides`), except `server.properties` and `eula.txt`. Afterwards it is a
+server like any other: the **Mods** tab recognises the mods and updates them. A server that didn't get all files of its
+pack is deleted again. Creating servers from modpacks needs the permission to manage plugins and mods on the node.
 
 ## Backups
 
@@ -505,7 +514,11 @@ Users get their permissions from groups; a user can be in several groups and has
   them can't be listed, read, written or moved, others show them as `<hidden>`, no file or folder with secrets can be
   moved where they would show, and archives leave them out. Only moving a server to another node copies them.
 - **Plugins.** The master downloads only from Modrinth's CDN, up to 256 MB, and only uses a file whose SHA-512 hash
-  matches the one Modrinth's API lists. The agent decides the folder from the server type and only accepts plain
+  matches the one Modrinth's API lists. A modpack is checked the same way, and each of its files against the SHA-512
+  hash in the pack; packs with files elsewhere than on Modrinth's CDN or with paths that leave the server's folder are
+  refused before a server is created, and the agent confines the files like those of the file manager. The version of
+  a mod loader ends up in a variable of the server image, so the agent only accepts letters, digits, `.`, `_`, `+`
+  and `-`. The agent decides the folder from the server type and only accepts plain
   `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth and the
   Content Security Policy stays unchanged.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
@@ -591,6 +604,7 @@ internal/master/
   properties/           server.properties editor
   plugin/               installs, lists and removes plugins and mods of servers
   modrinth/             client for the Modrinth API and CDN
+  modpack/              creates servers from Modrinth modpacks: checks a pack and writes its files into the server
   template/             templates for new servers
   schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API
   backup/               backups of servers, and backup jobs as scheduled tasks
@@ -622,7 +636,7 @@ web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, dashboard, nodes, servers, files, properties, networks, plugins, templates, backups,
                         policies, schedules (shared by backups and policies), settings, terminal, logs, usage,
                         access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K),
-                        operations (progress, notifications and the list of operations), players
+                        operations (progress, notifications and the list of operations), players, modpacks
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

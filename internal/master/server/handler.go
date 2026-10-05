@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/tag"
@@ -56,6 +58,12 @@ type Plugins interface {
 	InstallOn(ctx context.Context, projects []string, nodeID, serverID string) error
 }
 
+// Modpacks installs Modrinth modpacks on new servers.
+type Modpacks interface {
+	Resolve(ctx context.Context, project, version string) (*modpack.Pack, error)
+	Install(ctx context.Context, nodeID, serverID string, p *modpack.Pack) error
+}
+
 // References refer to servers, e.g. the targets of backup jobs and the scopes of groups.
 type References interface {
 	// Forget forgets a deleted server.
@@ -69,13 +77,14 @@ type Handler struct {
 	networks Networks
 	tags     Tags
 	plugins  Plugins
+	modpacks Modpacks
 	ops      *operation.Operations
 	moves    *Moves
 	refs     []References
 }
 
-func NewHandler(nodes Nodes, networks Networks, tags Tags, plugins Plugins, ops *operation.Operations, moves *Moves, refs ...References) *Handler {
-	return &Handler{nodes: nodes, networks: networks, tags: tags, plugins: plugins, ops: ops, moves: moves, refs: refs}
+func NewHandler(nodes Nodes, networks Networks, tags Tags, plugins Plugins, modpacks Modpacks, ops *operation.Operations, moves *Moves, refs ...References) *Handler {
+	return &Handler{nodes: nodes, networks: networks, tags: tags, plugins: plugins, modpacks: modpacks, ops: ops, moves: moves, refs: refs}
 }
 
 // Register adds the routes. The lists only contain the servers the user may see.
@@ -133,6 +142,7 @@ type view struct {
 // settings are the settings of a server that can be changed after it was created.
 type settings struct {
 	Java          string   `json:"java"`
+	LoaderVersion string   `json:"loaderVersion"`
 	RestartPolicy string   `json:"restartPolicy"`
 	AikarFlags    bool     `json:"aikarFlags"`
 	JVMOptions    []string `json:"jvmOptions"`
@@ -157,7 +167,7 @@ func toView(s *noryxv1.Server) view {
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), Port: s.GetPort(),
 		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(), Crashes: s.GetCrashes(), ExitCode: s.GetExitCode(),
 		settings: settings{
-			Java: s.GetJava(), RestartPolicy: s.GetRestartPolicy().Slug(), AikarFlags: s.GetAikarFlags(),
+			Java: s.GetJava(), LoaderVersion: s.GetLoaderVersion(), RestartPolicy: s.GetRestartPolicy().Slug(), AikarFlags: s.GetAikarFlags(),
 			JVMOptions: append([]string{}, s.GetJvmOptions()...), CPULimit: float64(s.GetCpuMillis()) / 1000,
 		},
 	}
@@ -251,7 +261,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 // create creates a server as an operation, which downloads the server image if the node
 // doesn't have it. Besides the basics, it takes the settings, server.properties and plugins
-// a template provides; plugins that can't be installed leave the server without them.
+// a template provides; plugins that can't be installed leave the server without them. A
+// modpack decides the type and the versions, and a server without all of it is deleted.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name       string `json:"name"`
@@ -265,6 +276,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Properties map[string]string `json:"properties"`
 		// Plugins are the IDs of Modrinth projects to install on the new server.
 		Plugins []string `json:"plugins"`
+		// Modpack is a version of a Modrinth modpack to install on the new server.
+		Modpack *struct {
+			Project string `json:"project"`
+			Version string `json:"version"`
+		} `json:"modpack"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
@@ -274,7 +290,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
 	policy, cpuMillis, err := req.check()
-	if err == nil && len(req.Plugins) > 0 && !access.From(r.Context()).On(access.Plugins, nodeID, "") {
+	if err == nil && (len(req.Plugins) > 0 || req.Modpack != nil) && !access.From(r.Context()).On(access.Plugins, nodeID, "") {
 		err = access.Denied(access.Plugins)
 	}
 	if err == nil {
@@ -285,6 +301,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	steps := []string{"image", "container"}
+	if req.Modpack != nil {
+		steps = []string{"modpack", "image", "container", "mods"}
+	}
 	if len(req.Plugins) > 0 {
 		steps = append(steps, "plugins")
 	}
@@ -293,13 +312,25 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, ""),
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		create := &noryxv1.CreateServerRequest{
+			Name: req.Name, Type: noryxv1.ParseServerType(req.Type), Version: req.Version, MemoryMb: req.MemoryMB,
+			Port: req.Port, AcceptEula: req.AcceptEULA, Storage: req.Storage, Java: req.Java, RestartPolicy: policy,
+			AikarFlags: req.AikarFlags, JvmOptions: req.JVMOptions, CpuMillis: cpuMillis, Properties: req.Properties,
+			LoaderVersion: req.LoaderVersion,
+		}
+		var pack *modpack.Pack
+		if req.Modpack != nil {
+			operation.Step(ctx, "modpack")
+			var err error
+			if pack, err = h.modpacks.Resolve(ctx, req.Modpack.Project, req.Modpack.Version); err != nil {
+				return nil, err
+			}
+			create.Type, create.Version, create.LoaderVersion = pack.Type, pack.GameVersion, pack.LoaderVersion
+			operation.Step(ctx, "image")
+		}
 		var res *noryxv1.CreateServerResponse
 		err := h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) (err error) {
-			res, err = c.CreateServer(ctx, &noryxv1.CreateServerRequest{
-				Name: req.Name, Type: noryxv1.ParseServerType(req.Type), Version: req.Version, MemoryMb: req.MemoryMB,
-				Port: req.Port, AcceptEula: req.AcceptEULA, Storage: req.Storage, Java: req.Java, RestartPolicy: policy,
-				AikarFlags: req.AikarFlags, JvmOptions: req.JVMOptions, CpuMillis: cpuMillis, Properties: req.Properties,
-			})
+			res, err = c.CreateServer(ctx, create)
 			return err
 		})
 		if err != nil {
@@ -308,6 +339,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		id := res.GetServer().GetId()
 		operation.Target(ctx, nodeID, id)
 		logging.Note(ctx, slog.String(logging.KeyServer, id), slog.String(logging.KeyServerName, res.GetServer().GetName()))
+		if pack != nil {
+			operation.Step(ctx, "mods")
+			if err := h.modpacks.Install(ctx, nodeID, id, pack); err != nil {
+				return nil, errors.Join(err, h.agent(context.WithoutCancel(ctx), nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
+					_, err := c.DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: id})
+					return err
+				}))
+			}
+		}
 		created := struct {
 			view
 			// PluginError tells why the plugins couldn't be installed.
@@ -418,6 +458,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 			res, err = c.UpdateServer(ctx, &noryxv1.UpdateServerRequest{
 				Id: id, Name: req.Name, Version: req.Version, MemoryMb: req.MemoryMB, Port: req.Port,
 				Java: req.Java, RestartPolicy: policy, AikarFlags: req.AikarFlags, JvmOptions: req.JVMOptions, CpuMillis: cpuMillis,
+				LoaderVersion: req.LoaderVersion,
 			})
 			return err
 		})

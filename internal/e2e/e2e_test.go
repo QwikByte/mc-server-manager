@@ -41,6 +41,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/logs"
+	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
@@ -225,13 +226,14 @@ func startMaster(t *testing.T) *master {
 // services are those of a master's panel.
 func (m *master) services(t *testing.T) masterapp.Services {
 	nodes := m.nodes
-	plugins := plugin.NewService(nodes, modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/"))
+	modrinthClient := modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/")
+	plugins := plugin.NewService(nodes, modrinthClient)
 	moves := server.NewMoves()
 	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
-		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes), Tags: tag.NewStore(m.db), Operations: operation.New(m.quick),
 		Moves: moves,
 	}

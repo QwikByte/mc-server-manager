@@ -25,6 +25,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/files"
 	"github.com/QwikByte/noryx/internal/master/https"
 	"github.com/QwikByte/noryx/internal/master/logs"
+	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
@@ -128,7 +129,8 @@ func serve(ctx context.Context, cfg config) error {
 	}
 	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
 	noryxv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
-	plugins := plugin.NewService(nodes, modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN))
+	modrinthClient := modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN)
+	plugins := plugin.NewService(nodes, modrinthClient)
 	moves := server.NewMoves()
 	// Requests whose operation takes longer are answered right away, and the operation goes on.
 	ops := operation.New(time.Second)
@@ -160,7 +162,7 @@ func serve(ctx context.Context, cfg config) error {
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes, plugins),
-			Plugins: plugins, Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
+			Plugins: plugins, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
 			Usage: usageStore, Tags: tag.NewStore(db), Operations: ops, Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -221,6 +223,7 @@ type Services struct {
 	Nodes     *node.Service
 	Networks  *network.Service
 	Plugins   *plugin.Service
+	Modpacks  *modpack.Service
 	Templates *template.Service
 	Tasks     *schedule.Service
 	Logs      *logs.Store
@@ -260,13 +263,14 @@ func API(s Services) *http.ServeMux {
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations).Register(m)
 	player.NewHandler(player.NewService(s.Nodes, s.Networks), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
 	plugin.NewHandler(s.Plugins, s.Operations).Register(m)
+	modpack.NewHandler(s.Modpacks).Register(m)
 	template.NewHandler(s.Templates).Register(m)
 	backup.NewHandler(s.Nodes, s.Operations).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")

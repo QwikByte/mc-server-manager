@@ -27,6 +27,11 @@ func (t ServerType) Fabric() bool {
 	return t == ServerType_SERVER_TYPE_FABRIC || t == ServerType_SERVER_TYPE_QUILT
 }
 
+// Modded reports whether the type loads mods, with a mod loader, rather than plugins.
+func (t ServerType) Modded() bool {
+	return t.Fabric() || t == ServerType_SERVER_TYPE_FORGE || t == ServerType_SERVER_TYPE_NEOFORGE
+}
+
 // Slug returns the short lower-case name, e.g. "running" for SERVER_STATE_RUNNING.
 func (s ServerState) Slug() string { return slug(s.String(), "SERVER_STATE_") }
 

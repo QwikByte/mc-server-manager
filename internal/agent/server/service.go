@@ -51,7 +51,9 @@ var errUnknownType = status.Error(codes.FailedPrecondition, "This node's agent d
 var (
 	namePattern    = regexp.MustCompile(`^[\pL\pN][\pL\pN _.-]{0,31}$`)
 	versionPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
-	secretPattern  = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
+	// Versions of mod loaders, e.g. 0.16.10 or 1.20.1-47.3.0, end up in a variable of the image.
+	loaderVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
+	secretPattern        = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
 	// Names of backends a proxy sends players to; "try" is the list of these names.
 	backendPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 	hostPattern    = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
@@ -112,6 +114,7 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 		AikarFlags:    req.GetAikarFlags(),
 		JVMOptions:    req.GetJvmOptions(),
 		CPUMillis:     req.GetCpuMillis(),
+		LoaderVersion: req.GetLoaderVersion(),
 	}
 	switch {
 	case !req.GetAcceptEula():
@@ -185,7 +188,7 @@ func (s *Service) ImportServer(stream noryxv1.ServerService_ImportServerServer) 
 	spec := runtime.Spec{
 		ID: h.GetId(), Name: h.GetName(), Type: h.GetType(), Version: h.GetVersion(), MemoryMB: h.GetMemoryMb(), Port: h.GetPort(),
 		Storage: h.GetStorage(), Java: h.GetJava(), RestartPolicy: h.GetRestartPolicy(), AikarFlags: h.GetAikarFlags(),
-		JVMOptions: h.GetJvmOptions(), CPUMillis: h.GetCpuMillis(),
+		JVMOptions: h.GetJvmOptions(), CPUMillis: h.GetCpuMillis(), LoaderVersion: h.GetLoaderVersion(),
 	}
 	_, knownType := noryxv1.ServerType_name[int32(spec.Type)]
 	switch {
@@ -254,7 +257,7 @@ func (s *Service) UpdateServer(ctx context.Context, req *noryxv1.UpdateServerReq
 	}
 	srv.Name, srv.Version, srv.MemoryMB, srv.Port = req.GetName(), cmp.Or(req.GetVersion(), "LATEST"), req.GetMemoryMb(), req.GetPort()
 	srv.Java, srv.RestartPolicy, srv.AikarFlags = req.GetJava(), req.GetRestartPolicy(), req.GetAikarFlags()
-	srv.JVMOptions, srv.CPUMillis = req.GetJvmOptions(), req.GetCpuMillis()
+	srv.JVMOptions, srv.CPUMillis, srv.LoaderVersion = req.GetJvmOptions(), req.GetCpuMillis(), req.GetLoaderVersion()
 	if err := s.check(ctx, srv.Spec); err != nil {
 		return nil, err
 	}
@@ -479,6 +482,10 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 		return "Use 1-32 letters, digits, spaces, '.', '_' or '-' for the name."
 	case !versionPattern.MatchString(spec.Version):
 		return "Enter a Minecraft version like 1.21.4, or leave it empty for the latest."
+	case spec.LoaderVersion != "" && !spec.Type.Modded():
+		return "Only Fabric, Quilt, Forge and NeoForge servers have a mod loader."
+	case spec.LoaderVersion != "" && !loaderVersionPattern.MatchString(spec.LoaderVersion):
+		return "Enter the version of the mod loader like 0.16.10, or leave it empty for the newest."
 	case spec.MemoryMB < minMemoryMB || spec.MemoryMB > maxMemoryMB:
 		return fmt.Sprintf("Memory must be between %d and %d MB.", minMemoryMB, maxMemoryMB)
 	case spec.Port < minPort || spec.Port > maxPort:
@@ -514,6 +521,7 @@ func toProto(s runtime.Server) *noryxv1.Server {
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
 		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
+		LoaderVersion: s.LoaderVersion,
 	}
 }
 

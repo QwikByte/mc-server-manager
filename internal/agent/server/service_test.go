@@ -42,6 +42,9 @@ func TestCheckSettings(t *testing.T) {
 		{"more CPUs than the node", func(s *runtime.Spec) { s.CPUMillis = 8001 }, false},
 		{"tiny CPU limit", func(s *runtime.Spec) { s.CPUMillis = 50 }, false},
 		{"unknown restart policy", func(s *runtime.Spec) { s.RestartPolicy = 9 }, false},
+		{"loader version", func(s *runtime.Spec) { s.Type, s.LoaderVersion = noryxv1.ServerType_SERVER_TYPE_FORGE, "1.20.1-47.3.0" }, true},
+		{"loader version without loader", func(s *runtime.Spec) { s.LoaderVersion = "0.16.10" }, false},
+		{"loader version with shell syntax", func(s *runtime.Spec) { s.Type, s.LoaderVersion = noryxv1.ServerType_SERVER_TYPE_FABRIC, "$(id)" }, false},
 	}
 	for _, tt := range tests {
 		spec := valid
