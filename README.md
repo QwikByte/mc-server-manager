@@ -22,8 +22,8 @@ Servers run as containers based on [itzg/minecraft-server](https://github.com/it
 servers keep running while an agent restarts.
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
-through the RCON connection the server image provides, and to proxies through their own console, whose answer follows
-in the output. Commands typed in quick succession run one after the other, in their order. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
+through their console port (RCON), and to proxies through their own console, whose answer follows in the output. The
+agent keeps one console connection per game server for all its commands, so the server doesn't log a new one for each. Commands typed in quick succession run one after the other, in their order. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
 settings.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
@@ -44,7 +44,9 @@ of Fabric, Quilt, Forge and NeoForge servers (the newest unless set), memory, po
 the newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit.
 The agent creates the container again with the same data; the old container is only removed once the new one
 exists. A server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it
-changed, creates the container again the same way. The old image is removed once no server uses it.
+changed, creates the container again the same way. The old image is removed once no server uses it. New servers get
+the newest image too: creating one pulls it, which downloads its changes if it was updated since. Deleting servers
+keeps their images.
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
 crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.
@@ -387,7 +389,8 @@ how many servers have each player, and the changes that wait for stopped servers
   and turn the whitelist on or off. A change goes to the player's server, the network or all servers, as chosen; bans
   go to the network first. Kicks leave the server: Velocity sends kicked players to another server of the network,
   BungeeCord disconnects them. **Send to another server** moves a player within the network through the proxy (`send`).
-  The agent reads BungeeCord's answer, so the panel tells if the player isn't online or the proxy has no `send`. Players
+  The agent reads the proxy's answer, so the panel tells if the player isn't online or the proxy has no `send`. Velocity
+  only answers if it can't send, so the agent waits a second for that answer; rolling restarts don't wait. Players
   named `all` or `current`, and on BungeeCord like a server of the network, can't be sent, as `send` would read their
   name as other players too.
 - **Stopped servers** get a change once they run again, so that a ban also reaches the servers of a network that are
@@ -556,11 +559,13 @@ Users get their permissions from groups; a user can be in several groups and has
   Servers of a node can't reach each other: they share a Docker network without communication between containers
   (`noryx-servers`), and a Velocity proxy shares another one only with its backends on the node.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
-  (`os.Root`), and servers are only created after the operator accepts the Minecraft EULA. JVM options may only
+  (`os.Root`), and game servers are only created after the operator accepts the Minecraft EULA. JVM options may only
   contain characters that the image's start script can't interpret as shell syntax, can't override the memory limit
   and can't run code: Java agents, class and module paths, commands on errors, options read from files, class data
   archives, JVMCI compilers, debugging or JMX ports, and the system properties of Java, JNDI, logging libraries and JNA,
-  which name classes, libraries or configurations to load (also from URLs), are refused.
+  which name classes, libraries or configurations to load (also from URLs), are refused. A server that got such an
+  option before an update refused it keeps it until it is removed: the agent logs a warning when it starts, and the
+  panel shows it on the server's page and the overview.
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
   uploaded HTML file can't run scripts in the panel. Secrets of the server stay on the node: files that only hold
@@ -611,9 +616,9 @@ Users get their permissions from groups; a user can be in several groups and has
   them over its mutually authenticated connections. The new node checks the settings like those of a new server and
   extracts the archive confined to the server's data directory, without symbolic links. Moving needs the permissions
   to delete the server and read its files, and to create servers on the new node.
-- **Usage.** To ask a server for its ticks per second, the agent reads the console password from the server's
-  `server.properties` and connects to the server's console port inside Docker's network; the password never leaves
-  the node.
+- **Console.** To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console
+  password from the server's `server.properties` and connects to the server's console port inside Docker's network;
+  the password never leaves the node.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`noryx-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
@@ -728,6 +733,17 @@ go run ./cmd/noryx-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 | `make lint`     | golangci-lint, oxlint, the translation checks and the TypeScript type check    |
 | `make generate` | Regenerates the gRPC code after changing `api/**/*.proto`                      |
 | `make packages` | Builds the packages and archives of a release into `dist/`, without publishing |
+
+**Windows.** Noryx runs on Linux. On Windows, develop in WSL 2, e.g. with `scripts/ubuntu-test.sh`. Natively, only the
+master builds and runs, e.g. for `make dev-web`; the agent and `go build ./...` need `GOOS=linux`, which also checks the
+code with `GOOS=linux go vet ./...`. The tests need Linux, as some check file permissions and Unix sockets, and
+`npm run lint` may fail on `i18next-cli`, whose native SWC binding doesn't load on every Windows; `oxlint` and `tsc -b`
+run.
+
+**Test machines.** `scripts/deploy-dev.sh --master root@vm1 --agent root@vm1 --agent root@vm2` builds the panel and both
+programs of the checkout for Linux and installs them over SSH on machines with Noryx installed, restarting their
+services; servers keep running. Turn off **Check for updates** in the panel's settings, so that it doesn't offer the
+latest release as an update of the test build.
 
 **Translations.** The panel's texts are English and serve as the keys of their translations
 ([i18next](https://www.i18next.com)): components show them with `t("…")`, or `<Trans>` for texts with markup, and

@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { StateBar } from "@/features/servers/server-state"
-import { serverStates, serverType } from "@/features/servers/server-types"
+import { serverType, statusOf } from "@/features/servers/server-types"
 import type { ServerUsage } from "@/features/usage/api"
 import { maintenanceQuery, type Network, networksQuery, type ServerRef } from "./api"
 import { CreateNetworkDialog } from "./create-network-dialog"
@@ -116,7 +116,7 @@ function NetworkCard({ network, servers, usage }: { network: Network; servers?: 
               const server = findServer(servers, b)
               return (
                 <Chip key={key(b)} className="font-mono font-normal">
-                  {server && <StatusDot status={serverStates[server.state]} />}
+                  {server && <StatusDot status={statusOf(server)} />}
                   {b.name}
                 </Chip>
               )

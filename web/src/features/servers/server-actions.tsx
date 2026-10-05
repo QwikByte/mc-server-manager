@@ -166,7 +166,7 @@ export function ServerActions({
                 <TrashIcon />
               </Button>
             }
-            title={t("Delete {{name}}?", { name: server.name })}
+            title={t("Delete {{name}} on port {{port}}?", { name: server.name, port: server.port })}
             description={t("This stops the server and permanently deletes it with all worlds, plugins and settings. This can't be undone.")}
             action={t("Delete server")}
             destructive

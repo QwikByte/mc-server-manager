@@ -109,6 +109,7 @@ func (s *Service) renewDue(ctx context.Context) {
 func (s *Service) retire(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gen++
 	if conn, ok := s.conns[id]; ok {
 		delete(s.conns, id)
 		time.AfterFunc(connDrainTime, func() { conn.Close() })

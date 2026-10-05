@@ -3,12 +3,10 @@
 package stats
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"io/fs"
 	"log/slog"
-	"net"
 	"regexp"
 	"slices"
 	"strconv"
@@ -26,9 +24,9 @@ const (
 	interval     = 5 * time.Second
 	diskInterval = 5 * time.Minute
 	probeTimeout = 2 * time.Second
-	// rconRetry is how long the agent waits before it connects to a console again that
-	// failed, as the server logs every attempt.
-	rconRetry = time.Minute
+	// consoleRetry is how long the agent waits before it asks a console again that failed,
+	// as the server logs every attempt to connect.
+	consoleRetry = time.Minute
 	// maxListed is the most players listed of a server.
 	maxListed = 1000
 )
@@ -54,12 +52,10 @@ type Service struct {
 
 // serverState is what the service keeps about a server between measurements.
 type serverState struct {
-	usage     runtime.Usage
-	at        time.Time
-	rcon      *rcon
-	rconHost  string
-	rconRetry time.Time
-	offline   *bool // whether it runs in offline mode, read once per run
+	usage        runtime.Usage
+	at           time.Time
+	consoleRetry time.Time
+	offline      *bool // whether it runs in offline mode, read once per run
 }
 
 func NewService(rt runtime.Runtime) *Service {
@@ -199,14 +195,14 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 	}
 	stats.OfflineMode = !srv.BehindProxy && st.offlineMode(ctx, rt, srv.ID)
 	// The ping lists only some players, the console all of them.
-	if out, ok := st.command(ctx, rt, srv.ID, u.Host, now, "minecraft:list"); ok && stats.Players != nil {
+	if out, ok := st.command(ctx, rt, srv.ID, now, "minecraft:list"); ok && stats.Players != nil {
 		if names, ok := listed(out); ok {
 			stats.Players.Names = names
 		}
 	}
 	// Folia tells the ticks per second of each region instead.
 	if srv.Type.Paper() && srv.Type != noryxv1.ServerType_SERVER_TYPE_FOLIA {
-		if out, ok := st.command(ctx, rt, srv.ID, u.Host, now, "tps"); ok {
+		if out, ok := st.command(ctx, rt, srv.ID, now, "tps"); ok {
 			if m := tpsPattern.FindStringSubmatch(out); m != nil {
 				tps, _ := strconv.ParseFloat(m[1], 64)
 				stats.Tps = min(tps, 20)
@@ -218,27 +214,16 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 
 func perSecond(bytes uint64, d time.Duration) uint64 { return uint64(float64(bytes) / d.Seconds()) }
 
-// command runs a console command of a game server over RCON and returns its output without
+// command runs a console command of a game server and returns its output without
 // formatting, or false if the console can't be reached.
-func (st *serverState) command(ctx context.Context, rt runtime.Runtime, id, host string, now time.Time, command string) (string, bool) {
-	if st.rconHost != host {
-		st.closeRCON()
-	}
-	if st.rcon == nil && now.After(st.rconRetry) {
-		r, err := openRCON(ctx, rt, id, host)
-		if err != nil {
-			slog.Debug("Can't connect to the console of a server", "server", id, "err", err)
-			st.rconRetry = now.Add(rconRetry)
-			return "", false
-		}
-		st.rcon, st.rconHost = r, host
-	}
-	if st.rcon == nil {
+func (st *serverState) command(ctx context.Context, rt runtime.Runtime, id string, now time.Time, command string) (string, bool) {
+	if now.Before(st.consoleRetry) {
 		return "", false
 	}
-	out, err := st.rcon.call(ctx, rconCommand, command)
+	out, err := rt.SendCommand(ctx, id, command)
 	if err != nil {
-		st.closeRCON()
+		slog.Debug("Can't run a command on the console of a server", "server", id, "err", err)
+		st.consoleRetry = now.Add(consoleRetry)
 		return "", false
 	}
 	return plain(out), true
@@ -260,26 +245,6 @@ func listed(out string) ([]string, bool) {
 	return list, true
 }
 
-// openRCON connects to the console of a server with the port and password in its
-// server.properties, which the server image chooses.
-func openRCON(ctx context.Context, rt runtime.Runtime, id, host string) (*rcon, error) {
-	if host == "" {
-		return nil, errors.New("the server's ports can't be reached")
-	}
-	dir, err := rt.Data(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	props, err := properties.Read(dir)
-	if err = errors.Join(err, dir.Close()); err != nil {
-		return nil, err
-	}
-	if props["enable-rcon"] != "true" || props["rcon.password"] == "" {
-		return nil, errors.New("the console port is off")
-	}
-	return dialRCON(ctx, net.JoinHostPort(host, cmp.Or(props["rcon.port"], "25575")), props["rcon.password"])
-}
-
 // offlineMode reports whether a running game server is in offline mode, as its
 // server.properties tells when first asked; changes apply when it starts again.
 func (st *serverState) offlineMode(ctx context.Context, rt runtime.Runtime, id string) bool {
@@ -299,15 +264,7 @@ func (st *serverState) offlineMode(ctx context.Context, rt runtime.Runtime, id s
 
 // reset forgets a server that stopped.
 func (st *serverState) reset() {
-	st.closeRCON()
-	st.at, st.offline = time.Time{}, nil
-}
-
-func (st *serverState) closeRCON() {
-	if st.rcon != nil {
-		_ = st.rcon.Close()
-		st.rcon = nil
-	}
+	st.at, st.offline, st.consoleRetry = time.Time{}, nil, time.Time{}
 }
 
 // measureDisks measures the size of the data of all servers, which takes a while for

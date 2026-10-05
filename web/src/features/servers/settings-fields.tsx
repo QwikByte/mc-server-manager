@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { formatMegabytes } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import type { RestartPolicy } from "./api"
-import { memoryOptionsMb } from "./server-types"
+import { containerMemoryMb, memoryOptionsMb } from "./server-types"
 
 // Fields shared by the settings of a server and the templates for new servers.
 
@@ -27,7 +27,19 @@ const restartPolicies: [RestartPolicy, string, string][] = [
   ["never", msg("Only manually"), msg("Starts only when you start it.")],
 ]
 
-export function MemoryField({ id, value, onChange }: { id: string; value: number; onChange: (mb: number) => void }) {
+/** Chooses the memory of a server. freeMb, if the node limits it, leaves out what doesn't fit. */
+export function MemoryField({
+  id,
+  value,
+  onChange,
+  freeMb,
+}: {
+  id: string
+  value: number
+  onChange: (mb: number) => void
+  freeMb?: number
+}) {
+  const fits = (mb: number) => freeMb === undefined || containerMemoryMb(mb) <= freeMb
   return (
     <Field>
       <FieldLabel htmlFor={id}>{t("Memory")}</FieldLabel>
@@ -39,12 +51,18 @@ export function MemoryField({ id, value, onChange }: { id: string; value: number
           {[...new Set([...memoryOptionsMb, value])]
             .sort((a, b) => a - b)
             .map((mb) => (
-              <SelectItem key={mb} value={String(mb)}>
+              <SelectItem key={mb} value={String(mb)} disabled={!fits(mb)}>
                 {formatMegabytes(mb)}
+                {!fits(mb) && <span className="text-muted-foreground">{t("More than the node has left")}</span>}
               </SelectItem>
             ))}
         </SelectContent>
       </Select>
+      {freeMb !== undefined && (
+        <FieldDescription>
+          {t("{{free}} left on the node, for the server and what Java needs besides it", { free: formatMegabytes(Math.max(0, freeMb)) })}
+        </FieldDescription>
+      )}
     </Field>
   )
 }

@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -122,13 +121,11 @@ func openDB(dataDir string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		if owner := strconv.FormatUint(uint64(st.Uid), 10); owner != strconv.Itoa(os.Getuid()) {
-			if u, err := user.LookupId(owner); err == nil {
-				owner = u.Username
-			}
-			return nil, fmt.Errorf("%s belongs to another user, run this as %s, e.g. with: sudo -u %s noryx-master …", dataDir, owner, owner)
+	if owner, ok := ownerOf(info); ok && owner != strconv.Itoa(os.Getuid()) {
+		if u, err := user.LookupId(owner); err == nil {
+			owner = u.Username
 		}
+		return nil, fmt.Errorf("%s belongs to another user, run this as %s, e.g. with: sudo -u %s noryx-master …", dataDir, owner, owner)
 	}
 	return database.Open(filepath.Join(dataDir, "master.db"))
 }

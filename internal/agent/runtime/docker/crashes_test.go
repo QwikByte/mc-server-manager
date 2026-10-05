@@ -32,3 +32,21 @@ func TestCrashState(t *testing.T) {
 		}
 	}
 }
+
+// Docker starts a container again right away after its first crash, before the agent inspects
+// it, and later after a delay.
+func TestRestarts(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		state container.State
+		want  bool
+	}{
+		{"running again", container.State{Running: true}, true},
+		{"waiting to start again", container.State{Running: true, Restarting: true}, true},
+		{"stopped", container.State{Status: container.StateExited, ExitCode: 143}, false},
+	} {
+		if got := restarts(&tc.state); got != tc.want {
+			t.Errorf("%s: restarts = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

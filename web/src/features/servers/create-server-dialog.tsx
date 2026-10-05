@@ -35,9 +35,10 @@ import { nodeQuery, nodesQuery } from "@/features/nodes/api"
 import { OperationStatus } from "@/features/operations/operation-status"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Template, templatesQuery } from "@/features/templates/api"
-import { formatBytes, formatMegabytes } from "@/lib/format"
-import { type NewServer, serversQuery, useCreateServer } from "./api"
-import { defaults, memoryOptionsMb, modpack, serverType, suggestPort, usedPorts } from "./server-types"
+import { formatBytes } from "@/lib/format"
+import { freeMemoryMb, type NewServer, serversQuery, useCreateServer } from "./api"
+import { defaults, modpack, serverType, suggestPort, usedPorts } from "./server-types"
+import { MemoryField } from "./settings-fields"
 import { EndOfLifeNotice, SoftwareOptions } from "./software"
 
 // Node, port and storage stay unset until chosen, so that the suggestions apply.
@@ -279,23 +280,12 @@ export function CreateServerDialog({
               <EndOfLifeNotice type={form.type} />
               {fromModpack && <ModpackPicker onChange={chooseModpack} />}
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="server-memory">{t("Memory")}</FieldLabel>
-                  <Select value={String(form.memoryMb)} onValueChange={(v) => setForm({ ...form, memoryMb: Number(v) })}>
-                    <SelectTrigger id="server-memory" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[...new Set([...memoryOptionsMb, form.memoryMb])]
-                        .sort((a, b) => a - b)
-                        .map((mb) => (
-                          <SelectItem key={mb} value={String(mb)}>
-                            {formatMegabytes(mb)}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
+                <MemoryField
+                  id="server-memory"
+                  value={form.memoryMb}
+                  onChange={(memoryMb) => setForm({ ...form, memoryMb })}
+                  freeMb={freeMemoryMb(node, servers)}
+                />
                 <Field>
                   <FieldLabel htmlFor="server-port">{t("Port")}</FieldLabel>
                   <Input
@@ -328,30 +318,32 @@ export function CreateServerDialog({
                   </Select>
                 </Field>
               )}
-              <Field orientation="horizontal">
-                <Checkbox
-                  id="server-eula"
-                  checked={form.acceptEula}
-                  onCheckedChange={(v) => setForm({ ...form, acceptEula: v === true })}
-                />
-                <FieldLabel htmlFor="server-eula" className="font-normal">
-                  <span>
-                    <Trans
-                      i18nKey="I accept the <link>Minecraft EULA</link>"
-                      components={{
-                        link: (
-                          <a
-                            href="https://aka.ms/MinecraftEULA"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline underline-offset-4"
-                          />
-                        ),
-                      }}
-                    />
-                  </span>
-                </FieldLabel>
-              </Field>
+              {!proxy && (
+                <Field orientation="horizontal">
+                  <Checkbox
+                    id="server-eula"
+                    checked={form.acceptEula}
+                    onCheckedChange={(v) => setForm({ ...form, acceptEula: v === true })}
+                  />
+                  <FieldLabel htmlFor="server-eula" className="font-normal">
+                    <span>
+                      <Trans
+                        i18nKey="I accept the <link>Minecraft EULA</link>"
+                        components={{
+                          link: (
+                            <a
+                              href="https://aka.ms/MinecraftEULA"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline underline-offset-4"
+                            />
+                          ),
+                        }}
+                      />
+                    </span>
+                  </FieldLabel>
+                </Field>
+              )}
               {proxy && <FieldDescription>{t("Proxies always run the latest release of their software.")}</FieldDescription>}
               {create.error && <FieldError>{create.error.message}</FieldError>}
             </FieldGroup>

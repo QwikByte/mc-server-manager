@@ -49,6 +49,15 @@ export function problemsOf(
         link,
       })
     }
+    if (s.refusedJvmOptions?.length) {
+      add({
+        key: `jvm-options/${s.id}`,
+        tone: "warning",
+        title: t("{{name}} starts with JVM options that are refused now", { name: s.name }),
+        detail: t("Remove {{options}} in its settings.", { options: s.refusedJvmOptions.join(" ") }),
+        link,
+      })
+    }
     if (usages.server(s.nodeId, s.id)?.offlineMode) {
       add({
         key: `offline-mode/${s.id}`,

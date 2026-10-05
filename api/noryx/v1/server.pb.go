@@ -305,9 +305,12 @@ type Server struct {
 	LoaderVersion string `protobuf:"bytes,16,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
 	// For a proxy whose network lets Bedrock players join: the UDP port at which Geyser
 	// listens for them; 0 for none.
-	BedrockPort   uint32 `protobuf:"varint,17,opt,name=bedrock_port,json=bedrockPort,proto3" json:"bedrock_port,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	BedrockPort uint32 `protobuf:"varint,17,opt,name=bedrock_port,json=bedrockPort,proto3" json:"bedrock_port,omitempty"`
+	// JVM options that were set before the agent refused them, e.g. as they can run code. The
+	// server still starts with them until they are removed in its settings.
+	RefusedJvmOptions []string `protobuf:"bytes,18,rep,name=refused_jvm_options,json=refusedJvmOptions,proto3" json:"refused_jvm_options,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Server) Reset() {
@@ -459,6 +462,13 @@ func (x *Server) GetBedrockPort() uint32 {
 	return 0
 }
 
+func (x *Server) GetRefusedJvmOptions() []string {
+	if x != nil {
+		return x.RefusedJvmOptions
+	}
+	return nil
+}
+
 type ListServersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -546,7 +556,8 @@ type CreateServerRequest struct {
 	Version  string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
 	MemoryMb uint32                 `protobuf:"varint,4,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
 	Port     uint32                 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`
-	// The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA).
+	// The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA) for a game
+	// server; proxies don't run Minecraft.
 	AcceptEula bool `protobuf:"varint,6,opt,name=accept_eula,json=acceptEula,proto3" json:"accept_eula,omitempty"`
 	// Storage location for the server's data; empty means the default location.
 	Storage string `protobuf:"bytes,7,opt,name=storage,proto3" json:"storage,omitempty"`
@@ -1432,7 +1443,10 @@ type SendCommandRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// A single console command, e.g. "say Hello". A leading slash is optional.
-	Command       string `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	Command string `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	// Don't wait for an answer to a send command that only comes if the proxy can't send the
+	// player, as Velocity's, e.g. to send many players before a rolling restart.
+	NoWait        bool `protobuf:"varint,3,opt,name=no_wait,json=noWait,proto3" json:"no_wait,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1479,6 +1493,13 @@ func (x *SendCommandRequest) GetCommand() string {
 		return x.Command
 	}
 	return ""
+}
+
+func (x *SendCommandRequest) GetNoWait() bool {
+	if x != nil {
+		return x.NoWait
+	}
+	return false
 }
 
 type SendCommandResponse struct {
@@ -2092,7 +2113,7 @@ var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\x9e\x04\n" +
+	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xce\x04\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
@@ -2114,7 +2135,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\acrashes\x18\x0e \x01(\rR\acrashes\x12\x1b\n" +
 	"\texit_code\x18\x0f \x01(\x05R\bexitCode\x12%\n" +
 	"\x0eloader_version\x18\x10 \x01(\tR\rloaderVersion\x12!\n" +
-	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\"\x14\n" +
+	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\x12.\n" +
+	"\x13refused_jvm_options\x18\x12 \x03(\tR\x11refusedJvmOptions\"\x14\n" +
 	"\x12ListServersRequest\"A\n" +
 	"\x13ListServersResponse\x12*\n" +
 	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\xc3\x04\n" +
@@ -2185,10 +2207,11 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"N\n" +
 	"\x12StreamLogsResponse\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\tR\x04line\x12$\n" +
-	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\">\n" +
+	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\"W\n" +
 	"\x12SendCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\acommand\x18\x02 \x01(\tR\acommand\"-\n" +
+	"\acommand\x18\x02 \x01(\tR\acommand\x12\x17\n" +
+	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"-\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
 	"\x06output\x18\x01 \x01(\tR\x06output\"\xfd\x02\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +

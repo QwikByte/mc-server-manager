@@ -46,6 +46,15 @@ var (
 	ErrNotSent = errors.New("the proxy couldn't send the player")
 )
 
+type noWaitKey struct{}
+
+// NoWait makes SendCommand not wait for an answer to a send command that only comes if the
+// proxy can't send the player, as Velocity's, e.g. to send many players at once.
+func NoWait(ctx context.Context) context.Context { return context.WithValue(ctx, noWaitKey{}, true) }
+
+// Waits reports whether SendCommand waits for an answer that only comes on failure.
+func Waits(ctx context.Context) bool { return ctx.Value(noWaitKey{}) == nil }
+
 // Spec describes a server.
 type Spec struct {
 	ID       string             `json:"id"`
@@ -157,9 +166,6 @@ type Usage struct {
 	MemoryLimit uint64
 	NetRxBytes  uint64
 	NetTxBytes  uint64
-	// Host is the address at which the agent reaches the ports of the server, e.g. its
-	// console port; empty if it can't.
-	Host string
 }
 
 // LogLine is a line of a server's console and when it was written; Time is zero if unknown.

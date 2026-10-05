@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"regexp"
@@ -28,6 +29,7 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/properties"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 const (
@@ -130,8 +132,8 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 		LoaderVersion: req.GetLoaderVersion(),
 	}
 	switch {
-	case !req.GetAcceptEula():
-		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a server.")
+	case !req.GetAcceptEula() && !req.GetType().Proxy():
+		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a game server.")
 	case req.GetType() == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
 		return nil, status.Error(codes.InvalidArgument, "Choose a server type.")
 	case !knownType:
@@ -402,6 +404,9 @@ func (s *Service) SendCommand(ctx context.Context, req *noryxv1.SendCommandReque
 	if command == "" || len(command) > maxCommand || strings.ContainsFunc(command, unicode.IsControl) {
 		return nil, status.Errorf(codes.InvalidArgument, "Enter a single command with up to %d characters.", maxCommand)
 	}
+	if req.GetNoWait() {
+		ctx = runtime.NoWait(ctx)
+	}
 	output, err := s.rt.SendCommand(ctx, req.GetId(), command)
 	switch {
 	case errors.Is(err, runtime.ErrUnsupported):
@@ -584,16 +589,45 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 		return fmt.Sprintf("The node has %d CPU cores.", cpus)
 	}
 	for _, option := range spec.JVMOptions {
-		switch {
-		case !jvmOptionPattern.MatchString(option):
-			return fmt.Sprintf("The JVM option %q is invalid. Options start with '-' and contain no spaces or quotes.", option)
-		case memoryOption.MatchString(option):
-			return fmt.Sprintf("Set the memory in the settings instead of with %s.", option)
-		case runsCode(option):
-			return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
+		if msg := checkJVMOption(option); msg != "" {
+			return msg
 		}
 	}
 	return ""
+}
+
+// checkJVMOption returns a message for the operator if a JVM option is refused.
+func checkJVMOption(option string) string {
+	switch {
+	case !jvmOptionPattern.MatchString(option):
+		return fmt.Sprintf("The JVM option %q is invalid. Options start with '-' and contain no spaces or quotes.", option)
+	case memoryOption.MatchString(option):
+		return fmt.Sprintf("Set the memory in the settings instead of with %s.", option)
+	case runsCode(option):
+		return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
+	}
+	return ""
+}
+
+// refusedOptions returns the JVM options of a server that are refused now, as they were set
+// before an update of the agent refused them.
+func refusedOptions(options []string) []string {
+	return slices.DeleteFunc(slices.Clone(options), func(o string) bool { return checkJVMOption(o) == "" })
+}
+
+// WarnRefusedOptions logs the servers whose JVM options are refused now, e.g. after an update
+// of the agent. They still start with them, until they are removed in their settings.
+func (s *Service) WarnRefusedOptions(ctx context.Context) {
+	servers, err := s.rt.List(ctx)
+	if err != nil {
+		return
+	}
+	for _, srv := range servers {
+		if refused := refusedOptions(srv.JVMOptions); len(refused) > 0 {
+			slog.Warn("A server starts with JVM options that are refused now; remove them in its settings", logging.Servers,
+				logging.KeyServer, srv.ID, logging.KeyServerName, srv.Name, "options", refused)
+		}
+	}
 }
 
 // runsCode reports whether a JVM option can run code, by its name.
@@ -613,7 +647,7 @@ func toProto(s runtime.Server) *noryxv1.Server {
 		Id: s.ID, Name: s.Name, Type: s.Type, Version: s.Version, MemoryMb: s.MemoryMB, Port: s.Port, State: s.State,
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
 		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
-		LoaderVersion: s.LoaderVersion, BedrockPort: s.BedrockPort,
+		LoaderVersion: s.LoaderVersion, BedrockPort: s.BedrockPort, RefusedJvmOptions: refusedOptions(s.JVMOptions),
 	}
 }
 
@@ -625,6 +659,8 @@ func toStatus(err error) error {
 		return status.Error(codes.NotFound, "Server not found.")
 	case errors.Is(err, runtime.ErrNotRunning):
 		return status.Error(codes.FailedPrecondition, "Start the server to send commands.")
+	case errors.Is(err, runtime.ErrNotReady):
+		return status.Error(codes.FailedPrecondition, "The server is starting. Wait until it runs to send commands.")
 	case errors.Is(err, runtime.ErrUnsupported):
 		return status.Error(codes.FailedPrecondition, "This type of server does not support that.")
 	case errors.Is(err, storage.ErrUnknown):

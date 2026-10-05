@@ -113,6 +113,9 @@ message Server {
   // For a proxy whose network lets Bedrock players join: the UDP port at which Geyser
   // listens for them; 0 for none.
   uint32 bedrock_port = 17;
+  // JVM options that were set before the agent refused them, e.g. as they can run code. The
+  // server still starts with them until they are removed in its settings.
+  repeated string refused_jvm_options = 18;
 }
 
 message ListServersRequest {}
@@ -127,7 +130,8 @@ message CreateServerRequest {
   string version = 3;
   uint32 memory_mb = 4;
   uint32 port = 5;
-  // The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA).
+  // The operator must accept the Minecraft EULA (https://aka.ms/MinecraftEULA) for a game
+  // server; proxies don't run Minecraft.
   bool accept_eula = 6;
   // Storage location for the server's data; empty means the default location.
   string storage = 7;
@@ -216,6 +220,9 @@ message SendCommandRequest {
   string id = 1;
   // A single console command, e.g. "say Hello". A leading slash is optional.
   string command = 2;
+  // Don't wait for an answer to a send command that only comes if the proxy can't send the
+  // player, as Velocity's, e.g. to send many players before a rolling restart.
+  bool no_wait = 3;
 }
 
 message SendCommandResponse {

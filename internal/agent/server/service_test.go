@@ -190,3 +190,34 @@ func TestCreateServerReservesThePort(t *testing.T) {
 		t.Fatalf("ports still reserved: %v", s.reserved)
 	}
 }
+
+// A server keeps JVM options set before the agent refused them, and the list reports them.
+func TestRefusedJVMOptions(t *testing.T) {
+	options := []string{"-Dfile.encoding=UTF-8", "-XX:VMOptionsFile=/data/opts", "-Djava.system.class.loader=Evil"}
+	rt := &slowRuntime{servers: []runtime.Server{{Spec: runtime.Spec{ID: runtime.NewID(), JVMOptions: options}}}}
+	res, err := NewService(rt, nil).ListServers(t.Context(), &noryxv1.ListServersRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.GetServers()[0].GetRefusedJvmOptions(); !slices.Equal(got, options[1:]) {
+		t.Fatalf("refused options = %q, want %q", got, options[1:])
+	}
+	if got := res.GetServers()[0].GetJvmOptions(); !slices.Equal(got, options) {
+		t.Fatalf("options = %q, want all of them", got)
+	}
+}
+
+// Game servers run Minecraft, so they need the EULA accepted; proxies don't.
+func TestCreateServerNeedsTheEULAForGameServers(t *testing.T) {
+	s := NewService(&slowRuntime{}, nil)
+	create := func(typ noryxv1.ServerType, port uint32) error {
+		_, err := s.CreateServer(t.Context(), &noryxv1.CreateServerRequest{Name: "Server", Type: typ, MemoryMb: 1024, Port: port})
+		return err
+	}
+	if err := create(noryxv1.ServerType_SERVER_TYPE_PAPER, 25565); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("game server without the EULA: %v", err)
+	}
+	if err := create(noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577); err != nil {
+		t.Fatalf("proxy without the EULA: %v", err)
+	}
+}

@@ -42,11 +42,5 @@ func (d *Docker) Usage(ctx context.Context, id string) (runtime.Usage, error) {
 		u.NetRxBytes += n.RxBytes
 		u.NetTxBytes += n.TxBytes
 	}
-	for _, ep := range c.NetworkSettings.Networks { // the agent reaches it in any of its networks
-		if ep != nil && ep.IPAddress.IsValid() {
-			u.Host = ep.IPAddress.String()
-			break
-		}
-	}
 	return u, nil
 }

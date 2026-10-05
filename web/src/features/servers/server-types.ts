@@ -48,6 +48,9 @@ export const isFabric = (type: string) => type === "fabric" || type === "quilt"
 
 export const memoryOptionsMb = [512, 1024, 2048, 4096, 6144, 8192, 12288, 16384]
 
+/** The limit of a server's container, which nodes count: its memory, a quarter more and 256 MB for what Java needs besides. */
+export const containerMemoryMb = (memoryMb: number) => Math.floor((memoryMb * 5) / 4) + 256
+
 /** Tells the memory of a server: its heap, and the limit of its container. */
 export const memoryTitle = (s: { memoryMb: number; memoryLimitMb: number }) =>
   t("{{memory}} for the server, and up to {{limit}} with what Java needs besides it", {
@@ -104,6 +107,12 @@ export const serverStates: Record<ServerState, Status> = {
   crashing: { tone: "destructive", label: msg("Crashing"), pulse: true },
   stopped: { tone: "neutral", label: msg("Stopped") },
 }
+
+const crashed: Status = { tone: "warning", label: msg("Crashed") }
+
+/** The state of a server to show: one that stopped after crashing says that it crashed. */
+export const statusOf = (s: { state: ServerState; crashes: number }) =>
+  s.state === "stopped" && s.crashes > 0 ? crashed : serverStates[s.state]
 
 /** The states in the order lists show them. */
 export const states = Object.keys(serverStates) as ServerState[]
