@@ -65,10 +65,19 @@ var (
 	jvmOptionPattern = regexp.MustCompile(`^-[A-Za-z0-9:._+=,/@%-]{1,200}$`)
 	// memoryOption matches options that would override the memory the agent manages.
 	memoryOption = regexp.MustCompile(`^-(Xm[sx]|XX:(Max|Min|Initial)RAM)`)
-	// codeOption matches options that run commands, load agents or other code, or open a
-	// debugging or management port, so that changing settings can't run code in the container.
-	codeOption   = regexp.MustCompile(`^-(javaagent:|agentpath:|agentlib:|Xrun|Xbootclasspath|XX:On(OutOfMemory)?Error=|Dcom\.sun\.management\.jmxremote)`)
-	javaVersions = []string{"", "8", "11", "17", "21", "25"}
+	// codeOption, codeFlag and codeProperty match the names of options, -XX flags and system
+	// properties that can run code, so that changing settings can't run code in the container.
+	// codeOption: agents, a debugger, and class or module paths and programs to run.
+	codeOption = regexp.MustCompile(`^-(javaagent:|agentpath:|agentlib:|Xrun|Xbootclasspath|(cp|classpath|-class-path|p|-module-path|-upgrade-module-path|-patch-module|m|-module|jar|-source)$)`)
+	// codeFlag: commands on errors, options read from files, and classes or native code
+	// loaded from archives, checkpoints or JVMCI compilers.
+	codeFlag = regexp.MustCompile(`^(On(OutOfMemory)?Error|VMOptionsFile|Flags|SharedArchiveFile|AOT\w*|CRaC\w*|\w*JVMCI\w*)$`)
+	// codeProperty: the properties of Java, JMX and JNDI, logging libraries and JNA, which
+	// name classes, native libraries or configurations to load, also from URLs, e.g.
+	// log4j2.configurationFile; except safeProperties.
+	codeProperty   = regexp.MustCompile(`(?i)^(log4j|(java|javax|jdk|sun|com\.sun|jvmci|jna|logback|org\.apache\.logging)\.)`)
+	safeProperties = []string{"java.awt.headless", "java.net.preferIPv4Stack", "java.net.preferIPv6Addresses", "sun.stdout.encoding", "sun.stderr.encoding", "log4j2.formatMsgNoLookups"}
+	javaVersions   = []string{"", "8", "11", "17", "21", "25"}
 	// Terminal escape sequences and Minecraft formatting codes (§a, §l, ...).
 	formatting = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|§[0-9a-fk-orxA-FK-ORX]|\r`)
 )
@@ -580,11 +589,23 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 			return fmt.Sprintf("The JVM option %q is invalid. Options start with '-' and contain no spaces or quotes.", option)
 		case memoryOption.MatchString(option):
 			return fmt.Sprintf("Set the memory in the settings instead of with %s.", option)
-		case codeOption.MatchString(option):
-			return fmt.Sprintf("The JVM option %s can run code, so it can't be set here. Install agents as plugins or mods instead.", option)
+		case runsCode(option):
+			return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
 		}
 	}
 	return ""
+}
+
+// runsCode reports whether a JVM option can run code, by its name.
+func runsCode(option string) bool {
+	name, _, _ := strings.Cut(option, "=")
+	if key, ok := strings.CutPrefix(name, "-D"); ok {
+		return codeProperty.MatchString(key) && !slices.Contains(safeProperties, key)
+	}
+	if flag, ok := strings.CutPrefix(name, "-XX:"); ok {
+		return codeFlag.MatchString(strings.TrimLeft(flag, "+-"))
+	}
+	return codeOption.MatchString(name)
 }
 
 func toProto(s runtime.Server) *noryxv1.Server {

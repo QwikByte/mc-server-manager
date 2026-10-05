@@ -554,7 +554,9 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory
   (`os.Root`), and servers are only created after the operator accepts the Minecraft EULA. JVM options may only
   contain characters that the image's start script can't interpret as shell syntax, can't override the memory limit
-  and can't run code: Java agents, commands on errors, and debugging or JMX ports are refused.
+  and can't run code: Java agents, class and module paths, commands on errors, options read from files, class data
+  archives, JVMCI compilers, debugging or JMX ports, and the system properties of Java, JNDI, logging libraries and JNA,
+  which name classes, libraries or configurations to load (also from URLs), are refused.
 - **File manager.** The agent confines every path to the server's data directory, including through symbolic
   links, and new files belong to the server's user. Downloads are sent as attachments with a sandboxing CSP, so an
   uploaded HTML file can't run scripts in the panel. Secrets of the server stay on the node: files that only hold
