@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 )
 
@@ -57,5 +58,48 @@ func TestDir(t *testing.T) {
 	}
 	if data, err := d.ReadOptional("missing.txt"); data != nil || err != nil {
 		t.Fatalf("missing file = %q, %v", data, err)
+	}
+}
+
+// A directory handed over to the user of a server belongs to it with everything in it,
+// also what the agent writes later; a link to a file outside isn't followed.
+func TestHandOver(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("changing owners needs root")
+	}
+	path, outside := t.TempDir(), filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if err := errors.Join(d.MkdirAll("plugins"), d.WriteFile("plugins/a.jar", nil), os.Symlink(outside, filepath.Join(path, "link"))); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.HandOver(1000, 1001); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.WriteFile("velocity.toml", nil); err != nil {
+		t.Fatal(err)
+	}
+	owner := func(name string) [2]uint32 {
+		info, err := os.Lstat(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		st := info.Sys().(*syscall.Stat_t)
+		return [2]uint32{st.Uid, st.Gid}
+	}
+	for _, name := range []string{".", "plugins", "plugins/a.jar", "link", "velocity.toml"} {
+		if got := owner(filepath.Join(path, name)); got != [2]uint32{1000, 1001} {
+			t.Errorf("owner of %s = %v", name, got)
+		}
+	}
+	if got := owner(outside); got != [2]uint32{0, 0} {
+		t.Errorf("followed the link: owner of its target = %v", got)
 	}
 }

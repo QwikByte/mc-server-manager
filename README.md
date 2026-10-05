@@ -541,7 +541,8 @@ Users get their permissions from groups; a user can be in several groups and has
   their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent writes to through
   Docker; no RCON plugin is added.
 - **Containers.** Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images
-  need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`, for proxies also `DAC_READ_SEARCH`.
+  need to hand the data to the server's user: `CHOWN`, `SETUID` and `SETGID`. Proxies run as the user of their image
+  (uid 1000) from the start, which owns their data, without any capabilities.
   Servers of a node can't reach each other: they share a Docker network without communication between containers
   (`noryx-servers`), and a Velocity proxy shares another one only with its backends on the node.
 - **Agent input.** Every request is validated by the agent. Server files are confined to the data directory

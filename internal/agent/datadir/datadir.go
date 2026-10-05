@@ -135,6 +135,29 @@ func (d *Dir) ReadOptional(name string) ([]byte, error) {
 	return data, err
 }
 
+// HandOver makes uid and gid the owner of the directory, of everything in it and of
+// whatever the agent creates in it from now on, for a server that runs as this user from
+// its start. Links are changed, not followed. Without root, the agent leaves the owners.
+func (d *Dir) HandOver(uid, gid int) error {
+	if d.uid < 0 {
+		return nil
+	}
+	d.uid, d.gid = uid, gid
+	return fs.WalkDir(d.FS(), ".", func(name string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := e.Info()
+		if err != nil {
+			return err
+		}
+		if st, ok := info.Sys().(*syscall.Stat_t); ok && int(st.Uid) == uid && int(st.Gid) == gid {
+			return nil
+		}
+		return d.Lchown(name, uid, gid)
+	})
+}
+
 func (d *Dir) own(name string) error {
 	if d.uid < 0 {
 		return nil
