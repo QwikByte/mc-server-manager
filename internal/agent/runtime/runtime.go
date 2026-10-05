@@ -157,9 +157,6 @@ type Usage struct {
 	MemoryLimit uint64
 	NetRxBytes  uint64
 	NetTxBytes  uint64
-	// Host is the address at which the agent reaches the ports of the server, e.g. its
-	// console port; empty if it can't.
-	Host string
 }
 
 // LogLine is a line of a server's console and when it was written; Time is zero if unknown.

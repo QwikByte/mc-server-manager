@@ -48,7 +48,8 @@ func (d *Docker) addCrashes(ctx context.Context, containerID string, srv *runtim
 	}
 }
 
-// Watch stops servers that keep crashing until ctx is done.
+// Watch stops servers that keep crashing, and closes the connections to the consoles of
+// servers that stop, until ctx is done.
 func (d *Docker) Watch(ctx context.Context) {
 	inRow := map[string]int{} // crashes in a row by container ID
 	for ctx.Err() == nil {
@@ -76,11 +77,15 @@ func (d *Docker) watch(ctx context.Context, inRow map[string]int) error {
 	}
 }
 
-// crashed counts a container that exited, and stops its server after maxCrashes in a row.
+// crashed closes the console of a container that exited and counts the exit, stopping its
+// server after maxCrashes in a row.
 func (d *Docker) crashed(ctx context.Context, actor events.Actor, inRow map[string]int) {
 	// The event carries the labels of the container; one that doesn't restart was stopped.
-	res, err := d.cli.ContainerInspect(ctx, actor.ID, client.ContainerInspectOptions{})
 	spec, ok := specOf(actor.Attributes)
+	if ok {
+		d.consoles.Close(spec.ID)
+	}
+	res, err := d.cli.ContainerInspect(ctx, actor.ID, client.ContainerInspectOptions{})
 	if err != nil || !ok || !res.Container.State.Restarting {
 		delete(inRow, actor.ID)
 		return

@@ -4,7 +4,6 @@ package docker
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,7 +15,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -29,6 +27,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/progress"
+	"github.com/QwikByte/noryx/internal/agent/rcon"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 )
@@ -91,8 +90,9 @@ var images = map[noryxv1.ServerType]image{
 // Docker implements runtime.Runtime. Container labels are the only state:
 // the agent itself stores nothing besides the server data directories.
 type Docker struct {
-	cli     *client.Client
-	storage *storage.Locations
+	cli      *client.Client
+	storage  *storage.Locations
+	consoles *rcon.Consoles
 }
 
 // New connects to the Docker daemon configured by the standard DOCKER_* variables.
@@ -101,7 +101,7 @@ func New(locations *storage.Locations) (*Docker, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Docker{cli: cli, storage: locations}, nil
+	return &Docker{cli: cli, storage: locations, consoles: rcon.NewConsoles()}, nil
 }
 
 func (d *Docker) Close() error { return d.cli.Close() }
@@ -443,51 +443,6 @@ func logLine(text string) runtime.LogLine {
 	return runtime.LogLine{Time: t, Text: rest}
 }
 
-// SendCommand runs the command of a game server through rcon-cli, which the itzg server
-// image ships together with a preconfigured RCON connection. Proxies have no RCON and get
-// the command on their console instead, whose output follows in the logs; see command.
-func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, error) {
-	c, spec, err := d.inspect(ctx, id)
-	switch {
-	case err != nil:
-		return "", err
-	case !c.State.Running:
-		return "", runtime.ErrNotRunning
-	case spec.Type.Proxy() && !c.Config.OpenStdin:
-		return "", runtime.ErrUnsupported // created by an older agent, until it is created again
-	case spec.Type.Proxy():
-		return "", d.command(ctx, id, spec.Type, command)
-	}
-	// As the server's user: root in the container may not read its data.
-	user, err := d.owner(spec)
-	if err != nil {
-		return "", err
-	}
-	exec, err := d.cli.ExecCreate(ctx, containerName(id), client.ExecCreateOptions{
-		User: user, Cmd: []string{"rcon-cli", command}, AttachStdout: true, AttachStderr: true,
-	})
-	if err != nil {
-		return "", err
-	}
-	attached, err := d.cli.ExecAttach(ctx, exec.ID, client.ExecAttachOptions{})
-	if err != nil {
-		return "", err
-	}
-	defer attached.Close()
-	var out bytes.Buffer
-	if _, err := stdcopy.StdCopy(&out, &out, io.LimitReader(attached.Reader, maxLineBytes)); err != nil {
-		return "", err
-	}
-	result, err := d.cli.ExecInspect(ctx, exec.ID, client.ExecInspectOptions{})
-	if err != nil {
-		return "", err
-	}
-	if result.ExitCode != 0 {
-		return "", fmt.Errorf("rcon-cli failed: %s", strings.TrimSpace(out.String()))
-	}
-	return out.String(), nil
-}
-
 // pull pulls an image, and reports how much of its layers it downloaded.
 func (d *Docker) pull(ctx context.Context, ref string) error {
 	progress.Step(ctx, "image", 0)
@@ -516,24 +471,6 @@ func (d *Docker) pull(ctx context.Context, ref string) error {
 		progress.Set(ctx, done, total)
 	}
 	return nil
-}
-
-// owner returns the user and group that own the data of a server, as uid:gid; the image
-// hands the data to the user it runs the server as.
-func (d *Docker) owner(spec runtime.Spec) (string, error) {
-	path, err := d.dataPath(spec)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "", errors.New("the owner of the server's data is unknown")
-	}
-	return fmt.Sprintf("%d:%d", st.Uid, st.Gid), nil
 }
 
 func containerName(id string) string { return "noryx-" + id }

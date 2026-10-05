@@ -7,15 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	mcnet "github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/properties"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
@@ -29,6 +32,58 @@ const (
 
 // notSent are parts of the answers of BungeeCord to a send command that can't send anyone.
 var notSent = []string{"That user is not online", "The specified server does not exist", "Only in game players"}
+
+// SendCommand runs the command of a game server on its console over RCON, keeping the
+// connection for the next one. Proxies have no RCON and get the command on their console
+// instead, whose output follows in the logs; see command.
+func (d *Docker) SendCommand(ctx context.Context, id, command string) (string, error) {
+	c, spec, err := d.inspect(ctx, id)
+	switch {
+	case err != nil:
+		return "", err
+	case !c.State.Running:
+		return "", runtime.ErrNotRunning
+	case spec.Type.Proxy() && !c.Config.OpenStdin:
+		return "", runtime.ErrUnsupported // created by an older agent, until it is created again
+	case spec.Type.Proxy():
+		return "", d.command(ctx, id, spec.Type, command)
+	}
+	host := hostOf(c)
+	return d.consoles.Command(ctx, id, host+" "+c.State.StartedAt, func(ctx context.Context) (string, string, error) {
+		return d.rconTarget(ctx, id, host)
+	}, command)
+}
+
+// rconTarget returns the address and password of the console of a game server, which the
+// server image sets in its server.properties.
+func (d *Docker) rconTarget(ctx context.Context, id, host string) (addr, password string, err error) {
+	if host == "" {
+		return "", "", errors.New("the server's ports can't be reached")
+	}
+	dir, err := d.Data(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+	props, err := properties.Read(dir)
+	if err = errors.Join(err, dir.Close()); err != nil {
+		return "", "", err
+	}
+	if props["enable-rcon"] != "true" || props["rcon.password"] == "" {
+		return "", "", errors.New("the server's console port is off")
+	}
+	return net.JoinHostPort(host, cmp.Or(props["rcon.port"], "25575")), props["rcon.password"], nil
+}
+
+// hostOf returns the address at which the agent reaches the ports of a container, in any of
+// its networks; empty if it can't.
+func hostOf(c container.InspectResponse) string {
+	for _, ep := range c.NetworkSettings.Networks {
+		if ep != nil && ep.IPAddress.IsValid() {
+			return ep.IPAddress.String()
+		}
+	}
+	return ""
+}
 
 // Reload sends the reload command of a running proxy to its console and waits for its
 // answer. A proxy created by an older agent can't read commands, so it is created again.

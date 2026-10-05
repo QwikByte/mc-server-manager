@@ -22,8 +22,8 @@ Servers run as containers based on [itzg/minecraft-server](https://github.com/it
 servers keep running while an agent restarts.
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
-through the RCON connection the server image provides, and to proxies through their own console, whose answer follows
-in the output. Commands typed in quick succession run one after the other, in their order. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
+through their console port (RCON), and to proxies through their own console, whose answer follows in the output. The
+agent keeps one console connection per game server for all its commands, so the server doesn't log a new one for each. Commands typed in quick succession run one after the other, in their order. Proxies created by earlier versions accept commands once they were created again, e.g. by saving their
 settings.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through
@@ -611,9 +611,9 @@ Users get their permissions from groups; a user can be in several groups and has
   them over its mutually authenticated connections. The new node checks the settings like those of a new server and
   extracts the archive confined to the server's data directory, without symbolic links. Moving needs the permissions
   to delete the server and read its files, and to create servers on the new node.
-- **Usage.** To ask a server for its ticks per second, the agent reads the console password from the server's
-  `server.properties` and connects to the server's console port inside Docker's network; the password never leaves
-  the node.
+- **Console.** To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console
+  password from the server's `server.properties` and connects to the server's console port inside Docker's network;
+  the password never leaves the node.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`noryx-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
