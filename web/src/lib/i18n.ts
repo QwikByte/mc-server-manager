@@ -49,7 +49,16 @@ export function chooseLanguage(choice: string) {
 const language = resolve(chosenLanguage())
 
 /** The locale of dates and numbers: the panel's language, in the browser's region for it if there is one, e.g. de-AT. */
-export const locale = navigator.languages.find((l) => l.split("-")[0] === language) ?? language
+export const locale = navigator.languages.find((l) => l.split("-")[0] === language && valid(l)) ?? language
+
+/** Whether Intl takes a locale; some browsers report ones it doesn't, e.g. en-US@posix. */
+function valid(l: string) {
+  try {
+    return Intl.getCanonicalLocales(l).length > 0
+  } catch {
+    return false
+  }
+}
 
 /**
  * Marks a text outside of components for translation, which the components do with t. t itself
