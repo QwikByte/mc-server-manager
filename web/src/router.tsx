@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient } from "@tanstack/react-query"
+import { notifyManager, QueryCache, QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, createRoute, createRouter, lazyRouteComponent, Outlet, redirect } from "@tanstack/react-router"
 import { AppShell } from "@/components/app-shell"
 import { home } from "@/components/navigation"
@@ -13,6 +13,11 @@ import { validatePlayerSearch } from "@/features/players/search"
 import type { Kind } from "@/features/plugins/api"
 import { validateServerSearch } from "@/features/servers/browse"
 import { ApiError } from "@/lib/api"
+
+// Queries and mutations tell their state before the next click is handled, instead of in a
+// timer that a click can come before: a button disabled while its mutation is pending can't
+// send it twice, e.g. on a double click.
+notifyManager.setScheduler(queueMicrotask)
 
 export const queryClient = new QueryClient({
   // An expired session sends the user back to the sign-in page, unless the panel is already

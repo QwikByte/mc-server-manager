@@ -1,7 +1,14 @@
 package server
 
 import (
+	"context"
+	"slices"
+	"sync"
 	"testing"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
@@ -116,5 +123,58 @@ func TestNetworkOf(t *testing.T) {
 	}
 	if n, _ := networkOf(&noryxv1.ConfigureNetworkRequest{Id: id, ProxyOnNode: true}); n.Forwarding != runtime.ForwardingNone || n.ProxyOnNode {
 		t.Fatalf("leaving a network = %+v", n)
+	}
+}
+
+// slowRuntime creates servers slowly, as Docker does while it pulls an image.
+type slowRuntime struct {
+	runtime.Runtime
+	mu      sync.Mutex
+	servers []runtime.Server
+}
+
+func (r *slowRuntime) Info(context.Context) (runtime.Info, error) { return runtime.Info{CPUs: 4}, nil }
+
+func (r *slowRuntime) List(context.Context) ([]runtime.Server, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.servers), nil
+}
+
+func (r *slowRuntime) Create(_ context.Context, spec runtime.Spec) error {
+	time.Sleep(50 * time.Millisecond)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.servers = append(r.servers, runtime.Server{Spec: spec})
+	return nil
+}
+
+// Of concurrent requests for the same port, e.g. after a double click, only one creates a server.
+func TestCreateServerReservesThePort(t *testing.T) {
+	rt := &slowRuntime{}
+	s := NewService(rt, nil)
+	errs := make(chan error, 3)
+	for range cap(errs) {
+		go func() {
+			_, err := s.CreateServer(t.Context(), &noryxv1.CreateServerRequest{
+				Name: "Lobby", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, MemoryMb: 1024, Port: 25565, AcceptEula: true,
+			})
+			errs <- err
+		}()
+	}
+	var refused int
+	for range cap(errs) {
+		if err := <-errs; status.Code(err) == codes.AlreadyExists {
+			refused++
+		} else if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if servers, _ := rt.List(t.Context()); refused != 2 || len(servers) != 1 {
+		t.Fatalf("%d servers created, %d refused", len(servers), refused)
+	}
+	// Once the server exists, the port is free to reserve for it again, e.g. to change it.
+	if len(s.reserved) != 0 {
+		t.Fatalf("ports still reserved: %v", s.reserved)
 	}
 }

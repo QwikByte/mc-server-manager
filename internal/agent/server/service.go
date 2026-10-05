@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -76,6 +77,9 @@ type Service struct {
 	noryxv1.UnimplementedServerServiceServer
 	rt      runtime.Runtime
 	backups Backups
+
+	mu       sync.Mutex
+	reserved map[uint32]string // ports about to be used, by the ID of their server
 }
 
 // Backups are deleted together with their server.
@@ -84,7 +88,7 @@ type Backups interface {
 }
 
 func NewService(rt runtime.Runtime, backups Backups) *Service {
-	return &Service{rt: rt, backups: backups}
+	return &Service{rt: rt, backups: backups, reserved: map[uint32]string{}}
 }
 
 func (s *Service) ListServers(ctx context.Context, _ *noryxv1.ListServersRequest) (*noryxv1.ListServersResponse, error) {
@@ -127,9 +131,11 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 	if msg := properties.Check(spec, req.GetProperties()); msg != "" {
 		return nil, status.Error(codes.InvalidArgument, msg)
 	}
-	if err := s.check(ctx, spec); err != nil {
+	release, err := s.check(ctx, spec)
+	if err != nil {
 		return nil, err
 	}
+	defer release()
 	if err := s.rt.Create(ctx, spec); err != nil {
 		return nil, toStatus(err)
 	}
@@ -157,9 +163,11 @@ func (s *Service) DuplicateServer(ctx context.Context, req *noryxv1.DuplicateSer
 	spec := source.Spec
 	spec.ID, spec.Name, spec.Port, spec.BehindProxy, spec.ProxyOnNode = runtime.NewID(), req.GetName(), req.GetPort(), false, false
 	spec.BedrockPort, spec.BedrockPlayers = 0, false // the copy isn't part of the network
-	if err := s.check(ctx, spec); err != nil {
+	release, err := s.check(ctx, spec)
+	if err != nil {
 		return nil, err
 	}
+	defer release()
 	resume, err := runtime.PauseSaving(ctx, s.rt, source)
 	if errors.Is(err, runtime.ErrNotReady) {
 		return nil, status.Error(codes.FailedPrecondition, "Wait until the server has started, or stop it, to duplicate it.")
@@ -200,9 +208,11 @@ func (s *Service) ImportServer(stream noryxv1.ServerService_ImportServerServer) 
 	case !knownType:
 		return errUnknownType
 	}
-	if err := s.check(ctx, spec); err != nil {
+	release, err := s.check(ctx, spec)
+	if err != nil {
 		return err
 	}
+	defer release()
 	if _, err := runtime.Find(ctx, s.rt, spec.ID); !errors.Is(err, runtime.ErrNotFound) {
 		return cmp.Or(toStatus(err), status.Error(codes.AlreadyExists, "The server exists on this node already."))
 	}
@@ -259,9 +269,11 @@ func (s *Service) UpdateServer(ctx context.Context, req *noryxv1.UpdateServerReq
 	srv.Name, srv.Version, srv.MemoryMB, srv.Port = req.GetName(), cmp.Or(req.GetVersion(), "LATEST"), req.GetMemoryMb(), req.GetPort()
 	srv.Java, srv.RestartPolicy, srv.AikarFlags = req.GetJava(), req.GetRestartPolicy(), req.GetAikarFlags()
 	srv.JVMOptions, srv.CPUMillis, srv.LoaderVersion = req.GetJvmOptions(), req.GetCpuMillis(), req.GetLoaderVersion()
-	if err := s.check(ctx, srv.Spec); err != nil {
+	release, err := s.check(ctx, srv.Spec)
+	if err != nil {
 		return nil, err
 	}
+	defer release()
 	if err := s.rt.Update(ctx, srv.Spec); err != nil {
 		return nil, toStatus(err)
 	}
@@ -286,25 +298,47 @@ func (s *Service) find(ctx context.Context, id string) (runtime.Server, error) {
 	return srv, toStatus(err)
 }
 
-// check validates the settings of a server and that no other server uses its port.
-func (s *Service) check(ctx context.Context, spec runtime.Spec) error {
+// check validates the settings of a server and reserves its port; see reserve.
+func (s *Service) check(ctx context.Context, spec runtime.Spec) (release func(), err error) {
 	var cpus uint32
 	if info, err := s.rt.Info(ctx); err == nil {
 		cpus = info.CPUs
 	}
 	if msg := checkSettings(spec, cpus); msg != "" {
-		return status.Error(codes.InvalidArgument, msg)
+		return nil, status.Error(codes.InvalidArgument, msg)
 	}
+	return s.reserve(ctx, spec.ID, spec.Port, func(servers []runtime.Server) error {
+		if i := slices.IndexFunc(servers, func(srv runtime.Server) bool {
+			return srv.Uses(spec.Port) && (srv.ID != spec.ID || spec.BedrockPort == spec.Port)
+		}); i >= 0 {
+			return status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another port.", spec.Port, servers[i].Name)
+		}
+		return nil
+	})
+}
+
+// reserve checks with the servers of the node that the server id may use port, and
+// reserves it until release is called, once the server's container has it, so that
+// concurrent requests can't take the same port.
+func (s *Service) reserve(ctx context.Context, id string, port uint32, check func([]runtime.Server) error) (release func(), err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	servers, err := s.rt.List(ctx)
 	if err != nil {
-		return toStatus(err)
+		return nil, toStatus(err)
 	}
-	if i := slices.IndexFunc(servers, func(srv runtime.Server) bool {
-		return srv.Uses(spec.Port) && (srv.ID != spec.ID || spec.BedrockPort == spec.Port)
-	}); i >= 0 {
-		return status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another port.", spec.Port, servers[i].Name)
+	if err := check(servers); err != nil {
+		return nil, err
 	}
-	return nil
+	if other, ok := s.reserved[port]; ok && other != id {
+		return nil, status.Errorf(codes.AlreadyExists, "Port %d is about to be used by another server. Choose another port.", port)
+	}
+	s.reserved[port] = id
+	return func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.reserved, port)
+	}, nil
 }
 
 func (s *Service) StartServer(ctx context.Context, req *noryxv1.StartServerRequest) (*noryxv1.StartServerResponse, error) {
@@ -376,9 +410,11 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNe
 	if msg != "" {
 		return nil, status.Error(codes.InvalidArgument, msg)
 	}
-	if err := s.checkBedrock(ctx, req.GetId(), network.BedrockPort); err != nil {
+	release, err := s.checkBedrock(ctx, req.GetId(), network.BedrockPort)
+	if err != nil {
 		return nil, err
 	}
+	defer release()
 	restarted, err := s.rt.Configure(ctx, req.GetId(), network)
 	switch {
 	case errors.Is(err, runtime.ErrUnsupported):
@@ -391,28 +427,26 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNe
 	return &noryxv1.ConfigureNetworkResponse{Restarted: restarted}, nil
 }
 
-// checkBedrock checks that only a proxy gets a Bedrock port, and one no other server uses.
-func (s *Service) checkBedrock(ctx context.Context, id string, port uint32) error {
+// checkBedrock checks that only a proxy gets a Bedrock port, and reserves it; see reserve.
+func (s *Service) checkBedrock(ctx context.Context, id string, port uint32) (release func(), err error) {
 	if port == 0 {
+		return func() {}, nil
+	}
+	return s.reserve(ctx, id, port, func(servers []runtime.Server) error {
+		i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.ID == id })
+		switch {
+		case i < 0:
+			return toStatus(runtime.ErrNotFound)
+		case !servers[i].Type.Proxy():
+			return status.Error(codes.InvalidArgument, "Only proxies let Bedrock players join.")
+		case port < minPort || port > maxPort:
+			return status.Errorf(codes.InvalidArgument, "The Bedrock port must be between %d and %d.", minPort, maxPort)
+		}
+		if other := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.Uses(port) && (srv.ID != id || srv.Port == port) }); other >= 0 {
+			return status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another Bedrock port.", port, servers[other].Name)
+		}
 		return nil
-	}
-	servers, err := s.rt.List(ctx)
-	if err != nil {
-		return toStatus(err)
-	}
-	i := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.ID == id })
-	switch {
-	case i < 0:
-		return toStatus(runtime.ErrNotFound)
-	case !servers[i].Type.Proxy():
-		return status.Error(codes.InvalidArgument, "Only proxies let Bedrock players join.")
-	case port < minPort || port > maxPort:
-		return status.Errorf(codes.InvalidArgument, "The Bedrock port must be between %d and %d.", minPort, maxPort)
-	}
-	if other := slices.IndexFunc(servers, func(srv runtime.Server) bool { return srv.Uses(port) && (srv.ID != id || srv.Port == port) }); other >= 0 {
-		return status.Errorf(codes.AlreadyExists, "Port %d is already used by %q. Choose another Bedrock port.", port, servers[other].Name)
-	}
-	return nil
+	})
 }
 
 // networkOf validates a network configuration, which ends up in configuration files.
