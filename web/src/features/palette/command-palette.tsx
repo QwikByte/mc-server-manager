@@ -13,8 +13,8 @@ const Lazy = lazy(() => load().then((Palette) => ({ default: Palette })))
 
 const mac = /mac|iphone|ipad/i.test(navigator.userAgent)
 
-/** Opens the palette with Ctrl+K or ⌘K anywhere in the panel, or with its button. */
-export function PaletteButton({ className, onOpen }: { className?: string; onOpen?: () => void }) {
+/** Opens the palette with Ctrl+K or ⌘K anywhere in the panel, or with its button; a folded one only shows its icon. */
+export function PaletteButton({ className, onOpen, folded }: { className?: string; onOpen?: () => void; folded?: boolean }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const preload = () => void load()
@@ -44,8 +44,8 @@ export function PaletteButton({ className, onOpen }: { className?: string; onOpe
         }}
       >
         <MagnifyingGlassIcon />
-        <span className="flex-1 text-left max-md:sr-only">{t("Search…")}</span>
-        <kbd className="rounded border bg-muted px-1.5 font-mono text-[0.6875rem] max-md:hidden">{mac ? "⌘K" : "Ctrl K"}</kbd>
+        <span className={cn("flex-1 text-left max-md:sr-only", folded && "md:sr-only")}>{t("Search…")}</span>
+        <kbd className={cn("rounded border bg-muted px-1.5 font-mono text-[0.6875rem] max-md:hidden", folded && "md:hidden")}>{mac ? "⌘K" : "Ctrl K"}</kbd>
       </Button>
       {open &&
         (Loaded ? (

@@ -55,6 +55,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/overlay"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
+	"github.com/QwikByte/noryx/internal/master/preference"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 	"github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/settings"
@@ -249,7 +250,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes, Overlay: overlays,
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks, fileSets), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
-		Usage: usage.NewStore(m.db, nodes), Tags: tags, Operations: operation.New(m.quick), Moves: moves,
+		Usage: usage.NewStore(m.db, nodes), Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
 	}
 }
 

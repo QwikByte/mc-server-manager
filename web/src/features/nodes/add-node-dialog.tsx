@@ -1,6 +1,6 @@
 import { PlusIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, type ReactElement, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,7 +19,8 @@ import { EnrollSteps } from "./enroll-steps"
 
 const empty = { name: "", address: "" }
 
-export function AddNodeDialog() {
+/** trigger replaces the button that opens the dialog. */
+export function AddNodeDialog({ trigger }: { trigger?: ReactElement }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(empty)
   const create = useCreateNode()
@@ -40,10 +41,12 @@ export function AddNodeDialog() {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <PlusIcon />
-          {t("Add node")}
-        </Button>
+        {trigger ?? (
+          <Button>
+            <PlusIcon />
+            {t("Add node")}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         {create.data ? (

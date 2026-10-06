@@ -78,6 +78,20 @@ more memory assigned than they can give or almost full storage, and proxies that
 It counts like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned against
 what the online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
 
+The Overview is made of widgets: key figures, what needs attention, the nodes with their CPU of the last 24 hours, the
+load of all nodes over the last 24 hours, pinned servers, networks, the servers with the most players, the latest entries
+of the log and quick actions to create a server or a network or add a node. Each user only gets the widgets their
+permissions allow. **Customize** arranges them: widgets are dragged by their handle to the place of another, or moved a
+place with the arrow keys on it, span one, two or all three columns, and are hidden and added again; **Reset** brings
+back the default layout. The master keeps the layout for each user, like the language, so it applies in all their
+browsers. The players online and the CPU load of the key figures show how they went while the panel is open.
+
+Servers are pinned with the pin on their card, in the table or on their page. Pinned servers are listed with their
+state in the sidebar and in their widget, which also starts and stops them. The master keeps them for each user too,
+up to 20; they follow a server that moves and go with a deleted server or a removed node. The sidebar folds to its
+icons, which each browser remembers. Lists, figures, charts, tabs and pages are animated, unless the operating system
+asks for less motion.
+
 The **Servers** page and the page of each node list servers as cards or as a compact table, the table from 13 servers
 on until one is chosen. They are searched, filtered by state, type, node, network and tag, sorted by name, state,
 players, CPU, memory or node, and grouped by network, node, type or tag, in groups that fold away. The address keeps
@@ -809,6 +823,7 @@ internal/master/
   app/                  wiring, HTTP and gRPC listeners, CLI
   auth/                 accounts, passwords, setup links, two-factor authentication, sessions, sign-in
   access/               permissions, groups with scopes, user management, the permission every API route needs
+  preference/           each user's preferences of the panel: the layout of the overview and pinned servers
   settings/             settings of the master that the panel changes, and a description of the running master
   terminal/             runs the commands of the master and of the agents for the panel
   node/                 node registry, enrollment, agent connections

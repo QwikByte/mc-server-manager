@@ -1,5 +1,8 @@
 import { DesktopIcon, MoonIcon, SunIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
+import { LayoutGroup } from "motion/react"
+import { useId } from "react"
+import { Highlight } from "@/components/segmented"
 import { msg } from "@/lib/i18n"
 import { setTheme, type Theme, useTheme } from "@/lib/theme"
 import { cn } from "@/lib/utils"
@@ -14,20 +17,23 @@ export function ThemeToggle({ className }: { className?: string }) {
   const theme = useTheme()
   return (
     <div role="radiogroup" aria-label={t("Colour theme")} className={cn("flex rounded-full bg-muted p-0.5", className)}>
-      {options.map(({ value, label, icon: Icon }) => (
-        <button
-          key={value}
-          type="button"
-          role="radio"
-          aria-checked={theme === value}
-          aria-label={t(label)}
-          title={t(label)}
-          onClick={() => setTheme(value)}
-          className="grid h-7 flex-1 place-items-center rounded-full px-2 text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-card aria-checked:text-foreground aria-checked:shadow-sm"
-        >
-          <Icon className="size-3.5" weight={theme === value ? "fill" : "regular"} />
-        </button>
-      ))}
+      <LayoutGroup id={useId()}>
+        {options.map(({ value, label, icon: Icon }) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={theme === value}
+            aria-label={t(label)}
+            title={t(label)}
+            onClick={() => setTheme(value)}
+            className="relative isolate grid h-7 flex-1 place-items-center rounded-full px-2 text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:text-foreground"
+          >
+            {theme === value && <Highlight className="rounded-full" />}
+            <Icon className="size-3.5" weight={theme === value ? "fill" : "regular"} />
+          </button>
+        ))}
+      </LayoutGroup>
     </div>
   )
 }

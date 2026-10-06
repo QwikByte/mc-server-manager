@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
+import { PinButton } from "@/features/preferences/pin-button"
 import { SaveTemplateDialog } from "@/features/templates/save-template-dialog"
 import { cn } from "@/lib/utils"
 import { type Server, type ServerAction, useMove, useServerAction } from "./api"
@@ -38,17 +39,20 @@ const pendingLabels: Record<ServerAction, (name: string) => string> = {
 /**
  * Start or stop a server, copy it, move it, tag it, save it as a template and delete it after
  * confirmation. While it moves, it can't be changed. Compact actions only have icons, e.g. in a table.
+ * With pin, they also pin it to the sidebar and the overview.
  */
 export function ServerActions({
   nodeId,
   server,
   onDeleted,
   compact,
+  pin,
 }: {
   nodeId: string
   server: Server
   onDeleted?: () => void
   compact?: boolean
+  pin?: boolean
 }) {
   const mutation = useServerAction(nodeId)
   const move = useMove(server.id)
@@ -91,7 +95,8 @@ export function ServerActions({
       </Pill>
     )
   }
-  if (powers.length === 0 && !duplicate && !saveTemplate && !tags && !may("servers.delete")) return null
+  const pinButton = pin && <PinButton nodeId={nodeId} server={server} />
+  if (powers.length === 0 && !duplicate && !saveTemplate && !tags && !may("servers.delete")) return pinButton || null
 
   return (
     <div className={cn("flex items-center", compact ? "justify-end gap-0.5" : "flex-wrap gap-2")}>
@@ -111,6 +116,7 @@ export function ServerActions({
         </Button>
       ))}
       <div className={cn("flex items-center gap-1", !compact && "ml-auto")}>
+        {pinButton}
         {(duplicate || movable || saveTemplate || tags) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

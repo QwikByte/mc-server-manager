@@ -37,6 +37,7 @@ export function TimeChart({
   format,
   max: fixedMax,
   nice = niceMax,
+  className,
 }: {
   title: string
   points: UsagePoint[]
@@ -49,6 +50,7 @@ export function TimeChart({
   /** Top of the axis, e.g. a limit; by default the highest value rounded up with nice. */
   max?: number
   nice?: (value: number) => number
+  className?: string
 }) {
   const [active, setActive] = useState<number>()
   const from = end - span
@@ -78,7 +80,7 @@ export function TimeChart({
   }
 
   return (
-    <figure className="surface min-w-0 rounded-xl p-4 sm:p-5">
+    <figure className={cn("surface min-w-0 rounded-xl p-4 sm:p-5", className)}>
       <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <span className="text-sm font-semibold">{title}</span>
         {series.length > 1 && (

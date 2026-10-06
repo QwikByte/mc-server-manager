@@ -1,13 +1,16 @@
 import { CaretRightIcon, CpuIcon, GraphIcon, HardDrivesIcon, HashIcon, MemoryIcon, UsersIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
+import { motion } from "motion/react"
 import type { ReactNode } from "react"
 import { Chip } from "@/components/chip"
 import { IconTile } from "@/components/icon-tile"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { PinButton } from "@/features/preferences/pin-button"
 import { formatCores } from "@/features/usage/format"
 import { formatBytes, formatMegabytes } from "@/lib/format"
+import { rise } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 import { type NodeServer, serverKey } from "./api"
 import type { Facts, Group } from "./browse"
@@ -123,9 +126,10 @@ export function ServerGrid({ groups, facts, showNode, selected, onSelect, collap
           )}
           {!collapsed(group) && (
             <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {group.servers.map((server) => (
+              {group.servers.map((server, i) => (
                 <ServerCard
                   key={serverKey(server)}
+                  index={i}
                   server={server}
                   facts={facts}
                   showNode={showNode}
@@ -146,12 +150,14 @@ export function ServerGrid({ groups, facts, showNode, selected, onSelect, collap
  * use.
  */
 function ServerCard({
+  index,
   server,
   facts,
   showNode,
   selected,
   onSelect,
 }: {
+  index: number
   server: NodeServer
   facts: Facts
   showNode: boolean
@@ -162,9 +168,10 @@ function ServerCard({
   const network = facts.network(server)
   const look = serverLook(server.type)
   return (
-    <li
+    <motion.li
+      {...rise(index)}
       className={cn(
-        "group surface relative flex flex-col gap-4 rounded-xl p-5 transition-all hover:shadow-lg hover:ring-primary/30",
+        "group surface lift relative flex flex-col gap-4 rounded-xl p-5 hover:ring-primary/30",
         selected && "ring-2 ring-primary/50 hover:ring-primary/50",
       )}
     >
@@ -180,6 +187,13 @@ function ServerCard({
           </p>
         </div>
         <ServerStateBadge server={server} nodeId={server.nodeId} />
+        {/* Shows on hover, and always once pinned or without a pointer that hovers. */}
+        <PinButton
+          nodeId={server.nodeId}
+          server={server}
+          size="icon-xs"
+          className="relative z-10 -my-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-pressed:opacity-100 pointer-coarse:opacity-100"
+        />
         <Checkbox
           checked={selected}
           aria-label={t("Select {{name}}", { name: server.name })}
@@ -210,7 +224,7 @@ function ServerCard({
       <div className="relative z-10 mt-auto border-t pt-4 empty:hidden">
         <ServerActions nodeId={server.nodeId} server={server} />
       </div>
-    </li>
+    </motion.li>
   )
 }
 
@@ -304,7 +318,7 @@ export function ServerTable({ groups, facts, showNode, selected, onSelect, colla
                       )}
                     </TableCell>
                     <TableCell className="pr-3">
-                      <ServerActions nodeId={server.nodeId} server={server} compact />
+                      <ServerActions nodeId={server.nodeId} server={server} compact pin />
                     </TableCell>
                   </TableRow>
                 )

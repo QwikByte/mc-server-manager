@@ -24,6 +24,7 @@ import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
+import { PinButton } from "@/features/preferences/pin-button"
 import { formatMegabytes } from "@/lib/format"
 import { useServer } from "./api"
 import { Console } from "./console"
@@ -116,7 +117,12 @@ export function ServerPage() {
           <PageHeader
             {...serverLook(server.type)}
             title={server.name}
-            badge={<ServerStateBadge server={server} nodeId={nodeId} />}
+            badge={
+              <>
+                <ServerStateBadge server={server} nodeId={nodeId} />
+                <PinButton nodeId={nodeId} server={server} />
+              </>
+            }
             description={
               <span className="mt-1 flex flex-wrap gap-2 text-foreground">
                 <Chip>
