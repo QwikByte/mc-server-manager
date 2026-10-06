@@ -70,6 +70,16 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn off the whitelist of {{count}} servers", { count, defaultValue_one: "Turn off the whitelist of {{count}} server" })
     case "fileset.apply":
       return t("Apply the file set {{name}}", { name: subject })
+    case "datastore.create":
+      return t("Create the datastore {{name}}", { name: subject })
+    case "datastore.update":
+      return t("Change the datastore {{name}}", { name: subject })
+    case "datastore.rotate":
+      return t("Give {{name}} a new password", { name: subject })
+    case "datastore.backup":
+      return t("Back up the datastore {{name}}", { name: subject })
+    case "datastore.restore":
+      return t("Restore a backup of the datastore {{name}}", { name: subject })
     case "servers.start":
       return t("Start {{count}} servers", { count, defaultValue_one: "Start {{count}} server" })
     case "servers.stop":
@@ -85,6 +95,26 @@ export function titleOf(op: Operation, name?: string): string {
 /** What a step of an operation does. */
 export function stepOf(op: Operation, step: string): string {
   const verb = op.kind.split(".")[1]
+  if (op.kind.startsWith("datastore.")) {
+    switch (step) {
+      case "image":
+        return t("Download the database image")
+      case "start":
+        return verb === "create" ? t("Start the datastore") : t("Start the servers again")
+      case "stop":
+        return t("Stop the servers that use it")
+      case "network":
+        return t("Connect the servers of the network")
+      case "dump":
+        return t("Dump the databases")
+      case "load":
+        return t("Load the dumps")
+      case "check":
+        return t("Check the backup")
+      case "password":
+        return t("Set the new password")
+    }
+  }
   switch (step) {
     case "image":
       return t("Prepare the server image")

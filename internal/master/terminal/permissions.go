@@ -78,8 +78,8 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 	}
 	return map[string]check{
 		"datastore list":    global(access.DatastoresView),
-		"datastore dumps":   global(access.DatastoresView),
-		"datastore dump":    global(access.DatastoresManage),
+		"datastore backups": global(access.DatastoresView),
+		"datastore backup":  global(access.DatastoresManage),
 		"datastore restore": global(access.DatastoresManage),
 		"status":            node(access.ServersView),
 		"server list":       node(access.ServersView),

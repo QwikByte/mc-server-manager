@@ -1,5 +1,6 @@
 import { t } from "i18next"
 import type { Tone } from "@/components/tone"
+import type { Datastore } from "@/features/datastores/api"
 import type { Network } from "@/features/networks/api"
 import { type Node, memoryCapacityMb } from "@/features/nodes/api"
 import type { Overlay } from "@/features/overlay/api"
@@ -17,6 +18,7 @@ export interface Problem {
     | { to: "/nodes/$nodeId/servers/$serverId"; params: { nodeId: string; serverId: string } }
     | { to: "/nodes/$nodeId"; params: { nodeId: string } }
     | { to: "/networks/$networkId"; params: { networkId: string } }
+    | { to: "/networks/$networkId/databases"; params: { networkId: string } }
 }
 
 const full = 0.9
@@ -28,6 +30,7 @@ export function problemsOf(
   networks: Network[],
   usages: ReturnType<typeof useUsages>,
   overlay?: Overlay,
+  datastores: Datastore[] = [],
 ): Problem[] {
   const problems: Problem[] = []
   const add = (p: Problem) => problems.push(p)
@@ -146,6 +149,28 @@ export function problemsOf(
         title: t("The proxy of {{name}} may send players to the wrong address", { name: network.name }),
         detail: t("Its servers couldn't be configured. Apply the network again."),
         link: { to: "/networks/$networkId", params: { networkId: network.id } },
+      })
+    }
+  }
+  for (const ds of datastores) {
+    const network = networks.find((n) => n.id === ds.networkId)
+    const link = { to: "/networks/$networkId/databases", params: { networkId: ds.networkId } } as const
+    const running = network?.backends.some((b) => servers.find((s) => s.nodeId === b.nodeId && s.id === b.serverId)?.state === "running")
+    if (ds.state === "unhealthy") {
+      add({
+        key: `datastore/${ds.id}`,
+        tone: "destructive",
+        title: t("The datastore {{name}} is unhealthy", { name: ds.name }),
+        detail: [network?.name, ds.nodeName].filter(Boolean).join(" · "),
+        link,
+      })
+    } else if (ds.state === "stopped" && running) {
+      add({
+        key: `datastore/${ds.id}`,
+        tone: "warning",
+        title: t("The datastore {{name}} is stopped", { name: ds.name }),
+        detail: t("The servers of {{network}} run without its databases.", { network: network?.name ?? "…" }),
+        link,
       })
     }
   }

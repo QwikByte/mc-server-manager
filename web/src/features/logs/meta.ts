@@ -24,6 +24,7 @@ export const categories: Record<string, string> = {
   plugins: msg("Plugins and mods"),
   backups: msg("Backups"),
   networks: msg("Networks"),
+  databases: msg("Databases"),
   players: msg("Players"),
   templates: msg("Templates"),
   policies: msg("Policies"),

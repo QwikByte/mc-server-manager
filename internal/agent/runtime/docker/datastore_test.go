@@ -207,3 +207,43 @@ func must(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+// TestUpgradeRollsBackLive upgrades a datastore whose dump its user may not load, a view of
+// the superuser, after which it runs the old version on the old data again.
+func TestUpgradeRollsBackLive(t *testing.T) {
+	if os.Getenv("NORYX_DOCKER_TEST") == "" {
+		t.Skip("set NORYX_DOCKER_TEST to run datastores in Docker")
+	}
+	d, err := New(storage.New(t.TempDir()))
+	must(t, err)
+	ctx := t.Context()
+	spec := runtime.DatastoreSpec{ID: runtime.NewID(), Engine: noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB, Version: "11.8", MemoryMB: 512}
+	must(t, d.CreateDatastore(ctx, spec))
+	t.Cleanup(func() { must(t, d.RemoveDatastore(context.WithoutCancel(ctx), spec.ID)) })
+	must(t, d.StartDatastore(ctx, spec.ID))
+	must(t, d.waitReady(ctx, spec.ID))
+	const password = "abcdefghijklmnopqrstuvwxyz234567"
+	must(t, d.EnsureDatabase(ctx, spec.ID, "shop", password))
+	asUser(t, d, spec.ID, password, "CREATE TABLE items (v INT); INSERT INTO items VALUES (42);")
+	s, err := d.session(ctx, spec.ID)
+	must(t, err)
+	_, err = s.query(ctx, "CREATE DEFINER = 'root'@'localhost' VIEW shop.all_items AS SELECT v FROM shop.items;")
+	must(t, err)
+
+	spec.Version = "12.3"
+	if err := d.UpdateDatastore(ctx, spec, false); err == nil {
+		t.Fatal("the upgrade loaded a view of the superuser as the user")
+	}
+	list, err := d.ListDatastores(ctx)
+	must(t, err)
+	if len(list) != 1 || list[0].Version != "11.8" || list[0].Previous != "" {
+		t.Fatalf("after the failed upgrade: %+v", list)
+	}
+	if _, err := os.Stat(d.mustDir(t, list[0].DatastoreSpec) + "/" + dataFolder("12.3")); !os.IsNotExist(err) {
+		t.Errorf("the new data stayed: %v", err)
+	}
+	must(t, d.waitReady(ctx, spec.ID))
+	if got := asUser(t, d, spec.ID, password, "SELECT SUM(v) FROM items;"); got != "42" {
+		t.Errorf("after the rollback, the sum is %q", got)
+	}
+}

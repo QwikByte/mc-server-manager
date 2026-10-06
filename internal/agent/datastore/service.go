@@ -288,11 +288,10 @@ func (s *Service) CreateDump(ctx context.Context, req *noryxv1.CreateDumpRequest
 		return nil, err
 	}
 	d := backup.Details{Label: label, Created: time.Now(), Paths: names, JobID: req.GetJobId()}
-	progress.Step(ctx, "dump", int64(len(names)))
+	progress.Step(ctx, "dump", 0)
 	b, err := s.dumps.Add(owner(ds.ID), cmp.Or(req.GetLocation(), storage.Default), backup.NewID(d.Created), d, ds.Size, func(w io.Writer) error {
 		zw := zip.NewWriter(w)
-		for i, name := range names {
-			progress.Set(ctx, int64(i), int64(len(names)))
+		for _, name := range names {
 			f, err := zw.CreateHeader(&zip.FileHeader{Name: name + ".sql", Method: zip.Deflate, Modified: d.Created})
 			if err != nil {
 				return err
@@ -376,9 +375,8 @@ func (s *Service) RestoreDump(ctx context.Context, req *noryxv1.RestoreDumpReque
 			}
 		}
 	}
-	progress.Step(ctx, "load", int64(len(names)))
-	for i, name := range names {
-		progress.Set(ctx, int64(i), int64(len(names)))
+	progress.Step(ctx, "load", 0)
+	for _, name := range names {
 		f := files[name]
 		if f == nil {
 			return nil, status.Errorf(codes.DataLoss, "The dump lacks %s.", name)

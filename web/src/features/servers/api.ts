@@ -181,6 +181,8 @@ export interface MoveRequest {
   storage: string
   /** Whether the backups move too; otherwise they are deleted with the server on its old node. */
   backups: boolean
+  /** Confirms a move to a node that doesn't reach the databases of the server's network. */
+  withoutDatabases?: boolean
 }
 
 export function useMoveServer(nodeId: string, serverId: string) {

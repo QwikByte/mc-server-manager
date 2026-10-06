@@ -34,6 +34,7 @@ export function TaskForm<S>({
   pending,
   error,
   onSubmit,
+  targetsOptional,
   children,
 }: {
   initial: TaskInput<S>
@@ -42,6 +43,8 @@ export function TaskForm<S>({
   pending: boolean
   error: Error | null
   onSubmit: (input: TaskInput<S>) => void
+  /** Whether a task with the settings may have no servers. */
+  targetsOptional?: (settings: S) => boolean
   children: (settings: S, set: (change: Partial<S>) => void) => ReactNode
 }) {
   const [form, setForm] = useState(initial)
@@ -82,7 +85,7 @@ export function TaskForm<S>({
 
       <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">
         {error && <FieldError className="mr-auto">{error.message}</FieldError>}
-        <Button type="submit" disabled={!dirty || pending || form.targets.length === 0}>
+        <Button type="submit" disabled={!dirty || pending || (form.targets.length === 0 && !targetsOptional?.(form.settings))}>
           {pending ? t("Saving…") : submitLabel}
         </Button>
       </div>

@@ -18,22 +18,22 @@ import (
 func (c cli) datastore() *cobra.Command {
 	cmd := &cobra.Command{Use: "datastore", Short: "Back up and restore the databases of the networks of this node"}
 	var label string
-	dump := &cobra.Command{
-		Use:   "dump <datastore-id> [database]...",
-		Short: "Dump the databases of a datastore, or some of them; it keeps running",
+	backup := &cobra.Command{
+		Use:   "backup <datastore-id> [database]...",
+		Short: "Back up the databases of a datastore as SQL dumps, or some of them; it keeps running",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.long(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
 				req := &noryxv1.CreateDumpRequest{Id: args[0], Databases: args[1:], Label: label}
 				res, err := noryxv1.NewDatastoreServiceClient(conn).CreateDump(ctx, req)
 				if err == nil {
-					fmt.Fprintf(cmd.OutOrStdout(), "Created dump %s (%.1f MiB).\n", res.GetDump().GetId(), float64(res.GetDump().GetSize())/(1<<20))
+					fmt.Fprintf(cmd.OutOrStdout(), "Created backup %s (%.1f MiB).\n", res.GetDump().GetId(), float64(res.GetDump().GetSize())/(1<<20))
 				}
 				return err
 			})
 		},
 	}
-	dump.Flags().StringVar(&label, "label", "", "describes the dump, e.g. before an update")
+	backup.Flags().StringVar(&label, "label", "", "describes the backup, e.g. before an update")
 	cmd.AddCommand(
 		&cobra.Command{
 			Use:   "list",
@@ -58,10 +58,10 @@ func (c cli) datastore() *cobra.Command {
 				})
 			},
 		},
-		dump,
+		backup,
 		&cobra.Command{
-			Use:   "dumps <datastore-id>",
-			Short: "List the dumps of a datastore",
+			Use:   "backups <datastore-id>",
+			Short: "List the backups of a datastore",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.call(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
@@ -80,8 +80,8 @@ func (c cli) datastore() *cobra.Command {
 			},
 		},
 		&cobra.Command{
-			Use:   "restore <datastore-id> <dump-id> [database]...",
-			Short: "Replace databases with their dump, all in it or some; their users keep their passwords",
+			Use:   "restore <datastore-id> <backup-id> [database]...",
+			Short: "Replace databases with their backup, all in it or some; their users keep their passwords",
 			Args:  cobra.MinimumNArgs(2),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return c.long(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
@@ -89,7 +89,7 @@ func (c cli) datastore() *cobra.Command {
 					if _, err := noryxv1.NewDatastoreServiceClient(conn).RestoreDump(ctx, req); err != nil {
 						return err
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "Restored dump %s.\n", args[1])
+					fmt.Fprintf(cmd.OutOrStdout(), "Restored backup %s.\n", args[1])
 					return nil
 				})
 			},

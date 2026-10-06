@@ -234,7 +234,9 @@ proxy of a network. Paths are relative to the server's folder, e.g. `plugins/Luc
   the server's name in its network, for each server; these only hold letters, digits and a few other characters, so
   they can't add lines to a file. `{{secret:<name>}}` is a secret of the set: a single line of up to 1 KiB, typed in or
   generated randomly. The API only tells the names of secrets and when they changed, never their values. Other text in
-  double braces stays as it is, as some plugins use it themselves. `{{datastore:…}}` is kept for databases of networks.
+  double braces stays as it is, as some plugins use it themselves. `{{datastore:<datastore>.<database>.<field>}}` is a
+  field of a [database](#databases) of the server's network: `host`, `port`, `database`, `user` or `password`, as the
+  server reaches it; only the agent fills in the password, like a secret.
 - **Applying.** Saving changes no server. **Apply** shows first what changes on each server, with the diff of each file
   between the server's copy and the new version, servers with the same changes together; files with secrets show the
   version the server has and the new one, with placeholders instead of values, and whether the server's copy changed. It
@@ -294,12 +296,15 @@ its worlds to disk first and pauses saving while they are archived, so players s
 - **Jobs.** The **Backups** page schedules backup jobs for servers or whole nodes (including servers created later):
   on chosen weekdays at one or more times of day in a time zone. A job keeps the newest backups per server and deletes
   older ones; backups made by hand are never deleted that way. A job backs up one server per node at a time, and
-  skips servers without any of the selected data yet, e.g. new ones that never started: its last run lists them.
+  skips servers without any of the selected data yet, e.g. new ones that never started: its last run lists them. A
+  job can also back up [datastores](#databases) with all their databases, also without any server, one at a time per
+  node together with the servers there.
 - **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds
   and leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
   stopped while the files are swapped, and started again afterwards.
 - Deleting a server deletes its backups too. Locally, `noryx-agent backup list|create|restore` works without the
   master, e.g. to restore a server while the master is unreachable.
+- **Databases** are backed up as SQL dumps instead, see [Databases](#databases).
 
 **The master** keeps users, nodes, networks, templates, file sets with their secrets, backup jobs, policies, settings and
 the log in its database, and the certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling every node again.
@@ -445,6 +450,43 @@ removes it when it leaves.
   the confirmation that a firewall protects them, and no server of it moves to such a node without.
 - New Minecraft servers start with a whitelist: add players on the **Players** page, for one server or the network.
 
+## Databases
+
+A network gets datastores: MariaDB or PostgreSQL servers that the agent of a node of its choice runs from the official
+`mariadb` and `postgres` images, for plugins that keep their data in SQL and share it across the network, e.g.
+LuckPerms, LiteBans, Plan or CoreProtect (which only speaks MySQL). A network has up to 10 datastores, and each up to 50
+databases, each with a user of the same name that has rights on that database only.
+
+- **Creating.** The network's **Databases** tab creates a datastore with a name, an engine, a node, a storage location
+  and its memory, which counts against the node's memory limit like that of servers. It gets the newest major version
+  the agent knows (MariaDB 11.8 and 12.3, PostgreSQL 17 and 18). Its data lives in
+  `<location>/datastores/<id>/data-<version>`, owned by the image's user.
+- **Reaching it.** The network's servers on the datastore's node, the proxy included, join its internal Docker network
+  `noryx-db-<id>`, which has no route to the internet, while they run, and keep it when their container is created
+  again; they reach it by the name of its container. Servers of other nodes reach it over the
+  [private network of the nodes](#networks) if both nodes are part of it: the datastore's node publishes its port there,
+  for the nodes of the network's servers only. Without the private network, servers of other nodes can't reach it, and
+  the file sets that use it tell why. Moving a server to a node that can't reach the datastores of its network needs a
+  confirmation.
+- **Credentials.** The master generates the password of each database: 32 characters from `a-z2-7`, which need no
+  quoting in YAML, TOML, HOCON or properties files. File sets put them into the configuration of plugins with
+  `{{datastore:<datastore>.<database>.<field>}}`, e.g. `{{datastore:main.luckperms.password}}`, filled in for each
+  server: `host` and `port` as the server reaches the datastore, `database`, `user` and `password`. The panel never shows
+  passwords; the tab lists the placeholders to copy and the servers whose file sets use each database. **New password**
+  gives a user another one, applies the file sets that use it again and restarts their running servers.
+- **Backups.** **Back up now** and backup jobs dump the databases into a ZIP archive with one `<database>.sql` each
+  (`mariadb-dump --single-transaction`, `pg_dump`), kept next to the backups of servers in
+  `<backups of the location>/datastores/<id>`, while the datastore keeps running. Restoring creates the databases of a
+  dump again and loads them as each database's own user, while the running servers whose file sets use them are
+  stopped. Dumps can be downloaded. Locally, `noryx-agent datastore list|backup|backups|restore` works without the master.
+- **Changes.** The settings change the memory and CPU limits, download the newest image of the version, or move the
+  datastore to a newer major version: the agent dumps the databases, creates the datastore again on new data, loads the
+  dumps and creates the users again with the hashes of their passwords, while the servers that use the databases are
+  stopped. A failure goes back to the old version, and its data stays until it is removed on the tab. The overview
+  lists datastores that are unhealthy, or stopped while servers of their network run.
+- **Deleting** a datastore, once its name is typed, removes its container, network, data and dumps. A network with
+  datastores can't be deleted.
+
 ## Players
 
 The **Players** page lists the players online on all game servers, with their server and network, to search and act on;
@@ -540,7 +582,7 @@ only shows to users with the permission for it.
   range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can also look
   for an update right away.
 - **Agents** lists all nodes with their agent version, certificate and settings, which can be changed there too.
-- **Terminal** runs the commands of `noryx-agent` (`status`, `server …`, `backup …`) on any node, and the master's own
+- **Terminal** runs the commands of `noryx-agent` (`status`, `server …`, `backup …`, `datastore …`) on any node, and the master's own
   commands: `status`, `node list`, `node renew <node>` and `logs`. `help` lists them; output streams in as it happens, e.g.
   for `server logs <id>`, and Ctrl+C stops a command. A node's page opens its terminal directly. Besides the
   permission to use the terminal, every command needs its own, e.g. `server restart <id>` that to restart this server.
@@ -556,8 +598,8 @@ Users get their permissions from groups; a user can be in several groups and has
   certificates, remove, add, manage the private network, which applies to all nodes), servers (see, create, start, stop, restart, change settings, delete), console (read, send
   commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download, change
   files, `server.properties`, plugins and mods),
-  backups (see and download, back up, restore, delete), the log, networks, templates, file sets, backup jobs, policies,
-  the master's settings, the terminal, users and groups. Previewing and applying a file set also needs the permission
+  backups (see and download, back up, restore, delete), the log, networks, databases of networks, templates, file sets,
+  backup jobs, policies, the master's settings, the terminal, users and groups. Previewing and applying a file set also needs the permission
   to change the files of every server it touches, and restarting them the one to restart each. Choosing a permission also chooses what it needs, e.g. seeing the servers
   one may restart.
 - **Scopes.** The node and server permissions of a group apply to all servers, or only to chosen nodes (including
@@ -665,6 +707,24 @@ Users get their permissions from groups; a user can be in several groups and has
   secrets of the server, so a set can't change forwarding or RCON settings, and the agent writes no file through a link
   or into a file where a folder should be. A compromised server can change its own manifest, which only changes its own
   state or the hiding of secrets it can read anyway.
+- **Databases.** A datastore runs as the image's user without capabilities, with `no-new-privileges`, memory, CPU and
+  PID limits and a health check. The agent generates the superuser's password, which the image reads from a file that
+  only it may read, never from the environment or labels, and which never leaves the node; MariaDB's root may only sign
+  in on the container itself. Every database has its own user with rights on it alone, and on PostgreSQL nobody else
+  may connect to it or to the superuser's database. Only the network's servers reach a datastore: on its node over an
+  internal Docker network without internet, which they share with each other as backends in a proxy's network already
+  do; from other nodes only over the private network of the nodes, for the nodes of its servers, never at a public
+  address. The agent checks every name against `^[a-z][a-z0-9_]{0,31}$`, refuses those of the engines themselves, and
+  only takes passwords from `a-z2-7`, so no statement or configuration file needs escaping; statements go to the
+  clients in the container on their standard input. Dumps are loaded as their database's own user, never as the
+  superuser, with MariaDB's sandbox mode, so a dump can't gain more rights; as MariaDB has no way to sign in as a user
+  without its password, the user gets a random one for the time of the load. The agent never stores the passwords of
+  users: upgrades keep the hashes, which it checks before it uses them in a statement. Dumps are kept like backups and
+  checked before a restore drops anything, so a damaged one changes nothing. The passwords are stored in the master's
+  database like the forwarding secret, never returned by the API or logged, and reach servers only as values of file
+  sets, which hide the files that hold them. A compromised master knows them, as it knows the forwarding secret, and
+  could restore or delete data, but can't learn the superuser's password or place data outside the allowed storage
+  locations.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
   directory. A copied Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a
   copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. Copied proxies also
@@ -737,7 +797,7 @@ Users get their permissions from groups; a user can be in several groups and has
 The code is organised by feature, not by layer.
 
 ```
-api/noryx/v1/            gRPC contract (enrollment, node, server, files, file sets, properties, proxy, players, plugins, backups, log, stats, progress, overlay), generated code and the rules both sides check
+api/noryx/v1/            gRPC contract (enrollment, node, server, files, file sets, datastores, properties, proxy, players, plugins, backups, log, stats, progress, overlay), generated code and the rules both sides check
 cmd/noryx-master/        master binary
 cmd/noryx-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -769,6 +829,8 @@ internal/master/
   modpack/              creates servers from Modrinth modpacks: checks a pack and writes its files into the server
   template/             templates for new servers
   fileset/              file sets: versions, targets, secrets, variables, the state of servers, previews and applying
+  datastore/            datastores of networks: databases and their passwords, ports in the private network, the
+                        fields of file sets, dumps, upgrades and rotating passwords
   schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API
   backup/               backups of servers, and backup jobs as scheduled tasks
   policy/               policies as scheduled tasks: restarts with warnings, stops, starts, console commands
@@ -791,18 +853,20 @@ internal/agent/
   fileset/              files of file sets on servers: secrets filled in, the manifest that hides them, the state of files
   properties/           reads and updates server.properties, keeping comments
   plugin/               plugin and mod files of servers
-  backup/               backups of servers: selection, archives, restoring
+  backup/               backups of servers: selection, archives, restoring, and the store that keeps dumps too
+  datastore/            datastores of networks: databases and users, dumps loaded as their users, the local CLI's part
   logs/                 latest log entries in memory, log service, logging of every call
   progress/             tells the master the progress of calls, e.g. downloading an image, through ProgressService
   stats/                measures what the node and its servers use: CPU, memory, network, data, players with names, TPS
-  runtime/              runtime interface; docker/ implements it
+  runtime/              runtime interface, also for datastores; docker/ implements it, runtimetest/ keeps datastores in
+                        memory for tests
 internal/e2e/           end-to-end tests over real mTLS, with a fake runtime and a fake Modrinth
 web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, dashboard, nodes, servers, files, properties, networks, plugins, templates, backups,
                         policies, schedules (shared by backups and policies), settings, terminal, logs, usage,
                         access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K),
                         operations (progress, notifications and the list of operations), players, modpacks,
-                        overlay (the private network of the nodes), filesets
+                        overlay (the private network of the nodes), filesets, datastores (the databases of networks)
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

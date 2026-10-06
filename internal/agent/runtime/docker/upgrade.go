@@ -83,8 +83,7 @@ func (d *Docker) upgrade(ctx context.Context, c container.InspectResponse, curre
 	if err != nil {
 		return err
 	}
-	for i, name := range names {
-		progress.Set(ctx, int64(i), int64(len(names)))
+	for _, name := range names {
 		if _, err := s.query(ctx, s.dialect.login(name, credentials[name], true)); err != nil {
 			return err
 		}
@@ -111,8 +110,7 @@ func (d *Docker) dumpAll(ctx context.Context, id, work string) ([]string, map[st
 		return nil, nil, err
 	}
 	credentials := map[string]string{}
-	for i, name := range names {
-		progress.Set(ctx, int64(i), int64(len(names)))
+	for _, name := range names {
 		if credentials[name], err = s.credential(ctx, name); err != nil {
 			return nil, nil, err
 		}
