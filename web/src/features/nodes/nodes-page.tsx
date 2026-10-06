@@ -2,6 +2,8 @@ import { ArrowRightIcon, CpuIcon, CubeIcon, HardDrivesIcon, MemoryIcon } from "@
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
+import { motion } from "motion/react"
+import { AnimatedNumber } from "@/components/animated-number"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
@@ -13,8 +15,10 @@ import { useAccess } from "@/features/access/use-access"
 import { OverlaySettingsSection } from "@/features/overlay/overlay-settings"
 import { allServersQuery, assignedMemoryMb, type NodeServer, runningCount } from "@/features/servers/api"
 import { formatBytes, formatMegabytes } from "@/lib/format"
+import { rise } from "@/lib/motion"
 import { AddNodeDialog } from "./add-node-dialog"
 import { memoryCapacityMb, type Node, nodesQuery, onlineCapacityMb } from "./api"
+import { CpuTrend } from "./cpu-trend"
 import { NodeStatusBadge } from "./node-status"
 
 export function NodesPage() {
@@ -42,10 +46,10 @@ export function NodesPage() {
         <>
           <Overview nodes={nodes} servers={servers} />
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {nodes.map((node) => (
-              <li key={node.id}>
+            {nodes.map((node, i) => (
+              <motion.li key={node.id} {...rise(i)}>
                 <NodeCard node={node} servers={servers?.filter((s) => s.nodeId === node.id)} />
-              </li>
+              </motion.li>
             ))}
           </ul>
           <OverlaySettingsSection />
@@ -62,17 +66,44 @@ function Overview({ nodes, servers }: { nodes: Node[]; servers?: NodeServer[] })
   const capacityMb = onlineCapacityMb(nodes)
   return (
     <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <StatCard icon={HardDrivesIcon} tone="info" label={t("Nodes online")} value={`${online.length} / ${nodes.length}`} />
-      <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={servers ? `${runningCount(servers)} / ${servers.length}` : "–"} />
+      <StatCard
+        icon={HardDrivesIcon}
+        tone="info"
+        label={t("Nodes online")}
+        value={
+          <>
+            <AnimatedNumber value={online.length} /> / {nodes.length}
+          </>
+        }
+      />
+      <StatCard
+        icon={CubeIcon}
+        tone="success"
+        label={t("Servers running")}
+        value={
+          servers ? (
+            <>
+              <AnimatedNumber value={runningCount(servers)} /> / {servers.length}
+            </>
+          ) : (
+            "–"
+          )
+        }
+      />
       <StatCard
         icon={MemoryIcon}
         tone="violet"
         label={t("Memory assigned")}
-        value={assignedMb === undefined ? "–" : formatMegabytes(assignedMb)}
+        value={assignedMb === undefined ? "–" : <AnimatedNumber value={assignedMb} format={(v) => formatMegabytes(Math.round(v))} />}
       >
         {capacityMb > 0 && t("of {{memory}} on online nodes", { memory: formatMegabytes(capacityMb) })}
       </StatCard>
-      <StatCard icon={CpuIcon} tone="warning" label={t("CPU cores")} value={online.reduce((sum, n) => sum + (n.info?.cpuCount ?? 0), 0)} />
+      <StatCard
+        icon={CpuIcon}
+        tone="warning"
+        label={t("CPU cores")}
+        value={<AnimatedNumber value={online.reduce((sum, n) => sum + (n.info?.cpuCount ?? 0), 0)} />}
+      />
     </div>
   )
 }
@@ -105,6 +136,7 @@ function NodeCard({ node, servers }: { node: Node; servers?: NodeServer[] }) {
               value={servers ? `${runningCount(servers)} / ${servers.length}` : "–"}
             />
           </dl>
+          <CpuTrend node={node} caption />
           {capacityMb !== undefined && servers && (
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-muted-foreground">

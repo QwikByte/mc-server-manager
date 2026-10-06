@@ -2,7 +2,7 @@ import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, type ReactElement, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -23,7 +23,8 @@ const steps = ["proxy", "forwarding", "servers"] as const
 type Step = (typeof steps)[number]
 
 /** Creates a network in three steps: its proxy, how the proxy forwards players, and its servers. */
-export function CreateNetworkDialog() {
+/** trigger replaces the button that opens the dialog. */
+export function CreateNetworkDialog({ trigger }: { trigger?: ReactElement }) {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<Step>("proxy")
   const [name, setName] = useState("")
@@ -89,10 +90,12 @@ export function CreateNetworkDialog() {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <PlusIcon />
-          {t("Create network")}
-        </Button>
+        {trigger ?? (
+          <Button>
+            <PlusIcon />
+            {t("Create network")}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl" {...guard(create.isPending)}>
         {operation.live ? (

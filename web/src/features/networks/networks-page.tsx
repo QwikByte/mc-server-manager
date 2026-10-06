@@ -2,6 +2,7 @@ import { ArrowRightIcon, GraphIcon, ShieldCheckIcon, ShieldWarningIcon, UsersThr
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
+import { motion } from "motion/react"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { EmptyState } from "@/components/empty-state"
@@ -14,6 +15,7 @@ import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { StateBar } from "@/features/servers/server-state"
 import { serverType, statusOf } from "@/features/servers/server-types"
 import type { ServerUsage } from "@/features/usage/api"
+import { rise } from "@/lib/motion"
 import { maintenanceQuery, type Network, networksQuery, type ServerRef } from "./api"
 import { CreateNetworkDialog } from "./create-network-dialog"
 import { ServerLabel } from "./server-label"
@@ -48,10 +50,10 @@ export function NetworksPage() {
         </EmptyState>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
-          {networks.map((network) => (
-            <li key={network.id}>
+          {networks.map((network, i) => (
+            <motion.li key={network.id} {...rise(i)}>
               <NetworkCard network={network} servers={servers} usage={usage} />
-            </li>
+            </motion.li>
           ))}
         </ul>
       )}

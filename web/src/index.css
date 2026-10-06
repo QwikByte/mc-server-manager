@@ -184,3 +184,22 @@
 @utility animate-indeterminate {
   animation: indeterminate 1.4s ease-in-out infinite;
 }
+
+/* A sheen that sweeps over placeholders while their content loads. */
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@utility animate-shimmer {
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Cards that open something rise a little under the pointer. */
+@utility lift {
+  @apply transition-[translate,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg motion-reduce:hover:translate-y-0;
+}
