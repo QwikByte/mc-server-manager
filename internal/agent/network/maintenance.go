@@ -37,7 +37,7 @@ func (s *Service) GetMaintenance(ctx context.Context, req *noryxv1.GetMaintenanc
 		return nil, err
 	}
 	defer dir.Close()
-	m, err := readMaintenance(dir, srv.Type.Bungee())
+	m, err := readMaintenance(dir, srv.Type)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -59,7 +59,6 @@ func (s *Service) ChangeMaintenance(ctx context.Context, req *noryxv1.ChangeMain
 	if srv.State != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		return nil, status.Error(codes.FailedPrecondition, "Start the proxy first.")
 	}
-	bungee := srv.Type.Bungee()
 	// done tells whether the plugin's files show the change.
 	done := func(m *noryxv1.Maintenance) bool {
 		has := slices.ContainsFunc(m.GetPlayers(), func(p *noryxv1.MaintenancePlayer) bool { return strings.EqualFold(p.GetName(), player) })
@@ -74,7 +73,7 @@ func (s *Service) ChangeMaintenance(ctx context.Context, req *noryxv1.ChangeMain
 			return !has
 		}
 	}
-	m, err := readMaintenance(dir, bungee)
+	m, err := readMaintenance(dir, srv.Type)
 	switch {
 	case err != nil:
 		return nil, status.Error(codes.Internal, err.Error())
@@ -96,21 +95,17 @@ func (s *Service) ChangeMaintenance(ctx context.Context, req *noryxv1.ChangeMain
 			return nil, status.Error(codes.DeadlineExceeded, "The Maintenance plugin didn't save the change. The console of the proxy tells why.")
 		case <-t.C:
 		}
-		if m, err := readMaintenance(dir, bungee); err == nil && done(m) {
+		if m, err := readMaintenance(dir, srv.Type); err == nil && done(m) {
 			return &noryxv1.ChangeMaintenanceResponse{Maintenance: m}, nil
 		}
 	}
 }
 
-// readMaintenance reads the files of the Maintenance plugin, which keeps them in
-// plugins/maintenance on Velocity and in plugins/Maintenance on BungeeCord: config.yml with
+// readMaintenance reads the files of the Maintenance plugin in its folder: config.yml with
 // whether maintenance is on, and WhitelistedPlayers.yml with the players who may join, by
 // their ID. Without config.yml, the plugin isn't installed or wasn't loaded yet.
-func readMaintenance(dir *datadir.Dir, bungee bool) (*noryxv1.Maintenance, error) {
-	folder := "plugins/maintenance"
-	if bungee {
-		folder = "plugins/Maintenance"
-	}
+func readMaintenance(dir *datadir.Dir, typ noryxv1.ServerType) (*noryxv1.Maintenance, error) {
+	folder := typ.MaintenanceFolder()
 	data, err := dir.ReadOptional(filepath.FromSlash(path.Join(folder, "config.yml")))
 	if err != nil || data == nil {
 		return &noryxv1.Maintenance{}, err

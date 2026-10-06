@@ -170,6 +170,35 @@ func Write(ctx context.Context, c noryxv1.FileServiceClient, header *noryxv1.Wri
 	return res.GetFile(), err
 }
 
+// Copy writes the file of a server, as the file manager shows it, into a file of another
+// server, which it replaces. It fails with codes.NotFound if the file doesn't exist.
+func Copy(ctx context.Context, from noryxv1.FileServiceClient, src *noryxv1.ReadFileRequest, to noryxv1.FileServiceClient, dst *noryxv1.WriteFileHeader) error {
+	ctx, cancel := context.WithCancel(ctx) // ends the download if the upload fails
+	defer cancel()
+	stream, err := from.ReadFile(ctx, src)
+	if err != nil {
+		return err
+	}
+	first, err := stream.Recv() // errors such as a missing file arrive here
+	if err != nil {
+		return err
+	}
+	r, w := io.Pipe()
+	defer r.Close()
+	go func() {
+		msg, err := first, error(nil)
+		for err == nil {
+			if _, err = w.Write(msg.GetData()); err == nil {
+				msg, err = stream.Recv()
+			}
+		}
+		w.CloseWithError(err) // io.EOF ends the content
+	}()
+	dst.Size, dst.Overwrite = first.GetSize(), true
+	_, err = Write(ctx, to, dst, r)
+	return err
+}
+
 func (h *Handler) createDirectory(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path string `json:"path"`

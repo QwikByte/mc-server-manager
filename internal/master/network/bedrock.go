@@ -20,8 +20,9 @@ var bedrockPlugins = []string{"wKkoqHrH", geysermc.Floodgate}
 const minBedrockPort, maxBedrockPort = 1024, 65535
 
 // checkBedrock checks that the Bedrock port of a network is free on a node for its proxy:
-// in the node's port range and used by no other server, also not as its own port.
-func (s *Service) checkBedrock(ctx context.Context, nodeID, proxyID string, port uint32) error {
+// in the node's port range and used by no server, also not as its own port, unless as the
+// Bedrock port of one of the owners, such as the proxy itself.
+func (s *Service) checkBedrock(ctx context.Context, nodeID string, port uint32, owners ...string) error {
 	if port == 0 {
 		return nil
 	}
@@ -46,7 +47,7 @@ func (s *Service) checkBedrock(ctx context.Context, nodeID, proxyID string, port
 		return err
 	}
 	if i := slices.IndexFunc(res.GetServers(), func(srv *noryxv1.Server) bool {
-		return srv.GetPort() == port || srv.GetBedrockPort() == port && srv.GetId() != proxyID
+		return srv.GetPort() == port || srv.GetBedrockPort() == port && !slices.Contains(owners, srv.GetId())
 	}); i >= 0 {
 		return httpapi.Errorf(http.StatusConflict, "Port %d is already used by %q on %s. Choose another Bedrock port.", port, res.GetServers()[i].GetName(), n.Name)
 	}

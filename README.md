@@ -305,7 +305,7 @@ Waterfall reached its [end of life](https://forums.papermc.io/threads/1088/) and
 modules, whose API PaperMC shut down. A new Waterfall proxy has no `send`, `/server`, `/glist`, `/alert` and `/find`, so
 the panel no longer offers Waterfall for new servers and templates. Existing proxies keep running, and those that
 downloaded their modules before keep them; their pages recommend Velocity with modern forwarding, or BungeeCord, which
-reads the same `config.yml`.
+reads the same `config.yml`, and a Waterfall network can **change its proxy** to one of them.
 
 | Game server                | Accepts the players of the proxy through                                                       |
 | -------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -334,6 +334,12 @@ removes it when it leaves.
   its servers later; until then, the network's page and the overview tell that its proxy may be out of date. The
   proxy reaches servers on other nodes at the host of their node's address and their port, so changing either
   configures the network again. Proxies created by earlier versions are created again once, to read console commands.
+- **Change proxy.** A network can swap its proxy for a free Velocity or BungeeCord proxy on any node, and keeps its
+  servers, join order, host names and Bedrock port. The new proxy takes over the old one's configuration if it reads
+  the same file, as BungeeCord reads Waterfall's `config.yml`, and the Maintenance plugin with its state and team;
+  other plugins stay with the old proxy. Changing to Velocity can switch to modern forwarding, which restarts the
+  servers once, as does a proxy that comes to or leaves the node of a server. The dialog tells all this beforehand and
+  where players join from then on. The old proxy leaves the network and stops; the new one starts if either ran.
 - **Proxy configuration.** The proxy's tab of the network, and the **Configuration** tab of every proxy, edit the other
   settings of its file as a form: MOTD, the shown maximum of players, online mode, ping passthrough, compression,
   timeouts, rate limits, the HAProxy protocol, query, BungeeCord's permissions and more. Settings that aren't known

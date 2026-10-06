@@ -26,7 +26,7 @@ export interface ForcedHost {
   servers: string[]
 }
 
-/** What can be changed about a network; its proxy stays. */
+/** What can be changed about a network, except its proxy. */
 export interface NetworkSettings {
   name: string
   forwarding: Forwarding
@@ -86,6 +86,26 @@ export function useUpdateNetwork(id: string) {
     mutationFn: ({ settings, onStart }: { settings: NetworkSettings } & Followed) =>
       operate<Network>(`/networks/${id}`, { method: "PUT", body: settings }, onStart),
     onSettled: () => queryClient.invalidateQueries({ queryKey: networksQuery.queryKey }),
+  })
+}
+
+/** Another proxy for a network, which must be free. */
+export interface ProxySwap {
+  proxy: ServerRef
+  forwarding: Forwarding
+  /** As in the settings of the network, for the new proxy's node. */
+  firewalled: boolean
+}
+
+/** Gives a network another proxy, which takes over the settings it can of the old one. */
+export function useSwapProxy(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ onStart, ...swap }: ProxySwap & Followed) => operate<Network>(`/networks/${id}/proxy`, { body: swap }, onStart),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: networksQuery.queryKey })
+      void queryClient.invalidateQueries({ queryKey: ["servers"] })
+    },
   })
 }
 

@@ -291,3 +291,77 @@ func TestNetworkFollowsAddresses(t *testing.T) {
 	}
 	wantAddress("localhost", "25572")
 }
+
+// A network moves from its Waterfall proxy to BungeeCord, which takes over its configuration
+// and the Maintenance plugin, then to Velocity on another node, which forwards the modern way.
+func TestSwapProxy(t *testing.T) {
+	m := startMaster(t)
+	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
+	waterfall := m.createServer(t, a1, "Waterfall", noryxv1.ServerType_SERVER_TYPE_WATERFALL, 25577)
+	bungee := m.createServer(t, a1, "BungeeCord", noryxv1.ServerType_SERVER_TYPE_BUNGEECORD, 25578)
+	velocity := m.createServer(t, a2, "Velocity", noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25579)
+	lobby := m.createServer(t, a1, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	survival := m.createServer(t, a2, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25570)
+	api := apiClient{t: t, url: m.panel(t).URL}
+	var n network.Network
+	api.do("POST", "/api/networks", map[string]any{"name": "Main", "proxy": waterfall, "firewalled": true, "servers": []network.Ref{lobby, survival}}, http.StatusCreated, &n)
+	file := func(a agent, ref network.Ref, name string) string {
+		data, _ := os.ReadFile(filepath.Join(a.runtime.dir, ref.ServerID, name))
+		return string(data)
+	}
+	write := func(a agent, ref network.Ref, name, content string) {
+		path := filepath.Join(a.runtime.dir, ref.ServerID, name)
+		check(t, os.MkdirAll(filepath.Dir(path), 0o750))
+		check(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+	config, players := "motd: '&aWelcome'\nip_forward: true\n", "8667ba71-b85a-4004-af54-457a9734eed7: Steve\n"
+	write(a1, waterfall, "config.yml", config)
+	write(a1, waterfall, "plugins/Maintenance/config.yml", "maintenance-enabled: true\n")
+	write(a1, waterfall, "plugins/Maintenance/WhitelistedPlayers.yml", players)
+	check(t, a1.runtime.Start(t.Context(), waterfall.ServerID))
+	swap := func(sw network.Swap, status int) {
+		t.Helper()
+		api.do("POST", "/api/networks/"+n.ID+"/proxy", sw, status, &n)
+	}
+
+	// Waterfall reached its end of life, and the proxy must be one, and free.
+	swap(network.Swap{Proxy: waterfall}, http.StatusBadRequest)
+	swap(network.Swap{Proxy: lobby}, http.StatusBadRequest)
+	swap(network.Swap{Proxy: bungee}, http.StatusConflict) // survival on another node needs the firewall
+
+	swap(network.Swap{Proxy: bungee, Firewalled: true}, http.StatusOK)
+	if n.Proxy != bungee || n.ProxyType != "bungeecord" || n.Forwarding != network.Legacy {
+		t.Fatalf("network = %+v", n)
+	}
+	if file(a1, bungee, "config.yml") != config || file(a1, bungee, "plugins/Maintenance/WhitelistedPlayers.yml") != players ||
+		file(a1, bungee, "plugins/VCAqN1ln-5.1.0.jar") == "" {
+		t.Fatalf("files of BungeeCord = %q", files(t, filepath.Join(a1.runtime.dir, bungee.ServerID, "plugins")))
+	}
+	var maintenance network.Maintenance
+	api.do("GET", "/api/networks/"+n.ID+"/maintenance", nil, http.StatusOK, &maintenance)
+	if !maintenance.Enabled || len(maintenance.Players) != 1 || !maintenance.ProxyRunning {
+		t.Fatalf("maintenance = %+v", maintenance)
+	}
+	if got := a1.runtime.network(waterfall.ServerID); got.Forwarding != runtime.ForwardingNone || serverState(t, api, waterfall) != "stopped" {
+		t.Fatalf("Waterfall after the swap: %+v, %s", got, serverState(t, api, waterfall))
+	}
+	if got := a1.runtime.network(bungee.ServerID); got.Forwarding != runtime.ForwardingLegacy || len(got.Backends) != 2 {
+		t.Fatalf("BungeeCord network = %+v", got)
+	}
+
+	// Velocity reads another configuration, and the servers restart for modern forwarding.
+	swap(network.Swap{Proxy: velocity}, http.StatusOK)
+	if n.Proxy != velocity || n.Forwarding != network.Modern || file(a2, velocity, "velocity.toml") != "" ||
+		file(a2, velocity, "plugins/maintenance/config.yml") != "maintenance-enabled: true\n" {
+		t.Fatalf("network = %+v, files of Velocity = %q", n, files(t, filepath.Join(a2.runtime.dir, velocity.ServerID, "plugins")))
+	}
+	if got := a2.runtime.network(survival.ServerID); got.Forwarding != runtime.ForwardingModern || !got.ProxyOnNode {
+		t.Fatalf("survival network = %+v", got)
+	}
+	if got := a1.runtime.network(lobby.ServerID); got.Forwarding != runtime.ForwardingModern || got.ProxyOnNode || got.ForwardingSecret == "" {
+		t.Fatalf("lobby network = %+v", got)
+	}
+	if serverState(t, api, bungee) != "stopped" || serverState(t, api, velocity) != "running" {
+		t.Fatalf("BungeeCord %s, Velocity %s", serverState(t, api, bungee), serverState(t, api, velocity))
+	}
+}

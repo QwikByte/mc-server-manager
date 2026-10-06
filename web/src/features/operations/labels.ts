@@ -30,6 +30,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Create the network {{name}}", { name: subject })
     case "network.update":
       return t("Save the network {{name}}", { name: subject })
+    case "network.proxy":
+      return t("Change the proxy of {{name}}", { name: subject })
     case "network.apply":
       return t("Apply the network {{name}} again", { name: subject })
     case "network.delete":
@@ -116,6 +118,10 @@ export function stepOf(op: Operation, step: string): string {
       return t("Start the proxy")
     case "proxy-restart":
       return t("Restart the proxy")
+    case "settings":
+      return t("Take over the settings of the old proxy")
+    case "old-proxy":
+      return t("Take the old proxy out of the network")
     case "plugin":
       return t("Install the Maintenance plugin")
     case "bedrock":

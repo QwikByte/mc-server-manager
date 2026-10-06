@@ -1,5 +1,6 @@
 import {
   ArrowClockwiseIcon,
+  ArrowsLeftRightIcon,
   ArrowsClockwiseIcon,
   ArrowsCounterClockwiseIcon,
   CaretDownIcon,
@@ -32,6 +33,7 @@ import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
 import { useOperation } from "@/features/operations/use-operation"
 import { type Network, type NetworkAction, useNetworkAction } from "./api"
+import { SwapProxyDialog } from "./swap-proxy-dialog"
 
 type Power = "start" | "stop" | "restart" | "rolling"
 
@@ -106,6 +108,15 @@ export function NetworkActions({ network }: { network: Network }) {
       )}
       {can("networks.manage") && (
         <>
+          <SwapProxyDialog
+            network={network}
+            trigger={
+              <Button variant="outline" disabled={action.isPending}>
+                <ArrowsLeftRightIcon />
+                {t("Change proxy")}
+              </Button>
+            }
+          />
           <Button
             variant="outline"
             disabled={action.isPending}

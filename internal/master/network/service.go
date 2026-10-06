@@ -187,13 +187,9 @@ func (s *Service) Create(ctx context.Context, d Draft) (Network, error) {
 	if err != nil {
 		return Network{}, err
 	}
-	forwarding := cmp.Or(d.Forwarding, Modern)
-	if proxy.GetType().Bungee() {
-		forwarding = cmp.Or(d.Forwarding, Legacy)
-	}
 	n := Network{
 		ID: strings.ToLower(rand.Text()), Name: d.Name, Proxy: d.Proxy, ProxyType: proxy.GetType().Slug(),
-		Forwarding: forwarding, Firewalled: d.Firewalled, Backends: []Backend{}, ForcedHosts: []ForcedHost{},
+		Forwarding: forwardingOr(d.Forwarding, proxy.GetType()), Firewalled: d.Firewalled, Backends: []Backend{}, ForcedHosts: []ForcedHost{},
 		CreatedAt: time.Now(), secret: rand.Text(),
 	}
 	for _, ref := range d.Servers {
@@ -240,7 +236,7 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 		return current, err
 	}
 	if n.BedrockPort != current.BedrockPort {
-		if err := s.checkBedrock(ctx, n.Proxy.NodeID, n.Proxy.ServerID, n.BedrockPort); err != nil {
+		if err := s.checkBedrock(ctx, n.Proxy.NodeID, n.BedrockPort, n.Proxy.ServerID); err != nil {
 			return current, err
 		}
 	}
@@ -291,18 +287,27 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
 		}
 	}
-	if n.BedrockPort != 0 {
-		if err := ignoreMissing(s.removeBedrock(ctx, n)); err != nil {
-			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted: %s", message(err))
-		}
-	}
-	operation.Step(ctx, "proxy")
-	detach := &noryxv1.ConfigureNetworkRequest{Id: n.Proxy.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE}
-	if _, err := s.configure(ctx, n.Proxy, detach); ignoreMissing(err) != nil {
-		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because its proxy could not be updated: %s", message(err))
+	if err := s.release(ctx, n, "proxy"); err != nil {
+		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted: %s", message(err))
 	}
 	_, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID)
 	return err
+}
+
+// release takes the proxy out of a network, in the step of an operation: it loses Geyser and
+// Floodgate, its backends and the forwarding, and keeps running. A deleted proxy needs nothing.
+func (s *Service) release(ctx context.Context, n Network, step string) error {
+	if n.BedrockPort != 0 {
+		if err := ignoreMissing(s.removeBedrock(ctx, n)); err != nil {
+			return err
+		}
+	}
+	operation.Step(ctx, step)
+	detach := &noryxv1.ConfigureNetworkRequest{Id: n.Proxy.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_NONE}
+	if _, err := s.configure(ctx, n.Proxy, detach); ignoreMissing(err) != nil {
+		return httpapi.Errorf(http.StatusBadGateway, "The proxy could not be configured: %s", message(err))
+	}
+	return nil
 }
 
 // CheckRemovable fails if a server is part of a network, which would break without it.
@@ -327,7 +332,7 @@ func (s *Service) CheckMove(ctx context.Context, serverID, from, to string) erro
 	}
 	// The proxy takes the Bedrock port of its network along.
 	if n.Proxy.ServerID == serverID {
-		return s.checkBedrock(ctx, to, serverID, n.BedrockPort)
+		return s.checkBedrock(ctx, to, n.BedrockPort, serverID)
 	}
 	return nil
 }
@@ -474,6 +479,15 @@ func (n *Network) validate() error {
 func (n *Network) exposed() bool {
 	return n.Forwarding == Legacy && !n.Firewalled &&
 		slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.NodeID != n.Proxy.NodeID })
+}
+
+// forwardingOr returns the chosen forwarding, or else the default of a type of proxy:
+// modern for Velocity, legacy for BungeeCord, which only knows that.
+func forwardingOr(chosen string, proxy noryxv1.ServerType) string {
+	if proxy.Bungee() {
+		return cmp.Or(chosen, Legacy)
+	}
+	return cmp.Or(chosen, Modern)
 }
 
 // checkNames fails if a list of backends names one that doesn't exist, or one twice.
