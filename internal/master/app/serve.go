@@ -38,6 +38,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/player"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
+	"github.com/QwikByte/noryx/internal/master/preference"
 	"github.com/QwikByte/noryx/internal/master/properties"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 	"github.com/QwikByte/noryx/internal/master/server"
@@ -176,7 +177,7 @@ func serve(ctx context.Context, cfg config) error {
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks, fileSets),
-			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Operations: ops, Moves: moves, Restart: restart,
+			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -250,6 +251,8 @@ type Services struct {
 	Updates    *update.Service
 	Usage      *usage.Store
 	Tags       *tag.Store
+	// Preferences are what each user chose for the panel: the layout of the overview and pinned servers.
+	Preferences *preference.Store
 	// Operations are the long actions in progress.
 	Operations *operation.Operations
 	Moves      *server.Moves
@@ -264,7 +267,9 @@ type Services struct {
 func Handler(s Services) http.Handler {
 	authHandler := auth.NewHandler(s.Users, s.Settings.SessionTTL)
 	api := API(s)
+	// The routes of the user's own account and preferences need no permission.
 	authHandler.Register(api)
+	preference.NewHandler(s.Preferences).Register(api)
 
 	mux := http.NewServeMux()
 	authHandler.RegisterPublic(mux)
@@ -284,7 +289,7 @@ func API(s Services) *http.ServeMux {
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes, s.Networks, s.Overlay).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations, s.FileSets).Register(m)
 	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Operations).Register(m)
