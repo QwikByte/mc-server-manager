@@ -3,6 +3,7 @@ import { t } from "i18next"
 import { LayoutGroup } from "motion/react"
 import { useId } from "react"
 import { Highlight } from "@/components/segmented"
+import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu"
 import { msg } from "@/lib/i18n"
 import { setTheme, type Theme, useTheme } from "@/lib/theme"
 import { cn } from "@/lib/utils"
@@ -35,5 +36,20 @@ export function ThemeToggle({ className }: { className?: string }) {
         ))}
       </LayoutGroup>
     </div>
+  )
+}
+
+/** The colour themes as items of a menu. */
+export function ThemeChoices() {
+  const theme = useTheme()
+  return (
+    <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as Theme)}>
+      {options.map(({ value, label, icon: Icon }) => (
+        <DropdownMenuRadioItem key={value} value={value}>
+          <Icon weight="duotone" />
+          {t(label)}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
   )
 }

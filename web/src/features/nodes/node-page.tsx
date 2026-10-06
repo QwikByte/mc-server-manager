@@ -29,7 +29,7 @@ import { formatCores } from "@/features/usage/format"
 import { UsageHistory } from "@/features/usage/usage-history"
 import { formatBytes, formatDate, formatMegabytes } from "@/lib/format"
 import { memoryCapacityMb, memoryLimitMb, type Node, type NodeInfo, nodeQuery } from "./api"
-import { NewJoinTokenButton, RemoveNodeButton, RenewCertificateButton } from "./node-actions"
+import { NewJoinTokenButton, NodeMenu } from "./node-actions"
 import { NodeSettingsDialog } from "./node-settings-dialog"
 import { NodeStatusBadge } from "./node-status"
 import { StorageList } from "./storage-list"
@@ -69,9 +69,7 @@ export function NodePage() {
                     </Link>
                   </Button>
                 )}
-                {node.status === "online" && can("nodes.certificates", node.id) && <RenewCertificateButton node={node} />}
-                {node.enrolledAt && can("nodes.enroll") && <NewJoinTokenButton node={node} />}
-                {can("nodes.delete", node.id) && <RemoveNodeButton node={node} />}
+                <NodeMenu node={node} />
               </>
             }
           />
@@ -113,7 +111,7 @@ export function NodePage() {
               title={t("Connect the agent")}
               description={t("This node has no connected agent yet. Create a join token and run the enrollment command on the node.")}
             >
-              {can("nodes.enroll") && <NewJoinTokenButton node={node} variant="default" />}
+              {can("nodes.enroll") && <NewJoinTokenButton node={node} />}
             </EmptyState>
           ) : (
             <EmptyState
@@ -180,7 +178,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
           {assignedMb !== undefined && capacityMb ? (
             <div className="space-y-2">
               <Meter value={assignedMb / capacityMb} label={t("Memory assigned to servers")} />
-              <p>{t("of {{limit}}, including what Java needs besides the servers", { limit: formatMegabytes(capacityMb) })}</p>
+              <p>{t("of {{limit}}, including Java's overhead", { limit: formatMegabytes(capacityMb) })}</p>
             </div>
           ) : null}
         </StatCard>

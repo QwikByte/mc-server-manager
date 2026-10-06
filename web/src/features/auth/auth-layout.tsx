@@ -39,7 +39,7 @@ function InsecureNotice() {
   return (
     <Callout tone="warning" icon={LockOpenIcon} role="note" className="mb-4 bg-card/80" title={t("Signing in needs HTTPS")}>
       <Trans
-        i18nKey="Browsers only keep the sign-in over HTTPS or at localhost. Sign in through an SSH tunnel instead: run <tunnel/> and open <local/>. Then turn on HTTPS under Settings → General."
+        i18nKey="Browsers only keep you signed in over HTTPS or on localhost. Sign in through an SSH tunnel instead: run <tunnel/> and open <local/>. Then turn on HTTPS under Settings → General."
         components={{
           tunnel: <span className="font-mono break-all">{`ssh -L 8080:${location.host} <user>@${location.hostname}`}</span>,
           local: <span className="font-mono">http://localhost:8080</span>,

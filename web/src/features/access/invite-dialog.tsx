@@ -65,7 +65,7 @@ export function InviteDialog({ groups }: { groups: Group[] }) {
           <form onSubmit={submit} className="grid gap-6">
             <DialogHeader>
               <DialogTitle>{t("Invite user")}</DialogTitle>
-              <DialogDescription>{t("You get a link with which the user sets a password. You never see it.")}</DialogDescription>
+              <DialogDescription>{t("You get a link the user can use to set their password. You never see the password.")}</DialogDescription>
             </DialogHeader>
             <FieldGroup>
               <Field>

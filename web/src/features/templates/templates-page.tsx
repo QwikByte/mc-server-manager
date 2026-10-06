@@ -7,8 +7,8 @@ import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
+import { TabIntro } from "@/components/hub-layout"
 import { IconTile } from "@/components/icon-tile"
-import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
@@ -34,7 +34,9 @@ export function TemplatesPage() {
   const { data: templates, isPending, error } = useQuery(templatesQuery)
   return (
     <>
-      <PageHeader icon={StackIcon} tone="info" title={t("Templates")} actions={manage && <NewTemplate />} />
+      <TabIntro actions={manage && <NewTemplate />}>
+        {t("Reusable server setups: software, version, memory, settings and plugins. New servers start from them in a few clicks.")}
+      </TabIntro>
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (

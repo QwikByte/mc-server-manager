@@ -59,7 +59,7 @@ players stay connected. The copy doesn't take over the original's place in a net
 A server can move to another node with its ID, files, settings and, if chosen, its backups; otherwise the backups are
 deleted with it. Port, storage location, memory and CPU limits are checked on the new node first. The server then
 stops, its data is copied through the master, and it starts on the new node if it ran before. Its backup jobs,
-policies, the scopes of groups and its usage history follow it, and its network is configured again, which restarts
+schedules, the scopes of groups and its usage history follow it, and its network is configured again, which restarts
 the proxy. The original is deleted only once the server is complete on the new node; if anything fails before, the
 copy goes away and the server runs where it was. While it moves, the panel shows the progress, refuses changes to the
 server and continues on the new node once it is done; scheduled tasks leave it out meanwhile. The new node needs free
@@ -88,7 +88,10 @@ browsers. The players online and the CPU load of the key figures show how they w
 
 Servers are pinned with the pin on their card, in the table or on their page. Pinned servers are listed with their
 state in the sidebar and in their widget, which also starts and stops them. The master keeps them for each user too,
-up to 20; they follow a server that moves and go with a deleted server or a removed node. The sidebar folds to its
+up to 20; they follow a server that moves and go with a deleted server or a removed node. The sidebar lists the
+overview, servers, networks, players and nodes, the **Library** (templates, file sets, plugins and mods) and the
+**Automation** (backup jobs and schedules), each with its parts as tabs, and the log and settings at its foot. The menu
+of the user's name holds their account, the colour theme, the language and signing out. The sidebar folds to its
 icons, which each browser remembers. Lists, figures, charts, tabs and pages are animated, unless the operating system
 asks for less motion.
 
@@ -325,7 +328,7 @@ pauses saving while they are archived, so players stay connected.
   master, e.g. to restore a server while the master is unreachable.
 - **Databases** are backed up as SQL dumps instead, see [Databases](#databases).
 
-**The master** keeps users, nodes, networks, templates, file sets with their secrets, backup jobs, policies, settings and
+**The master** keeps users, nodes, networks, templates, file sets with their secrets, backup jobs, schedules, settings and
 the log in its database, and the certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling every node again.
 `sudo -u noryx noryx-master backup <file>` saves both in a `.tar.gz` archive, also while the master runs; with `-`
 instead of a file, it writes the archive to stdout, e.g. for `ssh master 'sudo -u noryx noryx-master backup -' > master.tar.gz`
@@ -342,17 +345,17 @@ sudo systemctl start noryx-master
 
 The nodes keep working with the restored master. If its IP address changed, allow the new one on port 7443 of the nodes.
 
-## Policies
+## Schedules
 
-Policies rule servers or whole nodes on a schedule like that of backup jobs:
+Schedules rule servers or whole nodes at set times, like backup jobs:
 
 - **Restart**, e.g. every night at 4:00. Players are warned in the chat beforehand (10, 5 and 1 minutes before by
   default, with an editable message) and the servers restart at the scheduled time.
 - **Stop** and **start**, e.g. for opening hours. Stopping warns the players like restarting.
 - **Console command**, e.g. a broadcast every evening.
 
-Restarts and stops only concern running servers, starts only stopped ones. The master runs backup jobs and policies;
-runs it misses while it is down are skipped. The latest run and its errors are shown with each job and policy, and
+Restarts and stops only concern running servers, starts only stopped ones. The master runs backup jobs and schedules;
+runs it misses while it is down are skipped. The latest run and its errors are shown with each job and schedule, and
 both can be run right away. Deleted servers are removed from them automatically.
 
 ## Networks
@@ -562,7 +565,7 @@ The master keeps a log of what happens on it and on its agents, so that it's cle
   the outcome and how long it took. Denied requests are logged as warnings, and failed ones as errors if the master or
   an agent failed. Others, e.g. with an invalid input, are only information: the panel tells the user why. Sign-ins,
   failed sign-ins, password changes, changes of two-factor authentication, sign-outs, enrollments, certificate
-  renewals and what backup jobs and policies did on each server are logged too.
+  renewals and what backup jobs and schedules did on each server are logged too.
 - **Agents.** An agent logs every call it receives with its origin (the master or its local CLI) and keeps its latest
   entries in memory. The master collects them over the mutually authenticated connection and continues where it left
   off, also after a restart of either. Calls that only read are logged at the debug level, downloads at the info level.
@@ -622,13 +625,13 @@ Users get their permissions from groups; a user can be in several groups and has
   commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download, change
   files, `server.properties`, plugins and mods),
   backups (see and download, back up, restore, delete), the log, networks, databases of networks, templates, file sets,
-  backup jobs, policies, the master's settings, the terminal, users and groups. Previewing and applying a file set also needs the permission
+  backup jobs, schedules, the master's settings, the terminal, users and groups. Previewing and applying a file set also needs the permission
   to change the files of every server it touches, and restarting them the one to restart each. Choosing a permission also chooses what it needs, e.g. seeing the servers
   one may restart.
 - **Scopes.** The node and server permissions of a group apply to all servers, or only to chosen nodes (including
   servers created later) and single servers, e.g. a group that may restart the lobby and use its console. Lists only
   show the nodes and servers a user may see, and the log only the entries about them; entries about the master, users
-  or groups need the permission for all servers. Other permissions, e.g. for networks or policies, apply everywhere,
+  or groups need the permission for all servers. Other permissions, e.g. for networks or schedules, apply everywhere,
   because they act on any server.
 - **Administrators.** The built-in Administrators group has every permission, also those that later versions add.
   Only its members see and install updates; no permission allows that to other groups.
@@ -636,8 +639,8 @@ Users get their permissions from groups; a user can be in several groups and has
   administrators with this version.
 - **Invitations.** New users get a setup link (valid for three days, usable once) to choose their password; the same
   link resets a forgotten password. The token is in the link's fragment, which browsers don't send to servers, and the
-  panel removes it from the address bar once it was read. Users change their own password on their account page (their
-  name in the sidebar), which signs them out everywhere else.
+  panel removes it from the address bar once it was read. Users change their own password on their account page (in
+  the menu of their name in the sidebar), which signs them out everywhere else.
 - **Two-factor authentication.** It is off until users set it up on their account page: they scan a QR code with an
   authenticator app (TOTP, e.g. Google Authenticator, Aegis or a password manager), confirm with a code of it and their
   password, and get 10 recovery codes that each replace a code once. Then signing in asks for a code after the
@@ -861,7 +864,7 @@ internal/master/
                         addresses servers reach them at, dumps, upgrades, rotating passwords and browsing tables
   schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API
   backup/               backups of servers, and backup jobs as scheduled tasks
-  policy/               policies as scheduled tasks: restarts with warnings, stops, starts, console commands
+  policy/               the panel's schedules (policies in the API): restarts with warnings, stops, starts, console commands
   database/             SQLite and embedded migrations
   logs/                 log in the database, logging of API requests, collecting the agents' logs, REST API, CLI
   usage/                history of what nodes and servers use, from the agents' measurements, REST API

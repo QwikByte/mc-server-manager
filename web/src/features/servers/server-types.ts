@@ -53,7 +53,7 @@ export const containerMemoryMb = (memoryMb: number) => Math.floor((memoryMb * 5)
 
 /** Tells the memory of a server: its heap, and the limit of its container. */
 export const memoryTitle = (s: { memoryMb: number; memoryLimitMb: number }) =>
-  t("{{memory}} for the server, and up to {{limit}} with what Java needs besides it", {
+  t("{{memory}} for the server, and up to {{limit}} with Java's overhead", {
     memory: formatMegabytes(s.memoryMb),
     limit: formatMegabytes(s.memoryLimitMb),
   })

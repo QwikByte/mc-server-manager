@@ -56,7 +56,7 @@ function Available({ status, release }: { status: UpdateStatus; release: Release
     <Callout icon={SparkleIcon} title={t("Noryx {{version}} is available", { version: release.version })}>
       <p>
         {[
-          t("You run {{version}}.", { version: status.version }),
+          t("You're running {{version}}.", { version: status.version }),
           release.publishedAt && t("The new release was published on {{date}}.", { date: formatDate(release.publishedAt) }),
           !status.updatable && t("This master wasn't installed from a package, so update it on its host:"),
         ]

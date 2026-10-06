@@ -1,10 +1,10 @@
 import { ArrowsLeftRightIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
-import { type FormEvent, type ReactElement, useState } from "react"
+import { type FormEvent, useState } from "react"
 import { Callout } from "@/components/callout"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { nodesQuery } from "@/features/nodes/api"
@@ -17,14 +17,27 @@ import { type Forwarding, maintenanceQuery, type Network, networksQuery, type Se
 import { FirewallConfirmation, ForwardingChoice } from "./forwarding"
 import { availableServers, findServer, hostOf, isBungee, key, proxyTypes, refOf, routeOf } from "./servers"
 
-/** Gives a network another proxy, e.g. BungeeCord or Velocity instead of Waterfall, and tells first what that does. */
-export function SwapProxyDialog({ network, trigger }: { network: Network; trigger: ReactElement }) {
+/** Opens the dialog that gives a network another proxy, e.g. where its proxy reached its end of life. */
+export function ChangeProxyButton({ network }: { network: Network }) {
   const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <ArrowsLeftRightIcon />
+        {t("Change proxy")}
+      </Button>
+      {open && <SwapProxyDialog network={network} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+/** Gives a network another proxy, e.g. BungeeCord or Velocity instead of Waterfall, and tells first what that does. */
+export function SwapProxyDialog({ network, onClose }: { network: Network; onClose: () => void }) {
   const [proxy, setProxy] = useState<ServerRef>()
   const [forwarding, setForwarding] = useState<Forwarding>("modern")
   const [firewalled, setFirewalled] = useState(false)
-  const { data: servers } = useQuery({ ...allServersQuery, enabled: open })
-  const { data: networks } = useQuery({ ...networksQuery, enabled: open })
+  const { data: servers } = useQuery(allServersQuery)
+  const { data: networks } = useQuery(networksQuery)
   const swap = useSwapProxy(network.id)
   const operation = useOperation()
   const chosen = proxy && findServer(servers, proxy)
@@ -34,29 +47,18 @@ export function SwapProxyDialog({ network, trigger }: { network: Network; trigge
   const exposed = forwarding === "legacy" && !!proxy && network.backends.some((b) => routeOf({ ...network, proxy }, b, isPrivate) === "public")
   const title = t("Change the proxy of {{name}}", { name: network.name })
 
-  function onOpenChange(next: boolean) {
-    setOpen(next)
-    if (!next) {
-      swap.reset()
-      operation.reset()
-      setProxy(undefined)
-      setFirewalled(false)
-    }
-  }
-
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!proxy) return
     operation.run((onStart) => swap.mutateAsync({ proxy, forwarding, firewalled, onStart }), {
       title,
       done: () => ({ message: t("{{name}} has another proxy", { name: network.name }) }),
-      then: () => onOpenChange(false),
+      then: onClose,
     })
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-2xl" {...guard(swap.isPending)}>
         {operation.live ? (
           <OperationStatus
@@ -64,7 +66,7 @@ export function SwapProxyDialog({ network, trigger }: { network: Network; trigge
             title={title}
             onBackground={() => {
               operation.background(title)
-              onOpenChange(false)
+              onClose()
             }}
             onBack={() => {
               operation.reset()

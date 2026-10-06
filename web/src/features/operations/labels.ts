@@ -63,7 +63,7 @@ export function titleOf(op: Operation, name?: string): string {
     case "players.op":
       return t("Make {{name}} an operator", { name: subject })
     case "players.deop":
-      return t("Take operator away from {{name}}", { name: subject })
+      return t("Revoke operator status from {{name}}", { name: subject })
     case "players.whitelist_on":
       return t("Turn on the whitelist of {{count}} servers", { count, defaultValue_one: "Turn on the whitelist of {{count}} server" })
     case "players.whitelist_off":

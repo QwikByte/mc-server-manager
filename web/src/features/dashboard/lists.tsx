@@ -37,7 +37,7 @@ export function Attention({ title }: { title: string }) {
     <Panel title={title} count={problems.length}>
       {problems.length === 0 ? (
         <Calm icon={CheckCircleIcon} tone="success">
-          {t("Everything runs as it should.")}
+          {t("Everything is running smoothly.")}
         </Calm>
       ) : (
         <ul className="divide-y">

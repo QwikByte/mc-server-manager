@@ -97,7 +97,7 @@ export function LogAlerts() {
       <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel>{t("Warnings and errors")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {entries.length === 0 && <p className="px-2 py-4 text-center text-sm text-muted-foreground">{t("Nothing went wrong lately.")}</p>}
+        {entries.length === 0 && <p className="px-2 py-4 text-center text-sm text-muted-foreground">{t("Nothing has gone wrong lately.")}</p>}
         {entries.slice(0, shown).map((e) => {
           const { icon: Icon, tone, label } = levels[e.level]
           return (

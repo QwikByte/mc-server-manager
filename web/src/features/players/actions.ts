@@ -70,9 +70,9 @@ export const playerActions: Record<PlayerAction, ActionInfo> = {
   },
   deop: {
     icon: UserCircleMinusIcon,
-    label: () => t("Take operator away…"),
-    title: (name) => t("Take operator away from {{name}}", { name }),
-    done: (name) => t("{{name}} is no operator anymore", { name }),
+    label: () => t("Revoke operator status…"),
+    title: (name) => t("Revoke operator status from {{name}}", { name }),
+    done: (name) => t("{{name}} is no longer an operator", { name }),
   },
   whitelist_on: {
     icon: ListChecksIcon,

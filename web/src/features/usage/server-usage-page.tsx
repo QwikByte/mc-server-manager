@@ -96,7 +96,7 @@ function LiveUsage({ server, usage }: { server: Server; usage?: ServerUsage }) {
         {running && usage.memoryLimitBytes ? (
           <div className="space-y-2">
             <Meter value={usage.memoryBytes / usage.memoryLimitBytes} label={t("Memory used of the limit")} />
-            <p>{t("of {{limit}}, including what Java needs besides the server", { limit: formatBytes(usage.memoryLimitBytes) })}</p>
+            <p>{t("of {{limit}}, including Java's overhead", { limit: formatBytes(usage.memoryLimitBytes) })}</p>
           </div>
         ) : (
           idle

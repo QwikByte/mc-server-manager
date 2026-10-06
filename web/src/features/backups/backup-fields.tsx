@@ -14,7 +14,7 @@ import { pathsError, type Selection } from "./api"
 
 const choices: [key: keyof Omit<Selection, "paths">, label: string, description: string][] = [
   ["everything", msg("Everything"), msg("The whole folder of the server, including the server software.")],
-  ["worlds", msg("Worlds"), msg("All worlds, also those added later.")],
+  ["worlds", msg("Worlds"), msg("All worlds, including those added later.")],
   ["plugins", msg("Plugins and mods"), msg("With their settings.")],
   ["config", msg("Configuration"), msg("server.properties, whitelist and other settings, without jars and logs.")],
 ]

@@ -106,7 +106,7 @@ export function DashboardPage() {
             className="overflow-hidden text-sm text-muted-foreground"
           >
             <span className="mb-8 block rounded-xl border border-dashed border-primary/40 bg-primary/5 px-4 py-3">
-              {t("Drag widgets by their handle to another place, choose how wide they are or hide them. Your account keeps the layout.")}
+              {t("Drag widgets by their handle to rearrange them, change their width or hide them. The layout is saved to your account.")}
             </span>
           </motion.p>
         )}
@@ -117,7 +117,7 @@ export function DashboardPage() {
 }
 
 function greeting(name: string, hour: number) {
-  if (hour < 5) return t("Good night, {{name}}", { name })
+  if (hour < 5) return t("Still up, {{name}}?", { name })
   if (hour < 12) return t("Good morning, {{name}}", { name })
   if (hour < 18) return t("Good afternoon, {{name}}", { name })
   return t("Good evening, {{name}}", { name })

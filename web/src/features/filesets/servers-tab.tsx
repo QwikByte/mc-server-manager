@@ -28,7 +28,7 @@ export function ServersTab({ set }: { set: FileSet }) {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : list.length === 0 ? (
-        <EmptyState icon={UsersThreeIcon} tone="info" title={t("The set is for no server yet")} description={t("Add a tag or a network as a target.")} />
+        <EmptyState icon={UsersThreeIcon} tone="info" title={t("The set doesn't target any servers yet")} description={t("Add a tag or a network as a target.")} />
       ) : (
         <div className="surface overflow-hidden rounded-xl">
           <Table>

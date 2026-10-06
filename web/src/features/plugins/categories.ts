@@ -38,7 +38,7 @@ export const categories: Record<string, { label: string; icon: Icon }> = {
   mobs: { label: msg("Mobs"), icon: BugIcon },
   optimization: { label: msg("Optimization"), icon: LightningIcon },
   social: { label: msg("Social"), icon: ChatsCircleIcon },
-  storage: { label: msg("Storage"), icon: PackageIcon },
+  storage: { label: msg("Item storage"), icon: PackageIcon },
   technology: { label: msg("Technology"), icon: CpuIcon },
   transportation: { label: msg("Transportation"), icon: TrainIcon },
   utility: { label: msg("Utility"), icon: ToolboxIcon },

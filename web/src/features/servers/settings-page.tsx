@@ -161,7 +161,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
         )}
       </FormSection>
 
-      <FormSection title={t("Starting")}>
+      <FormSection title={t("Startup")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
       </FormSection>
 

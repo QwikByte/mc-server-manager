@@ -171,7 +171,7 @@ function SaveBar({
   const names = (list: { name: string }[]) => list.map((b) => b.name).join(", ")
   const consequences = [
     e.restart.length > 0 && t("Restarts: {{names}}.", { names: names(e.restart) }),
-    e.left.length > 0 && t("Accept players directly again, in online mode: {{names}}.", { names: names(e.left) }),
+    e.left.length > 0 && t("Removed servers accept players directly again, in online mode: {{names}}.", { names: names(e.left) }),
     e.bedrock === "on"
       ? t("The proxy restarts to load Geyser and Floodgate, which disconnects all players.")
       : e.bedrock === "off"

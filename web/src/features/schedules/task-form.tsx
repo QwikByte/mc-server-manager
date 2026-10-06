@@ -18,8 +18,8 @@ const texts = {
     unsaved: msg("Your changes to the job haven't been saved."),
   },
   policy: {
-    paused: msg("A paused policy only runs when you start it."),
-    unsaved: msg("Your changes to the policy haven't been saved."),
+    paused: msg("A paused schedule only runs when you start it."),
+    unsaved: msg("Your changes to the schedule haven't been saved."),
   },
 }
 
@@ -75,7 +75,7 @@ export function TaskForm<S>({
 
       {children(form.settings, (change) => set({ settings: { ...form.settings, ...change } }))}
 
-      <FormSection title={t("Schedule")}>
+      <FormSection title={t("When")}>
         <ScheduleField value={form.schedule} onChange={(schedule) => set({ schedule })} />
       </FormSection>
 

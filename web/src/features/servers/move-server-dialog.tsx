@@ -72,7 +72,7 @@ export function MoveServerDialog({
             <DialogTitle>{t("Move {{name}}", { name: server.name })}</DialogTitle>
             <DialogDescription>
               {t(
-                "The server stops while its files are copied through the master, and starts on the new node if it runs now. Players then join it at the new node's address.",
+                "The server stops while its files are copied through the master, and starts on the new node if it is running now. Players then join it at the new node's address.",
               )}
             </DialogDescription>
           </DialogHeader>

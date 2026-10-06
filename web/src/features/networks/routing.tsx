@@ -47,7 +47,7 @@ export function Routing({
     onChange({ forcedHosts: hosts.map((h, j) => (i === j ? { ...h, ...host } : h)) })
 
   return (
-    <Section title={t("Routing")} description={t("Where players go when they join, and where they fall back to when a server goes away.")}>
+    <Section title={t("Routing")} description={t("Where players go when they join, and where they fall back to when a server goes down.")}>
       <ol className="surface divide-y overflow-hidden rounded-xl">
         <Route
           icon={<IconTile icon={UsersThreeIcon} tone="info" size="sm" />}

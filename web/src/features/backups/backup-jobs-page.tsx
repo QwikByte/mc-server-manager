@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
-import { PageHeader } from "@/components/page-header"
+import { TabIntro } from "@/components/hub-layout"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
@@ -27,7 +27,9 @@ export function BackupJobsPage() {
   const { data: list, isPending, error } = useQuery(jobs.tasksQuery)
   return (
     <>
-      <PageHeader icon={ArchiveIcon} tone="info" title={t("Backups")} actions={manage && <NewJob />} />
+      <TabIntro actions={manage && <NewJob />}>
+        {t("Back up servers and databases on a schedule. Each job keeps as many backups as you choose.")}
+      </TabIntro>
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (

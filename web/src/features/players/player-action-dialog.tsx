@@ -53,9 +53,9 @@ export function PlayerActionDialog({
         ? results[0].output
         : t("Done on {{done}} of {{count}} servers.", { done: results.length - failed.length - pending, count: results.length }),
       pending > 0 &&
-        t("{{count}} stopped servers follow once they start.", {
+        t("{{count}} stopped servers catch up when they next start.", {
           count: pending,
-          defaultValue_one: "A stopped server follows once it starts.",
+          defaultValue_one: "A stopped server catches up when it next starts.",
         }),
       failed.length > 0 && t("Failed on {{servers}}: {{error}}", { servers: failed.map(nameOf).join(", "), error: failed[0].error }),
     ]
@@ -189,8 +189,8 @@ function describe(action: PlayerAction) {
     case "op":
       return t("Operators may run any command in the game, like the console.")
     case "whitelist_on":
-      return t("Only players on the whitelist may join, and those online who aren't leave.")
+      return t("Only players on the whitelist may join, and online players who aren't on it are disconnected.")
     default:
-      return t("Stopped servers follow once they start.")
+      return t("Stopped servers apply the change when they next start.")
   }
 }

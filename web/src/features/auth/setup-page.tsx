@@ -54,7 +54,7 @@ function PasswordForm({ token, username }: { token: string; username: string }) 
       {
         onSuccess: (result) => {
           if (!("mfaRequired" in result)) return navigate({ to: "/" })
-          toast.success(t("Saved your password"), { description: t("Sign in with it and a code of your authenticator app.") })
+          toast.success(t("Saved your password"), { description: t("Sign in with it and a code from your authenticator app.") })
           return navigate({ to: "/login", search: {} })
         },
       },

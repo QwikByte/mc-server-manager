@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
-import { PageHeader } from "@/components/page-header"
+import { TabIntro } from "@/components/hub-layout"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
@@ -16,7 +16,7 @@ function NewPolicy() {
     <Button asChild>
       <Link to="/policies/new">
         <PlusIcon />
-        {t("New policy")}
+        {t("New schedule")}
       </Link>
     </Button>
   )
@@ -40,7 +40,9 @@ export function PoliciesPage() {
   const { data: list, isPending, error } = useQuery(policies.tasksQuery)
   return (
     <>
-      <PageHeader icon={CalendarCheckIcon} tone="warning" title={t("Policies")} actions={manage && <NewPolicy />} />
+      <TabIntro actions={manage && <NewPolicy />}>
+        {t("Restart, stop or start servers at set times, or run console commands. Players can be warned before restarts and stops.")}
+      </TabIntro>
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (
@@ -50,7 +52,7 @@ export function PoliciesPage() {
       ) : error ? (
         <ErrorCallout error={error} />
       ) : list.length === 0 ? (
-        <EmptyState icon={CalendarCheckIcon} tone="warning" title={t("No policies yet")}>
+        <EmptyState icon={CalendarCheckIcon} tone="warning" title={t("No schedules yet")}>
           {manage && <NewPolicy />}
         </EmptyState>
       ) : (

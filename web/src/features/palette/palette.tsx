@@ -5,7 +5,7 @@ import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { IconTile } from "@/components/icon-tile"
-import { navigation } from "@/components/navigation"
+import { pages as visiblePages } from "@/components/navigation"
 import { StatusDot } from "@/components/status"
 import {
   Command,
@@ -24,6 +24,7 @@ import { nodesQuery } from "@/features/nodes/api"
 import { useOnlinePlayers } from "@/features/players/online"
 import { allServersQuery, type NodeServer, serverKey, useBulkAction } from "@/features/servers/api"
 import { serverLook, serverType, statusOf } from "@/features/servers/server-types"
+import { settings } from "@/features/settings/tabs"
 import { msg } from "@/lib/i18n"
 
 /** Actions on a server that the palette offers once a search starts with their name, e.g. "restart lobby". */
@@ -58,8 +59,10 @@ export function Palette({ onClose }: { onClose: () => void }) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   // "neustart" names "Neu starten" too.
   const named = actions.filter((a) => words.some((w) => w.length >= 3 && a.label().toLowerCase().replace(/\s/g, "").startsWith(w)))
+  // The tabs of the settings are found by name too, e.g. "users".
   const pages = [
-    ...navigation.flatMap((g) => g.links.filter((l) => l.visible(access))),
+    ...visiblePages(access),
+    ...settings.tabs.filter((tab) => tab.to !== "/settings" && tab.visible(access)),
     { to: "/account", label: msg("Your account"), icon: UserIcon },
   ] as const
 

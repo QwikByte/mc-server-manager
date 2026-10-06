@@ -331,7 +331,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
         className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8"
         hidden={!editable}
       >
-        <p className="text-sm text-muted-foreground">{t("Changes apply right away, those of the panel when the master starts again.")}</p>
+        <p className="text-sm text-muted-foreground">{t("Changes apply right away, except those to the panel, which apply once the master restarts.")}</p>
         <Button type="submit" disabled={!dirty || update.isPending}>
           {update.isPending ? t("Saving…") : t("Save settings")}
         </Button>

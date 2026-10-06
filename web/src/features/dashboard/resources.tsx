@@ -65,7 +65,7 @@ export function Resources({ title }: { title: string }) {
     >
       {shown.length === 0 ? (
         <Calm icon={ChartLineIcon} tone="info">
-          {t("No node tells what it uses yet.")}
+          {t("No node has reported its load yet.")}
         </Calm>
       ) : loaded.length === 0 ? (
         <Skeleton className="m-4 h-48 rounded-xl" />

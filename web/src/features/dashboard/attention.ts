@@ -58,7 +58,7 @@ export function problemsOf(
       add({
         key: `jvm-options/${s.id}`,
         tone: "warning",
-        title: t("{{name}} starts with JVM options that are refused now", { name: s.name }),
+        title: t("{{name}} starts with JVM options that are no longer allowed", { name: s.name }),
         detail: t("Remove {{options}} in its settings.", { options: s.refusedJvmOptions.join(" ") }),
         link,
       })
@@ -89,7 +89,7 @@ export function problemsOf(
       add({
         key: `pending/${n.id}`,
         tone: "warning",
-        title: t("{{name}} waits for its agent", { name: n.name }),
+        title: t("{{name}} is waiting for its agent", { name: n.name }),
         detail: t("Run the enrollment command on the node."),
         link,
       })
@@ -138,7 +138,7 @@ export function problemsOf(
         key: `proxy/${network.id}`,
         tone: "destructive",
         title: t("The proxy of {{name}} is stopped", { name: network.name }),
-        detail: t("Players can't join the network, although its servers run."),
+        detail: t("Players can't join the network, although its servers are running."),
         link: { to: "/networks/$networkId", params: { networkId: network.id } },
       })
     }
