@@ -17,6 +17,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/backup"
 	"github.com/QwikByte/noryx/internal/agent/files"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 	agentlogs "github.com/QwikByte/noryx/internal/agent/logs"
 	"github.com/QwikByte/noryx/internal/agent/network"
 	"github.com/QwikByte/noryx/internal/agent/node"
@@ -112,6 +113,7 @@ type services struct {
 	node       *node.Service
 	server     *server.Service
 	files      *files.Service
+	filesets   *fileset.Service
 	properties *properties.Service
 	proxy      *network.Service
 	plugin     *plugin.Service
@@ -132,6 +134,7 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 		node:       node.NewService(rt, identity, locations),
 		server:     server.NewService(rt, backups, ov),
 		files:      files.NewService(rt),
+		filesets:   fileset.NewService(rt),
 		properties: properties.NewService(rt),
 		proxy:      network.NewService(rt),
 		plugin:     plugin.NewService(rt),
@@ -153,6 +156,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 	noryxv1.RegisterNodeServiceServer(srv, s.node)
 	noryxv1.RegisterServerServiceServer(srv, s.server)
 	noryxv1.RegisterFileServiceServer(srv, s.files)
+	noryxv1.RegisterFileSetServiceServer(srv, s.filesets)
 	noryxv1.RegisterPropertiesServiceServer(srv, s.properties)
 	noryxv1.RegisterProxyServiceServer(srv, s.proxy)
 	noryxv1.RegisterPluginServiceServer(srv, s.plugin)

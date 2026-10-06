@@ -108,6 +108,13 @@ var actions = map[string]action{
 	"POST /api/templates":                         {logging.Templates, "Create template"},
 	"PUT /api/templates/{id}":                     {logging.Templates, "Change template"},
 	"DELETE /api/templates/{id}":                  {logging.Templates, "Delete template"},
+	"POST /api/filesets":                          {logging.Files, "Create file set"},
+	"PUT /api/filesets/{id}":                      {logging.Files, "Change file set"},
+	"DELETE /api/filesets/{id}":                   {logging.Files, "Delete file set"},
+	"PUT /api/filesets/{id}/secrets/{name}":       {logging.Files, "Set secret of file set"},
+	"DELETE /api/filesets/{id}/secrets/{name}":    {logging.Files, "Delete secret of file set"},
+	"POST /api/filesets/{id}/preview":             {logging.Files, "Preview file set"},
+	"POST /api/filesets/{id}/apply":               {logging.Files, "Apply file set"},
 }
 
 var wildcard = regexp.MustCompile(`\{(\w+)\}`)

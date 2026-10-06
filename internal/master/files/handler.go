@@ -50,10 +50,12 @@ type fileView struct {
 	Directory bool      `json:"directory"`
 	Size      int64     `json:"size"`
 	Modified  time.Time `json:"modified"`
+	// FileSet is the file set that wrote the file, whose next apply replaces changes.
+	FileSet string `json:"fileSet,omitempty"`
 }
 
 func toView(f *noryxv1.FileInfo) fileView {
-	return fileView{f.GetName(), f.GetDirectory(), f.GetSize(), time.Unix(f.GetModifiedUnix(), 0)}
+	return fileView{f.GetName(), f.GetDirectory(), f.GetSize(), time.Unix(f.GetModifiedUnix(), 0), f.GetFileSet()}
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

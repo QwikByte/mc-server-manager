@@ -43,7 +43,13 @@ func TestCallDetails(t *testing.T) {
 	}
 	upload := &noryxv1.WriteFileRequest{Content: &noryxv1.WriteFileRequest_Header{Header: &noryxv1.WriteFileHeader{ServerId: "s1", Path: "plugins/x.yml"}}}
 	network := &noryxv1.ConfigureNetworkRequest{Id: "s1", ForwardingSecret: "secret"}
-	for req, want := range map[proto.Message][]string{upload: {"path=plugins/x.yml", "server=s1"}, network: {"server=s1"}} {
+	set := &noryxv1.ApplyFileSetRequest{
+		ServerId: "s1", SetId: "set1", SetName: "Plugins", Revision: "hash", Secrets: map[string]string{"secret:db": "secret"},
+		Files: []*noryxv1.FileSetFile{{Path: "a.yml", Content: "password: {{secret:db}}"}},
+	}
+	for req, want := range map[proto.Message][]string{
+		upload: {"path=plugins/x.yml", "server=s1"}, network: {"server=s1"}, set: {"server=s1", "set_id=set1", "set_name=Plugins"},
+	} {
 		var got []string
 		for _, a := range details(req.ProtoReflect(), nil, true) {
 			got = append(got, a.Key+"="+a.Value.String())

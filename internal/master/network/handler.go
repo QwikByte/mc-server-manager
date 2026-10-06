@@ -10,15 +10,23 @@ import (
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 type Handler struct {
-	svc *Service
-	ops *operation.Operations
+	svc  *Service
+	ops  *operation.Operations
+	sets FileSets
 }
 
-func NewHandler(svc *Service, ops *operation.Operations) *Handler {
-	return &Handler{svc: svc, ops: ops}
+// FileSets put shared files on the servers of networks. Servers that leave a network lose the
+// files with secrets of its sets.
+type FileSets interface {
+	Left(ctx context.Context, servers []tag.Server)
+}
+
+func NewHandler(svc *Service, ops *operation.Operations, sets FileSets) *Handler {
+	return &Handler{svc: svc, ops: ops, sets: sets}
 }
 
 // networkTimeout covers configuring all servers of a large network one after the other.
@@ -57,11 +65,13 @@ func (h *Handler) Register(mux access.Mux) {
 		if read(w, r, &c) {
 			logging.Note(r.Context(), slog.String("name", c.Name))
 			id := r.PathValue("id")
-			h.run(w, r, "network.update", c.Name, id, http.StatusOK, func(ctx context.Context) (any, error) { return h.svc.Update(ctx, id, c) })
+			h.run(w, r, "network.update", c.Name, id, http.StatusOK, func(ctx context.Context) (any, error) {
+				return h.leaving(ctx, id, func() (any, error) { return h.svc.Update(ctx, id, c) })
+			})
 		}
 	})
 	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusNoContent, func(ctx context.Context, n Network) (any, error) {
-		return nil, h.svc.Delete(ctx, n.ID)
+		return h.leaving(ctx, n.ID, func() (any, error) { return nil, h.svc.Delete(ctx, n.ID) })
 	}))
 	mux.Handle("POST /api/networks/{id}/proxy", manage, func(w http.ResponseWriter, r *http.Request) {
 		var sw Swap
@@ -74,7 +84,9 @@ func (h *Handler) Register(mux access.Mux) {
 			return
 		}
 		logging.Note(r.Context(), slog.String("name", n.Name), slog.String("proxy", sw.Proxy.ServerID))
-		h.run(w, r, "network.proxy", n.Name, n.ID, http.StatusOK, func(ctx context.Context) (any, error) { return h.svc.SwapProxy(ctx, n.ID, sw) })
+		h.run(w, r, "network.proxy", n.Name, n.ID, http.StatusOK, func(ctx context.Context) (any, error) {
+			return h.leaving(ctx, n.ID, func() (any, error) { return h.svc.SwapProxy(ctx, n.ID, sw) })
+		})
 	})
 	mux.Handle("POST /api/networks/{id}/apply", manage, h.onNetwork("network.apply", http.StatusOK, func(ctx context.Context, n Network) (any, error) {
 		return h.svc.Apply(ctx, n.ID)
@@ -175,6 +187,21 @@ func (h *Handler) Register(mux access.Mux) {
 	})
 	mux.Handle("GET /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.proxySettings)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.updateProxySettings)
+}
+
+// leaving runs an action that may take servers out of a network. Then those that left lose
+// the files with secrets of the file sets of the network.
+func (h *Handler) leaving(ctx context.Context, id string, action func() (any, error)) (any, error) {
+	before, err := h.svc.Get(ctx, id)
+	res, actionErr := action()
+	if err == nil {
+		servers := []tag.Server{tag.Server(before.Proxy)}
+		for _, b := range before.Backends {
+			servers = append(servers, tag.Server(b.Ref))
+		}
+		h.sets.Left(ctx, servers)
+	}
+	return res, actionErr
 }
 
 // onNetwork runs an action on the network of a request as an operation.

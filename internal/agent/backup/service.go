@@ -26,8 +26,8 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
-	"github.com/QwikByte/noryx/internal/agent/secrets"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/logging"
 
@@ -152,7 +152,10 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 			return nil, toStatus(err)
 		}
 	}
-	err = swap(data, b, staged)
+	err = keepMarked(data, b, staged, fileset.Read(data).Marked())
+	if err == nil {
+		err = swap(data, b, staged)
+	}
 	if running { // also after a failure, which leaves the server as it was or partly restored
 		progress.Step(ctx, "start", 0)
 		err = errors.Join(err, s.rt.Start(context.WithoutCancel(ctx), srv.ID))
@@ -189,13 +192,20 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 	defer f.Close()
 	r, size := io.Reader(f), b.Size
 	if req.GetHideSecrets() {
+		// What the server marks now is hidden, also in backups from before.
+		data, err := s.rt.Data(stream.Context(), srv.ID)
+		if err != nil {
+			return toStatus(err)
+		}
+		hidden := fileset.Read(data).Secrets()
+		data.Close()
 		zr, err := zip.NewReader(f, b.Size)
 		if err != nil {
 			return toStatus(err)
 		}
 		pr, pw := io.Pipe()
 		defer pr.Close() // stops CopyZip if the client goes away
-		go func() { pw.CloseWithError(datadir.CopyZip(pw, zr, secrets.Censor("."))) }()
+		go func() { pw.CloseWithError(datadir.CopyZip(pw, zr, hidden.Censor("."))) }()
 		r, size = pr, 0
 	}
 	res := &noryxv1.DownloadBackupResponse{Size: size}

@@ -7,6 +7,8 @@ export interface FileEntry {
   directory: boolean
   size: number
   modified: string
+  /** The file set that wrote the file, whose next apply replaces changes made here. */
+  fileSet?: string
 }
 
 export interface Listing {

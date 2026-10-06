@@ -23,6 +23,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/files"
+	"github.com/QwikByte/noryx/internal/master/fileset"
 	"github.com/QwikByte/noryx/internal/master/geysermc"
 	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/https"
@@ -148,6 +149,9 @@ func serve(ctx context.Context, cfg config) error {
 	go usageStore.Run(ctx)
 	overlays := overlay.NewService(db, nodes)
 	go overlays.Run(ctx)
+	networks, tags := network.NewService(db, nodes, plugins, overlays), tag.NewStore(db)
+	fileSets := fileset.NewService(db, nodes, networks, tags, moves)
+	go fileSets.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}
 	var restart func() error
@@ -167,9 +171,10 @@ func serve(ctx context.Context, cfg config) error {
 	httpServer := &http.Server{
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
-			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes, plugins, overlays), Overlay: overlays,
-			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
-			Usage: usageStore, Tags: tag.NewStore(db), Operations: ops, Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
+			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
+			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
+			Tasks: tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Operations: ops, Moves: moves, Restart: restart,
+			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests themselves have no time limit, as uploads and streams last long.
@@ -234,6 +239,7 @@ type Services struct {
 	GeyserMC  *geysermc.Client
 	Modpacks  *modpack.Service
 	Templates *template.Service
+	FileSets  *fileset.Service
 	Tasks     *schedule.Service
 	Logs      *logs.Store
 	Updates   *update.Service
@@ -273,15 +279,16 @@ func API(s Services) *http.ServeMux {
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes, s.Networks, s.Overlay).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
-	network.NewHandler(s.Networks, s.Operations).Register(m)
+	network.NewHandler(s.Networks, s.Operations, s.FileSets).Register(m)
 	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
 	plugin.NewHandler(s.Plugins, s.Operations).Register(m)
 	modpack.NewHandler(s.Modpacks).Register(m)
 	template.NewHandler(s.Templates).Register(m)
+	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
 	backup.NewHandler(s.Nodes, s.Operations).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")

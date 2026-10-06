@@ -55,6 +55,12 @@ type Tags interface {
 	Copy(ctx context.Context, from, to tag.Server) error
 }
 
+// FileSets put shared files on the servers of tags. Servers that lose a tag lose the files
+// with secrets of its sets.
+type FileSets interface {
+	Left(ctx context.Context, servers []tag.Server)
+}
+
 // Plugins installs plugins and mods, e.g. those of a template on a new server.
 type Plugins interface {
 	InstallOn(ctx context.Context, projects []string, nodeID, serverID string) error
@@ -82,12 +88,13 @@ type Handler struct {
 	modpacks Modpacks
 	ops      *operation.Operations
 	moves    *Moves
+	sets     FileSets
 	refs     []References
 	reserved reservations
 }
 
-func NewHandler(nodes Nodes, networks Networks, tags Tags, plugins Plugins, modpacks Modpacks, ops *operation.Operations, moves *Moves, refs ...References) *Handler {
-	return &Handler{nodes: nodes, networks: networks, tags: tags, plugins: plugins, modpacks: modpacks, ops: ops, moves: moves, refs: refs}
+func NewHandler(nodes Nodes, networks Networks, tags Tags, plugins Plugins, modpacks Modpacks, ops *operation.Operations, moves *Moves, sets FileSets, refs ...References) *Handler {
+	return &Handler{nodes: nodes, networks: networks, tags: tags, plugins: plugins, modpacks: modpacks, ops: ops, moves: moves, sets: sets, refs: refs}
 }
 
 // Register adds the routes. The lists only contain the servers the user may see.

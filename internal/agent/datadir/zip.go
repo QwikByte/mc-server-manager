@@ -24,7 +24,8 @@ var stored = map[string]bool{".mca": true, ".jar": true, ".zip": true, ".gz": tr
 const maxEdited = 1 << 20
 
 // A Censor decides about each file of an archive, by its name, whether to omit it and how
-// to edit its content, if at all.
+// to edit its content, if at all. WriteZip asks it once the file is open, so that what marks
+// a file as secret before it is written always counts.
 type Censor func(name string) (omit bool, edit func([]byte) []byte)
 
 // WriteZip writes files and folders of root as a ZIP archive; "." writes all of it.
@@ -43,14 +44,7 @@ func WriteZip(ctx context.Context, w io.Writer, root *os.Root, censor Censor, pa
 			case name == "." || IsTemp(d.Name()) || (!d.IsDir() && !d.Type().IsRegular()):
 				return nil
 			}
-			var edit func([]byte) []byte
-			if censor != nil && !d.IsDir() {
-				var omit bool
-				if omit, edit = censor(name); omit {
-					return nil
-				}
-			}
-			return addFile(ctx, zw, root, name, d, edit)
+			return addFile(ctx, zw, root, name, d, censor)
 		}); err != nil {
 			break
 		}
@@ -105,10 +99,24 @@ func readEdited(r io.Reader) ([]byte, error) {
 	return data, err
 }
 
-func addFile(ctx context.Context, zw *zip.Writer, root *os.Root, name string, d fs.DirEntry, edit func([]byte) []byte) error {
+func addFile(ctx context.Context, zw *zip.Writer, root *os.Root, name string, d fs.DirEntry, censor Censor) error {
 	info, err := d.Info()
 	if err != nil {
 		return err
+	}
+	var f *os.File
+	var edit func([]byte) []byte
+	if !d.IsDir() {
+		if f, err = root.Open(name); err != nil {
+			return err
+		}
+		defer f.Close()
+		if censor != nil {
+			var omit bool
+			if omit, edit = censor(name); omit {
+				return nil
+			}
+		}
 	}
 	header, err := zip.FileInfoHeader(info)
 	if err != nil {
@@ -124,11 +132,6 @@ func addFile(ctx context.Context, zw *zip.Writer, root *os.Root, name string, d 
 	if err != nil || d.IsDir() {
 		return err
 	}
-	f, err := root.Open(name)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
 	if edit == nil {
 		_, err = io.Copy(fw, progress.Reader(ctx, f))
 		return err

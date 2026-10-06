@@ -37,7 +37,8 @@ Secrets such as the RCON password and the forwarding secret of a network never r
 hides files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`, Floodgate's `key.pem`)
 and shows `server.properties`, `config/paper-global.yml`, Geyser's `config.yml` and the configuration of the
 forwarding mods of networks with their secrets as `<hidden>`, which saving keeps. Downloads of folders and backups
-leave them out the same way. Plugins and mods run with the server, though, and can read them.
+leave them out the same way, as they do with the files that [file sets](#file-sets) filled secrets into. Plugins and
+mods run with the server, though, and can read them.
 
 The settings of a server can be changed after it was created: name, Minecraft version, the version of the mod loader
 of Fabric, Quilt, Forge and NeoForge servers (the newest unless set), memory, port, Java version (8, 11, 17, 21, 25 or
@@ -211,7 +212,44 @@ and a list of plugins or mods from Modrinth. When a server is created from a tem
 storage are chosen; `server.properties` is written before the first start and each plugin is installed in the newest
 release that suits the server, so templates don't go stale. Templates are created from scratch or from an existing
 server ("Save as template"), which takes its settings, its properties (except those the manager sets) and the plugins
-that come from Modrinth. Worlds and plugin configurations are not part of templates.
+that come from Modrinth. Worlds and plugin configurations are not part of templates; [file sets](#file-sets) share
+the configurations of plugins among servers.
+
+## File sets
+
+A file set keeps text files that many servers share in one place, e.g. the configuration of LuckPerms, chat or
+anti-cheat plugins, and puts them on the servers of tags and networks: those with a tag, or the game servers or the
+proxy of a network. Paths are relative to the server's folder, e.g. `plugins/LuckPerms/config.yml`.
+
+- **Files.** The **File sets** page edits the files of a set in the browser, imports them from a server as the file
+  manager shows them, and keeps the newest 20 versions with who saved them; the history shows what each version
+  changed and loads an older one into the editor to save it as the newest. A save based on an older version than the
+  newest is refused, so that it can't undo what someone else saved. A set has up to 100 text files (UTF-8 without NUL
+  bytes) of up to 1 MiB, 3 MiB in all. A file can be written only to servers that don't have it, for files that plugins
+  rewrite. Files that Noryx writes itself (`server.properties`, `eula.txt`, `velocity.toml`, BungeeCord's `config.yml`,
+  `spigot.yml`, `config/paper-global.yml`, the lists of players, `noryx-*` files), those with secrets of the server and
+  `.jar`, `.zip` and `.class` files can't be part of a set; plugins come from the **Plugins** page, with their hashes
+  checked. On a server, a path comes from one set only.
+- **Placeholders.** The master fills in `{{server.name}}`, `{{server.id}}`, `{{server.port}}` and `{{network.server}}`,
+  the server's name in its network, for each server; these only hold letters, digits and a few other characters, so
+  they can't add lines to a file. `{{secret:<name>}}` is a secret of the set: a single line of up to 1 KiB, typed in or
+  generated randomly. The API only tells the names of secrets and when they changed, never their values. Other text in
+  double braces stays as it is, as some plugins use it themselves. `{{datastore:…}}` is kept for databases of networks.
+- **Applying.** Saving changes no server. **Apply** shows first what changes on each server, with the diff of each file
+  between the server's copy and the new version, servers with the same changes together; files with secrets show the
+  version the server has and the new one, with placeholders instead of values, and whether the server's copy changed. It
+  names the servers that get the secrets for the first time. Applying writes the files atomically as the server's user,
+  removes those the set no longer has unless they changed on the server, at most 8 servers of a node at a time, and
+  leaves moving servers alone. It can then restart the running servers whose files changed, the game servers of a
+  network a few at a time like a rolling restart, as most plugins only read their configuration when they start.
+- **State.** The page of a set tells for each server whether it has the newest files, an older version or other
+  values of its variables or secrets (outdated), files that changed on it since, none yet, whether it is no longer a
+  target but still has files of the set, or whether its node can't be reached. The file manager marks the files that
+  come from a set, as applying it again replaces changes made there.
+- **Leaving.** A server that loses its tag or leaves its network, and the servers of a deleted set, lose the files with
+  secrets of the set right away, or, if their node is offline, once it is back. Applying the set again removes the
+  other files from servers it is no longer for, unless they changed on them; a deleted set leaves them as they are.
+  Copies of a server lose the files with secrets; moving a server takes everything along.
 
 ## Plugins and mods
 
@@ -263,8 +301,8 @@ its worlds to disk first and pauses saving while they are archived, so players s
 - Deleting a server deletes its backups too. Locally, `noryx-agent backup list|create|restore` works without the
   master, e.g. to restore a server while the master is unreachable.
 
-**The master** keeps users, nodes, networks, templates, backup jobs, policies, settings and the log in its database, and
-the certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling every node again.
+**The master** keeps users, nodes, networks, templates, file sets with their secrets, backup jobs, policies, settings and
+the log in its database, and the certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling every node again.
 `sudo -u noryx noryx-master backup <file>` saves both in a `.tar.gz` archive, also while the master runs; with `-`
 instead of a file, it writes the archive to stdout, e.g. for `ssh master 'sudo -u noryx noryx-master backup -' > master.tar.gz`
 on another machine. The CA's private key lets anyone control the agents, so keep the archive as safe as the master. To
@@ -518,8 +556,9 @@ Users get their permissions from groups; a user can be in several groups and has
   certificates, remove, add, manage the private network, which applies to all nodes), servers (see, create, start, stop, restart, change settings, delete), console (read, send
   commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download, change
   files, `server.properties`, plugins and mods),
-  backups (see and download, back up, restore, delete), the log, networks, templates, backup jobs, policies, the
-  master's settings, the terminal, users and groups. Choosing a permission also chooses what it needs, e.g. seeing the servers
+  backups (see and download, back up, restore, delete), the log, networks, templates, file sets, backup jobs, policies,
+  the master's settings, the terminal, users and groups. Previewing and applying a file set also needs the permission
+  to change the files of every server it touches, and restarting them the one to restart each. Choosing a permission also chooses what it needs, e.g. seeing the servers
   one may restart.
 - **Scopes.** The node and server permissions of a group apply to all servers, or only to chosen nodes (including
   servers created later) and single servers, e.g. a group that may restart the lobby and use its console. Lists only
@@ -610,6 +649,22 @@ Users get their permissions from groups; a user can be in several groups and has
   `.jar` file names in it. Project icons are fetched by the master, so the browser never contacts Modrinth or Hangar
   and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the master sends their gamertag to
   GeyserMC's global API, and the agent only accepts the IDs Floodgate gives Bedrock players.
+- **File sets.** Applying a set needs the permission to change the files of every server it touches, besides the one
+  to manage file sets, as a set can configure plugins that run code, e.g. scripts; whoever may only change the tags of a
+  server can make it a target, but never applies anything, and the preview names the servers that would get secrets for
+  the first time. Secrets are stored in the master's database like the forwarding secret, as a key next to them would be
+  in the same backups as the CA key, which already controls all agents. The master sends their values only to the agents,
+  in a field of their own that, like the files, is never logged; the agent fills them in and hides the resulting files
+  like the RCON password: the file manager can't list, read, write or move them, and downloads of folders and backups
+  leave them out. Each server records in `noryx-filesets.json` which set wrote which file, with its SHA-256 hash, and
+  which files held secrets; these stay hidden for the life of the server. The manifest is hidden too, can't be deleted
+  or replaced from the file manager, and is left out of backups and restores, so that restoring an older backup can't
+  bring back a file with secrets without hiding it; restoring keeps these files as they are, so that it brings back no
+  secret of a set the server left. As a set marks a file before it writes it, the agent checks the marks once a file is
+  open, also while it archives a folder, and copies of a server lose every file that the original marked. Master and agent both refuse the files that Noryx writes itself or that hold
+  secrets of the server, so a set can't change forwarding or RCON settings, and the agent writes no file through a link
+  or into a file where a folder should be. A compromised server can change its own manifest, which only changes its own
+  state or the hiding of secrets it can read anyway.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
   directory. A copied Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a
   copied game server stops trusting the proxy, so a copy can't impersonate a server of a network. Copied proxies also
@@ -682,7 +737,7 @@ Users get their permissions from groups; a user can be in several groups and has
 The code is organised by feature, not by layer.
 
 ```
-api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, players, plugins, backups, log, stats, progress, overlay) and generated code
+api/noryx/v1/            gRPC contract (enrollment, node, server, files, file sets, properties, proxy, players, plugins, backups, log, stats, progress, overlay), generated code and the rules both sides check
 cmd/noryx-master/        master binary
 cmd/noryx-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -713,6 +768,7 @@ internal/master/
   geysermc/             client for GeyserMC's download server (Floodgate) and global API (IDs of Bedrock players)
   modpack/              creates servers from Modrinth modpacks: checks a pack and writes its files into the server
   template/             templates for new servers
+  fileset/              file sets: versions, targets, secrets, variables, the state of servers, previews and applying
   schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API
   backup/               backups of servers, and backup jobs as scheduled tasks
   policy/               policies as scheduled tasks: restarts with warnings, stops, starts, console commands
@@ -732,6 +788,7 @@ internal/agent/
                         configuration, and the Maintenance plugin
   player/               kicks, bans, whitelists and operators with Minecraft's commands; changes for stopped servers
   files/                file access for the file manager
+  fileset/              files of file sets on servers: secrets filled in, the manifest that hides them, the state of files
   properties/           reads and updates server.properties, keeping comments
   plugin/               plugin and mod files of servers
   backup/               backups of servers: selection, archives, restoring
@@ -745,7 +802,7 @@ web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
                         policies, schedules (shared by backups and policies), settings, terminal, logs, usage,
                         access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K),
                         operations (progress, notifications and the list of operations), players, modpacks,
-                        overlay (the private network of the nodes)
+                        overlay (the private network of the nodes), filesets
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

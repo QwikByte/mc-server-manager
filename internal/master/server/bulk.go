@@ -138,6 +138,10 @@ func (h *Handler) changeTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logging.Note(r.Context(), slog.Int("servers", len(req.Servers)), slog.Any("add", req.Add), slog.Any("remove", req.Remove))
+	if len(req.Remove) > 0 {
+		// In the background, as nodes that can't be reached would hold up the answer.
+		go h.sets.Left(context.WithoutCancel(r.Context()), req.Servers)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
