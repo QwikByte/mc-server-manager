@@ -119,7 +119,7 @@ export function TemplateForm({
         </div>
       </FormSection>
 
-      <FormSection title={t("Starting")}>
+      <FormSection title={t("Startup")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
       </FormSection>
 

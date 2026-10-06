@@ -29,7 +29,7 @@ import { formatCores } from "@/features/usage/format"
 import { UsageHistory } from "@/features/usage/usage-history"
 import { formatBytes, formatDate, formatMegabytes } from "@/lib/format"
 import { memoryCapacityMb, memoryLimitMb, type Node, type NodeInfo, nodeQuery } from "./api"
-import { NewJoinTokenButton, RemoveNodeButton, RenewCertificateButton } from "./node-actions"
+import { NewJoinTokenButton, NodeMenu } from "./node-actions"
 import { NodeSettingsDialog } from "./node-settings-dialog"
 import { NodeStatusBadge } from "./node-status"
 import { StorageList } from "./storage-list"
@@ -69,9 +69,7 @@ export function NodePage() {
                     </Link>
                   </Button>
                 )}
-                {node.status === "online" && can("nodes.certificates", node.id) && <RenewCertificateButton node={node} />}
-                {node.enrolledAt && can("nodes.enroll") && <NewJoinTokenButton node={node} />}
-                {can("nodes.delete", node.id) && <RemoveNodeButton node={node} />}
+                <NodeMenu node={node} />
               </>
             }
           />
@@ -113,7 +111,7 @@ export function NodePage() {
               title={t("Connect the agent")}
               description={t("This node has no connected agent yet. Create a join token and run the enrollment command on the node.")}
             >
-              {can("nodes.enroll") && <NewJoinTokenButton node={node} variant="default" />}
+              {can("nodes.enroll") && <NewJoinTokenButton node={node} />}
             </EmptyState>
           ) : (
             <EmptyState

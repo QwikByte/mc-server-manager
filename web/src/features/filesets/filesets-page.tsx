@@ -5,7 +5,7 @@ import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { EmptyState } from "@/components/empty-state"
-import { PageHeader } from "@/components/page-header"
+import { TabIntro } from "@/components/hub-layout"
 import { Pill, StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -33,13 +33,9 @@ export function FileSetsPage() {
   const { data: sets, isPending, error } = useQuery(fileSetsQuery)
   return (
     <>
-      <PageHeader
-        icon={FilesIcon}
-        tone="info"
-        title={t("File sets")}
-        description={t("Configuration files that many servers share, e.g. of plugins, kept in one place and applied to the servers of tags and networks.")}
-        actions={manage && <NewFileSet />}
-      />
+      <TabIntro actions={manage && <NewFileSet />}>
+        {t("Configuration files that many servers share, e.g. those of plugins. Keep them in one place and apply them to servers by tag or network.")}
+      </TabIntro>
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((i) => (

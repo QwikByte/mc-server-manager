@@ -77,7 +77,7 @@ func New(nodes Nodes) Policies { return Policies{nodes: nodes} }
 func (Policies) Check(raw json.RawMessage) (json.RawMessage, error) {
 	var s Settings
 	if err := json.Unmarshal(raw, &s); err != nil {
-		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose what the policy does.")
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose what the schedule does.")
 	}
 	if _, warns := defaultMessages[s.Action]; warns {
 		slices.SortFunc(s.Warnings, func(a, b uint32) int { return cmp.Compare(b, a) })
@@ -94,7 +94,7 @@ func (Policies) Check(raw json.RawMessage) (json.RawMessage, error) {
 	s.Command = strings.TrimSpace(s.Command)
 	switch {
 	case !slices.Contains([]string{restart, stop, start, command}, s.Action):
-		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose what the policy does.")
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose what the schedule does.")
 	case len(s.Warnings) > maxWarnings || slices.ContainsFunc(s.Warnings, func(m uint32) bool { return m == 0 || m > maxMinutes }):
 		return nil, httpapi.Errorf(http.StatusBadRequest, "Warn the players up to %d times, 1 to %d minutes before.", maxWarnings, maxMinutes)
 	case len(s.Message) > maxMessage || strings.ContainsFunc(s.Message, unicode.IsControl):

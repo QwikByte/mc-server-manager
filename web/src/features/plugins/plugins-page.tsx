@@ -1,12 +1,11 @@
-import { PuzzlePieceIcon } from "@phosphor-icons/react"
 import { getRouteApi } from "@tanstack/react-router"
 import { t } from "i18next"
-import { PageHeader } from "@/components/page-header"
+import { TabIntro } from "@/components/hub-layout"
 import { Segmented } from "@/components/segmented"
 import { InstallDialog } from "./install-dialog"
 import { PluginSearch } from "./plugin-search"
 
-const route = getRouteApi("/_app/plugins")
+const route = getRouteApi("/_app/_library/plugins")
 
 /** Finds plugins or mods on Modrinth, or plugins on Hangar, and installs them on several servers at once. */
 export function PluginsPage() {
@@ -14,10 +13,7 @@ export function PluginsPage() {
   const navigate = route.useNavigate()
   return (
     <>
-      <PageHeader
-        icon={PuzzlePieceIcon}
-        tone="warning"
-        title={t("Plugins & mods")}
+      <TabIntro
         actions={
           <Segmented
             label={t("Show")}
@@ -29,7 +25,9 @@ export function PluginsPage() {
             ]}
           />
         }
-      />
+      >
+        {t("Search Modrinth and Hangar, and install plugins or mods on several servers at once.")}
+      </TabIntro>
       <div className="surface rounded-2xl p-4 sm:p-6">
         {/* Each kind starts with its own filters. */}
         <PluginSearch key={kind} kind={kind} action={(hit) => <InstallDialog hit={hit} />} />

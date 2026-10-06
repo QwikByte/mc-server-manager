@@ -1,7 +1,8 @@
 import { notifyManager, QueryCache, QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, createRoute, createRouter, lazyRouteComponent, Outlet, redirect } from "@tanstack/react-router"
 import { AppShell } from "@/components/app-shell"
-import { home } from "@/components/navigation"
+import { HubLayout } from "@/components/hub-layout"
+import { automation, home, library } from "@/components/navigation"
 import { NotFound } from "@/components/not-found"
 import { Toaster } from "@/components/ui/sonner"
 import { accessQuery } from "@/features/access/api"
@@ -214,8 +215,20 @@ const networkDatabaseRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/datastores/table-browser"), "TableBrowser"),
 })
 
-const templatesRoute = createRoute({
+// The library and the automation are pages under one header each, whose tabs keep their own addresses.
+const libraryRoute = createRoute({
   getParentRoute: () => appRoute,
+  id: "_library",
+  component: () => <HubLayout hub={library} />,
+})
+const automationRoute = createRoute({
+  getParentRoute: () => appRoute,
+  id: "_automation",
+  component: () => <HubLayout hub={automation} />,
+})
+
+const templatesRoute = createRoute({
+  getParentRoute: () => libraryRoute,
   path: "/templates",
   component: lazyRouteComponent(() => import("@/features/templates/templates-page"), "TemplatesPage"),
 })
@@ -231,7 +244,7 @@ const templateRoute = createRoute({
 })
 
 const fileSetsRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryRoute,
   path: "/filesets",
   component: lazyRouteComponent(() => import("@/features/filesets/filesets-page"), "FileSetsPage"),
 })
@@ -242,7 +255,7 @@ const fileSetRoute = createRoute({
 })
 
 const backupJobsRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => automationRoute,
   path: "/backups",
   component: lazyRouteComponent(() => import("@/features/backups/backup-jobs-page"), "BackupJobsPage"),
 })
@@ -258,7 +271,7 @@ const backupJobRoute = createRoute({
 })
 
 const policiesRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => automationRoute,
   path: "/policies",
   component: lazyRouteComponent(() => import("@/features/policies/policies-page"), "PoliciesPage"),
 })
@@ -274,7 +287,7 @@ const policyRoute = createRoute({
 })
 
 const pluginsRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => libraryRoute,
   path: "/plugins",
   // kind tells whether mods are searched; without it, plugins are.
   validateSearch: (search: Record<string, unknown>): { kind?: Kind } => ({ kind: search.kind === "mods" ? "mods" : undefined }),
@@ -364,18 +377,15 @@ export const router = createRouter({
       networksRoute,
       playersRoute,
       networkRoute.addChildren([networkOverviewRoute, networkProxyRoute, networkDatabasesRoute, networkDatabaseRoute]),
-      templatesRoute,
+      libraryRoute.addChildren([templatesRoute, fileSetsRoute, pluginsRoute]),
       newTemplateRoute,
       templateRoute,
-      fileSetsRoute,
       fileSetRoute,
-      backupJobsRoute,
+      automationRoute.addChildren([backupJobsRoute, policiesRoute]),
       newBackupJobRoute,
       backupJobRoute,
-      policiesRoute,
       newPolicyRoute,
       policyRoute,
-      pluginsRoute,
       logsRoute,
       accountRoute,
       settingsRoute.addChildren([

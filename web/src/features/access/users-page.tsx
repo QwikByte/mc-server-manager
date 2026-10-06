@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
+import { TabIntro } from "@/components/hub-layout"
 import { type Status, StatusBadge } from "@/components/status"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -32,11 +33,9 @@ export function UsersPage() {
   if (error) return <ErrorCallout error={error} />
   return (
     <>
-      {manage && (
-        <div className="mb-4 flex justify-end">
-          <InviteDialog groups={groups} />
-        </div>
-      )}
+      <TabIntro actions={manage && <InviteDialog groups={groups} />}>
+        {t("Everyone who can sign in to the panel. What they may do comes from their groups.")}
+      </TabIntro>
       <div className="surface overflow-hidden rounded-xl">
         <Table>
           <TableHeader>

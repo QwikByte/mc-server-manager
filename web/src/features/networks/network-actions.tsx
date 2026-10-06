@@ -4,6 +4,7 @@ import {
   ArrowsClockwiseIcon,
   ArrowsCounterClockwiseIcon,
   CaretDownIcon,
+  DotsThreeIcon,
   MegaphoneIcon,
   PlayIcon,
   PowerIcon,
@@ -26,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import type { Permission } from "@/features/access/permissions"
@@ -37,13 +38,14 @@ import { SwapProxyDialog } from "./swap-proxy-dialog"
 
 type Power = "start" | "stop" | "restart" | "rolling"
 
-/** Acts on all servers of a network, and applies or deletes it. */
+/** Acts on all servers of a network, and applies it; changing its proxy and deleting it are behind a menu. */
 export function NetworkActions({ network }: { network: Network }) {
   const { can } = useAccess()
   const action = useNetworkAction(network.id)
   const operation = useOperation()
   const navigate = useNavigate()
-  const [dialog, setDialog] = useState<Power | "broadcast">()
+  const [dialog, setDialog] = useState<Power | "broadcast" | "swap" | "delete">()
+  const close = (open: boolean) => !open && setDialog(undefined)
   const onAll = (p: Permission) => [network.proxy, ...network.backends].every((s) => can(p, s.nodeId, s.serverId))
   const powers = (["start", "restart", "rolling", "stop"] as const).filter((p) => onAll(`servers.${p === "rolling" ? "restart" : p}`))
 
@@ -108,15 +110,6 @@ export function NetworkActions({ network }: { network: Network }) {
       )}
       {can("networks.manage") && (
         <>
-          <SwapProxyDialog
-            network={network}
-            trigger={
-              <Button variant="outline" disabled={action.isPending}>
-                <ArrowsLeftRightIcon />
-                {t("Change proxy")}
-              </Button>
-            }
-          />
           <Button
             variant="outline"
             disabled={action.isPending}
@@ -131,29 +124,46 @@ export function NetworkActions({ network }: { network: Network }) {
             <ArrowsClockwiseIcon />
             {t("Apply again")}
           </Button>
-          <ConfirmDialog
-            trigger={
-              <Button variant="outline" className="text-destructive hover:bg-destructive/10 hover:text-destructive">
-                <TrashIcon />
-                {t("Delete network")}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label={t("More actions for {{name}}", { name: network.name })} title={t("More actions")}>
+                <DotsThreeIcon weight="bold" />
               </Button>
-            }
-            title={t("Delete {{name}}?", { name: network.name })}
-            description={t("Its servers restart and accept players directly again, in online mode. The proxy keeps running without forwarding.")}
-            action={t("Delete network")}
-            destructive
-            onConfirm={() =>
-              run({ action: "delete" }, t("Deleting {{name}}…", { name: network.name }), t("Deleted {{name}}", { name: network.name }), () =>
-                navigate({ to: "/networks" }),
-              )
-            }
-          />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem disabled={action.isPending} onSelect={() => setDialog("swap")}>
+                <ArrowsLeftRightIcon />
+                {t("Change proxy…")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" disabled={action.isPending} onSelect={() => setDialog("delete")}>
+                <TrashIcon />
+                {t("Delete network…")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
+      )}
+      {dialog === "swap" && <SwapProxyDialog network={network} onClose={() => setDialog(undefined)} />}
+      {dialog === "delete" && (
+        <ConfirmDialog
+          open
+          onOpenChange={close}
+          title={t("Delete {{name}}?", { name: network.name })}
+          description={t("Its servers restart and accept players directly again, in online mode. The proxy keeps running without forwarding.")}
+          action={t("Delete network")}
+          destructive
+          onConfirm={() =>
+            run({ action: "delete" }, t("Deleting {{name}}…", { name: network.name }), t("Deleted {{name}}", { name: network.name }), () =>
+              navigate({ to: "/networks" }),
+            )
+          }
+        />
       )}
       {(dialog === "restart" || dialog === "stop") && (
         <ConfirmDialog
           open
-          onOpenChange={(open) => !open && setDialog(undefined)}
+          onOpenChange={close}
           title={dialog === "stop" ? t("Stop {{name}}?", { name: network.name }) : t("Restart {{name}}?", { name: network.name })}
           description={power[dialog].confirm}
           action={dialog === "stop" ? t("Stop all") : t("Restart all")}
@@ -177,7 +187,7 @@ export function NetworkActions({ network }: { network: Network }) {
       {dialog === "broadcast" && (
         <BroadcastDialog
           network={network}
-          onOpenChange={(open) => !open && setDialog(undefined)}
+          onOpenChange={close}
           onSend={(message) => action.mutateAsync({ action: "broadcast", message })}
         />
       )}

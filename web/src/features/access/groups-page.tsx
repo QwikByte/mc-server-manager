@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
+import { TabIntro } from "@/components/hub-layout"
 import { IconTile } from "@/components/icon-tile"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -19,16 +20,20 @@ export function GroupsPage() {
   if (error) return <ErrorCallout error={error} />
   return (
     <>
-      {can("groups.manage") && (
-        <div className="mb-4 flex justify-end">
-          <Button asChild>
-            <Link to="/settings/groups/new">
-              <PlusIcon />
-              {t("New group")}
-            </Link>
-          </Button>
-        </div>
-      )}
+      <TabIntro
+        actions={
+          can("groups.manage") && (
+            <Button asChild>
+              <Link to="/settings/groups/new">
+                <PlusIcon />
+                {t("New group")}
+              </Link>
+            </Button>
+          )
+        }
+      >
+        {t("Groups bundle permissions, for all servers or only some. Users get the permissions of all their groups.")}
+      </TabIntro>
       <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => (
           <li key={group.id}>

@@ -26,7 +26,7 @@ export function PolicyPage() {
   const save = policies.useSaveTask(policyId)
   return (
     <>
-      <BackLink to="/policies">{t("Policies")}</BackLink>
+      <BackLink to="/policies">{t("Schedules")}</BackLink>
       {isPending ? (
         <Skeleton className="h-96 rounded-xl" />
       ) : error ? (
@@ -46,7 +46,7 @@ export function PolicyPage() {
                 targets: policy.targets,
                 settings: policy.settings,
               }}
-              submitLabel={t("Save policy")}
+              submitLabel={t("Save schedule")}
               save={save}
               onSaved={(p) => toast.success(t("Saved {{name}}", { name: p.name }))}
             />
@@ -62,11 +62,11 @@ export function NewPolicyPage() {
   const navigate = useNavigate()
   return (
     <>
-      <BackLink to="/policies">{t("Policies")}</BackLink>
-      <PageHeader icon={CalendarCheckIcon} tone="warning" title={t("New policy")} />
+      <BackLink to="/policies">{t("Schedules")}</BackLink>
+      <PageHeader icon={CalendarCheckIcon} tone="warning" title={t("New schedule")} />
       <PolicyForm
         initial={emptyPolicy}
-        submitLabel={t("Create policy")}
+        submitLabel={t("Create schedule")}
         save={save}
         onSaved={(p) => {
           toast.success(t("Created {{name}}", { name: p.name }))

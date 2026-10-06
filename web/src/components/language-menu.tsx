@@ -24,15 +24,22 @@ export function LanguageMenu({ value, onChoose = chooseLanguage }: { value: stri
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuLabel>{t("Language")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={value} onValueChange={onChoose}>
-          <DropdownMenuRadioItem value="">{t("Browser language")}</DropdownMenuRadioItem>
-          {languages.map((code) => (
-            <DropdownMenuRadioItem key={code} value={code} lang={code}>
-              {languageName(code)}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        <LanguageChoices value={value} onChoose={onChoose} />
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** The languages as items of a menu. */
+export function LanguageChoices({ value, onChoose }: { value: string; onChoose: (language: string) => void }) {
+  return (
+    <DropdownMenuRadioGroup value={value} onValueChange={onChoose}>
+      <DropdownMenuRadioItem value="">{t("Browser language")}</DropdownMenuRadioItem>
+      {languages.map((code) => (
+        <DropdownMenuRadioItem key={code} value={code} lang={code}>
+          {languageName(code)}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
   )
 }
