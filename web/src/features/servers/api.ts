@@ -34,6 +34,8 @@ export interface Server {
   loaderVersion: string
   /** The UDP port at which Bedrock players join a proxy, which its network sets. */
   bedrockPort?: number
+  /** The node publishes the port only in the private network of the nodes, for the node of the server's proxy. */
+  overlay?: boolean
   /** Labels such as lobby, sorted; only in lists of servers. */
   tags: string[]
 }

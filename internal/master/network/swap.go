@@ -105,7 +105,11 @@ func (s *Service) swapped(ctx context.Context, current Network, sw Swap) (Networ
 	n.Forwarding, n.Firewalled = forwardingOr(sw.Forwarding, proxy.GetType()), sw.Firewalled
 	// validate puts them into their canonical form, which current keeps.
 	n.Backends, n.ForcedHosts = slices.Clone(current.Backends), slices.Clone(current.ForcedHosts)
-	if err := n.validate(); err != nil {
+	m, err := s.members(ctx)
+	if err == nil {
+		err = n.validate(m)
+	}
+	if err != nil {
 		return current, nil, err
 	}
 	if n.Forwarding != current.Forwarding {

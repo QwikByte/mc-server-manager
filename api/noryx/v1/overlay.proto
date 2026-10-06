@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package noryx.v1;
+
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
+
+// OverlayService is served by every agent and joins its node to the private network of the
+// nodes: a WireGuard interface over which proxies reach the backends of other nodes. Only
+// nodes whose administrator allowed it, with noryx-agent overlay allow, join.
+service OverlayService {
+  // GetOverlay tells whether the node may and can join, and returns its public key, which it
+  // creates the first time, and the state of its interface and peers.
+  rpc GetOverlay(GetOverlayRequest) returns (GetOverlayResponse);
+  // ConfigureOverlay sets the node's address, port, MTU and peers. Applying the same again
+  // keeps the sessions with the peers.
+  rpc ConfigureOverlay(ConfigureOverlayRequest) returns (ConfigureOverlayResponse);
+  // RotateOverlayKey replaces the node's key and returns the new public key. Until the peers
+  // have it, they don't reach the node.
+  rpc RotateOverlayKey(RotateOverlayKeyRequest) returns (RotateOverlayKeyResponse);
+  // LeaveOverlay removes the interface and its firewall rules. The key stays.
+  rpc LeaveOverlay(LeaveOverlayRequest) returns (LeaveOverlayResponse);
+}
+
+message GetOverlayRequest {}
+
+message GetOverlayResponse {
+  // The node's administrator allowed the node to join.
+  bool allowed = 1;
+  // Why the node can't run WireGuard, e.g. as its kernel lacks it; empty if it can.
+  string unsupported = 2;
+  // The node's public key, base64; empty unless it is allowed.
+  string public_key = 3;
+  // The node's address with the prefix of the network, e.g. 10.213.0.3/24; empty unless it
+  // is a member.
+  string address = 4;
+  repeated OverlayPeerStatus peers = 5;
+}
+
+message OverlayPeerStatus {
+  string public_key = 1;
+  // host:port the peer last sent from, or is reached at.
+  string endpoint = 2;
+  // 0 if there was none yet.
+  int64 latest_handshake_unix = 3;
+  uint64 received_bytes = 4;
+  uint64 sent_bytes = 5;
+}
+
+message ConfigureOverlayRequest {
+  // The node's address with the prefix of the network, e.g. 10.213.0.3/24. The network is a
+  // private IPv4 range that overlaps no address or route of the node.
+  string address = 1;
+  // The UDP port at which WireGuard listens.
+  uint32 port = 2;
+  uint32 mtu = 3;
+  repeated OverlayPeer peers = 4;
+}
+
+message OverlayPeer {
+  string public_key = 1;
+  // Its address in the network, e.g. 10.213.0.4, the only one it may send from.
+  string address = 2;
+  // host:port at which it is reached; the agent resolves host names.
+  string endpoint = 3;
+}
+
+message ConfigureOverlayResponse {}
+
+message RotateOverlayKeyRequest {}
+
+message RotateOverlayKeyResponse {
+  string public_key = 1;
+}
+
+message LeaveOverlayRequest {}
+
+message LeaveOverlayResponse {}

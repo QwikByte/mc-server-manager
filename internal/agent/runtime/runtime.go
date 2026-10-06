@@ -86,6 +86,9 @@ type Spec struct {
 	// BedrockPort is the UDP port of Geyser on a proxy whose network lets Bedrock players
 	// join; 0 for none. The network sets it.
 	BedrockPort uint32 `json:"bedrockPort,omitempty"`
+	// Overlay is the node's address in the private network of the nodes, where a backend
+	// publishes its port for its proxy on another node; empty publishes it on all addresses.
+	Overlay string `json:"overlay,omitempty"`
 }
 
 // Uses reports whether a server uses a port of the node: its own, or the UDP port at which
@@ -136,6 +139,9 @@ type Network struct {
 	// BedrockPort is set for the proxy of a network that lets Bedrock players join through
 	// Geyser at this UDP port.
 	BedrockPort uint32
+	// Overlay is set for a backend whose proxy reaches it over the private network of the
+	// nodes: the node's address there, where it publishes its port.
+	Overlay string
 }
 
 // NetworkBackend is a server behind the proxy, either on the same node (ServerID) or

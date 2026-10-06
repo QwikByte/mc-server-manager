@@ -32,6 +32,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/overlay"
 	"github.com/QwikByte/noryx/internal/master/player"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
@@ -145,6 +146,8 @@ func serve(ctx context.Context, cfg config) error {
 	go updates.Run(ctx)
 	usageStore := usage.NewStore(db, nodes)
 	go usageStore.Run(ctx)
+	overlays := overlay.NewService(db, nodes)
+	go overlays.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}
 	var restart func() error
@@ -164,7 +167,7 @@ func serve(ctx context.Context, cfg config) error {
 	httpServer := &http.Server{
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
-			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes, plugins),
+			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: network.NewService(db, nodes, plugins, overlays), Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), Tasks: tasks, Logs: logStore, Updates: updates,
 			Usage: usageStore, Tags: tag.NewStore(db), Operations: ops, Moves: moves, Restart: restart, HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
@@ -226,6 +229,7 @@ type Services struct {
 	Settings  *settings.Service
 	Nodes     *node.Service
 	Networks  *network.Service
+	Overlay   *overlay.Service
 	Plugins   *plugin.Service
 	GeyserMC  *geysermc.Client
 	Modpacks  *modpack.Service
@@ -267,7 +271,8 @@ func API(s Services) *http.ServeMux {
 	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
-	node.NewHandler(s.Nodes, s.Networks).Register(m)
+	node.NewHandler(s.Nodes, s.Networks, s.Overlay).Register(m)
+	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
 	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.Tasks, s.Access, s.Usage, s.Tags).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations).Register(m)

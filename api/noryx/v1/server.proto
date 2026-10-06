@@ -116,6 +116,9 @@ message Server {
   // JVM options that were set before the agent refused them, e.g. as they can run code. The
   // server still starts with them until they are removed in its settings.
   repeated string refused_jvm_options = 18;
+  // The node publishes the port of the backend only at its address in the private network of
+  // the nodes, for the node of its proxy.
+  bool overlay = 19;
 }
 
 message ListServersRequest {}
@@ -252,6 +255,10 @@ message ConfigureNetworkRequest {
   // For a backend: Bedrock players join it through the proxy. They can't sign their chat
   // messages, so the server must not demand it.
   bool bedrock_players = 9;
+  // For a backend on another node than its proxy, both in the private network of the nodes:
+  // the address of the proxy's node in it. The node publishes the backend's port only at its
+  // own address in the network, and only for this one.
+  string overlay_client = 10;
 }
 
 enum Forwarding {

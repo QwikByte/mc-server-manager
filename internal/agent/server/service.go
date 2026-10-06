@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"regexp"
 	"slices"
@@ -88,6 +89,7 @@ type Service struct {
 	noryxv1.UnimplementedServerServiceServer
 	rt      runtime.Runtime
 	backups Backups
+	overlay Overlay
 
 	mu       sync.Mutex
 	reserved map[uint32]string // ports about to be used, by the ID of their server
@@ -98,8 +100,17 @@ type Backups interface {
 	RemoveAll(serverID string) error
 }
 
-func NewService(rt runtime.Runtime, backups Backups) *Service {
-	return &Service{rt: rt, backups: backups, reserved: map[uint32]string{}}
+// Overlay publishes the ports of backends in the private network of the nodes.
+type Overlay interface {
+	// Admit lets client, the address in the network of the node of a server's proxy, reach
+	// the server's port there, and returns the node's address in the network.
+	Admit(id string, port uint32, client string) (string, error)
+	// Dismiss closes the port of a server in the network.
+	Dismiss(id string) error
+}
+
+func NewService(rt runtime.Runtime, backups Backups, overlay Overlay) *Service {
+	return &Service{rt: rt, backups: backups, overlay: overlay, reserved: map[uint32]string{}}
 }
 
 func (s *Service) ListServers(ctx context.Context, _ *noryxv1.ListServersRequest) (*noryxv1.ListServersResponse, error) {
@@ -173,7 +184,7 @@ func (s *Service) DuplicateServer(ctx context.Context, req *noryxv1.DuplicateSer
 	}
 	spec := source.Spec
 	spec.ID, spec.Name, spec.Port, spec.BehindProxy, spec.ProxyOnNode = runtime.NewID(), req.GetName(), req.GetPort(), false, false
-	spec.BedrockPort, spec.BedrockPlayers = 0, false // the copy isn't part of the network
+	spec.BedrockPort, spec.BedrockPlayers, spec.Overlay = 0, false, "" // the copy isn't part of the network
 	release, err := s.check(ctx, spec)
 	if err != nil {
 		return nil, err
@@ -370,7 +381,7 @@ func (s *Service) DeleteServer(ctx context.Context, req *noryxv1.DeleteServerReq
 	if err := s.apply(ctx, req.GetId(), s.rt.Remove); err != nil && status.Code(err) != codes.NotFound {
 		return nil, err
 	}
-	return &noryxv1.DeleteServerResponse{}, toStatus(s.backups.RemoveAll(req.GetId()))
+	return &noryxv1.DeleteServerResponse{}, toStatus(errors.Join(s.backups.RemoveAll(req.GetId()), s.overlay.Dismiss(req.GetId())))
 }
 
 func (s *Service) StreamLogs(req *noryxv1.StreamLogsRequest, stream noryxv1.ServerService_StreamLogsServer) error {
@@ -431,6 +442,9 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNe
 		return nil, err
 	}
 	defer release()
+	if network.Overlay, err = s.publish(ctx, req.GetId(), req.GetOverlayClient()); err != nil {
+		return nil, err
+	}
 	restarted, err := s.rt.Configure(ctx, req.GetId(), network)
 	switch {
 	case errors.Is(err, runtime.ErrUnsupported):
@@ -466,6 +480,26 @@ func (s *Service) checkBedrock(ctx context.Context, id string, port uint32) (rel
 }
 
 // networkOf validates a network configuration, which ends up in configuration files.
+// publish lets the client of a backend reach its port in the private network of the nodes,
+// and returns the node's address there; without a client, it closes the port there.
+func (s *Service) publish(ctx context.Context, id, client string) (string, error) {
+	if client == "" {
+		return "", toStatus(s.overlay.Dismiss(id))
+	}
+	srv, err := s.find(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if srv.Type.Proxy() {
+		return "", status.Error(codes.InvalidArgument, "Players reach a proxy at all of the node's addresses.")
+	}
+	addr, err := s.overlay.Admit(id, srv.Port, client)
+	if status.Code(err) == codes.Unknown {
+		err = status.Error(codes.FailedPrecondition, err.Error())
+	}
+	return addr, err
+}
+
 func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
 	network := runtime.Network{ForwardingSecret: req.GetForwardingSecret(), Try: req.GetTry(), BedrockPort: req.GetBedrockPort()}
 	switch req.GetForwarding() {
@@ -492,6 +526,8 @@ func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
 		return network, "invalid forwarding secret"
 	case len(req.GetBackends()) > maxBackends || len(req.GetForcedHosts()) > maxForcedHosts:
 		return network, "too many backends or forced hosts"
+	case req.GetOverlayClient() != "" && (!behind || !validIPv4(req.GetOverlayClient())):
+		return network, "invalid overlay client"
 	}
 	names := map[string]bool{}
 	for _, b := range req.GetBackends() {
@@ -546,6 +582,11 @@ func validAddress(address string) bool {
 	host, port, err := net.SplitHostPort(address)
 	n, perr := strconv.Atoi(port)
 	return err == nil && perr == nil && hostPattern.MatchString(host) && n > 0 && n <= maxPort
+}
+
+func validIPv4(s string) bool {
+	addr, err := netip.ParseAddr(s)
+	return err == nil && addr.Is4()
 }
 
 // plain removes colours and formatting so that console output reads as plain text.
@@ -648,6 +689,7 @@ func toProto(s runtime.Server) *noryxv1.Server {
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
 		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
 		LoaderVersion: s.LoaderVersion, BedrockPort: s.BedrockPort, RefusedJvmOptions: refusedOptions(s.JVMOptions),
+		Overlay: s.Overlay != "",
 	}
 }
 

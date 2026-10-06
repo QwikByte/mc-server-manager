@@ -48,6 +48,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn on maintenance of {{name}}", { name: subject })
     case "network.maintenance-off":
       return t("Turn off maintenance of {{name}}", { name: subject })
+    case "overlay.leave":
+      return t("Remove {{name}} from the private network", { name: subject })
     case "players.kick":
       return t("Kick {{name}}", { name: subject })
     case "players.ban":
@@ -130,6 +132,10 @@ export function stepOf(op: Operation, step: string): string {
       return t("Remove Geyser and Floodgate")
     case "maintenance":
       return op.kind === "network.maintenance-off" ? t("Turn maintenance off") : t("Turn maintenance on")
+    case "overlay":
+      return t("Leave the private network")
+    case "networks":
+      return t("Configure the networks again")
     case "servers":
       if (op.kind.startsWith("players.")) return t("Apply it on the servers")
       if (verb === "rolling-restart") return t("Restart the servers one after the other")

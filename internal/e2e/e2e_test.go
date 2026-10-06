@@ -32,6 +32,7 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/enroll"
 	agentlogs "github.com/QwikByte/noryx/internal/agent/logs"
 	agentnode "github.com/QwikByte/noryx/internal/agent/node"
+	agentoverlay "github.com/QwikByte/noryx/internal/agent/overlay"
 	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
@@ -48,6 +49,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/overlay"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/schedule"
@@ -236,9 +238,10 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	moves := server.NewMoves()
 	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
+	overlays := overlay.NewService(m.db, nodes)
 	return masterapp.Services{
-		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes,
-		Networks: network.NewService(m.db, nodes, plugins), Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes, Overlay: overlays,
+		Networks: network.NewService(m.db, nodes, plugins, overlays), Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes), Tags: tag.NewStore(m.db), Operations: operation.New(m.quick),
 		Moves: moves,
 	}
@@ -261,6 +264,7 @@ type agent struct {
 	dir      string
 	identity *agentnode.Identity
 	runtime  *fakeRuntime
+	kernel   *fakeKernel
 	log      *agentlogs.Buffer
 }
 
@@ -269,12 +273,12 @@ func (m *master) startAgent(t *testing.T, name string) agent {
 	ln := listen(t)
 	n, token, err := m.nodes.Create(t.Context(), name, ln.Addr().String())
 	check(t, err)
-	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{dir: t.TempDir()}, log: agentlogs.NewBuffer()}
+	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{dir: t.TempDir()}, kernel: &fakeKernel{}, log: agentlogs.NewBuffer()}
 	check(t, enroll.Run(t.Context(), token.String(), a.dir))
 	a.identity, err = agentnode.LoadIdentity(a.dir)
 	check(t, err)
 	creds := credentials.NewTLS(pki.AgentServerTLS(a.identity.Holder, a.identity.CA))
-	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), a.log, grpc.Creds(creds)), ln)
+	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), agentoverlay.NewService(a.dir, a.kernel), a.log, grpc.Creds(creds)), ln)
 	return a
 }
 
@@ -556,8 +560,8 @@ func (f *fakeRuntime) spec(id string) runtime.Spec {
 	return runtime.Spec{}
 }
 
-// Configure keeps the network of a server; a running proxy whose Bedrock port changes
-// restarts, like a container created again.
+// Configure keeps the network of a server and where it publishes its port; a running proxy
+// whose Bedrock port changes restarts, like a container created again.
 func (f *fakeRuntime) Configure(_ context.Context, id string, network runtime.Network) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -566,6 +570,9 @@ func (f *fakeRuntime) Configure(_ context.Context, id string, network runtime.Ne
 	}
 	f.networks[id] = network
 	i := slices.IndexFunc(f.servers, func(s runtime.Server) bool { return s.ID == id })
+	if i >= 0 {
+		f.servers[i].Overlay = network.Overlay
+	}
 	if i < 0 || f.servers[i].BedrockPort == network.BedrockPort && f.servers[i].BedrockPlayers == network.BedrockPlayers {
 		return false, nil
 	}

@@ -47,6 +47,8 @@ archives:
       - README.md
       - src: packaging/agent/noryx-agent.service
         strip_parent: true
+      - src: packaging/agent/noryx-overlay.service
+        strip_parent: true
       - src: packaging/agent/agent.env
         strip_parent: true
 
@@ -97,6 +99,8 @@ nfpms:
     contents:
       - src: packaging/agent/noryx-agent.service
         dst: /usr/lib/systemd/system/noryx-agent.service
+      - src: packaging/agent/noryx-overlay.service
+        dst: /usr/lib/systemd/system/noryx-overlay.service
       - src: bin/install.sh
         dst: /usr/lib/noryx-agent/install.sh
         file_info:

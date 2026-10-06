@@ -154,7 +154,8 @@ starts it:
 curl -fsSLO https://github.com/QwikByte/noryx/releases/download/<version>/install.sh && sudo bash install.sh agent --join <join-token>
 ```
 
-Allow port 7443 only from the master's IP address.
+Allow port 7443 only from the master's IP address. For the [private network](#networks) of the nodes, open UDP port
+51820 (or the one in its settings) between the nodes.
 
 **Everything on one machine.** `sudo bash install.sh all` installs master and agent, registers the machine as node and
 connects its agent, which then only accepts connections from the machine itself.
@@ -182,7 +183,9 @@ and `… backup <file>` saves the master's database and CA (see [Backups](#backu
 **Commands on a node:** `sudo noryx-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the
 agent's own log. `backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is
 unreachable too. `storage add ssd /mnt/ssd/noryx` allows another directory for server data, e.g. on a faster disk; new
-servers can then be created there from the panel, and backup jobs can keep their backups there.
+servers can then be created there from the panel, and backup jobs can keep their backups there. `overlay allow` lets
+the panel add the node to the private network of the nodes, `overlay deny` takes that back, and `overlay status`
+shows its address and peers.
 
 **Removing.** `apt remove`, `dnf remove` or `pacman -R` with `noryx-master` or `noryx-agent` stops and removes a program
 but keeps its data. Delete `/var/lib/noryx-master`, `/var/lib/noryx-agent` and `/etc/noryx` to remove that too. The
@@ -375,14 +378,33 @@ removes it when it leaves.
   Floodgate starts their names with a dot, e.g. `.Steve`. Turning Bedrock off removes both plugins, but keeps their
   settings and Floodgate's key for later.
 - **Reaching the servers.** On its own node, the proxy reaches a server by container name over a Docker network that only
-  the two of them share; such a server's port isn't published at all. A server on another node is reached at that
-  node's host and the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as
-  ufw, so allow only the proxy's node in Docker's `DOCKER-USER` chain on the server's node, e.g. for port 25566 and the
-  proxy's node 203.0.113.10: `iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 25566 --ctdir ORIGINAL ! -s 203.0.113.10 -j DROP`
-  (and save it, e.g. with `netfilter-persistent save`). The panel shows this command with each such server.
+  the two of them share; such a server's port isn't published at all. A server on another node is reached over the
+  private network of the nodes if both nodes are part of it (see below). Otherwise it is reached at that node's host and
+  the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as ufw, so allow only
+  the proxy's node in Docker's `DOCKER-USER` chain on the server's node, e.g. for port 25566 and the proxy's node
+  203.0.113.10: `iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 25566 --ctdir ORIGINAL ! -s 203.0.113.10 -j DROP`
+  (and save it, e.g. with `netfilter-persistent save`). The panel shows this command with each such server; with
+  Docker's nftables firewall there is no `DOCKER-USER` chain, so use the private network instead.
+- **Private network.** Nodes form a private WireGuard network, `10.213.0.0/24` with UDP port 51820 unless its settings
+  on the **Nodes** page say otherwise. Its range changes only while no node is part of it. A node joins on its page once
+  its administrator ran `noryx-agent overlay allow` on it, and gets the lowest free address; the others reach it at the
+  host of its agent's address, or at an endpoint set on its page, which a node on the master's machine needs
+  (`install.sh all` registers it at `127.0.0.1`). The proxy then reaches a server of another member at that node's
+  address in the network, where the node publishes the server's port only for the proxy's node: no firewall rule and no
+  confirmation for legacy forwarding are needed, and the traffic between the nodes is encrypted. Joining restarts
+  nothing: a network shows which of its servers move to the private network when it is applied again, which restarts
+  them once for their new port. Leaving applies the networks of the node again, which reach the servers at public ports
+  then, and is refused while a network with legacy forwarding would reach servers that no firewall protects. Nodes
+  outside, agents of older versions and kernels without WireGuard (it is part of Linux since 5.6; RHEL 9 has it only as
+  an unsupported Technology Preview) work as before. The master configures the members every 5 minutes, so those that
+  were offline catch up, and right away after a change, e.g. when a node is removed or its address changes. Each node's
+  page shows its address, endpoint, key and peers with their latest handshake and traffic, and rotates its key; the
+  overview names members that had no handshake with another one for 5 minutes, e.g. as the UDP port is closed. The
+  kernel keeps the interface `noryx0` while the agent restarts or updates, and `noryx-overlay.service` restores it at
+  boot, before Docker starts the servers.
 - **Legacy forwarding** doesn't prove that players come through the proxy: anyone who reaches such a server can join as
-  any player. A network with legacy forwarding and servers on other nodes therefore needs the confirmation that a
-  firewall protects them, and no server of it moves to another node without.
+  any player. A network with legacy forwarding and servers on other nodes outside the private network therefore needs
+  the confirmation that a firewall protects them, and no server of it moves to such a node without.
 - New Minecraft servers start with a whitelist: add players on the **Players** page, for one server or the network.
 
 ## Players
@@ -493,7 +515,7 @@ only shows to users with the permission for it.
 Users get their permissions from groups; a user can be in several groups and has the permissions of all of them.
 
 - **Fine-grained permissions.** There are permissions for every action, by area: nodes (see, change, renew
-  certificates, remove, add), servers (see, create, start, stop, restart, change settings, delete), console (read, send
+  certificates, remove, add, manage the private network, which applies to all nodes), servers (see, create, start, stop, restart, change settings, delete), console (read, send
   commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download, change
   files, `server.properties`, plugins and mods),
   backups (see and download, back up, restore, delete), the log, networks, templates, backup jobs, policies, the
@@ -609,8 +631,8 @@ Users get their permissions from groups; a user can be in several groups and has
   removed from the Administrators. The master logs every change with the user who made it, also denied attempts.
 - **Terminal.** The panel's terminal is not a shell. The agent's commands are the same code as its local CLI, but
   run in the master and reach the agent through the existing mutually authenticated connection, so the agent offers
-  nothing new to the master. Commands that only the node's administrator may run (`storage`, `enroll`) don't exist
-  there. Command lines are split like a shell would, but nothing is expanded or executed by one, and the master logs
+  nothing new to the master. Commands that only the node's administrator may run (`storage`, `enroll`, `overlay allow`, `deny`
+  and `up`) don't exist there. Command lines are split like a shell would, but nothing is expanded or executed by one, and the master logs
   every command with the user who ran it.
 - **Log.** An agent can only add entries about its own node and its servers, at a limited rate, and entries are cut to
   a maximum size, so a compromised agent can't fill the database or write entries about other nodes. Request fields
@@ -625,6 +647,19 @@ Users get their permissions from groups; a user can be in several groups and has
 - **Console.** To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console
   password from the server's `server.properties` and connects to the server's console port inside Docker's network;
   the password never leaves the node.
+- **Private network.** Only nodes whose administrator ran `noryx-agent overlay allow` join, so the master can't open a
+  UDP port and an interface on a host that didn't agree. Each node creates its WireGuard key itself
+  (`/var/lib/noryx-agent/overlay/private.key`, mode `0600`); only the public key reaches the master, over the node's
+  mutually authenticated connection, and the master's backup holds public keys only. The agent checks what the master
+  configures: the range must be a private IPv4 range (RFC 1918) that overlaps none of the node's addresses and routes,
+  e.g. a provider's private network or a Docker network, and each peer gets exactly one address in it, so a master
+  can't pull other traffic of the node into the tunnel. An nftables table of its own (`inet noryx`), which works next to
+  Docker's iptables and nftables rules, drops packets for the node's address that don't arrive through the tunnel, new
+  connections from the tunnel to the node itself, e.g. to SSH or the agent, and forwarded connections from the tunnel
+  except those of a proxy's node to the ports of its servers. WireGuard accepts from a peer only its own address and
+  doesn't answer unauthenticated packets. A compromised node reaches only the ports of its own servers on other nodes;
+  removing it removes it everywhere. A compromised master could add a peer of its own, but it can already reconfigure
+  every server. If the interface is missing, e.g. after a failed boot, the ports of these servers are reachable nowhere.
 - **Storage locations.** Only the node's administrator decides where server data may be stored
   (`noryx-agent storage add`). The panel can only choose among these locations, so a compromised master can't
   mount other host directories into containers.
@@ -647,7 +682,7 @@ Users get their permissions from groups; a user can be in several groups and has
 The code is organised by feature, not by layer.
 
 ```
-api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, players, plugins, backups, log, stats, progress) and generated code
+api/noryx/v1/            gRPC contract (enrollment, node, server, files, properties, proxy, players, plugins, backups, log, stats, progress, overlay) and generated code
 cmd/noryx-master/        master binary
 cmd/noryx-agent/         agent binary
 internal/pki/           CA, certificate issuing, mTLS configurations (shared)
@@ -661,6 +696,7 @@ internal/master/
   settings/             settings of the master that the panel changes, and a description of the running master
   terminal/             runs the commands of the master and of the agents for the panel
   node/                 node registry, enrollment, agent connections
+  overlay/              private WireGuard network of the nodes: members, addresses, peers, keeping them configured
   update/               looks for new releases, updates the master through systemd and the agents after it
   server/               server API, forwarded to the node's agent
   tag/                  tags of servers, which the panel finds and groups them by
@@ -690,6 +726,7 @@ internal/agent/
   node/                 machine info, certificate renewal, updates of the node
   server/               server lifecycle and input validation
   storage/              storage locations allowed for server data
+  overlay/              the node's part of the private network: WireGuard interface, keys, checks, nftables table
   datadir/              confined access to a server's data, owned by the server's user
   network/              configuration of proxies and game servers for networks, the settings of proxies, Geyser's
                         configuration, and the Maintenance plugin
@@ -707,7 +744,8 @@ web/                    admin panel (React, Vite, Tailwind CSS, shadcn/ui)
   src/features/         auth, dashboard, nodes, servers, files, properties, networks, plugins, templates, backups,
                         policies, schedules (shared by backups and policies), settings, terminal, logs, usage,
                         access (users, groups and the permission checks of the panel), updates, palette (Ctrl+K),
-                        operations (progress, notifications and the list of operations), players, modpacks
+                        operations (progress, notifications and the list of operations), players, modpacks,
+                        overlay (the private network of the nodes)
 packaging/              installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
 ```
 

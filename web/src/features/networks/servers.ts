@@ -24,6 +24,14 @@ export function forwardingMod(type: string) {
 }
 
 export const key = ({ nodeId, serverId }: ServerRef) => `${nodeId}/${serverId}`
+
+/** How the proxy reaches a server: on its own node, over the private network of the nodes, or at a public port. */
+export type Route = "local" | "private" | "public"
+
+export function routeOf(network: Network, server: ServerRef, isPrivate: (a: string, b: string) => boolean): Route {
+  if (server.nodeId === network.proxy.nodeId) return "local"
+  return isPrivate(network.proxy.nodeId, server.nodeId) ? "private" : "public"
+}
 export const refOf = (server: NodeServer): ServerRef => ({ nodeId: server.nodeId, serverId: server.id })
 
 /** Finds a server; null while the servers are loading, undefined if it is unreachable. */

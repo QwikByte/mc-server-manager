@@ -143,7 +143,7 @@ func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, erro
 	if err != nil {
 		return nil, err
 	}
-	root := guarded("noryx-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations can only be changed on the node itself.", n.Name), agentChecks(n.ID, h.moving))
+	root := guarded("noryx-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations and the private network are only allowed on the node itself.", n.Name), agentChecks(n.ID, h.moving))
 	root.AddCommand(agentcli.Commands(func(ctx context.Context, fn func(grpc.ClientConnInterface) error) error {
 		conn, err := h.nodes.Conn(ctx, n.ID)
 		if err != nil {

@@ -164,7 +164,7 @@ func (r *slowRuntime) Create(_ context.Context, spec runtime.Spec) error {
 // server.
 func TestCreateServerReservesThePort(t *testing.T) {
 	rt := &slowRuntime{}
-	s := NewService(rt, nil)
+	s := NewService(rt, nil, nil)
 	errs := make(chan error, 3)
 	for range cap(errs) {
 		go func() {
@@ -195,7 +195,7 @@ func TestCreateServerReservesThePort(t *testing.T) {
 func TestRefusedJVMOptions(t *testing.T) {
 	options := []string{"-Dfile.encoding=UTF-8", "-XX:VMOptionsFile=/data/opts", "-Djava.system.class.loader=Evil"}
 	rt := &slowRuntime{servers: []runtime.Server{{Spec: runtime.Spec{ID: runtime.NewID(), JVMOptions: options}}}}
-	res, err := NewService(rt, nil).ListServers(t.Context(), &noryxv1.ListServersRequest{})
+	res, err := NewService(rt, nil, nil).ListServers(t.Context(), &noryxv1.ListServersRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestRefusedJVMOptions(t *testing.T) {
 
 // Game servers run Minecraft, so they need the EULA accepted; proxies don't.
 func TestCreateServerNeedsTheEULAForGameServers(t *testing.T) {
-	s := NewService(&slowRuntime{}, nil)
+	s := NewService(&slowRuntime{}, nil, nil)
 	create := func(typ noryxv1.ServerType, port uint32) error {
 		_, err := s.CreateServer(t.Context(), &noryxv1.CreateServerRequest{Name: "Server", Type: typ, MemoryMb: 1024, Port: port})
 		return err

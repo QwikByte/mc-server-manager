@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { allServersQuery } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
+import { usePrivateRoute } from "@/features/overlay/api"
 import { EndOfLifeNotice } from "@/features/servers/software"
 import { maintenanceQuery, networkQuery } from "./api"
 import { MaintenanceSection } from "./maintenance"
@@ -35,7 +36,7 @@ import { NetworkActions } from "./network-actions"
 import { NetworkEditor } from "./network-editor"
 import { ProxySettingsEditor } from "./proxy-settings"
 import { ServerLabel } from "./server-label"
-import { findServer } from "./servers"
+import { findServer, routeOf } from "./servers"
 import { SwapProxyDialog } from "./swap-proxy-dialog"
 import { playersOnline, useNetworkUsage } from "./usage"
 
@@ -49,6 +50,7 @@ export function NetworkPage() {
   const { data: servers } = useQuery(allServersQuery)
   const usage = useNetworkUsage(network ? [network] : [])
   const { data: maintenance } = useQuery(maintenanceQuery(networkId))
+  const isPrivate = usePrivateRoute()
 
   if (isPending)
     return (
@@ -68,6 +70,11 @@ export function NetworkPage() {
   const backends = network.backends.map((b) => findServer(servers, b))
   const running = backends.filter((s) => s && s.state !== "stopped").length
   const players = playersOnline(network, usage)
+  // Backends that publish their port publicly, although the proxy can reach them over the private network.
+  const ready = network.backends.filter((b) => {
+    const server = findServer(servers, b)
+    return routeOf(network, b, isPrivate) === "private" && server && !server.overlay
+  })
 
   return (
     <>
@@ -116,6 +123,13 @@ export function NetworkPage() {
           />
         )}
       </EndOfLifeNotice>
+      {ready.length > 0 && (
+        <Callout icon={ShieldCheckIcon} title={t("Ready for the private network")} className="mb-6">
+          {t("Apply the network again to reach {{names}} over the private network of the nodes instead of public ports. They restart once.", {
+            names: ready.map((b) => b.name).join(", "),
+          })}
+        </Callout>
+      )}
       {network.applyError && (
         <Callout tone="warning" icon={WarningCircleIcon} role="alert" title={t("The proxy may send players to the wrong address")} className="mb-6">
           {network.applyError}

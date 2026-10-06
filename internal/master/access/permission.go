@@ -15,6 +15,7 @@ const (
 	NodesCertificates Permission = "nodes.certificates"
 	NodesDelete       Permission = "nodes.delete"
 	NodesEnroll       Permission = "nodes.enroll"
+	OverlayManage     Permission = "overlay.manage"
 
 	ServersView     Permission = "servers.view"
 	ServersCreate   Permission = "servers.create"
@@ -96,6 +97,7 @@ var Catalog = []Area{
 		scoped(NodesCertificates, "Renew certificates", "Renew the certificate of a node before it is due.", NodesView),
 		scoped(NodesDelete, "Remove nodes", "The panel stops managing them; their servers keep running.", NodesView),
 		scoped(NodesEnroll, "Add nodes", "Add nodes and create join tokens for agents. Only in groups for all servers, as new nodes are outside other scopes.", NodesView),
+		global(OverlayManage, "Manage the private network", "Add nodes whose administrator allowed it to the private network of the nodes, remove them and rotate their keys, on the pages of the nodes one may see. Applies to all nodes, as members reach the ports of the others."),
 	}},
 	{"Servers", []Info{
 		scoped(ServersView, "See servers", "Servers with their state, settings and plugins."),

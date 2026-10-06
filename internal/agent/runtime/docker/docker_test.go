@@ -46,3 +46,37 @@ func TestContainerUser(t *testing.T) {
 		}
 	}
 }
+
+// A backend reached over the private network of the nodes publishes its port only at the
+// node's address there; one whose proxy runs on the node doesn't publish it at all.
+func TestPublishedPort(t *testing.T) {
+	for _, tc := range []struct {
+		spec runtime.Spec
+		want string // host IP, or "none"
+	}{
+		{runtime.Spec{}, ""},
+		{runtime.Spec{BehindProxy: true, Overlay: "10.213.0.3"}, "10.213.0.3"},
+		{runtime.Spec{BehindProxy: true, ProxyOnNode: true}, "none"},
+	} {
+		tc.spec.ID, tc.spec.Type, tc.spec.Port = "server", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566
+		opts, err := containerOptions(tc.spec, "/data", sharedNetwork)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := "none"
+		for _, bindings := range opts.HostConfig.PortBindings {
+			for _, b := range bindings {
+				got = ""
+				if b.HostIP.IsValid() {
+					got = b.HostIP.String()
+				}
+				if b.HostPort != "25566" {
+					t.Errorf("%+v: host port %s", tc.spec, b.HostPort)
+				}
+			}
+		}
+		if got != tc.want {
+			t.Errorf("%+v: host IP %q, want %q", tc.spec, got, tc.want)
+		}
+	}
+}

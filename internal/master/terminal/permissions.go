@@ -84,6 +84,7 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 		"backup create":  change(access.BackupsCreate),
 		"backup restore": change(access.BackupsRestore),
 		"logs":           node(access.LogsView),
+		"overlay status": node(access.NodesView),
 	}
 }
 

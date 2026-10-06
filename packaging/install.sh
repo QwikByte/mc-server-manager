@@ -285,6 +285,8 @@ summary_agent() {
 The agent is running.
 
   Firewall    allow port $AGENT_PORT only from the master's IP address
+  Network     for the private network of the nodes: noryx-agent overlay allow,
+              and open UDP port 51820 between the nodes
   Status      noryx-agent status
   Settings    /etc/noryx/agent.env, then: systemctl restart noryx-agent
   Log         journalctl -u noryx-agent, or: noryx-agent logs
