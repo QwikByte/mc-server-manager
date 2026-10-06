@@ -17,6 +17,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 
 	"github.com/QwikByte/noryx/internal/agent/progress"
@@ -127,8 +128,14 @@ func (s store) create(ctx context.Context, data *datadir.Dir, serverID, location
 	size := datadir.Size(data.FS(), d.Paths...)
 	progress.Step(ctx, "archive", size)
 	return s.add(serverID, location, newID(d.Created), d, size, func(w io.Writer) error {
-		return datadir.WriteZip(ctx, w, data.Root, nil, d.Paths...)
+		return datadir.WriteZip(ctx, w, data.Root, withoutManifest, d.Paths...)
 	})
+}
+
+// withoutManifest leaves out the manifest of file sets, which tells which files hold
+// secrets: restoring an older one would hide less.
+func withoutManifest(name string) (bool, func([]byte) []byte) {
+	return name == fileset.ManifestFile, nil
 }
 
 // add adds a backup to a location, whose archive write writes, if size bytes fit. It only

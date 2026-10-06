@@ -27,12 +27,12 @@ const (
 
 // detailFields are the request fields that are logged besides the server ID. Others may
 // hold secrets, such as the forwarding secret of a network, or file contents.
-var detailFields = []protoreflect.Name{"name", "version", "command", "path", "from", "to", "file_name", "replaces", "backup_id", "label", "location", "job_id"}
+var detailFields = []protoreflect.Name{"name", "version", "command", "path", "from", "to", "file_name", "replaces", "backup_id", "label", "location", "job_id", "set_id", "set_name"}
 
 var categories = map[string]slog.Attr{
 	"NodeService": logging.Nodes, "ServerService": logging.Servers, "FileService": logging.Files,
 	"PropertiesService": logging.Files, "PluginService": logging.Plugins, "BackupService": logging.Backups,
-	"ProxyService": logging.Files,
+	"ProxyService": logging.Files, "FileSetService": logging.Files,
 }
 
 var wordStart = regexp.MustCompile(`([a-z])([A-Z])`)

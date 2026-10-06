@@ -222,6 +222,14 @@ function EntryLink({ files, dir, entry }: { files: ServerFiles; dir: string; ent
     <>
       <FileTypeIcon entry={entry} />
       <span className="truncate">{entry.name}</span>
+      {entry.fileSet && (
+        <span
+          className="shrink-0 rounded-md bg-info/10 px-1.5 py-0.5 text-[11px] font-medium text-info"
+          title={t("Comes from the file set {{name}}. Applying the set again replaces changes made here.", { name: entry.fileSet })}
+        >
+          {entry.fileSet}
+        </span>
+      )}
     </>
   )
   const className = "flex min-w-0 items-center gap-3 font-medium hover:text-primary"

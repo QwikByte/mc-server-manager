@@ -33,8 +33,9 @@ var running = noryxv1.ServerState_SERVER_STATE_RUNNING
 // RollingRestart restarts the running game servers of a network a few at a time, so that the
 // network stays open: the players of a server move to another one first, and the next
 // servers restart once these run again. The servers that players join first restart last
-// and one at a time, so that players always find one.
-func (s *Service) RollingRestart(ctx context.Context, n Network, batch int) error {
+// and one at a time, so that players always find one. If only names servers, only these
+// restart, e.g. those whose files changed.
+func (s *Service) RollingRestart(ctx context.Context, n Network, batch int, only ...Ref) error {
 	if batch < 1 || batch > maxBatch {
 		return httpapi.Errorf(http.StatusBadRequest, "Restart from 1 to %d servers at a time.", maxBatch)
 	}
@@ -44,10 +45,12 @@ func (s *Service) RollingRestart(ctx context.Context, n Network, batch int) erro
 	if err != nil {
 		return err
 	}
-	var first, last []Backend
+	var first, last, others []Backend
 	for _, b := range n.Backends {
 		switch {
 		case states[b.Ref] != running:
+		case len(only) > 0 && !slices.Contains(only, b.Ref):
+			others = append(others, b) // players can move there
 		case slices.Contains(n.Try, b.Name):
 			last = append(last, b)
 		default:
@@ -59,16 +62,16 @@ func (s *Service) RollingRestart(ctx context.Context, n Network, batch int) erro
 	}
 	// The server that players join first restarts last.
 	slices.SortFunc(last, func(a, b Backend) int { return cmp.Compare(slices.Index(n.Try, b.Name), slices.Index(n.Try, a.Name)) })
-	up := slices.Concat(first, last)
+	restarting := slices.Concat(first, last)
 	groups := slices.Collect(slices.Chunk(first, batch))
 	for _, b := range last {
 		groups = append(groups, []Backend{b})
 	}
-	total, done := int64(len(up)), int64(0)
+	total, done := int64(len(restarting)), int64(0)
 	operation.Count(ctx, 0, total, "servers")
 	for _, group := range groups {
 		if states[n.Proxy] == running {
-			if err := s.moveOff(ctx, n, group, up); err != nil {
+			if err := s.moveOff(ctx, n, group, slices.Concat(restarting, others)); err != nil {
 				return err
 			}
 		}

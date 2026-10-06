@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +10,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 )
 
@@ -21,7 +23,7 @@ func paperData(t *testing.T) (string, *datadir.Dir) {
 		"server.properties": "motd=hi\n", "bukkit.yml": "a: 1\n", "paper.jar": "jar", ".rcon-cli.env": "secret",
 		"world/level.dat": "w", "world/region/r.0.0.mca": "chunks", "world_nether/level.dat": "n",
 		"plugins/LuckPerms.jar": "lp", "plugins/LuckPerms/config.yml": "storage: h2\n",
-		"config/paper-global.yml": "x: 1\n", "logs/latest.log": "log", "cache/x": "x",
+		"config/paper-global.yml": "x: 1\n", "logs/latest.log": "log", "cache/x": "x", fileset.ManifestFile: "{}",
 	}
 	for name, content := range files {
 		write(t, filepath.Join(path, name), content)
@@ -60,7 +62,7 @@ func TestSelected(t *testing.T) {
 		{"plugins", paper, &noryxv1.BackupSelection{Plugins: true}, []string{"plugins"}},
 		{"mods keep their settings in config", noryxv1.ServerType_SERVER_TYPE_FABRIC, &noryxv1.BackupSelection{Plugins: true}, []string{"config"}},
 		{"config", paper, &noryxv1.BackupSelection{Config: true}, []string{"bukkit.yml", "config", "server.properties"}},
-		{"paths inside others", paper, &noryxv1.BackupSelection{Worlds: true, Paths: []string{"world/region", "/logs/", "missing", "outside"}}, []string{"logs", "world", "world_nether"}},
+		{"paths inside others", paper, &noryxv1.BackupSelection{Worlds: true, Paths: []string{"world/region", "/logs/", "missing", "outside", fileset.ManifestFile}}, []string{"logs", "world", "world_nether"}},
 		{"everything", paper, &noryxv1.BackupSelection{Everything: true, Worlds: true}, []string{"."}},
 		{"root as a path", paper, &noryxv1.BackupSelection{Paths: []string{"/"}}, []string{"."}},
 	} {
@@ -113,15 +115,25 @@ func TestBackupAndRestore(t *testing.T) {
 		t.Fatal("the worlds were not restored, or more than the worlds")
 	}
 
-	// Restoring everything brings the data directory back to the state of the backup.
+	// Restoring everything brings the data directory back to the state of the backup, except
+	// for the manifest of file sets, which isn't backed up: what it marks stays hidden.
 	all := create([]string{"."}, "")
 	write(t, filepath.Join(path, "plugins/Grief.jar"), "x")
+	write(t, filepath.Join(path, fileset.ManifestFile), `{"marked":["bukkit.yml"]}`)
 	if err := os.RemoveAll(filepath.Join(path, "world_nether")); err != nil {
 		t.Fatal(err)
 	}
 	restore(all)
 	if read("plugins/Grief.jar") != "" || read("world_nether/level.dat") != "n" || read(".rcon-cli.env") != "secret" {
 		t.Fatal("everything was not restored")
+	}
+	if read(fileset.ManifestFile) != `{"marked":["bukkit.yml"]}` {
+		t.Fatal("restoring replaced the manifest of file sets")
+	}
+	if zr, err := zip.OpenReader(all.archive()); err != nil || slices.ContainsFunc(zr.File, func(f *zip.File) bool { return f.Name == fileset.ManifestFile }) {
+		t.Fatalf("the backup has the manifest of file sets: %v", err)
+	} else {
+		zr.Close()
 	}
 	if entries, _ := os.ReadDir(path); slices.ContainsFunc(entries, func(e os.DirEntry) bool { return datadir.IsTemp(e.Name()) }) {
 		t.Fatal("temporary files were left behind")

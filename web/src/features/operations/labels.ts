@@ -68,6 +68,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn on the whitelist of {{count}} servers", { count, defaultValue_one: "Turn on the whitelist of {{count}} server" })
     case "players.whitelist_off":
       return t("Turn off the whitelist of {{count}} servers", { count, defaultValue_one: "Turn off the whitelist of {{count}} server" })
+    case "fileset.apply":
+      return t("Apply the file set {{name}}", { name: subject })
     case "servers.start":
       return t("Start {{count}} servers", { count, defaultValue_one: "Start {{count}} server" })
     case "servers.stop":
@@ -136,6 +138,10 @@ export function stepOf(op: Operation, step: string): string {
       return t("Leave the private network")
     case "networks":
       return t("Configure the networks again")
+    case "files":
+      return t("Write the files on the servers")
+    case "restart":
+      return t("Restart the servers whose files changed")
     case "servers":
       if (op.kind.startsWith("players.")) return t("Apply it on the servers")
       if (verb === "rolling-restart") return t("Restart the servers one after the other")

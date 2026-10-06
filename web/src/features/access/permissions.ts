@@ -28,6 +28,8 @@ export const permissionIds = [
   "networks.manage",
   "templates.view",
   "templates.manage",
+  "filesets.view",
+  "filesets.manage",
   "backupjobs.view",
   "backupjobs.manage",
   "policies.view",

@@ -26,8 +26,8 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
-	"github.com/QwikByte/noryx/internal/agent/secrets"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/logging"
 
@@ -189,13 +189,20 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 	defer f.Close()
 	r, size := io.Reader(f), b.Size
 	if req.GetHideSecrets() {
+		// What the server marks now is hidden, also in backups from before.
+		data, err := s.rt.Data(stream.Context(), srv.ID)
+		if err != nil {
+			return toStatus(err)
+		}
+		hidden := fileset.Read(data).Secrets()
+		data.Close()
 		zr, err := zip.NewReader(f, b.Size)
 		if err != nil {
 			return toStatus(err)
 		}
 		pr, pw := io.Pipe()
 		defer pr.Close() // stops CopyZip if the client goes away
-		go func() { pw.CloseWithError(datadir.CopyZip(pw, zr, secrets.Censor("."))) }()
+		go func() { pw.CloseWithError(datadir.CopyZip(pw, zr, hidden.Censor("."))) }()
 		r, size = pr, 0
 	}
 	res := &noryxv1.DownloadBackupResponse{Size: size}

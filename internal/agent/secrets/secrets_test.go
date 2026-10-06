@@ -47,11 +47,23 @@ func TestFiles(t *testing.T) {
 		"plugins/Example":         {false, false, false},
 		"world/server.properties": {false, false, false},
 	} {
-		if got := [3]bool{Hidden(name), Redacted(name), len(Under(name)) > 0}; got != want {
+		if got := [3]bool{Hidden(name), Redacted(name), len(With().Under(name)) > 0}; got != want {
 			t.Errorf("%s: hidden, redacted, holds secrets = %v, want %v", name, got, want)
 		}
 	}
-	if got := slices.Sorted(slices.Values(Under("config"))); !slices.Equal(got, []string{"config/FabricProxy-Lite.toml", "config/paper-global.yml", "config/proxy-compatible-forge.toml"}) {
+	if got := slices.Sorted(slices.Values(With().Under("config"))); !slices.Equal(got, []string{"config/FabricProxy-Lite.toml", "config/paper-global.yml", "config/proxy-compatible-forge.toml"}) {
 		t.Errorf("Under(config) = %q", got)
+	}
+
+	// Files the agent marked on a server are hidden there, in archives too.
+	marked := With("plugins/LuckPerms/config.yml")
+	if !marked.Hidden("plugins/LuckPerms/config.yml") || Hidden("plugins/LuckPerms/config.yml") || !slices.Contains(marked.Under("plugins/LuckPerms"), "plugins/LuckPerms/config.yml") {
+		t.Error("a marked file isn't hidden")
+	}
+	if omit, _ := marked.Censor("plugins")("LuckPerms/config.yml"); !omit {
+		t.Error("an archive keeps a marked file")
+	}
+	if omit, edit := marked.Censor(".")("server.properties"); omit || edit == nil {
+		t.Error("an archive doesn't redact server.properties")
 	}
 }

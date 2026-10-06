@@ -31,6 +31,8 @@ message FileInfo {
   bool directory = 2;
   int64 size = 3;
   int64 modified_unix = 4;
+  // The file set that wrote the file, whose next apply replaces changes made here.
+  string file_set = 5;
 }
 
 message ListFilesRequest {

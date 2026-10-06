@@ -22,11 +22,13 @@ const (
 )
 
 type FileInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Directory     bool                   `protobuf:"varint,2,opt,name=directory,proto3" json:"directory,omitempty"`
-	Size          int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
-	ModifiedUnix  int64                  `protobuf:"varint,4,opt,name=modified_unix,json=modifiedUnix,proto3" json:"modified_unix,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Name         string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Directory    bool                   `protobuf:"varint,2,opt,name=directory,proto3" json:"directory,omitempty"`
+	Size         int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	ModifiedUnix int64                  `protobuf:"varint,4,opt,name=modified_unix,json=modifiedUnix,proto3" json:"modified_unix,omitempty"`
+	// The file set that wrote the file, whose next apply replaces changes made here.
+	FileSet       string `protobuf:"bytes,5,opt,name=file_set,json=fileSet,proto3" json:"file_set,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -87,6 +89,13 @@ func (x *FileInfo) GetModifiedUnix() int64 {
 		return x.ModifiedUnix
 	}
 	return 0
+}
+
+func (x *FileInfo) GetFileSet() string {
+	if x != nil {
+		return x.FileSet
+	}
+	return ""
 }
 
 type ListFilesRequest struct {
@@ -877,12 +886,13 @@ var File_noryx_v1_file_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_file_proto_rawDesc = "" +
 	"\n" +
-	"\x13noryx/v1/file.proto\x12\bnoryx.v1\"u\n" +
+	"\x13noryx/v1/file.proto\x12\bnoryx.v1\"\x90\x01\n" +
 	"\bFileInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tdirectory\x18\x02 \x01(\bR\tdirectory\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12#\n" +
-	"\rmodified_unix\x18\x04 \x01(\x03R\fmodifiedUnix\"C\n" +
+	"\rmodified_unix\x18\x04 \x01(\x03R\fmodifiedUnix\x12\x19\n" +
+	"\bfile_set\x18\x05 \x01(\tR\afileSet\"C\n" +
 	"\x10ListFilesRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"[\n" +

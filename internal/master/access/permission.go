@@ -44,6 +44,8 @@ const (
 	NetworksManage   Permission = "networks.manage"
 	TemplatesView    Permission = "templates.view"
 	TemplatesManage  Permission = "templates.manage"
+	FileSetsView     Permission = "filesets.view"
+	FileSetsManage   Permission = "filesets.manage"
 	BackupJobsView   Permission = "backupjobs.view"
 	BackupJobsManage Permission = "backupjobs.manage"
 	PoliciesView     Permission = "policies.view"
@@ -127,11 +129,13 @@ var Catalog = []Area{
 		scoped(BackupsRestore, "Restore backups", "Replaces the backed up data; a running server restarts.", BackupsView),
 		scoped(BackupsDelete, "Delete backups", "", BackupsView),
 	}},
-	{"Networks and templates", []Info{
+	{"Networks, templates and file sets", []Info{
 		global(NetworksView, "See networks", ""),
 		global(NetworksManage, "Manage networks", "Create, change and delete networks, which configures and restarts their servers.", NetworksView),
 		global(TemplatesView, "See templates", "Creating a server from a template also needs the permission to create servers."),
 		global(TemplatesManage, "Manage templates", "Create, change and delete templates.", TemplatesView),
+		global(FileSetsView, "See file sets", "Their files, targets and the names of their secrets, and which servers have them."),
+		global(FileSetsManage, "Manage file sets", "Create, change and delete file sets and set their secrets. File sets configure plugins, which run code and can read the secrets of the sets. Applying a set also needs the permission to change the files of each server it is for.", FileSetsView),
 	}},
 	{"Backup jobs and policies", []Info{
 		global(BackupJobsView, "See backup jobs", ""),

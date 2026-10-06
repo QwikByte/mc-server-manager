@@ -214,6 +214,17 @@ const templateRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/templates/template-page"), "TemplatePage"),
 })
 
+const fileSetsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/filesets",
+  component: lazyRouteComponent(() => import("@/features/filesets/filesets-page"), "FileSetsPage"),
+})
+const fileSetRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/filesets/$fileSetId",
+  component: lazyRouteComponent(() => import("@/features/filesets/fileset-page"), "FileSetPage"),
+})
+
 const backupJobsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/backups",
@@ -340,6 +351,8 @@ export const router = createRouter({
       templatesRoute,
       newTemplateRoute,
       templateRoute,
+      fileSetsRoute,
+      fileSetRoute,
       backupJobsRoute,
       newBackupJobRoute,
       backupJobRoute,

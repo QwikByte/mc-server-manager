@@ -11,6 +11,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/plugin"
 )
 
@@ -32,7 +33,7 @@ func selected(dir *datadir.Dir, typ noryxv1.ServerType, sel *noryxv1.BackupSelec
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if datadir.IsTemp(name) {
+		if datadir.IsTemp(name) || name == fileset.ManifestFile {
 			continue
 		}
 		world := sel.GetWorlds() && e.IsDir() && isFile(dir, filepath.Join(name, "level.dat"))
@@ -48,7 +49,7 @@ func selected(dir *datadir.Dir, typ noryxv1.ServerType, sel *noryxv1.BackupSelec
 		if !ok {
 			return nil, status.Errorf(codes.InvalidArgument, "The path %q is invalid.", p)
 		}
-		if info, err := dir.Lstat(name); err == nil && (info.IsDir() || info.Mode().IsRegular()) {
+		if info, err := dir.Lstat(name); err == nil && name != fileset.ManifestFile && (info.IsDir() || info.Mode().IsRegular()) {
 			paths = append(paths, name)
 		}
 	}

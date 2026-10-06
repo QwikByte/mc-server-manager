@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 
 	"github.com/QwikByte/noryx/internal/agent/progress"
 )
@@ -32,7 +33,8 @@ func stage(ctx context.Context, dir *datadir.Dir, b backup) (string, error) {
 }
 
 // swap replaces the files and folders of a backup with their staged state. Those that
-// didn't exist when the backup was made are removed.
+// didn't exist when the backup was made are removed, except for the current manifest of file
+// sets, which keeps the files hidden that held secrets.
 func swap(dir *datadir.Dir, b backup, staged string) error {
 	paths := b.Paths
 	if slices.Equal(paths, []string{"."}) {
@@ -48,6 +50,7 @@ func swap(dir *datadir.Dir, b backup, staged string) error {
 		slices.Sort(paths)
 		paths = slices.Compact(paths) // a second removal would hit the restored entry
 	}
+	paths = slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return p == fileset.ManifestFile })
 	for _, p := range paths {
 		if err := dir.RemoveAll(p); err != nil {
 			return err

@@ -19,6 +19,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/secrets"
 	"github.com/QwikByte/noryx/internal/agent/storage"
@@ -59,9 +60,14 @@ func (s *Service) ListFiles(ctx context.Context, req *noryxv1.ListFilesRequest) 
 		return nil, toStatus(err)
 	}
 	res := &noryxv1.ListFilesResponse{Truncated: len(entries) > maxEntries}
+	sets := fileset.Read(dir)
+	hidden := sets.Secrets()
 	for _, e := range entries[:min(len(entries), maxEntries)] {
-		if info, err := e.Info(); err == nil && !secrets.Hidden(path.Join(name, e.Name())) { // also skips entries deleted in the meantime
-			res.Files = append(res.Files, fileInfo(info))
+		p := path.Join(name, e.Name())
+		if info, err := e.Info(); err == nil && !hidden.Hidden(p) { // also skips entries deleted in the meantime
+			f := fileInfo(info)
+			f.FileSet = sets.Set(p)
+			res.Files = append(res.Files, f)
 		}
 	}
 	slices.SortFunc(res.Files, func(a, b *noryxv1.FileInfo) int {
@@ -79,7 +85,7 @@ func (s *Service) ReadFile(req *noryxv1.ReadFileRequest, stream noryxv1.FileServ
 		return err
 	}
 	defer dir.Close()
-	if secrets.Hidden(name) {
+	if fileset.Read(dir).Secrets().Hidden(name) {
 		return errSecret
 	}
 	f, err := dir.Open(name)
@@ -129,7 +135,7 @@ func (s *Service) WriteFile(stream noryxv1.FileService_WriteFileServer) error {
 	switch {
 	case name == ".":
 		return status.Error(codes.InvalidArgument, "Choose a file name.")
-	case secrets.Hidden(name):
+	case fileset.Read(dir).Secrets().Hidden(name):
 		return errSecret
 	}
 	top, err := dir.Open(".")
@@ -178,7 +184,7 @@ func (s *Service) ArchiveDirectory(req *noryxv1.ArchiveDirectoryRequest, stream 
 	defer sub.Close()
 	var censor datadir.Censor
 	if req.GetHideSecrets() {
-		censor = secrets.Censor(name)
+		censor = fileset.Read(dir).Secrets().Censor(name)
 	}
 	r, w := io.Pipe()
 	defer r.Close() // stops WriteZip if the client goes away
@@ -210,11 +216,14 @@ func (s *Service) MoveFile(ctx context.Context, req *noryxv1.MoveFileRequest) (*
 	if err != nil {
 		return nil, err
 	}
+	hidden := fileset.Read(dir).Secrets()
 	switch {
 	case from == "." || to == ".":
 		return nil, status.Error(codes.InvalidArgument, "The server folder itself can't be moved.")
-	case slices.ContainsFunc(secrets.Under(from), func(p string) bool { _, err := dir.Lstat(p); return err == nil }):
+	case slices.ContainsFunc(hidden.Under(from), func(p string) bool { _, err := dir.Lstat(p); return err == nil }):
 		return nil, errSecret // the secrets would show at the new place
+	case hidden.Hidden(to):
+		return nil, errSecret
 	}
 	if _, err := dir.Lstat(to); err == nil {
 		return nil, toStatus(fs.ErrExist)
@@ -228,8 +237,11 @@ func (s *Service) DeleteFile(ctx context.Context, req *noryxv1.DeleteFileRequest
 		return nil, err
 	}
 	defer dir.Close()
-	if name == "." {
+	switch name {
+	case ".":
 		return nil, status.Error(codes.InvalidArgument, "The server folder itself can't be deleted.")
+	case fileset.ManifestFile: // it tells which files hold secrets
+		return nil, errSecret
 	}
 	if _, err := dir.Lstat(name); err != nil {
 		return nil, toStatus(err)
