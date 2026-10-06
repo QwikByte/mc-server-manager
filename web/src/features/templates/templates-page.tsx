@@ -35,7 +35,7 @@ export function TemplatesPage() {
   return (
     <>
       <TabIntro actions={manage && <NewTemplate />}>
-        {t("Reusable setups of servers: their software, version, memory, settings and plugins. New servers start from them in a few clicks.")}
+        {t("Reusable server setups: software, version, memory, settings and plugins. New servers start from them in a few clicks.")}
       </TabIntro>
       {isPending ? (
         <div className="grid gap-4 md:grid-cols-2">

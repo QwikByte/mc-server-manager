@@ -178,7 +178,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
           {assignedMb !== undefined && capacityMb ? (
             <div className="space-y-2">
               <Meter value={assignedMb / capacityMb} label={t("Memory assigned to servers")} />
-              <p>{t("of {{limit}}, including what Java needs besides the servers", { limit: formatMegabytes(capacityMb) })}</p>
+              <p>{t("of {{limit}}, including Java's overhead", { limit: formatMegabytes(capacityMb) })}</p>
             </div>
           ) : null}
         </StatCard>

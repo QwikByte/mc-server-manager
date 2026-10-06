@@ -74,7 +74,7 @@ export function LimitsFields({
                   total: formatMegabytes(memoryMb),
                 })} `
               : ""}
-            {t("Each server counts with what Java needs besides its memory: about a quarter more and 256 MiB.")}
+            {t("Each server counts with Java's overhead on top of its memory: about a quarter more, plus 256 MiB.")}
           </FieldDescription>
         </Field>
       )}
