@@ -85,14 +85,15 @@ func (s *Service) ReadFile(req *noryxv1.ReadFileRequest, stream noryxv1.FileServ
 		return err
 	}
 	defer dir.Close()
-	if fileset.Read(dir).Secrets().Hidden(name) {
-		return errSecret
-	}
 	f, err := dir.Open(name)
 	if err != nil {
 		return toStatus(err)
 	}
 	defer f.Close()
+	// Checked once the file is open, as file sets mark files before they write them.
+	if fileset.Read(dir).Secrets().Hidden(name) {
+		return errSecret
+	}
 	info, err := f.Stat()
 	if err != nil {
 		return toStatus(err)
@@ -184,7 +185,9 @@ func (s *Service) ArchiveDirectory(req *noryxv1.ArchiveDirectoryRequest, stream 
 	defer sub.Close()
 	var censor datadir.Censor
 	if req.GetHideSecrets() {
-		censor = fileset.Read(dir).Secrets().Censor(name)
+		// A file set may write files with secrets while the archive is read.
+		hidden := fileset.Watch(dir)
+		censor = func(n string) (bool, func([]byte) []byte) { return hidden().Censor(name)(n) }
 	}
 	r, w := io.Pipe()
 	defer r.Close() // stops WriteZip if the client goes away
@@ -202,6 +205,9 @@ func (s *Service) CreateDirectory(ctx context.Context, req *noryxv1.CreateDirect
 	defer dir.Close()
 	if _, err := dir.Lstat(name); err == nil {
 		return nil, toStatus(fs.ErrExist)
+	}
+	if fileset.Read(dir).Secrets().Hidden(name) {
+		return nil, errSecret // e.g. the manifest of file sets, which a folder would block
 	}
 	return &noryxv1.CreateDirectoryResponse{}, toStatus(dir.MkdirAll(name))
 }

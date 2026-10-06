@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
@@ -30,6 +31,35 @@ func stage(ctx context.Context, dir *datadir.Dir, b backup) (string, error) {
 	progress.Step(ctx, "restore", size)
 	tmp := datadir.TempName(".")
 	return tmp, dir.ExtractZip(ctx, &zr.Reader, tmp)
+}
+
+// keepMarked keeps the files that held secrets of file sets as they are now, rather than as a
+// backup has them: their sets put them on the server, and a backup must not bring back the
+// secrets of a set that the server is no longer a target of. It links them into the staged
+// backup, which swap moves into place, so it runs while the server is stopped; if it fails,
+// they stay where they are.
+func keepMarked(dir *datadir.Dir, b backup, staged string, marked []string) error {
+	for _, m := range marked {
+		if !slices.ContainsFunc(b.Paths, func(p string) bool { return p == "." || m == p || strings.HasPrefix(m, p+string(filepath.Separator)) }) {
+			continue // the backup doesn't touch it
+		}
+		target := filepath.Join(staged, m)
+		if err := dir.RemoveAll(target); err != nil {
+			return err
+		}
+		if _, err := dir.Lstat(m); errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if err := dir.MkdirAll(filepath.Dir(target)); err != nil {
+			return err
+		}
+		if err := dir.Link(m, target); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // swap replaces the files and folders of a backup with their staged state. Those that

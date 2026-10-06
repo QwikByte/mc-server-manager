@@ -133,7 +133,9 @@ func (s *Service) RemoveFileSet(ctx context.Context, req *noryxv1.RemoveFileSetR
 	if req.GetDryRun() {
 		return res, nil
 	}
-	return res, toStatus(carry(dir, m, req.GetSetId(), *set, changes))
+	next := *set
+	next.Revision = "" // whatever stays isn't the state the master sent anymore
+	return res, toStatus(carry(dir, m, req.GetSetId(), next, changes))
 }
 
 func (s *Service) ListFileSets(ctx context.Context, _ *noryxv1.ListFileSetsRequest) (*noryxv1.ListFileSetsResponse, error) {
@@ -184,22 +186,31 @@ func (s *Service) list(ctx context.Context, id string) ([]*noryxv1.AppliedFileSe
 	return sets, nil
 }
 
-// Standalone removes the files with secrets of all sets from the copy of a server's data, as
-// the copy is no target of the sets that gave them. They stay hidden.
-func Standalone(dir *datadir.Dir) error {
+// Standalone removes the files that held secrets of sets from dir, the copy of the data of
+// original, as the copy is no target of the sets that gave them. They stay hidden. The marks
+// of original are read once the copy is complete, so that they cover every file with secrets
+// that a set wrote meanwhile.
+func Standalone(dir, original *datadir.Dir) error {
 	m, err := read(dir)
-	if err != nil || len(m.Sets) == 0 {
+	if err != nil {
 		return err
 	}
-	for id, set := range m.Sets {
-		for p, f := range set.Files {
-			if f.Secret {
-				if err := dir.Remove(filepath.FromSlash(p)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-					return err
-				}
-				delete(set.Files, p)
-			}
+	o, err := read(original)
+	if err != nil {
+		return err
+	}
+	m.Marked = append(m.Marked, o.Marked...)
+	if len(m.Marked) == 0 {
+		return nil
+	}
+	for _, p := range m.Marked {
+		if err := dir.Remove(filepath.FromSlash(p)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
 		}
+	}
+	for id, set := range m.Sets {
+		maps.DeleteFunc(set.Files, func(p string, _ *file) bool { return slices.Contains(m.Marked, p) })
+		set.Revision = ""
 		if len(set.Files) == 0 {
 			delete(m.Sets, id)
 		}
@@ -306,13 +317,15 @@ func plan(dir *datadir.Dir, c change, prev *file) (change, error) {
 	if info, err := dir.Lstat(filepath.FromSlash(c.path)); err == nil && info.IsDir() {
 		return c, failed("%s is a folder on this server.", c.path)
 	}
+	written := prev != nil && prev.SHA256 != "" // by the set, earlier
 	switch {
 	case !exists:
 		c.action = noryxv1.FileSetAction_FILE_SET_ACTION_CREATED
 	case c.file.OnlyIfMissing:
-		// The server's own file never counts as written by the set.
-		c.action, c.file.SHA256 = noryxv1.FileSetAction_FILE_SET_ACTION_UNCHANGED, ""
-		if prev != nil {
+		// The file stays as it is: the server's own one never counts as written by the set, and
+		// it holds secrets only if the set wrote them.
+		c.action, c.file.SHA256, c.secret = noryxv1.FileSetAction_FILE_SET_ACTION_UNCHANGED, "", false
+		if written {
 			c.file.SHA256 = prev.SHA256
 		}
 	case sum == c.file.SHA256:
@@ -321,26 +334,29 @@ func plan(dir *datadir.Dir, c change, prev *file) (change, error) {
 		c.action = noryxv1.FileSetAction_FILE_SET_ACTION_CHANGED
 	}
 	// A file that held secrets is taken off like one, also if the new version has none.
-	c.file.Secret = c.secret || prev != nil && prev.Secret
+	c.file.Secret = c.secret || written && prev.Secret
 	return c, nil
 }
 
-// leave tells what taking a file off a server does: files with secrets go, the others as the
-// removal says, if they didn't change since they were written.
+// leave tells what taking a file off a server does: files with secrets that the set wrote go,
+// the others as the removal says, if they didn't change since they were written.
 func leave(dir *datadir.Dir, p string, f *file, removal noryxv1.FileSetRemoval) (change, error) {
 	c := change{path: p, action: noryxv1.FileSetAction_FILE_SET_ACTION_REMOVED, secret: f.Secret}
-	switch {
-	case f.Secret:
-		return c, nil
-	case removal == noryxv1.FileSetRemoval_FILE_SET_REMOVAL_SECRETS:
+	if !f.Secret && removal == noryxv1.FileSetRemoval_FILE_SET_REMOVAL_SECRETS {
 		c.action, c.file = noryxv1.FileSetAction_FILE_SET_ACTION_UNCHANGED, f // stays part of the set
 		return c, nil
 	}
 	sum, exists, err := digest(dir, p)
-	if exists && (removal != noryxv1.FileSetRemoval_FILE_SET_REMOVAL_UNCHANGED || f.SHA256 == "" || sum != f.SHA256) {
+	switch {
+	case err != nil:
+		return c, err
+	case !exists:
+		c.action = noryxv1.FileSetAction_FILE_SET_ACTION_UNCHANGED // gone already
+	case f.Secret && f.SHA256 != "":
+	case removal != noryxv1.FileSetRemoval_FILE_SET_REMOVAL_UNCHANGED || f.SHA256 == "" || sum != f.SHA256:
 		c.action = noryxv1.FileSetAction_FILE_SET_ACTION_KEPT
 	}
-	return c, err
+	return c, nil
 }
 
 // carry carries out the changes of a set, which then has the files they keep. Files with

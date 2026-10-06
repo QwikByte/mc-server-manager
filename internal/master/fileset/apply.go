@@ -285,7 +285,10 @@ func (s *Service) Apply(ctx context.Context, id string, req ApplyRequest, allowe
 		}
 		for _, c := range changes {
 			results[i].Changes = append(results[i].Changes, change(c))
-			results[i].Restart = results[i].Restart || t.Running && c.GetAction() != noryxv1.FileSetAction_FILE_SET_ACTION_UNCHANGED
+			// Kept files stay as they were, and the agent tells removed files that were gone already as unchanged.
+			results[i].Restart = results[i].Restart || t.Running && slices.Contains([]noryxv1.FileSetAction{
+				noryxv1.FileSetAction_FILE_SET_ACTION_CREATED, noryxv1.FileSetAction_FILE_SET_ACTION_CHANGED, noryxv1.FileSetAction_FILE_SET_ACTION_REMOVED,
+			}, c.GetAction())
 		}
 	})
 	if req.Restart {

@@ -152,7 +152,10 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 			return nil, toStatus(err)
 		}
 	}
-	err = swap(data, b, staged)
+	err = keepMarked(data, b, staged, fileset.Read(data).Marked())
+	if err == nil {
+		err = swap(data, b, staged)
+	}
 	if running { // also after a failure, which leaves the server as it was or partly restored
 		progress.Step(ctx, "start", 0)
 		err = errors.Join(err, s.rt.Start(context.WithoutCancel(ctx), srv.ID))

@@ -47,7 +47,7 @@ func setup(t *testing.T) (*Service, string) {
 func apply(t *testing.T, s *Service, set string, version int64, dry bool, files ...*noryxv1.FileSetFile) map[string]noryxv1.FileSetAction {
 	t.Helper()
 	res, err := s.ApplyFileSet(t.Context(), &noryxv1.ApplyFileSetRequest{
-		ServerId: server, SetId: set, SetName: "Set " + set[:1], Version: version, Files: files, DryRun: dry,
+		ServerId: server, SetId: set, SetName: "Set " + set[:1], Version: version, Revision: "rev", Files: files, DryRun: dry,
 		Secrets: map[string]string{"secret:db": "p4ss", "datastore:main.lp.password": "dbp4ss"},
 	})
 	if err != nil {
@@ -232,14 +232,20 @@ func TestRemove(t *testing.T) {
 	apply(t, s, setA, 1, false, files...)
 	write(t, dir, "b.yml", "changed")
 
-	// Leaving a target removes the files with secrets right away; the others stay in the set.
+	// Leaving a target removes the files with secrets right away; the others stay in the set,
+	// which no longer has the state the master sent.
 	if got := remove(noryxv1.FileSetRemoval_FILE_SET_REMOVAL_SECRETS); got["secret.yml"] != removed || got["a.yml"] != unchanged {
 		t.Errorf("removing the secrets = %v", got)
 	}
 	if content(t, dir, "secret.yml") != "<none>" || content(t, dir, "a.yml") != "a" || len(listed(t, s)) != 2 {
 		t.Error("the files with secrets weren't removed alone")
 	}
-	// Then the unchanged files go, the changed stay.
+	res, err := s.ListFileSets(t.Context(), &noryxv1.ListFileSetsRequest{})
+	check(t, err)
+	if rev := res.GetServers()[0].GetSets()[0].GetRevision(); rev != "" {
+		t.Errorf("revision after removing the secrets = %q", rev)
+	}
+	// Then the unchanged files go, the changed stay, and those gone already need nothing.
 	if got := remove(noryxv1.FileSetRemoval_FILE_SET_REMOVAL_UNCHANGED); got["a.yml"] != removed || got["b.yml"] != kept {
 		t.Errorf("removing the set = %v", got)
 	}
@@ -258,15 +264,66 @@ func TestRemove(t *testing.T) {
 func TestStandalone(t *testing.T) {
 	s, dir := setup(t)
 	apply(t, s, setA, 1, false, &noryxv1.FileSetFile{Path: "a.yml", Content: "a"}, &noryxv1.FileSetFile{Path: "secret.yml", Content: "{{secret:db}}"})
+	copied := filepath.Join(t.TempDir(), "copy")
+	check(t, datadir.Copy(t.Context(), dir, copied))
+	// A set wrote another file with secrets to the original while it was copied.
+	write(t, copied, "late.yml", "password: p4ss")
+	original, err := datadir.Open(dir)
+	check(t, err)
+	defer original.Close()
+	m, err := read(original)
+	check(t, err)
+	m.Marked = append(m.Marked, "late.yml")
+	check(t, m.write(original))
+
+	data, err := datadir.Open(copied)
+	check(t, err)
+	defer data.Close()
+	check(t, Standalone(data, original))
+	if content(t, copied, "secret.yml") != "<none>" || content(t, copied, "late.yml") != "<none>" || content(t, copied, "a.yml") != "a" {
+		t.Error("the copy kept the secrets")
+	}
+	copy, err := read(data)
+	check(t, err)
+	if set := copy.Sets[setA]; set == nil || len(set.Files) != 1 || set.Revision != "" || !Read(data).Secrets().Hidden("late.yml") {
+		t.Errorf("manifest of the copy = %+v", copy)
+	}
+}
+
+func TestOnlyIfMissingKeepsTheServersFile(t *testing.T) {
+	s, dir := setup(t)
+	write(t, dir, "own.yml", "my own config")
+	f := &noryxv1.FileSetFile{Path: "own.yml", Content: "password: {{secret:db}}", OnlyIfMissing: true}
+	if got := apply(t, s, setA, 1, false, f); got["own.yml"] != unchanged {
+		t.Fatalf("apply = %v", got)
+	}
 	data, err := datadir.Open(dir)
 	check(t, err)
 	defer data.Close()
-	check(t, Standalone(data))
-	if content(t, dir, "secret.yml") != "<none>" || content(t, dir, "a.yml") != "a" {
-		t.Error("the copy kept the secrets")
+	if Read(data).Secrets().Hidden("own.yml") {
+		t.Error("the server's own file is hidden")
 	}
-	if got := listed(t, s); len(got) != 1 || got["b:a.yml"] == nil || !Read(data).Secrets().Hidden("secret.yml") {
-		t.Errorf("listed = %v", got)
+	for _, removal := range []noryxv1.FileSetRemoval{noryxv1.FileSetRemoval_FILE_SET_REMOVAL_SECRETS, noryxv1.FileSetRemoval_FILE_SET_REMOVAL_UNCHANGED} {
+		_, err := s.RemoveFileSet(t.Context(), &noryxv1.RemoveFileSetRequest{ServerId: server, SetId: setA, Removal: removal})
+		check(t, err)
+	}
+	if content(t, dir, "own.yml") != "my own config" {
+		t.Error("taking the set off removed the server's own file")
+	}
+}
+
+func TestWatch(t *testing.T) {
+	s, dir := setup(t)
+	data, err := datadir.Open(dir)
+	check(t, err)
+	defer data.Close()
+	hidden := Watch(data)
+	if hidden().Hidden("secret.yml") {
+		t.Fatal("hidden before the set was applied")
+	}
+	apply(t, s, setA, 1, false, &noryxv1.FileSetFile{Path: "secret.yml", Content: "{{secret:db}}"})
+	if !hidden().Hidden("secret.yml") {
+		t.Error("a file with secrets written meanwhile isn't hidden")
 	}
 }
 

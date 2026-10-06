@@ -658,8 +658,10 @@ Users get their permissions from groups; a user can be in several groups and has
   like the RCON password: the file manager can't list, read, write or move them, and downloads of folders and backups
   leave them out. Each server records in `noryx-filesets.json` which set wrote which file, with its SHA-256 hash, and
   which files held secrets; these stay hidden for the life of the server. The manifest is hidden too, can't be deleted
-  from the file manager, and is left out of backups and restores, so that restoring an older backup can't bring back a
-  file with secrets without hiding it. Master and agent both refuse the files that Noryx writes itself or that hold
+  or replaced from the file manager, and is left out of backups and restores, so that restoring an older backup can't
+  bring back a file with secrets without hiding it; restoring keeps these files as they are, so that it brings back no
+  secret of a set the server left. As a set marks a file before it writes it, the agent checks the marks once a file is
+  open, also while it archives a folder, and copies of a server lose every file that the original marked. Master and agent both refuse the files that Noryx writes itself or that hold
   secrets of the server, so a set can't change forwarding or RCON settings, and the agent writes no file through a link
   or into a file where a folder should be. A compromised server can change its own manifest, which only changes its own
   state or the hiding of secrets it can read anyway.

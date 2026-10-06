@@ -169,3 +169,38 @@ func TestBackupAndRestore(t *testing.T) {
 		t.Fatalf("backups after removing all = %v", backups)
 	}
 }
+
+// Files that held secrets of file sets stay as they are when a backup is restored: one that
+// the server lost as it left a set doesn't come back, and one it has keeps its content.
+func TestRestoreKeepsMarkedFiles(t *testing.T) {
+	path, dir := paperData(t)
+	s := store{storage.New(t.TempDir())}
+	write(t, filepath.Join(path, "plugins/Sync/token.yml"), "token: old")
+	b, err := s.create(t.Context(), dir, serverID, storage.Default, details{Created: time.Now(), Paths: []string{"."}})
+	check(t, err)
+	check(t, os.Remove(filepath.Join(path, "plugins/LuckPerms/config.yml")))
+	write(t, filepath.Join(path, "plugins/Sync/token.yml"), "token: new")
+	marked := []string{filepath.FromSlash("plugins/LuckPerms/config.yml"), filepath.FromSlash("plugins/Sync/token.yml")}
+
+	staged, err := stage(t.Context(), dir, b)
+	defer dir.RemoveAll(staged) //nolint:errcheck // a temporary folder
+	check(t, err)
+	check(t, keepMarked(dir, b, staged, marked))
+	check(t, swap(dir, b, staged))
+	if _, err := os.Stat(filepath.Join(path, "plugins/LuckPerms/config.yml")); !os.IsNotExist(err) {
+		t.Error("restoring brought back a file with secrets the server lost")
+	}
+	if data, _ := os.ReadFile(filepath.Join(path, "plugins/Sync/token.yml")); string(data) != "token: new" {
+		t.Errorf("a file with secrets was restored as %q", data)
+	}
+	if data, _ := os.ReadFile(filepath.Join(path, "bukkit.yml")); string(data) != "a: 1\n" {
+		t.Error("the other files weren't restored")
+	}
+}
+
+func check(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}

@@ -203,20 +203,25 @@ func (s *Service) DuplicateServer(ctx context.Context, req *noryxv1.DuplicateSer
 		return nil, toStatus(err)
 	}
 	// The copy is no target of the file sets of the original.
-	if err := s.standalone(ctx, spec.ID); err != nil {
+	if err := s.standalone(ctx, spec.ID, source.ID); err != nil {
 		return nil, toStatus(errors.Join(err, s.rt.Remove(context.WithoutCancel(ctx), spec.ID)))
 	}
 	return &noryxv1.DuplicateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED})}, nil
 }
 
 // standalone removes the files with secrets of file sets from the copy of a server.
-func (s *Service) standalone(ctx context.Context, id string) error {
+func (s *Service) standalone(ctx context.Context, id, original string) error {
 	dir, err := s.rt.Data(ctx, id)
 	if err != nil {
 		return err
 	}
 	defer dir.Close()
-	return fileset.Standalone(dir)
+	src, err := s.rt.Data(ctx, original)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	return fileset.Standalone(dir, src)
 }
 
 // ImportServer creates a stopped server with the ID and settings of a server of another

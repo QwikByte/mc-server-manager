@@ -121,7 +121,8 @@ func (h *Handler) Register(mux access.Mux) {
 		}
 		h.ops.Run(w, r, operation.Spec{
 			Kind: "fileset.apply", Subject: set.Name, Steps: steps, Status: http.StatusOK, Timeout: applyOperationTimeout, Category: logging.Files,
-			Visible: func(g access.Grants) bool { return g.Has(access.FileSetsView) },
+			// Its results name the servers of the set, which not everyone who sees sets may see.
+			Visible: func(g access.Grants) bool { return g.Has(access.FileSetsView) && g.Has(access.ServersView) },
 		}, func(ctx context.Context) (any, error) {
 			results, err := h.svc.Apply(ctx, set.ID, req, check)
 			return map[string]any{"results": results}, err
