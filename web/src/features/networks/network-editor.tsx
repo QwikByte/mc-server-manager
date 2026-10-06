@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useBlocker } from "@tanstack/react-router"
+import { useBlocker, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { useState } from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAccess } from "@/features/access/use-access"
+import { networkDatastoresQuery } from "@/features/datastores/api"
 import { nodeQuery } from "@/features/nodes/api"
 import { useOperation } from "@/features/operations/use-operation"
 import { usePrivateRoute } from "@/features/overlay/api"
@@ -30,7 +31,10 @@ const same = (a: Draft, b: Draft) => JSON.stringify(a) === JSON.stringify(b)
  * saving configures the servers and makes the proxy reload its configuration.
  */
 export function NetworkEditor({ network }: { network: Network }) {
-  const editable = useAccess().can("networks.manage")
+  const { can } = useAccess()
+  const editable = can("networks.manage")
+  const navigate = useNavigate()
+  const { data: databases } = useQuery({ ...networkDatastoresQuery(network.id), enabled: can("datastores.view") })
   const saved = draftOf(network)
   const [draft, setDraft] = useState(saved)
   const [seen, setSeen] = useState(saved)
@@ -56,10 +60,20 @@ export function NetworkEditor({ network }: { network: Network }) {
   const bedrockAddress = proxyHost && draft.bedrockPort ? `${proxyHost}:${draft.bedrockPort}` : undefined
 
   function save() {
+    // Servers that leave keep what they knew of the databases they used, which new passwords lock out.
+    const left = (databases?.uses ?? []).filter((u) => !draft.backends.some((b) => key(b) === key(u)) && key(network.proxy) !== key(u))
+    const names = [...new Set(left.map((u) => u.database))]
     operation.run((onStart) => update.mutateAsync({ settings: settingsOf(draft), onStart }), {
       title: t("Configuring {{name}}…", { name: draft.name }),
       notify: true,
-      done: () => ({ message: t("Saved {{name}}", { name: draft.name }) }),
+      done: () => ({
+        message: t("Saved {{name}}", { name: draft.name }),
+        ...(names.length > 0 && {
+          description: t("Servers that left used {{databases}}. Give them new passwords, so that they lose access.", { databases: names.join(", ") }),
+          action: { label: t("Databases"), onClick: () => void navigate({ to: "/networks/$networkId/databases", params: { networkId: network.id } }) },
+          warning: true,
+        }),
+      }),
       then: (n) => setDraft(draftOf(n)),
     })
   }

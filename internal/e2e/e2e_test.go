@@ -35,12 +35,14 @@ import (
 	agentoverlay "github.com/QwikByte/noryx/internal/agent/overlay"
 	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/agent/runtime/runtimetest"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/master/access"
 	masterapp "github.com/QwikByte/noryx/internal/master/app"
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/database"
+	"github.com/QwikByte/noryx/internal/master/datastore"
 	"github.com/QwikByte/noryx/internal/master/fileset"
 	"github.com/QwikByte/noryx/internal/master/geysermc"
 	"github.com/QwikByte/noryx/internal/master/hangar"
@@ -237,15 +239,17 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	geyser := geysermc.New(m.geysermc.URL+"/v2", m.geysermc.URL+"/v2", 0)
 	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(m.hangar.URL+"/api/v1", m.hangar.URL+"/cdn/"), geyser)
 	moves := server.NewMoves()
-	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
-	check(t, tasks.Start(t.Context()))
 	overlays := overlay.NewService(m.db, nodes)
-	networks, tags := network.NewService(m.db, nodes, plugins, overlays), tag.NewStore(m.db)
+	datastores := datastore.NewStore(m.db, nodes, overlays)
+	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes)}, moves.Busy)
+	check(t, tasks.Start(t.Context()))
+	networks, tags := network.NewService(m.db, nodes, plugins, overlays, datastores), tag.NewStore(m.db)
+	fileSets := fileset.NewService(m.db, nodes, networks, tags, moves, datastores)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes, Overlay: overlays,
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
-		FileSets: fileset.NewService(m.db, nodes, networks, tags, moves), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update), Usage: usage.NewStore(m.db, nodes),
-		Tags: tags, Operations: operation.New(m.quick), Moves: moves,
+		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks, fileSets), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
+		Usage: usage.NewStore(m.db, nodes), Tags: tags, Operations: operation.New(m.quick), Moves: moves,
 	}
 }
 
@@ -275,7 +279,7 @@ func (m *master) startAgent(t *testing.T, name string) agent {
 	ln := listen(t)
 	n, token, err := m.nodes.Create(t.Context(), name, ln.Addr().String())
 	check(t, err)
-	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{dir: t.TempDir()}, kernel: &fakeKernel{}, log: agentlogs.NewBuffer()}
+	a := agent{node: n, token: token, dir: t.TempDir(), runtime: &fakeRuntime{Datastores: &runtimetest.Datastores{}, dir: t.TempDir()}, kernel: &fakeKernel{}, log: agentlogs.NewBuffer()}
 	check(t, enroll.Run(t.Context(), token.String(), a.dir))
 	a.identity, err = agentnode.LoadIdentity(a.dir)
 	check(t, err)
@@ -360,9 +364,10 @@ func serve(t *testing.T, s *grpc.Server, ln net.Listener) {
 	t.Cleanup(s.Stop)
 }
 
-// fakeRuntime keeps servers and their network configuration in memory and their data
-// in a directory.
+// fakeRuntime keeps servers and their network configuration, and datastores, in memory and
+// the data of the servers in a directory.
 type fakeRuntime struct {
+	*runtimetest.Datastores
 	dir      string
 	mu       sync.Mutex
 	servers  []runtime.Server

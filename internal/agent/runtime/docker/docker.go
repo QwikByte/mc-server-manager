@@ -222,8 +222,8 @@ var restartPolicies = map[noryxv1.RestartPolicy]container.RestartPolicyMode{
 }
 
 // createContainer creates the container of a server whose image and data directory exist,
-// in the network netName.
-func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName string) error {
+// in the network netName and the internal networks of datastores in also.
+func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName string, also ...string) error {
 	path, err := d.dataPath(spec)
 	if err != nil {
 		return err
@@ -234,6 +234,9 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 	opts, err := containerOptions(spec, path, netName)
 	if err != nil {
 		return err
+	}
+	for _, name := range also {
+		opts.NetworkingConfig.EndpointsConfig[name] = &network.EndpointSettings{}
 	}
 	_, err = d.cli.ContainerCreate(ctx, opts)
 	return err
@@ -338,7 +341,7 @@ func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
 		}
 	}
 	progress.Step(ctx, "container", 0)
-	return d.recreate(ctx, spec, c.State.Running, placement(c, spec))
+	return d.recreate(ctx, c, spec, c.State.Running)
 }
 
 func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
@@ -354,7 +357,7 @@ func (d *Docker) UpdateImage(ctx context.Context, id string) (bool, error) {
 		return false, err
 	}
 	progress.Step(ctx, "container", 0)
-	if err := d.recreate(ctx, spec, c.State.Running, placement(c, spec)); err != nil {
+	if err := d.recreate(ctx, c, spec, c.State.Running); err != nil {
 		return true, err
 	}
 	// The old image goes once no container uses it; Docker refuses to remove it before.

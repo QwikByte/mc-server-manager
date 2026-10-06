@@ -2,10 +2,13 @@ import { t } from "i18next"
 
 export class ApiError extends Error {
   readonly status: number
+  /** Tells what the panel may offer, e.g. to confirm the request. */
+  readonly code?: string
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -42,5 +45,5 @@ export async function responseError(
   fallback = t("The request failed with status {{status}}.", { status: res.status }),
 ): Promise<ApiError> {
   const data = await res.json().catch(() => ({}))
-  return new ApiError(res.status, data.error ?? fallback)
+  return new ApiError(res.status, data.error ?? fallback, data.code)
 }

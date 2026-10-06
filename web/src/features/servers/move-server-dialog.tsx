@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery, nodesQuery } from "@/features/nodes/api"
+import { ApiError } from "@/lib/api"
 import { type Server, useMoveServer } from "./api"
 
 /** Moves a server with its data, and its backups if chosen, to another node. */
@@ -27,7 +28,9 @@ export function MoveServerDialog({
   const { can } = useAccess()
   const { data: nodes = [] } = useQuery(nodesQuery)
   const { data: node } = useQuery(nodeQuery(nodeId))
-  const [form, setForm] = useState<{ node?: string; port?: number; storage?: string; backups: boolean }>({ backups: true })
+  const [form, setForm] = useState<{ node?: string; port?: number; storage?: string; backups: boolean; withoutDatabases?: boolean }>({
+    backups: true,
+  })
   const move = useMoveServer(nodeId, server.id)
   const targets = nodes.filter((n) => n.id !== nodeId && n.status === "online" && can("servers.create", n.id))
   const target = targets.find((n) => n.id === form.node) ?? targets[0]
@@ -36,7 +39,10 @@ export function MoveServerDialog({
     port: form.port ?? server.port,
     storage: form.storage ?? target?.defaultStorage ?? "default",
     backups: form.backups,
+    withoutDatabases: form.withoutDatabases,
   }
+  // The new node doesn't reach the databases of the server's network, which the master asks to confirm.
+  const unreachable = move.error instanceof ApiError && move.error.code === "datastores-unreachable"
 
   function close(next: boolean) {
     onOpenChange(next)
@@ -132,6 +138,19 @@ export function MoveServerDialog({
               </Field>
               <FieldDescription>{t("If the server is part of a network, the network is updated and its proxy restarts.")}</FieldDescription>
               {move.error && <FieldError>{move.error.message}</FieldError>}
+              {unreachable && (
+                <Field orientation="horizontal">
+                  <Checkbox
+                    id="move-without-databases"
+                    checked={!!values.withoutDatabases}
+                    onCheckedChange={(v) => setForm({ ...form, withoutDatabases: v === true })}
+                  />
+                  <FieldContent>
+                    <FieldLabel htmlFor="move-without-databases">{t("Move it anyway")}</FieldLabel>
+                    <FieldDescription>{t("Its plugins can't reach the databases of the network from the new node.")}</FieldDescription>
+                  </FieldContent>
+                </Field>
+              )}
             </FieldGroup>
           )}
           <DialogFooter>

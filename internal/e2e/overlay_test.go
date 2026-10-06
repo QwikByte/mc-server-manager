@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -65,7 +66,7 @@ func TestOverlay(t *testing.T) {
 		t.Fatalf("the proxy reaches survival at %s", got)
 	}
 	client := agentoverlay.Client{Port: 25570, Address: netip.MustParseAddr("10.213.0.1")}
-	if got := a2.runtime.network(survival.ServerID).Overlay; got != "10.213.0.2" || a2.kernel.applied().Clients[survival.ServerID] != client {
+	if got := a2.runtime.network(survival.ServerID).Overlay; got != "10.213.0.2" || !reflect.DeepEqual(a2.kernel.applied().Clients[survival.ServerID], client) {
 		t.Fatalf("survival publishes its port at %q, clients %+v", got, a2.kernel.applied().Clients)
 	}
 	// A move to a node outside the network needs the firewall again.

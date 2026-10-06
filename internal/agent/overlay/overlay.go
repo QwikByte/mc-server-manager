@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -156,38 +157,49 @@ func (s *Service) LeaveOverlay(context.Context, *noryxv1.LeaveOverlayRequest) (*
 	return &noryxv1.LeaveOverlayResponse{}, nil
 }
 
-// Admit lets client, the address in the network of the node of a server's proxy, reach the
-// port the server publishes in the network, as the only one. It returns the node's address
-// in the network, at which the server publishes its port.
-func (s *Service) Admit(id string, port uint32, client string) (string, error) {
+// Admit lets clients, the addresses in the network of the nodes of a server's proxy or of the
+// servers that use a datastore, reach the port it publishes in the network, as the only ones.
+// It returns the node's address in the network, at which the port is published.
+func (s *Service) Admit(id string, port uint32, clients ...string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, err := s.state()
 	if err != nil {
 		return "", err
 	}
-	addr, _ := netip.ParseAddr(client)
-	if st == nil || !st.isPeer(addr) || port == 0 || port > 65535 {
-		return "", fmt.Errorf("%s is no node of the private network of this node", client)
+	if st == nil || len(clients) == 0 || port == 0 || port > 65535 {
+		return "", errors.New("this node is no member of the private network")
+	}
+	addrs := make([]netip.Addr, len(clients))
+	for i, client := range clients {
+		addr, _ := netip.ParseAddr(client)
+		if !st.isPeer(addr) || slices.Contains(addrs[:i], addr) {
+			return "", fmt.Errorf("%s is no node of the private network of this node", client)
+		}
+		addrs[i] = addr
 	}
 	key, err := s.key()
 	if err != nil {
 		return "", err
 	}
 	previous := *st
-	// A port belongs to one server; a server that had it before is gone.
-	clients := map[string]Client{id: {uint16(port), addr}} //nolint:gosec // checked
+	// A port belongs to one server or datastore; one that had it before is gone.
+	c := Client{Port: uint16(port), Address: addrs[0]} //nolint:gosec // checked
+	if len(addrs) > 1 {
+		c.Others = addrs[1:]
+	}
+	updated := map[string]Client{id: c}
 	for other, c := range st.Clients {
 		if other != id && c.Port != uint16(port) { //nolint:gosec // checked
-			clients[other] = c
+			updated[other] = c
 		}
 	}
-	st.Clients = clients
+	st.Clients = updated
 	return st.Address.Addr().String(), s.apply(*st, key, &previous)
 }
 
-// Dismiss closes the port of a server in the network to its client, e.g. as it left its
-// network or was deleted.
+// Dismiss closes the port of a server or datastore in the network to its clients, e.g. as it
+// left its network or was deleted.
 func (s *Service) Dismiss(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

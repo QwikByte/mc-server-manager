@@ -197,6 +197,11 @@ const networkProxyRoute = createRoute({
   path: "proxy",
   component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkProxy"),
 })
+const networkDatabasesRoute = createRoute({
+  getParentRoute: () => networkRoute,
+  path: "databases",
+  component: lazyRouteComponent(() => import("@/features/datastores/databases-tab"), "DatabasesTab"),
+})
 
 const templatesRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -347,7 +352,7 @@ export const router = createRouter({
       ]),
       networksRoute,
       playersRoute,
-      networkRoute.addChildren([networkOverviewRoute, networkProxyRoute]),
+      networkRoute.addChildren([networkOverviewRoute, networkProxyRoute, networkDatabasesRoute]),
       templatesRoute,
       newTemplateRoute,
       templateRoute,

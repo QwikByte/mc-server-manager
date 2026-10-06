@@ -142,6 +142,9 @@ type Network struct {
 	// Overlay is set for a backend whose proxy reaches it over the private network of the
 	// nodes: the node's address there, where it publishes its port.
 	Overlay string
+	// Datastores are the datastores of the network on this node, which the server reaches by
+	// the name of their containers.
+	Datastores []string
 }
 
 // NetworkBackend is a server behind the proxy, either on the same node (ServerID) or
@@ -188,8 +191,10 @@ type Info struct {
 	MemoryBytes uint64
 }
 
-// Runtime executes Minecraft servers. Servers keep running when the agent restarts.
+// Runtime executes Minecraft servers and the datastores of their networks. Both keep running
+// when the agent restarts.
 type Runtime interface {
+	Datastores
 	Info(ctx context.Context) (Info, error)
 	List(ctx context.Context) ([]Server, error)
 	Create(ctx context.Context, spec Spec) error

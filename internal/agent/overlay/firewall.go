@@ -36,8 +36,10 @@ func writeFirewall(st State) error {
 	forward := [][]expr.Any{clampMSS(expr.MetaKeyIIFNAME), clampMSS(expr.MetaKeyOIFNAME)}
 	for _, id := range slices.Sorted(maps.Keys(st.Clients)) {
 		c := st.Clients[id]
-		forward = append(forward, join(iifname(expr.CmpOpEq, Interface), ipv4, tcp, ctOriginal(expr.CtKeyDST, addr.AsSlice()),
-			ctOriginal(expr.CtKeyPROTODST, binaryutil.BigEndian.PutUint16(c.Port)), saddr(c.Address), accept))
+		for _, client := range c.addresses() {
+			forward = append(forward, join(iifname(expr.CmpOpEq, Interface), ipv4, tcp, ctOriginal(expr.CtKeyDST, addr.AsSlice()),
+				ctOriginal(expr.CtKeyPROTODST, binaryutil.BigEndian.PutUint16(c.Port)), saddr(client), accept))
+		}
 	}
 	forward = append(forward, join(iifname(expr.CmpOpEq, Interface), ctNew, drop))
 	chain(conn, "forward", nftables.ChainHookForward, -1, forward...)

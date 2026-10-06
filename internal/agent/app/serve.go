@@ -16,6 +16,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/backup"
+	"github.com/QwikByte/noryx/internal/agent/datastore"
 	"github.com/QwikByte/noryx/internal/agent/files"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	agentlogs "github.com/QwikByte/noryx/internal/agent/logs"
@@ -119,6 +120,7 @@ type services struct {
 	plugin     *plugin.Service
 	player     *player.Service
 	backup     *backup.Service
+	datastore  *datastore.Service
 	overlay    *overlay.Service
 	stats      *stats.Service
 	log        *agentlogs.Service
@@ -140,6 +142,7 @@ func newServices(rt runtime.Runtime, identity *node.Identity, locations *storage
 		plugin:     plugin.NewService(rt),
 		player:     player.NewService(rt),
 		backup:     backups,
+		datastore:  datastore.NewService(rt, locations, ov),
 		overlay:    ov,
 		stats:      stats.NewService(rt),
 		log:        agentlogs.NewService(buf),
@@ -162,6 +165,7 @@ func (s *services) grpcServer(origin string, opts ...grpc.ServerOption) *grpc.Se
 	noryxv1.RegisterPluginServiceServer(srv, s.plugin)
 	noryxv1.RegisterPlayerServiceServer(srv, s.player)
 	noryxv1.RegisterBackupServiceServer(srv, s.backup)
+	noryxv1.RegisterDatastoreServiceServer(srv, s.datastore)
 	noryxv1.RegisterOverlayServiceServer(srv, s.overlay)
 	noryxv1.RegisterStatsServiceServer(srv, s.stats)
 	noryxv1.RegisterLogServiceServer(srv, s.log)

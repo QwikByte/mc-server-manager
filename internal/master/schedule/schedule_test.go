@@ -83,10 +83,15 @@ func TestTargets(t *testing.T) {
 	if want := []Target{{"n1", ""}, {"n2", server}}; !ok || !slices.Equal(got, want) {
 		t.Fatalf("targets = %v, want %v", got, want)
 	}
-	for _, bad := range [][]Target{nil, {{"", ""}}, {{"n1", "../x"}}} {
+	for _, bad := range [][]Target{{{"", ""}}, {{"n1", "../x"}}} {
 		if _, ok := targets(bad); ok {
 			t.Errorf("accepted %v", bad)
 		}
+	}
+	// Tasks need targets, unless their kind does without.
+	s := &Service{kinds: map[string]Kind{"fake": fakeKind{}}}
+	if _, err := s.build("fake", Input{Name: "x", Schedule: Schedule{Times: []string{"04:00"}, TimeZone: "UTC"}}); err == nil {
+		t.Error("a task without targets was accepted")
 	}
 }
 

@@ -18,8 +18,8 @@ import (
 // stage extracts a backup into a temporary folder of the data directory, which the caller
 // removes unless its name is empty. Nothing of the server changes yet, so it can keep
 // running meanwhile.
-func stage(ctx context.Context, dir *datadir.Dir, b backup) (string, error) {
-	zr, err := zip.OpenReader(b.archive())
+func stage(ctx context.Context, dir *datadir.Dir, b Archive) (string, error) {
+	zr, err := zip.OpenReader(b.Path())
 	if err != nil {
 		return "", err
 	}
@@ -38,7 +38,7 @@ func stage(ctx context.Context, dir *datadir.Dir, b backup) (string, error) {
 // secrets of a set that the server is no longer a target of. It links them into the staged
 // backup, which swap moves into place, so it runs while the server is stopped; if it fails,
 // they stay where they are.
-func keepMarked(dir *datadir.Dir, b backup, staged string, marked []string) error {
+func keepMarked(dir *datadir.Dir, b Archive, staged string, marked []string) error {
 	for _, m := range marked {
 		if !slices.ContainsFunc(b.Paths, func(p string) bool { return p == "." || m == p || strings.HasPrefix(m, p+string(filepath.Separator)) }) {
 			continue // the backup doesn't touch it
@@ -65,7 +65,7 @@ func keepMarked(dir *datadir.Dir, b backup, staged string, marked []string) erro
 // swap replaces the files and folders of a backup with their staged state. Those that
 // didn't exist when the backup was made are removed, except for the current manifest of file
 // sets, which keeps the files hidden that held secrets.
-func swap(dir *datadir.Dir, b backup, staged string) error {
+func swap(dir *datadir.Dir, b Archive, staged string) error {
 	paths := b.Paths
 	if slices.Equal(paths, []string{"."}) {
 		current, err := names(dir, ".")

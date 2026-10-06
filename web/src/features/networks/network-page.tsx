@@ -2,6 +2,7 @@ import {
   ArrowsLeftRightIcon,
   ArrowsSplitIcon,
   CubeIcon,
+  DatabaseIcon,
   DeviceMobileIcon,
   GraphIcon,
   HardDrivesIcon,
@@ -149,6 +150,12 @@ export function NetworkPage() {
           <TabLink to="/networks/$networkId/proxy" params={{ networkId }}>
             <SlidersHorizontalIcon className="size-4" weight="duotone" />
             {t("Proxy configuration")}
+          </TabLink>
+        )}
+        {can("datastores.view") && (
+          <TabLink to="/networks/$networkId/databases" params={{ networkId }}>
+            <DatabaseIcon className="size-4" weight="duotone" />
+            {t("Databases")}
           </TabLink>
         )}
       </Tabs>

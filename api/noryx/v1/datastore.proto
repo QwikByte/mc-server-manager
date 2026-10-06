@@ -1,0 +1,222 @@
+syntax = "proto3";
+
+package noryx.v1;
+
+import "noryx/v1/backup.proto";
+
+option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
+
+// DatastoreService is served by every agent and runs the MariaDB and PostgreSQL servers of
+// networks: their containers, their databases, each with a user of the same name, and dumps of
+// them. Only the servers of a datastore's network reach it: on its node over a Docker network
+// without internet, from other nodes over the private network of the nodes. The superuser's
+// password never leaves the node.
+service DatastoreService {
+  // ListDatastores returns the datastores of the node and the versions the agent runs.
+  rpc ListDatastores(ListDatastoresRequest) returns (ListDatastoresResponse);
+  rpc CreateDatastore(CreateDatastoreRequest) returns (CreateDatastoreResponse);
+  rpc StartDatastore(StartDatastoreRequest) returns (StartDatastoreResponse);
+  rpc StopDatastore(StopDatastoreRequest) returns (StopDatastoreResponse);
+  // UpdateDatastore changes the limits of a datastore, pulls its image again, moves it to
+  // another major version or removes the data a previous version left.
+  rpc UpdateDatastore(UpdateDatastoreRequest) returns (UpdateDatastoreResponse);
+  // PublishDatastore publishes the port of a datastore at the node's address in the private
+  // network of the nodes, for the nodes of its network only, or no longer.
+  rpc PublishDatastore(PublishDatastoreRequest) returns (PublishDatastoreResponse);
+  // DeleteDatastore removes a datastore with its container, network, data and dumps.
+  rpc DeleteDatastore(DeleteDatastoreRequest) returns (DeleteDatastoreResponse);
+  // EnsureDatabase creates a database and its user, or sets the user's password, with rights
+  // on that database only.
+  rpc EnsureDatabase(EnsureDatabaseRequest) returns (EnsureDatabaseResponse);
+  rpc DropDatabase(DropDatabaseRequest) returns (DropDatabaseResponse);
+  // CreateDump dumps databases of a running datastore into a ZIP archive with one
+  // <database>.sql each, kept like the backups of servers.
+  rpc CreateDump(CreateDumpRequest) returns (CreateDumpResponse);
+  rpc ListDumps(ListDumpsRequest) returns (ListDumpsResponse);
+  // RestoreDump drops and creates databases again and loads their dumps as their own users.
+  rpc RestoreDump(RestoreDumpRequest) returns (RestoreDumpResponse);
+  rpc DeleteDump(DeleteDumpRequest) returns (DeleteDumpResponse);
+  // DownloadDump sends a dump in chunks; the first message carries its size.
+  rpc DownloadDump(DownloadDumpRequest) returns (stream DownloadDumpResponse);
+}
+
+enum DatastoreEngine {
+  DATASTORE_ENGINE_UNSPECIFIED = 0;
+  DATASTORE_ENGINE_MARIADB = 1;
+  DATASTORE_ENGINE_POSTGRES = 2;
+}
+
+enum DatastoreState {
+  DATASTORE_STATE_UNSPECIFIED = 0;
+  DATASTORE_STATE_STOPPED = 1;
+  // Running, but not ready for connections yet.
+  DATASTORE_STATE_STARTING = 2;
+  DATASTORE_STATE_RUNNING = 3;
+  // Running, but its health check fails.
+  DATASTORE_STATE_UNHEALTHY = 4;
+}
+
+message Datastore {
+  // Chosen by the master, like the IDs of servers.
+  string id = 1;
+  DatastoreEngine engine = 2;
+  // Major version, e.g. 12.3 for MariaDB or 18 for PostgreSQL.
+  string version = 3;
+  uint32 memory_mb = 4;
+  // Thousandths of a core; 0 means no limit.
+  uint32 cpu_millis = 5;
+  // Storage location of its data; empty means the default.
+  string storage = 6;
+  DatastoreState state = 7;
+  // Bytes of its data.
+  int64 size = 8;
+  // Version whose data a change of the major version left, until it is removed.
+  string previous_version = 9;
+  // Port published at the node's address in the private network; 0 for none.
+  uint32 port = 10;
+  // Databases of a running datastore, sorted.
+  repeated string databases = 11;
+}
+
+message DatastoreVersions {
+  DatastoreEngine engine = 1;
+  // Oldest first.
+  repeated string versions = 2;
+}
+
+message ListDatastoresRequest {}
+
+message ListDatastoresResponse {
+  repeated Datastore datastores = 1;
+  repeated DatastoreVersions versions = 2;
+}
+
+message CreateDatastoreRequest {
+  string id = 1;
+  DatastoreEngine engine = 2;
+  string version = 3;
+  uint32 memory_mb = 4;
+  uint32 cpu_millis = 5;
+  string storage = 6;
+}
+
+message CreateDatastoreResponse {
+  Datastore datastore = 1;
+}
+
+message StartDatastoreRequest {
+  string id = 1;
+}
+
+message StartDatastoreResponse {}
+
+message StopDatastoreRequest {
+  string id = 1;
+}
+
+message StopDatastoreResponse {}
+
+message UpdateDatastoreRequest {
+  string id = 1;
+  // The limits it gets, like when it was created.
+  uint32 memory_mb = 2;
+  uint32 cpu_millis = 3;
+  // Pulls the image of its version again.
+  bool update_image = 4;
+  // A newer major version, or empty for its own: the agent dumps the databases, creates the
+  // datastore again on new data and loads the dumps, with the users and their passwords. The
+  // old data stays.
+  string version = 5;
+  // Removes the data a previous version left.
+  bool remove_previous = 6;
+}
+
+message UpdateDatastoreResponse {
+  Datastore datastore = 1;
+}
+
+message PublishDatastoreRequest {
+  string id = 1;
+  // A port of the node, published at its address in the private network; 0 for none.
+  uint32 port = 2;
+  // Addresses of the nodes in the private network that may reach it; none for no port.
+  repeated string clients = 3;
+}
+
+message PublishDatastoreResponse {
+  // The node's address in the private network.
+  string address = 1;
+}
+
+message DeleteDatastoreRequest {
+  string id = 1;
+}
+
+message DeleteDatastoreResponse {}
+
+message EnsureDatabaseRequest {
+  string id = 1;
+  string name = 2;
+  // Only lower-case letters and digits 2 to 7, as the master generates them.
+  string password = 3;
+}
+
+message EnsureDatabaseResponse {}
+
+message DropDatabaseRequest {
+  string id = 1;
+  string name = 2;
+}
+
+message DropDatabaseResponse {}
+
+message CreateDumpRequest {
+  string id = 1;
+  // Databases to dump; empty for all of them.
+  repeated string databases = 2;
+  string label = 3;
+  string location = 4;
+  string job_id = 5;
+  // Dumps of the job kept; 0 keeps all.
+  uint32 keep = 6;
+}
+
+message CreateDumpResponse {
+  // Its paths are the databases in it.
+  Backup dump = 1;
+}
+
+message ListDumpsRequest {
+  string id = 1;
+}
+
+message ListDumpsResponse {
+  repeated Backup dumps = 1;
+}
+
+message RestoreDumpRequest {
+  string id = 1;
+  string dump_id = 2;
+  // Databases to restore; empty for all in the dump. Each needs its user on the datastore,
+  // as the master creates it.
+  repeated string databases = 3;
+}
+
+message RestoreDumpResponse {}
+
+message DeleteDumpRequest {
+  string id = 1;
+  string dump_id = 2;
+}
+
+message DeleteDumpResponse {}
+
+message DownloadDumpRequest {
+  string id = 1;
+  string dump_id = 2;
+}
+
+message DownloadDumpResponse {
+  int64 size = 1;
+  bytes data = 2;
+}

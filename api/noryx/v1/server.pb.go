@@ -1584,6 +1584,9 @@ type ConfigureNetworkRequest struct {
 	// the address of the proxy's node in it. The node publishes the backend's port only at its
 	// own address in the network, and only for this one.
 	OverlayClient string `protobuf:"bytes,10,opt,name=overlay_client,json=overlayClient,proto3" json:"overlay_client,omitempty"`
+	// Datastores of the server's network on this node, which it reaches by the name of their
+	// container, e.g. noryx-db-<id>.
+	Datastores    []string `protobuf:"bytes,11,rep,name=datastores,proto3" json:"datastores,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1686,6 +1689,13 @@ func (x *ConfigureNetworkRequest) GetOverlayClient() string {
 		return x.OverlayClient
 	}
 	return ""
+}
+
+func (x *ConfigureNetworkRequest) GetDatastores() []string {
+	if x != nil {
+		return x.Datastores
+	}
+	return nil
 }
 
 type NetworkBackend struct {
@@ -2235,7 +2245,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\acommand\x18\x02 \x01(\tR\acommand\x12\x17\n" +
 	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"-\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\"\xa4\x03\n" +
+	"\x06output\x18\x01 \x01(\tR\x06output\"\xc4\x03\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x124\n" +
@@ -2249,7 +2259,10 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\fbedrock_port\x18\b \x01(\rR\vbedrockPort\x12'\n" +
 	"\x0fbedrock_players\x18\t \x01(\bR\x0ebedrockPlayers\x12%\n" +
 	"\x0eoverlay_client\x18\n" +
-	" \x01(\tR\roverlayClient\"\x9d\x01\n" +
+	" \x01(\tR\roverlayClient\x12\x1e\n" +
+	"\n" +
+	"datastores\x18\v \x03(\tR\n" +
+	"datastores\"\x9d\x01\n" +
 	"\x0eNetworkBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\tserver_id\x18\x02 \x01(\tH\x00R\bserverId\x12\x1a\n" +

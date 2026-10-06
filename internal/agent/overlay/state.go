@@ -35,11 +35,15 @@ type Peer struct {
 }
 
 // Client is the address in the network of the node of a server's proxy, the only one that
-// reaches the port the server publishes in it.
+// reaches the port the server publishes in it, or those of the nodes whose servers reach a
+// datastore.
 type Client struct {
-	Port    uint16     `json:"port"`
-	Address netip.Addr `json:"address"`
+	Port    uint16       `json:"port"`
+	Address netip.Addr   `json:"address"`
+	Others  []netip.Addr `json:"others,omitempty"`
 }
+
+func (c Client) addresses() []netip.Addr { return append([]netip.Addr{c.Address}, c.Others...) }
 
 // private are the IPv4 ranges of private networks (RFC 1918).
 var private = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("172.16.0.0/12"), netip.MustParsePrefix("192.168.0.0/16")}

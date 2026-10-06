@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"slices"
 	"strconv"
@@ -23,10 +24,14 @@ import (
 // joining it, or their port moves to or from the private network of the nodes, because the
 // online mode, secure chat and published ports are part of the container, and running ones
 // restart to apply a changed configuration. Running proxies
-// reload theirs, or restart if they must.
+// reload theirs, or restart if they must. Servers join and leave the internal networks of
+// datastores while they run.
 func (d *Docker) Configure(ctx context.Context, id string, network runtime.Network) (bool, error) {
 	c, spec, err := d.inspect(ctx, id)
 	if err != nil {
+		return false, err
+	}
+	if c, err = d.attach(ctx, c, network.Datastores); err != nil {
 		return false, err
 	}
 	path, err := d.dataPath(spec)
@@ -52,7 +57,7 @@ func (d *Docker) Configure(ctx context.Context, id string, network runtime.Netwo
 			return false, err
 		}
 		spec.BehindProxy, spec.ProxyOnNode, spec.BedrockPlayers, spec.Overlay = behind, network.ProxyOnNode, network.BedrockPlayers, network.Overlay
-		return running, d.recreate(ctx, spec, running, placement(c, spec))
+		return running, d.recreate(ctx, c, spec, running)
 	}
 	if !running || !changed {
 		return false, nil // applying the same configuration again must not kick players
@@ -94,7 +99,7 @@ func (d *Docker) configureProxy(ctx context.Context, c container.InspectResponse
 		// A new Bedrock port, or created by an older agent that mounted the data and
 		// published the port wrongly, or that didn't let the proxy read console commands.
 		spec.BedrockPort = network.BedrockPort
-		return running, d.recreate(ctx, spec, running, proxyNetwork(spec.ID))
+		return running, d.recreate(ctx, c, spec, running)
 	case !running || !changed && !geyser:
 		return false, nil
 	case geyser || removed && spec.Type.Bungee():
@@ -230,19 +235,20 @@ func (d *Docker) prepare(ctx context.Context, id string) error {
 		return err
 	}
 	if c.Config.User != proxyUser && !c.State.Running {
-		return d.recreate(ctx, spec, false, placement(c, spec))
+		return d.recreate(ctx, c, spec, false)
 	}
 	return nil
 }
 
 // ensureNetwork creates a network of the agent if it doesn't exist yet. Containers in the
-// shared network can't reach each other.
+// shared network can't reach each other, and those in the internal network of a datastore
+// not the internet.
 func (d *Docker) ensureNetwork(ctx context.Context, name string) error {
 	_, err := d.cli.NetworkInspect(ctx, name, client.NetworkInspectOptions{})
 	if !cerrdefs.IsNotFound(err) {
 		return err
 	}
-	opts := client.NetworkCreateOptions{Driver: "bridge", Labels: map[string]string{labelManaged: "true"}}
+	opts := client.NetworkCreateOptions{Driver: "bridge", Internal: internalNetwork(name), Labels: map[string]string{labelManaged: "true"}}
 	if name == sharedNetwork {
 		opts.Options = map[string]string{"com.docker.network.bridge.enable_icc": "false"}
 	}
@@ -253,10 +259,11 @@ func (d *Docker) ensureNetwork(ctx context.Context, name string) error {
 	return err
 }
 
-// recreate replaces the container of a server to change its settings, in network; the
-// data on the host stays. The old container is kept until the new one exists, so that a failure
-// leaves the server as it was. A running server is stopped gracefully and started again.
-func (d *Docker) recreate(ctx context.Context, spec runtime.Spec, running bool, network string) error {
+// recreate replaces the container c of a server to change its settings; the data on the host
+// stays, and so do the networks of the server. The old container is kept until the new one
+// exists, so that a failure leaves the server as it was. A running server is stopped
+// gracefully and started again.
+func (d *Docker) recreate(ctx context.Context, c container.InspectResponse, spec runtime.Spec, running bool) error {
 	if running {
 		if err := d.Stop(ctx, spec.ID); err != nil {
 			return err
@@ -266,7 +273,7 @@ func (d *Docker) recreate(ctx context.Context, spec runtime.Spec, running bool, 
 	if _, err := d.cli.ContainerRename(ctx, name, client.ContainerRenameOptions{NewName: old}); err != nil {
 		return err
 	}
-	if err := d.createContainer(ctx, spec, network); err != nil {
+	if err := d.createContainer(ctx, spec, placement(c, spec), datastoreNetworks(c)...); err != nil {
 		_, renameErr := d.cli.ContainerRename(ctx, old, client.ContainerRenameOptions{NewName: name})
 		if renameErr == nil && running {
 			renameErr = d.Start(ctx, spec.ID)
@@ -280,4 +287,49 @@ func (d *Docker) recreate(ctx context.Context, spec runtime.Spec, running bool, 
 		return nil
 	}
 	return d.Start(ctx, spec.ID)
+}
+
+// datastoreNetworks returns the internal networks of datastores a container is in.
+func datastoreNetworks(c container.InspectResponse) []string {
+	var names []string
+	if c.NetworkSettings != nil {
+		for name := range c.NetworkSettings.Networks {
+			if internalNetwork(name) {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
+
+// attach puts a server into the internal networks of the datastores it uses and takes it
+// out of the others, and returns its container as it is then.
+func (d *Docker) attach(ctx context.Context, c container.InspectResponse, datastores []string) (container.InspectResponse, error) {
+	current := datastoreNetworks(c)
+	want := make([]string, len(datastores))
+	for i, id := range datastores {
+		want[i] = datastoreName(id)
+	}
+	changed := false
+	for _, name := range want {
+		if !slices.Contains(current, name) {
+			if _, err := d.cli.NetworkConnect(ctx, name, client.NetworkConnectOptions{Container: c.ID}); err != nil {
+				return c, fmt.Errorf("join the network of datastore %s: %w", strings.TrimPrefix(name, datastorePrefix), notFound(err))
+			}
+			changed = true
+		}
+	}
+	for _, name := range current {
+		if !slices.Contains(want, name) {
+			if _, err := d.cli.NetworkDisconnect(ctx, name, client.NetworkDisconnectOptions{Container: c.ID}); err != nil && !cerrdefs.IsNotFound(err) {
+				return c, err
+			}
+			changed = true
+		}
+	}
+	if !changed {
+		return c, nil
+	}
+	res, err := d.cli.ContainerInspect(ctx, c.ID, client.ContainerInspectOptions{})
+	return res.Container, notFound(err)
 }

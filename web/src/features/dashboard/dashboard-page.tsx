@@ -29,6 +29,7 @@ import { serverLook, serverType } from "@/features/servers/server-types"
 import { useUsages } from "@/features/usage/api"
 import { formatCores, formatNumber } from "@/features/usage/format"
 import { formatBytes, formatMegabytes } from "@/lib/format"
+import { datastoresQuery } from "@/features/datastores/api"
 import { overlayQuery } from "@/features/overlay/api"
 import { problemsOf } from "./attention"
 
@@ -42,6 +43,7 @@ export function DashboardPage() {
   const usages = useUsages(online.map((n) => n.id))
   const networkOf = useNetworkOf()
   const { data: overlay } = useQuery(overlayQuery)
+  const { data: datastores } = useQuery({ ...datastoresQuery, enabled: access.can("datastores.view") })
   if (isPending || !servers) return <Skeleton className="h-96 rounded-xl" />
 
   const usage = (s: { nodeId: string; serverId: string }) => usages.server(s.nodeId, s.serverId)
@@ -53,7 +55,7 @@ export function DashboardPage() {
     gameServers.filter((s) => !networkOf(ref(s))).reduce((sum, s) => sum + (usage(ref(s))?.players?.online ?? 0), 0)
   const assignedMb = assignedMemoryMb(servers)
   const capacityMb = onlineCapacityMb(nodes)
-  const problems = problemsOf(nodes, servers, networks, usages, overlay)
+  const problems = problemsOf(nodes, servers, networks, usages, overlay, datastores)
   const busiest = gameServers
     .filter((s) => usage(ref(s))?.players?.online)
     .sort((a, b) => usage(ref(b))!.players!.online - usage(ref(a))!.players!.online)

@@ -22,15 +22,16 @@ import (
 const reconcileEvery = 15 * time.Minute
 
 type Service struct {
-	store    store
-	nodes    Nodes
-	networks Networks
-	tags     Tags
-	moves    Moves
+	store      store
+	nodes      Nodes
+	networks   Networks
+	tags       Tags
+	moves      Moves
+	datastores Datastores
 }
 
-func NewService(db *sql.DB, nodes Nodes, networks Networks, tags Tags, moves Moves) *Service {
-	return &Service{store: store{db}, nodes: nodes, networks: networks, tags: tags, moves: moves}
+func NewService(db *sql.DB, nodes Nodes, networks Networks, tags Tags, moves Moves, datastores Datastores) *Service {
+	return &Service{store: store{db}, nodes: nodes, networks: networks, tags: tags, moves: moves, datastores: datastores}
 }
 
 func (s *Service) List(ctx context.Context) ([]Summary, error) { return s.store.summaries(ctx) }

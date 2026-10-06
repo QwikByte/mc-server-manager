@@ -18,10 +18,12 @@ const maxBodyBytes = 1 << 20
 // statusClientClosed is nginx's status of requests whose client went away before the answer.
 const statusClientClosed = 499
 
-// Error is an error whose message is safe to show to API clients.
+// Error is an error whose message is safe to show to API clients. Code, if set, tells the
+// panel what to offer, e.g. to confirm a request.
 type Error struct {
 	Status  int
 	Message string
+	Code    string
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -29,6 +31,11 @@ func (e *Error) Error() string { return e.Message }
 // Errorf returns an *Error with the given HTTP status.
 func Errorf(status int, format string, args ...any) error {
 	return &Error{Status: status, Message: fmt.Sprintf(format, args...)}
+}
+
+// Confirm returns a conflict that the client may confirm with what code names.
+func Confirm(code, format string, args ...any) error {
+	return &Error{Status: http.StatusConflict, Message: fmt.Sprintf(format, args...), Code: code}
 }
 
 // grpcStatus maps errors returned by agents to HTTP statuses. Their messages are
@@ -58,7 +65,11 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	var apiErr *Error
 	if errors.As(err, &apiErr) {
-		WriteJSON(w, apiErr.Status, map[string]string{"error": apiErr.Message})
+		body := map[string]string{"error": apiErr.Message}
+		if apiErr.Code != "" {
+			body["code"] = apiErr.Code
+		}
+		WriteJSON(w, apiErr.Status, body)
 		return
 	}
 	if st, ok := status.FromError(err); ok {

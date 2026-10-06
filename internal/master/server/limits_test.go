@@ -11,10 +11,12 @@ import (
 	"github.com/QwikByte/noryx/internal/master/node"
 )
 
-// limitsNodes is a node with 3379 MB of memory, of which 1024 MB are reserved, and servers.
+// limitsNodes is a node with 3379 MB of memory, of which 1024 MB are reserved, and servers
+// and datastores.
 type limitsNodes struct {
 	Nodes
-	servers []*noryxv1.Server
+	servers    []*noryxv1.Server
+	datastores []*noryxv1.Datastore
 }
 
 func (limitsNodes) Get(_ context.Context, id string) (node.Node, error) {
@@ -22,12 +24,13 @@ func (limitsNodes) Get(_ context.Context, id string) (node.Node, error) {
 }
 
 func (n limitsNodes) Conn(context.Context, string) (grpc.ClientConnInterface, error) {
-	return limitsAgent{servers: n.servers}, nil
+	return limitsAgent{servers: n.servers, datastores: n.datastores}, nil
 }
 
 type limitsAgent struct {
 	grpc.ClientConnInterface
-	servers []*noryxv1.Server
+	servers    []*noryxv1.Server
+	datastores []*noryxv1.Datastore
 }
 
 func (a limitsAgent) Invoke(_ context.Context, _ string, _, reply any, _ ...grpc.CallOption) error {
@@ -36,6 +39,8 @@ func (a limitsAgent) Invoke(_ context.Context, _ string, _, reply any, _ ...grpc
 		r.MemoryBytes = 3379 << 20
 	case *noryxv1.ListServersResponse:
 		r.Servers = a.servers
+	case *noryxv1.ListDatastoresResponse:
+		r.Datastores = a.datastores
 	}
 	return nil
 }
@@ -74,5 +79,11 @@ func TestCheckLimitsCountsContainers(t *testing.T) {
 	release()
 	if _, err := check(h, "", 450); err != nil {
 		t.Fatalf("after the release: %v", err)
+	}
+
+	// A datastore takes its memory limit: 819 MB minus 512 MB leave a container for 40 MB of heap.
+	h = NewHandler(limitsNodes{servers: []*noryxv1.Server{{Id: "s1", MemoryMb: 1024}}, datastores: []*noryxv1.Datastore{{Id: "d1", MemoryMb: 512}}}, nil, nil, nil, nil, nil, NewMoves(), nil)
+	if _, err := check(h, "", 450); err == nil || !strings.Contains(err.Error(), "up to 40 MB") {
+		t.Fatalf("next to a datastore: %v", err)
 	}
 }

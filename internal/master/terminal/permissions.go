@@ -14,7 +14,10 @@ import (
 // grants lack, or nil.
 type check func(ctx context.Context, g access.Grants, args []string) error
 
-var errUnchecked = errors.New("this command can't be run in the panel")
+var (
+	errUnchecked        = errors.New("this command can't be run in the panel")
+	errDatastoreRestore = errors.New("restore datastores on the Databases tab of their network, which stops the servers that use them first")
+)
 
 // need is the result of a check for permission p.
 func need(p access.Permission, ok bool) error {
@@ -50,7 +53,8 @@ func guarded(use, short string, checks map[string]check) *cobra.Command {
 }
 
 // agentChecks are the checks of the agent's commands on a node. Commands that list all
-// servers need the permission on the whole node, those for one server on that server.
+// servers need the permission on the whole node, those for one server on that server, and
+// those for datastores the global permission.
 // Commands that change a server also ask moving, which refuses them while the server
 // moves to another node, as the changes would be lost.
 func agentChecks(nodeID string, moving func(serverID string) error) map[string]check {
@@ -72,19 +76,28 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 			return moving(args[0])
 		}
 	}
+	global := func(p access.Permission) check {
+		return func(_ context.Context, g access.Grants, _ []string) error { return need(p, g.Has(p)) }
+	}
 	return map[string]check{
-		"status":         node(access.ServersView),
-		"server list":    node(access.ServersView),
-		"server start":   change(access.ServersStart),
-		"server stop":    change(access.ServersStop),
-		"server restart": change(access.ServersRestart),
-		"server logs":    server(access.ConsoleView),
-		"server command": change(access.ConsoleCommands),
-		"backup list":    server(access.BackupsView),
-		"backup create":  change(access.BackupsCreate),
-		"backup restore": change(access.BackupsRestore),
-		"logs":           node(access.LogsView),
-		"overlay status": node(access.NodesView),
+		"datastore list":    global(access.DatastoresView),
+		"datastore backups": global(access.DatastoresView),
+		"datastore backup":  global(access.DatastoresManage),
+		// Only the panel's Databases tab restores, as it stops the servers that use the databases
+		// first and gives their users their passwords; the local CLI is for emergencies.
+		"datastore restore": func(context.Context, access.Grants, []string) error { return errDatastoreRestore },
+		"status":            node(access.ServersView),
+		"server list":       node(access.ServersView),
+		"server start":      change(access.ServersStart),
+		"server stop":       change(access.ServersStop),
+		"server restart":    change(access.ServersRestart),
+		"server logs":       server(access.ConsoleView),
+		"server command":    change(access.ConsoleCommands),
+		"backup list":       server(access.BackupsView),
+		"backup create":     change(access.BackupsCreate),
+		"backup restore":    change(access.BackupsRestore),
+		"logs":              node(access.LogsView),
+		"overlay status":    node(access.NodesView),
 	}
 }
 

@@ -42,7 +42,9 @@ type Nodes interface {
 // network follows a server that moves, if it may.
 type Networks interface {
 	CheckRemovable(ctx context.Context, nodeID, serverID string) error
-	CheckMove(ctx context.Context, serverID, from, to string) error
+	// CheckMove fails if a server can't move to another node; unreachable confirms a move to
+	// a node that doesn't reach the datastores of its network.
+	CheckMove(ctx context.Context, serverID, from, to string, unreachable bool) error
 	Move(ctx context.Context, serverID, from, to string) error
 	// Reapply configures the network of a server again, e.g. as its port changed.
 	Reapply(ctx context.Context, serverID string) error

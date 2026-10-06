@@ -259,6 +259,9 @@ message ConfigureNetworkRequest {
   // the address of the proxy's node in it. The node publishes the backend's port only at its
   // own address in the network, and only for this one.
   string overlay_client = 10;
+  // Datastores of the server's network on this node, which it reaches by the name of their
+  // container, e.g. noryx-db-<id>.
+  repeated string datastores = 11;
 }
 
 enum Forwarding {

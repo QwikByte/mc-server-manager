@@ -34,6 +34,8 @@ export interface Backup {
 
 export interface JobSettings {
   selection: Selection
+  /** Datastores backed up with all their databases; jobs from before datastores have none. */
+  datastores?: string[]
   /** Storage location on each node; empty means the default one. */
   location: string
   /** Backups of the job kept per server; 0 keeps all. */
@@ -49,7 +51,7 @@ export const emptyJob: TaskInput<JobSettings> = {
   enabled: true,
   schedule: defaultSchedule,
   targets: [],
-  settings: { selection: defaultSelection, location: "", keep: 7 },
+  settings: { selection: defaultSelection, datastores: [], location: "", keep: 7 },
 }
 
 /** Why the master refuses the further paths of a selection, if it does. */

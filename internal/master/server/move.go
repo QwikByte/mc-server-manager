@@ -148,6 +148,9 @@ type moveRequest struct {
 	Port    uint32 `json:"port"`
 	Storage string `json:"storage"`
 	Backups bool   `json:"backups"`
+	// WithoutDatabases confirms the move to a node that doesn't reach the datastores of the
+	// server's network.
+	WithoutDatabases bool `json:"withoutDatabases"`
 }
 
 // move starts moving a server to another node, which needs the permission to create
@@ -202,7 +205,7 @@ func (h *Handler) checkMove(ctx context.Context, from, id string, req *moveReque
 	if err != nil {
 		return nil, err
 	}
-	if err := h.networks.CheckMove(ctx, id, from, req.Node); err != nil {
+	if err := h.networks.CheckMove(ctx, id, from, req.Node, req.WithoutDatabases); err != nil {
 		return nil, err
 	}
 	*src = source

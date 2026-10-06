@@ -32,7 +32,7 @@ type Agent func(ctx context.Context, fn func(grpc.ClientConnInterface) error) er
 // Commands returns the commands that control the agent. They print to the command's output.
 func Commands(agent Agent) []*cobra.Command {
 	c := cli{agent}
-	return []*cobra.Command{c.status(), c.server(), c.backup(), c.logs(), c.overlay()}
+	return []*cobra.Command{c.status(), c.server(), c.backup(), c.datastore(), c.logs(), c.overlay()}
 }
 
 type cli struct{ agent Agent }

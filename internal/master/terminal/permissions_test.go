@@ -54,6 +54,9 @@ func TestMovingServers(t *testing.T) {
 	})
 	changes := []string{"server start", "server stop", "server restart", "server command", "backup create", "backup restore"}
 	for name, c := range checks {
+		if name == "datastore restore" {
+			continue // refused in the panel
+		}
 		want := error(nil)
 		if slices.Contains(changes, name) {
 			want = errMoving

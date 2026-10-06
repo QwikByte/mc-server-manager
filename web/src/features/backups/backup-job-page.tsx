@@ -11,6 +11,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
+import { DatastoresField } from "@/features/datastores/datastores-field"
 import { nodesQuery } from "@/features/nodes/api"
 import type { TaskInput } from "@/features/schedules/api"
 import { TaskForm } from "@/features/schedules/task-form"
@@ -92,10 +93,13 @@ function JobForm({
       pending={save.isPending}
       error={save.error}
       onSubmit={(input) => save.mutate(input, { onSuccess: onSaved })}
+      // A job that only backs up datastores needs no servers.
+      targetsOptional={(settings) => (settings.datastores?.length ?? 0) > 0}
     >
       {(settings, set) => (
         <FormSection title={t("Backups")}>
           <SelectionField value={settings.selection} onChange={(selection) => set({ selection })} />
+          <DatastoresField value={settings.datastores ?? []} onChange={(datastores) => set({ datastores })} />
           <LocationField locations={locations} value={settings.location} onChange={(location) => set({ location })} />
           <Field>
             <FieldLabel htmlFor="job-keep">{t("Backups to keep")}</FieldLabel>
@@ -109,7 +113,7 @@ function JobForm({
               onChange={(e) => set({ keep: e.target.valueAsNumber || 0 })}
             />
             <FieldDescription>
-              {t("Per server; older backups of this job are deleted. 0 keeps all of them. Backups made by hand are never deleted.")}
+              {t("Per server and datastore; older backups of this job are deleted. 0 keeps all of them. Backups made by hand are never deleted.")}
             </FieldDescription>
           </Field>
         </FormSection>
