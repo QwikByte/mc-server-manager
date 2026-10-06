@@ -35,6 +35,7 @@ archives:
     files:
       - LICENSE
       - README.md
+      - docs/installation.md
       - src: packaging/master/noryx-master.service
         strip_parent: true
       - src: packaging/master/master.env
@@ -45,6 +46,7 @@ archives:
     files:
       - LICENSE
       - README.md
+      - docs/installation.md
       - src: packaging/agent/noryx-agent.service
         strip_parent: true
       - src: packaging/agent/noryx-overlay.service
