@@ -1488,6 +1488,7 @@
   "Servers on the proxy's own node need nothing: only the proxy reaches them.": "Server auf dem Node des Proxys brauchen nichts: Nur der Proxy erreicht sie.",
   "Servers running": "Laufende Server",
   "Servers that have the file keep their own, e.g. as a plugin rewrites it. Changes here only reach servers without it.": "Server, die die Datei haben, behalten ihre eigene, z. B. weil ein Plugin sie umschreibt. Änderungen hier erreichen nur Server ohne sie.",
+  "Servers that left used {{databases}}. Give them new passwords, so that they lose access.": "Server, die das Netzwerk verlassen haben, nutzten {{databases}}. Gib ihnen neue Passwörter, damit sie den Zugriff verlieren.",
   "Servers together can't get more memory than the node has, minus a reserve for the system.": "Server zusammen können nicht mehr Speicher bekommen, als der Node hat, abzüglich einer Reserve für das System.",
   "Servers with a tag": "Server mit einem Tag",
   "Sessions last": "Sitzungen dauern",

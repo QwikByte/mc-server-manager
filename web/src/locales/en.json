@@ -1488,6 +1488,7 @@
   "Servers on the proxy's own node need nothing: only the proxy reaches them.": "Servers on the proxy's own node need nothing: only the proxy reaches them.",
   "Servers running": "Servers running",
   "Servers that have the file keep their own, e.g. as a plugin rewrites it. Changes here only reach servers without it.": "Servers that have the file keep their own, e.g. as a plugin rewrites it. Changes here only reach servers without it.",
+  "Servers that left used {{databases}}. Give them new passwords, so that they lose access.": "Servers that left used {{databases}}. Give them new passwords, so that they lose access.",
   "Servers together can't get more memory than the node has, minus a reserve for the system.": "Servers together can't get more memory than the node has, minus a reserve for the system.",
   "Servers with a tag": "Servers with a tag",
   "Sessions last": "Sessions last",
