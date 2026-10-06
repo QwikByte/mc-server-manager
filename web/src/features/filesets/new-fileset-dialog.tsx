@@ -47,7 +47,7 @@ export function NewFileSetDialog({ trigger }: { trigger: ReactElement }) {
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
             <DialogTitle>{t("New file set")}</DialogTitle>
-            <DialogDescription>{t("Saving a set changes no server. Its files reach the servers when it is applied.")}</DialogDescription>
+            <DialogDescription>{t("Saving a set doesn't change any servers. Its files reach the servers when it is applied.")}</DialogDescription>
           </DialogHeader>
           <Field>
             <FieldLabel htmlFor="fileset-name">{t("Name")}</FieldLabel>

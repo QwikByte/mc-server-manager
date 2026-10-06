@@ -82,7 +82,7 @@ function MfaSettings({ username }: { username: string }) {
             </>
           }
         >
-          {t("Signing in asks for a code of the app.")}{" "}
+          {t("Signing in asks for a code from the app.")}{" "}
           <span className={data.recoveryCodes <= 3 ? "font-medium text-warning" : undefined}>
             {t("{{count}} recovery codes left.", { count: data.recoveryCodes, defaultValue_one: "{{count}} recovery code left." })}
           </span>

@@ -159,7 +159,7 @@ function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server;
                 content: backup.paths.includes(".") ? t("everything") : describeContent(backup.paths),
                 name: server.name,
               }),
-              server.state !== "stopped" && t("The server stops meanwhile and starts again."),
+              server.state !== "stopped" && t("The server stops while this happens and starts again afterwards."),
             ]
               .filter(Boolean)
               .join(" ")}

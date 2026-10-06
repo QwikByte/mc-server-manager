@@ -21,7 +21,7 @@ export function RecentActivity({ title }: { title: string }) {
   return (
     <Panel title={title} more={{ to: "/logs", label: t("Open the log") }}>
       {data && entries.length === 0 ? (
-        <Calm icon={ScrollIcon}>{t("Nothing happened yet.")}</Calm>
+        <Calm icon={ScrollIcon}>{t("Nothing has happened yet.")}</Calm>
       ) : (
         <ul className="divide-y">
           <AnimatePresence initial={false}>

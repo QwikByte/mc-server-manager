@@ -23,10 +23,10 @@ export function RestartButton({ master, next, label = t("Restart master") }: { m
       description={
         samePanel(next, currentPanel(master))
           ? t(
-              "The panel is away for a few seconds. Open consoles and logs reconnect, commands in the terminal stop. Minecraft servers and agents keep running.",
+              "The panel is unavailable for a few seconds. Open consoles and logs reconnect, and commands in the terminal stop. Minecraft servers and agents keep running.",
             )
           : t(
-              "The panel is away for a few seconds and then listens at {{address}}. Open consoles and logs reconnect, commands in the terminal stop. Minecraft servers and agents keep running.",
+              "The panel is unavailable for a few seconds and then listens at {{address}}. Open consoles and logs reconnect, and commands in the terminal stop. Minecraft servers and agents keep running.",
               { address: panelURL(next) },
             )
       }

@@ -76,11 +76,11 @@ export function Activity() {
       <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-md">
         <SheetHeader className="border-b">
           <SheetTitle>{t("Operations")}</SheetTitle>
-          <SheetDescription>{t("What runs now, and what ran in the last hour.")}</SheetDescription>
+          <SheetDescription>{t("What's running now, and what ran in the last hour.")}</SheetDescription>
         </SheetHeader>
         {ops.length === 0 ? (
           <p className="p-6 text-center text-sm text-muted-foreground">
-            {t("Nothing runs. Long actions, such as creating a server, show up here with their progress.")}
+            {t("Nothing is running. Long-running actions, such as creating a server, show up here with their progress.")}
           </p>
         ) : (
           <ul className="grid gap-2 p-4">

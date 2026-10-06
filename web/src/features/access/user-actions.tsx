@@ -113,7 +113,7 @@ function EditUserDialog({ user, groups, self }: { user: User; groups: Group[]; s
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
             <DialogTitle>{user.username}</DialogTitle>
-            <DialogDescription>{t("Changes apply right away, also to sessions in progress.")}</DialogDescription>
+            <DialogDescription>{t("Changes apply right away, even to sessions in progress.")}</DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <FieldSet>

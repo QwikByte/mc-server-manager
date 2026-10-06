@@ -68,7 +68,7 @@ export function MaintenanceSection({ network }: { network: Network }) {
         <div className="surface grid gap-4 rounded-xl p-5">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <Pill tone={m.enabled ? "warning" : "neutral"}>{m.enabled ? t("In maintenance") : t("Open to all players")}</Pill>
-            {!proxyRunning && <span className="text-muted-foreground">{t("The proxy doesn't run.")}</span>}
+            {!proxyRunning && <span className="text-muted-foreground">{t("The proxy isn't running.")}</span>}
             {!m.installed && proxyRunning && (
               <span className="text-muted-foreground">{t("The first time, the panel installs the Maintenance plugin on the proxy.")}</span>
             )}

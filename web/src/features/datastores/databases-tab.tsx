@@ -55,7 +55,7 @@ export function DatabasesTab() {
     <Section
       title={t("Datastores")}
       description={t(
-        "MariaDB and PostgreSQL servers that only the servers of this network reach. Enter the connection of a database into the configuration of its plugin, or into a file set.",
+        "MariaDB and PostgreSQL servers that only this network's servers can reach. Enter a database's connection details in the configuration of the plugin that uses it, or in a file set.",
       )}
       className="mt-0"
       actions={can("datastores.manage") && data.length > 0 && <CreateDatastoreDialog networkId={networkId} />}
@@ -124,7 +124,7 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
                   </Button>
                 }
                 title={t("Stop {{name}}?", { name: ds.name })}
-                description={t("The plugins that use its databases lose them until it starts again.")}
+                description={t("The plugins that use its databases lose access to them until it starts again.")}
                 action={t("Stop")}
                 destructive
                 onConfirm={() => run("stop")}
@@ -318,7 +318,7 @@ function DatabaseRow({ datastore: ds, database: db }: { datastore: Datastore; da
                   </Button>
                 }
                 title={t("Drop the database {{name}}?", { name: db.name })}
-                description={t("Its user and all its data are deleted; backups keep theirs. This can't be undone.")}
+                description={t("Its user and all its data are deleted, but existing backups are kept. This can't be undone.")}
                 action={t("Drop database")}
                 destructive
                 onConfirm={() =>

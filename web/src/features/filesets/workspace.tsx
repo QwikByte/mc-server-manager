@@ -165,7 +165,7 @@ export function Workspace({
         <PickDialog
           title={t("Import from a server")}
           description={t(
-            "Choose files or whole folders. The set gets them at the same paths, as the file manager shows them; replace passwords in them with secrets before applying the set. Files the set has are replaced.",
+            "Choose files or whole folders. The set gets them at the same paths as in the file manager; replace any passwords in them with secrets before applying the set. Files already in the set are replaced.",
           )}
           folder={folderOf(file?.path)}
           action={t("Import")}

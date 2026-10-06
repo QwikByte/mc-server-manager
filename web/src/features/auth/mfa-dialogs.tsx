@@ -87,7 +87,7 @@ export function MfaSetupDialog({
                 <Skeleton className="h-40 rounded-xl" />
               )}
             </Step>
-            <Step n={2} title={t("Confirm with a code of the app and your password")}>
+            <Step n={2} title={t("Confirm with a code from the app and your password")}>
               <FieldGroup className="sm:grid sm:grid-cols-2 sm:gap-4">
                 <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
                 <Field>
@@ -241,7 +241,7 @@ export function RecoveryCodesDialog({ codes, onClose }: { codes?: string[]; onCl
           <DialogTitle>{t("Save your recovery codes")}</DialogTitle>
           <DialogDescription>
             {t(
-              "If you lose your phone, each code signs you in once instead of a code of the app. They are shown only now, so keep them somewhere safe, such as your password manager.",
+              "If you lose your phone, each code signs you in once in place of an app code. They won't be shown again, so keep them somewhere safe, such as in your password manager.",
             )}
           </DialogDescription>
         </DialogHeader>

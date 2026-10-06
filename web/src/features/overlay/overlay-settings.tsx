@@ -25,7 +25,7 @@ export function OverlaySettingsSection() {
   return (
     <Section
       title={t("Private network")}
-      description={t("Nodes join it on their pages, once their administrator allowed it. Open its UDP port between them.")}
+      description={t("Nodes join it from their own page once their administrator allows it. Open its UDP port between them.")}
       actions={
         manage && (
           <Button variant="outline" onClick={() => setEditing(true)}>

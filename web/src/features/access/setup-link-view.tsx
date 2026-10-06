@@ -10,7 +10,7 @@ export function SetupLinkView({ username, link }: { username: string; link: Setu
     <div className="space-y-3 text-sm">
       <p>
         <Trans
-          i18nKey="Send this link to <user/>. It sets the password once and works until <time/>."
+          i18nKey="Send this link to <user/>. It can be used once to set a password and works until <time/>."
           components={{ user: <span className="font-medium">{username}</span>, time: <>{formatDateTime(link.expiresAt)}</> }}
         />
       </p>

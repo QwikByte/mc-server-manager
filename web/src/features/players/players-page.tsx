@@ -88,9 +88,9 @@ export function PlayersPage() {
         <>
           {unnamed > 0 && (
             <Callout icon={InfoIcon} className="mb-4">
-              {t("{{count}} more players are online on servers whose console doesn't answer, which only tell how many play.", {
+              {t("{{count}} more players are online on servers whose console isn't responding. Those servers only report a player count.", {
                 count: unnamed,
-                defaultValue_one: "Another player is online on a server whose console doesn't answer, which only tells how many play.",
+                defaultValue_one: "Another player is online on a server whose console isn't responding. That server only reports a player count.",
               })}
             </Callout>
           )}

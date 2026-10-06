@@ -166,7 +166,7 @@ function SetEditor({ set }: { set: FileSet }) {
               {t("Unsaved changes")}
             </p>
             <p className={save.error ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
-              {save.error?.message ?? t("Saving creates a new version and changes no server until the set is applied.")}
+              {save.error?.message ?? t("Saving creates a new version but doesn't change any servers until the set is applied.")}
             </p>
           </div>
           <div className="flex gap-2">
@@ -222,7 +222,7 @@ function StatusBar({
   const behind = statuses?.filter((s) => pending.includes(s.state)).length ?? 0
   const missing = usedSecrets(draft.files).filter((name) => !set.secrets.some((s) => s.name === name))
   const problems = [
-    draft.targets.length === 0 && t("The set is for no server yet: add a target."),
+    draft.targets.length === 0 && t("The set doesn't target any servers yet: add a target."),
     draft.files.length === 0 && t("The set has no files yet."),
     missing.length > 0 && t("Secrets without a value: {{names}}", { names: missing.join(", ") }),
   ].filter((p): p is string => Boolean(p))

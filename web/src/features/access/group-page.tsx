@@ -80,7 +80,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
             {group?.builtin && (
               <Callout tone="warning" icon={CrownIcon}>
                 {t(
-                  "Administrators have every permission on all servers, also permissions that later versions add. Only the members of this group change, on the Users tab.",
+                  "Administrators have every permission on all servers, including those that later versions add. You can only change who belongs to this group, on the Users tab.",
                 )}
               </Callout>
             )}
@@ -113,7 +113,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
                     value="all"
                     icon={GlobeIcon}
                     title={t("All servers")}
-                    description={t("On every node, also on nodes and servers added later.")}
+                    description={t("On every node, including nodes and servers added later.")}
                   />
                   <ScopeOption
                     value="some"

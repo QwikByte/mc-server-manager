@@ -27,7 +27,7 @@ export function OperationStatus({
         <DialogDescription>
           {op.error
             ? t("It failed at the marked step.")
-            : t("This takes a moment. It goes on if you leave it in the background, and a notification tells how it ends.")}
+            : t("This takes a moment. It keeps running in the background too, and a notification tells you how it went.")}
         </DialogDescription>
       </DialogHeader>
       <OperationProgress op={op} />

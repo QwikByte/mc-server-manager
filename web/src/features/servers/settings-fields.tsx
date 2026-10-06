@@ -60,7 +60,7 @@ export function MemoryField({
       </Select>
       {freeMb !== undefined && (
         <FieldDescription>
-          {t("{{free}} left on the node, for the server and what Java needs besides it", { free: formatMegabytes(Math.max(0, freeMb)) })}
+          {t("{{free}} left on the node for the server and Java's overhead", { free: formatMegabytes(Math.max(0, freeMb)) })}
         </FieldDescription>
       )}
     </Field>

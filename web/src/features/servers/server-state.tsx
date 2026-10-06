@@ -67,14 +67,14 @@ export function CrashNotice({ server }: { server: Server }) {
       <p>
         {[
           exitCode
-            ? t("It crashed {{count}} times since it was started, last with exit code {{code}}.", {
+            ? t("It has crashed {{count}} times since it was started, most recently with exit code {{code}}.", {
                 count: crashes,
                 code: exitCode,
-                defaultValue_one: "It crashed once since it was started, with exit code {{code}}.",
+                defaultValue_one: "It has crashed once since it was started, with exit code {{code}}.",
               })
-            : t("It crashed {{count}} times since it was started.", {
+            : t("It has crashed {{count}} times since it was started.", {
                 count: crashes,
-                defaultValue_one: "It crashed once since it was started.",
+                defaultValue_one: "It has crashed once since it was started.",
               }),
           t("The console shows why."),
           state === "crashing"
@@ -99,7 +99,7 @@ export function RefusedOptionsNotice({ server, nodeId, canEdit }: { server: Serv
       icon={WarningIcon}
       role="note"
       className="mb-6"
-      title={t("{{name}} starts with JVM options that are refused now", { name: server.name })}
+      title={t("{{name}} starts with JVM options that are no longer allowed", { name: server.name })}
     >
       <p className="font-mono break-all">{refused.join(" ")}</p>
       <p>

@@ -47,7 +47,7 @@ export const widgets: WidgetDef[] = [
   },
   {
     id: "resources",
-    title: msg("Load of the nodes"),
+    title: msg("Node load"),
     icon: ChartLineIcon,
     columns: 2,
     visible: (a) => a.canSomewhere("nodes.view"),

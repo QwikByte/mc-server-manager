@@ -209,7 +209,7 @@ function MemberActions({ node, overlay }: { node: Node; overlay: NodeOverlay }) 
           </Button>
         }
         title={t("Remove {{name}} from the private network?", { name: node.name })}
-        description={t("The networks then reach its servers, and servers from it, at public ports again: these servers restart once.")}
+        description={t("Networks then reach its servers, and it reaches other servers, over public ports again: these servers restart once.")}
         action={t("Remove")}
         destructive
         onConfirm={() =>

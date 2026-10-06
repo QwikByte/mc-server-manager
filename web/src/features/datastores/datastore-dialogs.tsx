@@ -70,7 +70,7 @@ export function CreateDatastoreDialog({ networkId }: { networkId: string }) {
             <DialogTitle>{t("Add a datastore")}</DialogTitle>
             <DialogDescription>
               {t(
-                "A database server that only the servers of the network reach: on its node by name, from other nodes over the private network of the nodes.",
+                "A database server that only the network's servers can reach: by name on its own node, and over the nodes' private network from other nodes.",
               )}
             </DialogDescription>
           </DialogHeader>

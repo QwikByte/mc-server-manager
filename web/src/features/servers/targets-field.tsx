@@ -36,7 +36,7 @@ export function TargetsField({ value, onChange }: { value: Target[]; onChange: (
               <Checkbox checked={whole} onCheckedChange={(on) => toggle({ nodeId: node.id, serverId: "" }, on === true)} />
               <HardDrivesIcon className="size-4 text-info" weight="duotone" />
               <span className="text-sm font-semibold">{node.name}</span>
-              <span className="text-xs text-muted-foreground">{t("All servers, also new ones")}</span>
+              <span className="text-xs text-muted-foreground">{t("All servers, including new ones")}</span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2 pl-7">
               {onNode.map((s) => (

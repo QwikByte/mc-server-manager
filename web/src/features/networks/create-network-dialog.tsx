@@ -194,7 +194,7 @@ export function CreateNetworkDialog({ trigger }: { trigger?: ReactElement }) {
                 <p className="text-xs text-muted-foreground">
                   {bungee
                     ? t(
-                        "BungeeCord and Waterfall only forward the legacy way. Servers on the proxy's node are safe, as only the proxy reaches them.",
+                        "BungeeCord and Waterfall only support legacy forwarding. Servers on the proxy's node are safe, as only the proxy can reach them.",
                       )
                     : t("You can change this later; the servers then restart.")}
                 </p>
