@@ -202,6 +202,17 @@ const networkDatabasesRoute = createRoute({
   path: "databases",
   component: lazyRouteComponent(() => import("@/features/datastores/databases-tab"), "DatabasesTab"),
 })
+// The table shown and the first of its rows are in the address.
+const networkDatabaseRoute = createRoute({
+  getParentRoute: () => networkRoute,
+  path: "databases/$datastoreId/$database",
+  validateSearch: (search: Record<string, unknown>): { table?: string; schema?: string; offset?: number } => ({
+    table: typeof search.table === "string" && search.table ? search.table : undefined,
+    schema: typeof search.schema === "string" && search.schema ? search.schema : undefined,
+    offset: Number.isSafeInteger(search.offset) && Number(search.offset) > 0 ? Number(search.offset) : undefined,
+  }),
+  component: lazyRouteComponent(() => import("@/features/datastores/table-browser"), "TableBrowser"),
+})
 
 const templatesRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -352,7 +363,7 @@ export const router = createRouter({
       ]),
       networksRoute,
       playersRoute,
-      networkRoute.addChildren([networkOverviewRoute, networkProxyRoute, networkDatabasesRoute]),
+      networkRoute.addChildren([networkOverviewRoute, networkProxyRoute, networkDatabasesRoute, networkDatabaseRoute]),
       templatesRoute,
       newTemplateRoute,
       templateRoute,

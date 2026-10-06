@@ -48,7 +48,7 @@ func apply(t *testing.T, s *Service, set string, version int64, dry bool, files 
 	t.Helper()
 	res, err := s.ApplyFileSet(t.Context(), &noryxv1.ApplyFileSetRequest{
 		ServerId: server, SetId: set, SetName: "Set " + set[:1], Version: version, Revision: "rev", Files: files, DryRun: dry,
-		Secrets: map[string]string{"secret:db": "p4ss", "datastore:main.lp.password": "dbp4ss"},
+		Secrets: map[string]string{"secret:db": "p4ss", "secret:lp": "dbp4ss"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ const (
 func TestApply(t *testing.T) {
 	s, dir := setup(t)
 	chat := &noryxv1.FileSetFile{Path: "plugins/Chat/config.yml", Content: "format: '<{player}> {{player}}'\n"}
-	lp := &noryxv1.FileSetFile{Path: "/plugins/LuckPerms/config.yml", Content: "password: {{secret:db}}\nother: {{datastore:main.lp.password}}\n"}
+	lp := &noryxv1.FileSetFile{Path: "/plugins/LuckPerms/config.yml", Content: "password: {{secret:db}}\nother: {{secret:lp}}\n"}
 	messages := &noryxv1.FileSetFile{Path: "plugins/Chat/messages.yml", Content: "hi: Hi\n", OnlyIfMissing: true}
 	write(t, dir, "plugins/Chat/messages.yml", "hi: Hello\n")
 

@@ -201,6 +201,7 @@ func (l *limited) Write(p []byte) (int, error) {
 type session struct {
 	d        *Docker
 	id       string
+	engine   noryxv1.DatastoreEngine
 	dialect  dialect
 	password string
 }
@@ -216,7 +217,7 @@ func (d *Docker) session(ctx context.Context, id string, names ...string) (*sess
 		return nil, err
 	}
 	password, err := os.ReadFile(filepath.Join(dir, superuserFile)) //nolint:gosec // in the folder of the datastore
-	return &session{d, id, dialects[spec.Engine], strings.TrimSpace(string(password))}, err
+	return &session{d, id, spec.Engine, dialects[spec.Engine], strings.TrimSpace(string(password))}, err
 }
 
 // query runs SQL with secrets in it and returns the words it prints.

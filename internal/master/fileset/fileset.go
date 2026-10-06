@@ -6,7 +6,6 @@ package fileset
 
 import (
 	"cmp"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -171,14 +170,10 @@ func placeholderProblem(name, content string) string {
 		secret, isSecret := strings.CutPrefix(key, "secret:")
 		_, variable := variables[key]
 		switch {
-		case strings.HasPrefix(key, "datastore:"):
-			if !noryxv1.DatastoreField.MatchString(key) {
-				return fmt.Sprintf("%s: %s names no field of a database. Use {{datastore:<datastore>.<database>.<field>}} with host, port, database, user or password as field.", name, m[0])
-			}
 		case isSecret && !noryxv1.SecretName.MatchString(secret):
 			return fmt.Sprintf("%s: %s names no valid secret. Secret names have up to 64 lower-case letters, digits, - and _.", name, m[0])
-		case !isSecret && !variable && !strings.HasPrefix(key, "datastore:"):
-			return fmt.Sprintf("%s: %s is unknown. Use {{server.name}}, {{server.id}}, {{server.port}}, {{network.server}}, {{secret:<name>}} or {{datastore:<datastore>.<database>.<field>}}.", name, m[0])
+		case !isSecret && !variable:
+			return fmt.Sprintf("%s: %s is unknown. Use {{server.name}}, {{server.id}}, {{server.port}}, {{network.server}} or {{secret:<name>}}.", name, m[0])
 		}
 	}
 	return ""
@@ -191,28 +186,6 @@ type member struct {
 	Port uint32
 	// Network is the server's name in its network, empty for none or the proxy.
 	Network string
-	// NetworkID is the ID of its network, also for the proxy; empty for none.
-	NetworkID string
-	// datastore returns a field of a database of its network, as the server reaches it.
-	datastore func(key string) (string, error)
-}
-
-// Datastores provide the values of the placeholders of the databases of networks.
-type Datastores interface {
-	// Fields returns the lookup of the fields of the databases as they are now.
-	Fields(ctx context.Context) (DatastoreFields, error)
-}
-
-// DatastoreFields returns a field of a database by <datastore>.<database>.<field>, as the
-// servers of a network on a node reach it, or why they can't.
-type DatastoreFields func(networkID, nodeID, key string) (string, error)
-
-// field returns a field of a database of the server's network.
-func (m member) field(key string) (string, error) {
-	if m.datastore == nil || m.NetworkID == "" {
-		return "", httpapi.Errorf(http.StatusConflict, "%s is in no network, so it has no databases.", cmp.Or(m.Name, m.ServerID))
-	}
-	return m.datastore(key)
 }
 
 // rendered is a set for one server: its files with the variables filled in, the values of
@@ -232,17 +205,6 @@ func render(id string, files []File, values map[string]string, m member) (render
 	for _, f := range files {
 		content := noryxv1.Placeholder.ReplaceAllStringFunc(f.Content, func(p string) string {
 			key := p[2 : len(p)-2]
-			if field, ok := strings.CutPrefix(key, "datastore:"); ok {
-				value, err := m.field(field)
-				if err != nil {
-					missing = cmp.Or(missing, httpapi.Errorf(http.StatusConflict, "%s: %s", f.Path, httpapi.Message(err)))
-				}
-				if !strings.HasSuffix(field, ".password") {
-					return value
-				}
-				r.secrets[key] = value // only the agent fills in passwords
-				return p
-			}
 			if name, ok := strings.CutPrefix(key, "secret:"); ok {
 				value, ok := values[name]
 				if !ok {

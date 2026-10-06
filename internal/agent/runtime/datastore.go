@@ -8,8 +8,12 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
-// ErrDatastoreNotRunning is returned for what needs a datastore that runs and is ready.
-var ErrDatastoreNotRunning = errors.New("the datastore isn't running")
+var (
+	// ErrDatastoreNotRunning is returned for what needs a datastore that runs and is ready.
+	ErrDatastoreNotRunning = errors.New("the datastore isn't running")
+	// ErrNoTable is returned for a table that a database lacks.
+	ErrNoTable = errors.New("table not found")
+)
 
 // DatastoreSpec describes a datastore: a MariaDB or PostgreSQL server of a network.
 type DatastoreSpec struct {
@@ -63,4 +67,10 @@ type Datastores interface {
 	// Load creates a database anew and loads a dump into it as the database's user, so that
 	// the dump gets no more rights than the user has. The user keeps its password.
 	Load(ctx context.Context, id, name string, r io.Reader) error
+	// Tables returns the tables of a database, sorted.
+	Tables(ctx context.Context, id, name string) ([]*noryxv1.Table, error)
+	// Browse returns the columns of a table and at most limit of its rows from offset on, in
+	// the order of its primary key if it has one, as text with long values cut short. It only
+	// reads, with names that noryxv1.TableName matches.
+	Browse(ctx context.Context, id, name, schema, table string, offset uint64, limit uint32) (*noryxv1.BrowseTableResponse, error)
 }

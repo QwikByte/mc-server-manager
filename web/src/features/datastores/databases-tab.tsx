@@ -3,13 +3,17 @@ import {
   ArrowCounterClockwiseIcon,
   DatabaseIcon,
   DownloadSimpleIcon,
+  EyeIcon,
+  EyeSlashIcon,
   GearIcon,
   HardDrivesIcon,
   KeyIcon,
   MemoryIcon,
   PlayIcon,
+  PlugsConnectedIcon,
   PlusIcon,
   StopIcon,
+  TableIcon,
   TrashIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
@@ -32,18 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { useOperation } from "@/features/operations/use-operation"
 import { formatBytes, formatDateTime, formatMegabytes } from "@/lib/format"
-import {
-  type Database,
-  type DatabaseUse,
-  type Datastore,
-  downloadUrl,
-  type Dump,
-  dumpsQuery,
-  fields,
-  networkDatastoresQuery,
-  placeholderOf,
-  useDatastore,
-} from "./api"
+import { type Database, type Datastore, downloadUrl, type Dump, dumpsQuery, networkDatastoresQuery, passwordQuery, useDatastore } from "./api"
 import { ChangeDatastoreDialog, CreateDatastoreDialog, DeleteDatastoreDialog } from "./datastore-dialogs"
 import { engines, states } from "./labels"
 
@@ -62,12 +55,12 @@ export function DatabasesTab() {
     <Section
       title={t("Datastores")}
       description={t(
-        "MariaDB and PostgreSQL servers that only the servers of this network reach. File sets put the credentials of their databases into the configuration of plugins.",
+        "MariaDB and PostgreSQL servers that only the servers of this network reach. Enter the connection of a database into the configuration of its plugin, or into a file set.",
       )}
       className="mt-0"
-      actions={can("datastores.manage") && data.datastores.length > 0 && <CreateDatastoreDialog networkId={networkId} />}
+      actions={can("datastores.manage") && data.length > 0 && <CreateDatastoreDialog networkId={networkId} />}
     >
-      {data.datastores.length === 0 ? (
+      {data.length === 0 ? (
         <EmptyState
           icon={DatabaseIcon}
           tone="info"
@@ -78,8 +71,8 @@ export function DatabasesTab() {
         </EmptyState>
       ) : (
         <div className="space-y-6">
-          {data.datastores.map((ds) => (
-            <DatastoreCard key={ds.id} datastore={ds} uses={data.uses.filter((u) => u.database.startsWith(`${ds.name}.`))} />
+          {data.map((ds) => (
+            <DatastoreCard key={ds.id} datastore={ds} />
           ))}
         </div>
       )}
@@ -87,7 +80,7 @@ export function DatabasesTab() {
   )
 }
 
-function DatastoreCard({ datastore: ds, uses }: { datastore: Datastore; uses: DatabaseUse[] }) {
+function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
   const { can } = useAccess()
   const manage = can("datastores.manage")
   const { power, addDatabase, update } = useDatastore(ds.id)
@@ -208,14 +201,14 @@ function DatastoreCard({ datastore: ds, uses }: { datastore: Datastore; uses: Da
             )}
           </Callout>
         )}
-        <Databases datastore={ds} uses={uses} />
+        <Databases datastore={ds} />
         <Dumps datastore={ds} />
       </div>
     </article>
   )
 }
 
-function Databases({ datastore: ds, uses }: { datastore: Datastore; uses: DatabaseUse[] }) {
+function Databases({ datastore: ds }: { datastore: Datastore }) {
   const { can } = useAccess()
   const [name, setName] = useState("")
   const { addDatabase } = useDatastore(ds.id)
@@ -238,7 +231,7 @@ function Databases({ datastore: ds, uses }: { datastore: Datastore; uses: Databa
       ) : (
         <ul className="divide-y rounded-lg ring-1 ring-foreground/8">
           {ds.databases.map((db) => (
-            <DatabaseRow key={db.name} datastore={ds} database={db} uses={uses.filter((u) => u.database === `${ds.name}.${db.name}`)} />
+            <DatabaseRow key={db.name} datastore={ds} database={db} />
           ))}
         </ul>
       )}
@@ -265,63 +258,49 @@ function Databases({ datastore: ds, uses }: { datastore: Datastore; uses: Databa
   )
 }
 
-function DatabaseRow({ datastore: ds, database: db, uses }: { datastore: Datastore; database: Database; uses: DatabaseUse[] }) {
-  const { can } = useAccess()
+function DatabaseRow({ datastore: ds, database: db }: { datastore: Datastore; database: Database }) {
+  const manage = useAccess().can("datastores.manage")
   const [open, setOpen] = useState(false)
   const { dropDatabase, rotate } = useDatastore(ds.id)
-  const operation = useOperation()
-  const servers = [...new Map(uses.map((u) => [`${u.nodeId}/${u.serverId}`, u])).values()]
 
   return (
     <li className="space-y-3 px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm font-semibold">{db.name}</span>
-        {servers.length > 0 ? (
-          <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            {t("Used by")}
-            {servers.map((u, i) => (
-              <span key={`${u.nodeId}/${u.serverId}`}>
-                <Link
-                  to="/nodes/$nodeId/servers/$serverId"
-                  params={{ nodeId: u.nodeId, serverId: u.serverId }}
-                  className="font-medium text-foreground underline-offset-4 hover:underline"
-                >
-                  {u.name ?? u.serverId}
-                </Link>
-                {i < servers.length - 1 && ","}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <Pill tone="neutral">{t("No file set uses it")}</Pill>
-        )}
         <div className="ml-auto flex items-center gap-1.5">
           <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? t("Hide placeholders") : t("Placeholders")}
+            <PlugsConnectedIcon />
+            {open ? t("Hide connection") : t("Connection")}
           </Button>
-          {can("datastores.manage") && (
+          {manage && (
             <>
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  to="/networks/$networkId/databases/$datastoreId/$database"
+                  params={{ networkId: ds.networkId, datastoreId: ds.id, database: db.name }}
+                >
+                  <TableIcon />
+                  <span className="max-sm:sr-only">{t("Browse")}</span>
+                </Link>
+              </Button>
               <ConfirmDialog
                 trigger={
-                  <Button size="sm" variant="outline" disabled={rotate.isPending}>
+                  <Button size="icon-sm" variant="ghost" aria-label={t("New password for {{name}}", { name: db.name })} title={t("New password")} disabled={rotate.isPending}>
                     <KeyIcon />
-                    <span className="max-sm:sr-only">{t("New password")}</span>
                   </Button>
                 }
                 title={t("Give {{name}} a new password?", { name: db.name })}
-                description={t(
-                  "The file sets that use it are applied again, and their running servers restart to load it. Servers that it reaches otherwise lose access.",
-                )}
+                description={t("The plugins that use the database lose access until you enter the new password in their configuration.")}
                 action={t("New password")}
                 onConfirm={() =>
-                  operation.run((onStart) => rotate.mutateAsync({ name: db.name, onStart }), {
-                    title: t("Rotating the password of {{name}}…", { name: db.name }),
-                    notify: true,
-                    done: ({ results }) => ({
-                      message: t("{{name}} has a new password", { name: db.name }),
-                      description: t("{{count}} servers got it", { count: results.filter((r) => !r.error).length, defaultValue_one: "{{count}} server got it" }),
-                      warning: results.some((r) => r.error),
-                    }),
+                  rotate.mutate(db.name, {
+                    onSuccess: () => {
+                      toast.success(t("{{name}} has a new password", { name: db.name }), {
+                        description: t("Enter it in the configuration of the plugins that use the database."),
+                      })
+                      setOpen(true)
+                    },
+                    onError: (e) => toast.error(e.message),
                   })
                 }
               />
@@ -353,14 +332,79 @@ function DatabaseRow({ datastore: ds, database: db, uses }: { datastore: Datasto
           )}
         </div>
       </div>
-      {open && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {fields.map((f) => (
-            <CopyField key={f} value={placeholderOf(ds.name, db.name, f)} label={f} />
-          ))}
-        </div>
-      )}
+      {open && <Connection datastore={ds} database={db.name} />}
     </li>
+  )
+}
+
+/** What the plugins of the network enter into their configuration to connect to a database. */
+function Connection({ datastore: ds, database }: { datastore: Datastore; database: string }) {
+  const manage = useAccess().can("datastores.manage")
+  return (
+    <div className="space-y-3">
+      {ds.endpoints.map((e) => (
+        <div key={e.host} className="space-y-1.5">
+          <p className="text-xs font-medium text-muted-foreground">
+            {e.remote ? t("Servers on other nodes") : t("Servers on {{node}}", { node: ds.nodeName })}
+          </p>
+          <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+            <CopyField prefix="host" label={t("Host")} value={e.host} />
+            <CopyField prefix="port" label={t("Port")} value={String(e.port)} />
+          </div>
+        </div>
+      ))}
+      {!ds.endpoints.some((e) => e.remote) && (
+        <p className="text-xs text-muted-foreground">
+          {t("Servers on other nodes reach it once both nodes are in the private network of the nodes and the network was applied.")}
+        </p>
+      )}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <CopyField prefix="database" label={t("Database")} value={database} />
+        <CopyField prefix="user" label={t("User")} value={database} />
+        {manage && <PasswordField datastoreId={ds.id} database={database} />}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("In a file set, keep the password in a secret, e.g. {{example}}, so that the panel hides it.", { example: `{{secret:${database}-password}}` })}
+      </p>
+    </div>
+  )
+}
+
+/** The password of a database's user, fetched only once it is to be shown. */
+function PasswordField({ datastoreId, database }: { datastoreId: string; database: string }) {
+  const [shown, setShown] = useState(false)
+  const { data, error, isFetching } = useQuery({ ...passwordQuery(datastoreId, database), enabled: shown })
+  if (shown && data) {
+    return (
+      <div className="flex items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <CopyField prefix="password" label={t("Password")} value={data.password} />
+        </div>
+        <Button size="icon-sm" variant="ghost" aria-label={t("Hide the password")} title={t("Hide")} onClick={() => setShown(false)}>
+          <EyeSlashIcon />
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 rounded-lg bg-console py-1 pr-1 pl-3 text-console-foreground">
+        {/* i18next-instrument-ignore-next-line: the key of configuration files, like the prefixes of the other fields */}
+        <span aria-hidden className="font-mono text-xs text-console-command">password</span>
+        {/* i18next-instrument-ignore-next-line: the hidden password */}
+        <span aria-hidden className="h-8 flex-1 font-mono text-xs leading-8 tracking-widest text-console-muted">••••••••••••</span>
+        <button
+          type="button"
+          disabled={isFetching}
+          onClick={() => setShown(true)}
+          aria-label={t("Show the password")}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-console-muted transition-colors hover:bg-white/10 hover:text-console-foreground"
+        >
+          <EyeIcon className="size-4" />
+        </button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error.message}</p>}
+    </div>
   )
 }
 
@@ -441,7 +485,7 @@ function DumpRow({ datastore: ds, dump: d }: { datastore: Datastore; dump: Dump 
             }
             title={t("Restore the backup of {{time}}?", { time: created })}
             description={t(
-              "This replaces {{names}} with the backed up state; what was added since is lost. The running servers whose file sets use them stop meanwhile and start again.",
+              "This replaces {{names}} with the backed up state; what was added since is lost. The plugins that use them lose their connection meanwhile, so stop their servers first.",
               { names: d.databases.join(", ") },
             )}
             action={t("Restore")}

@@ -25,7 +25,6 @@ import { type Datastore, type DatastoreInput, type Engine, useCreateDatastore, u
 import { engines } from "./labels"
 
 const exampleName = "main"
-const examplePlaceholder = "{{datastore:main.luckperms.host}}"
 
 /** Creates a datastore of a network on a node; the servers of the network on that node join it. */
 export function CreateDatastoreDialog({ networkId }: { networkId: string }) {
@@ -106,7 +105,6 @@ export function CreateDatastoreDialog({ networkId }: { networkId: string }) {
                 value={input.name}
                 onChange={(e) => setInput({ ...input, name: e.target.value.toLowerCase() })}
               />
-              <FieldDescription>{t("File sets name it in placeholders, e.g. {{example}}.", { example: examplePlaceholder })}</FieldDescription>
             </Field>
             <div className="grid gap-5 sm:grid-cols-2">
               <Field>
@@ -263,7 +261,7 @@ export function ChangeDatastoreDialog({ datastore: ds, trigger }: { datastore: D
               {upgrade && (
                 <FieldDescription>
                   {t(
-                    "The databases are dumped and loaded into the new version, while the servers whose file sets use them are stopped. The data of {{version}} stays until you remove it, so you can go back.",
+                    "The databases are dumped and loaded into the new version, which the plugins can't reach meanwhile, so stop their servers first. The data of {{version}} stays until you remove it, so you can go back.",
                     { version: ds.version },
                   )}
                 </FieldDescription>

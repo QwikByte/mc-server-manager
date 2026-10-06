@@ -3,8 +3,8 @@ import { Decoration, type DecorationSet, EditorView, MatchDecorator, ViewPlugin,
 // Variables, which the master fills in for each server, and secrets, which only the agents
 // fill in, stand out in the editor.
 const decorator = new MatchDecorator({
-  regexp: /\{\{((?:server|network)\.[^{}\s]*|(?:secret|datastore):[^{}\n]*)\}\}/g,
-  decoration: (m) => Decoration.mark({ class: /^(secret|datastore):/.test(m[1]) ? "cm-placeholder-secret" : "cm-placeholder-variable" }),
+  regexp: /\{\{((?:server|network)\.[^{}\s]*|secret:[^{}\n]*)\}\}/g,
+  decoration: (m) => Decoration.mark({ class: m[1].startsWith("secret:") ? "cm-placeholder-secret" : "cm-placeholder-variable" }),
 })
 
 /** Highlights the placeholders of a file of a set. */

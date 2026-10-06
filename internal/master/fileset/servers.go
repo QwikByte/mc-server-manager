@@ -50,7 +50,6 @@ type survey struct {
 	down     map[string]error // nodes that couldn't be asked
 	tags     map[tag.Server][]string
 	networks []network.Network
-	fields   DatastoreFields
 }
 
 // survey asks all nodes about their servers and the sets on them, all at the same time.
@@ -62,9 +61,6 @@ func (s *Service) survey(ctx context.Context) (*survey, error) {
 	}
 	if err == nil {
 		sv.networks, err = s.networks.List(ctx)
-	}
-	if err == nil {
-		sv.fields, err = s.datastores.Fields(ctx)
 	}
 	if err != nil {
 		return nil, err
@@ -168,16 +164,12 @@ func (sv *survey) holders(id string) []tag.Server {
 func (sv *survey) member(ref tag.Server) member {
 	m := member{Server: ref, Name: sv.servers[ref].GetName(), Port: sv.servers[ref].GetPort()}
 	for _, n := range sv.networks {
-		if tag.Server(n.Proxy) == ref {
-			m.NetworkID = n.ID
-		}
 		for _, b := range n.Backends {
 			if tag.Server(b.Ref) == ref {
-				m.Network, m.NetworkID = b.Name, n.ID
+				m.Network = b.Name
 			}
 		}
 	}
-	m.datastore = func(key string) (string, error) { return sv.fields(m.NetworkID, ref.NodeID, key) }
 	return m
 }
 

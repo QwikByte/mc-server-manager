@@ -199,7 +199,7 @@ export function useApply(id: string) {
 /** The secrets and variables a text uses, in order and each once. */
 export function placeholders(content: string) {
   const found = new Set<string>()
-  for (const m of content.matchAll(/\{\{((?:server|network)\.[^{}\s]*|(?:secret|datastore):[^{}\n]*)\}\}/g)) found.add(m[1])
+  for (const m of content.matchAll(/\{\{((?:server|network)\.[^{}\s]*|secret:[^{}\n]*)\}\}/g)) found.add(m[1])
   return [...found]
 }
 

@@ -1,8 +1,9 @@
 // Package datastore implements the DatastoreService of the agent, which runs the MariaDB and
-// PostgreSQL servers of networks with the runtime, and keeps dumps of their databases like
-// the backups of servers. The agent never stores the passwords of the databases' users: it
-// restores dumps as the users themselves, and upgrades keep the hashes of their passwords,
-// so that backing up and restoring also works with the local CLI alone.
+// PostgreSQL servers of networks with the runtime, keeps dumps of their databases like the
+// backups of servers, and shows the rows of their tables. The agent never stores the passwords
+// of the databases' users: it restores dumps as the users themselves, and upgrades keep the
+// hashes of their passwords, so that backing up and restoring also works with the local CLI
+// alone.
 package datastore
 
 import (
@@ -35,6 +36,9 @@ import (
 const (
 	minMemoryMB = 256
 	minPort     = 1024
+	// Rows of a table that a page has by default, and at most.
+	defaultRows = 50
+	maxRows     = 200
 	// overlayPrefix keeps the datastores apart from the servers among the clients of the
 	// private network of the nodes.
 	overlayPrefix = "db-"
@@ -431,6 +435,45 @@ func (s *Service) DownloadDump(req *noryxv1.DownloadDumpRequest, stream noryxv1.
 	})
 }
 
+func (s *Service) ListTables(ctx context.Context, req *noryxv1.ListTablesRequest) (*noryxv1.ListTablesResponse, error) {
+	ds, err := s.database(ctx, req.GetId(), req.GetDatabase())
+	if err != nil {
+		return nil, err
+	}
+	tables, err := s.rt.Tables(ctx, ds.ID, req.GetDatabase())
+	return &noryxv1.ListTablesResponse{Tables: tables}, toStatus(err)
+}
+
+// BrowseTable returns rows of a table, which the runtime only reads.
+func (s *Service) BrowseTable(ctx context.Context, req *noryxv1.BrowseTableRequest) (*noryxv1.BrowseTableResponse, error) {
+	if !noryxv1.TableName.MatchString(req.GetTable()) || req.GetSchema() != "" && !noryxv1.TableName.MatchString(req.GetSchema()) {
+		return nil, status.Error(codes.InvalidArgument, "Noryx only shows tables whose names have letters, digits, _, $ and -.")
+	}
+	ds, err := s.database(ctx, req.GetId(), req.GetDatabase())
+	if err != nil {
+		return nil, err
+	}
+	limit := min(cmp.Or(req.GetLimit(), defaultRows), maxRows)
+	res, err := s.rt.Browse(ctx, ds.ID, req.GetDatabase(), req.GetSchema(), req.GetTable(), req.GetOffset(), limit)
+	return res, toStatus(err)
+}
+
+// database finds a datastore with a database.
+func (s *Service) database(ctx context.Context, id, name string) (runtime.Datastore, error) {
+	if problem := noryxv1.DatabaseNameProblem(name); problem != "" {
+		return runtime.Datastore{}, status.Error(codes.InvalidArgument, problem)
+	}
+	ds, err := s.find(ctx, id)
+	if err != nil {
+		return ds, err
+	}
+	names, err := s.rt.Databases(ctx, ds.ID)
+	if err == nil && !slices.Contains(names, name) {
+		err = status.Errorf(codes.NotFound, "There is no database %q.", name)
+	}
+	return ds, toStatus(err)
+}
+
 func (s *Service) find(ctx context.Context, id string) (runtime.Datastore, error) {
 	if !runtime.ValidID(id) {
 		return runtime.Datastore{}, status.Error(codes.InvalidArgument, "invalid datastore ID")
@@ -486,6 +529,8 @@ func toStatus(err error) error {
 		return err
 	case errors.Is(err, runtime.ErrNotFound):
 		return status.Error(codes.NotFound, "Datastore not found.")
+	case errors.Is(err, runtime.ErrNoTable):
+		return status.Error(codes.NotFound, "Table not found.")
 	case errors.Is(err, runtime.ErrDatastoreNotRunning):
 		return status.Error(codes.FailedPrecondition, "The datastore isn't ready. Start it, or look at its log for why it isn't.")
 	case errors.Is(err, fs.ErrNotExist):

@@ -1,7 +1,6 @@
 package fileset
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -14,7 +13,6 @@ func TestCheck(t *testing.T) {
 		Files: []File{
 			{Path: "/plugins/LuckPerms/config.yml", Content: "server: {{network.server}}\npassword: {{secret:db}}\n"},
 			{Path: "bukkit.yml", Content: "{{player}} stays as it is"},
-			{Path: "plugins/CoreProtect/config.yml", Content: "host: {{datastore:main.coreprotect.host}}\npassword: {{datastore:main.coreprotect.password}}\n"},
 		},
 		Targets: []Target{
 			{Kind: KindTag, Value: " Lobby "}, {Kind: KindTag, Value: "lobby"},
@@ -24,7 +22,7 @@ func TestCheck(t *testing.T) {
 	if err := in.check(func(id string) bool { return id == "n1" }); err != nil {
 		t.Fatal(err)
 	}
-	if in.Name != "LuckPerms" || in.Files[0].Path != "bukkit.yml" || in.Files[2].Path != "plugins/LuckPerms/config.yml" {
+	if in.Name != "LuckPerms" || in.Files[0].Path != "bukkit.yml" || in.Files[1].Path != "plugins/LuckPerms/config.yml" {
 		t.Errorf("input = %+v", in)
 	}
 	// Tags are normalized, and targets of deleted networks left out.
@@ -36,8 +34,6 @@ func TestCheck(t *testing.T) {
 		"managed":          {Path: "spigot.yml"},
 		"banned players":   {Path: "banned-players.json"},
 		"unknown variable": {Path: "a.yml", Content: "{{server.ip}}"},
-		"datastore field":  {Path: "a.yml", Content: "{{datastore:main.lp.secret}}"},
-		"datastore name":   {Path: "a.yml", Content: "{{datastore:Main.lp.password}}"},
 		"bad secret":       {Path: "a.yml", Content: "{{secret:Not Valid}}"},
 		"binary":           {Path: "a.yml", Content: "\x00"},
 		"class":            {Path: "Plugin.CLASS"},
@@ -86,37 +82,5 @@ func TestRender(t *testing.T) {
 	m.Network = ""
 	if _, err := render("set", files, map[string]string{"db": "pw"}, m); err == nil {
 		t.Error("network.server outside of a network was filled in")
-	}
-}
-
-func TestRenderDatastores(t *testing.T) {
-	files := []File{{Path: "a.yml", Content: "{{datastore:main.lp.host}}:{{datastore:main.lp.port}}/{{datastore:main.lp.database}} {{datastore:main.lp.user}} {{datastore:main.lp.password}}"}}
-	fields := map[string]string{"main.lp.host": "noryx-db-x", "main.lp.port": "3306", "main.lp.database": "lp", "main.lp.user": "lp", "main.lp.password": "pw"}
-	m := member{Server: tag.Server{NodeID: "n1", ServerID: "s1"}, Name: "Lobby", NetworkID: "net"}
-	m.datastore = func(key string) (string, error) {
-		if v, ok := fields[key]; ok {
-			return v, nil
-		}
-		return "", errors.New("unreachable")
-	}
-	r, err := render("set", files, nil, m)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Only the password is a secret, which the agent fills in.
-	if got, _ := r.shown("a.yml"); got != "noryx-db-x:3306/lp lp {{datastore:main.lp.password}}" || len(r.secrets) != 1 || r.secrets["datastore:main.lp.password"] != "pw" {
-		t.Errorf("rendered %q with %v", got, r.secrets)
-	}
-	fields["main.lp.password"] = "new"
-	if rotated, _ := render("set", files, nil, m); rotated.revision == r.revision {
-		t.Error("a new password is the same revision")
-	}
-	delete(fields, "main.lp.host")
-	if _, err := render("set", files, nil, m); err == nil {
-		t.Error("an unreachable datastore was filled in")
-	}
-	m.NetworkID = ""
-	if _, err := render("set", files, nil, m); err == nil || !strings.Contains(err.Error(), "no network") {
-		t.Errorf("outside of a network: %v", err)
 	}
 }

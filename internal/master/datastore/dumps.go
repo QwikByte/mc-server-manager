@@ -64,9 +64,8 @@ func (s *Service) Dump(ctx context.Context, id string, req DumpRequest) (Dump, e
 	return dump, err
 }
 
-// Restore creates databases again from a dump, all in it or those named, while the running
-// servers whose file sets use them are stopped. Their users get the passwords the master
-// keeps, so a database must still be known to be restored.
+// Restore creates databases again from a dump, all in it or those named. Their users get the
+// passwords the master keeps, so a database must still be known to be restored.
 func (s *Service) Restore(ctx context.Context, id, dumpID string, databases []string) error {
 	ds, err := s.store.get(ctx, id)
 	if err != nil {
@@ -95,11 +94,9 @@ func (s *Service) Restore(ctx context.Context, id, dumpID string, databases []st
 			return err
 		}
 	}
-	return s.whileStopped(context.WithoutCancel(ctx), ds, databases, func(ctx context.Context) error {
-		return s.agent(ctx, ds.NodeID, func(ctx context.Context, c noryxv1.DatastoreServiceClient) error {
-			_, err := c.RestoreDump(ctx, &noryxv1.RestoreDumpRequest{Id: id, DumpId: dumpID, Databases: databases})
-			return err
-		})
+	return s.agent(context.WithoutCancel(ctx), ds.NodeID, func(ctx context.Context, c noryxv1.DatastoreServiceClient) error {
+		_, err := c.RestoreDump(ctx, &noryxv1.RestoreDumpRequest{Id: id, DumpId: dumpID, Databases: databases})
+		return err
 	})
 }
 

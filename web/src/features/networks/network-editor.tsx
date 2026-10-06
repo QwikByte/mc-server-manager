@@ -34,7 +34,7 @@ export function NetworkEditor({ network }: { network: Network }) {
   const { can } = useAccess()
   const editable = can("networks.manage")
   const navigate = useNavigate()
-  const { data: databases } = useQuery({ ...networkDatastoresQuery(network.id), enabled: can("datastores.view") })
+  const { data: datastores } = useQuery({ ...networkDatastoresQuery(network.id), enabled: can("datastores.view") })
   const saved = draftOf(network)
   const [draft, setDraft] = useState(saved)
   const [seen, setSeen] = useState(saved)
@@ -60,16 +60,18 @@ export function NetworkEditor({ network }: { network: Network }) {
   const bedrockAddress = proxyHost && draft.bedrockPort ? `${proxyHost}:${draft.bedrockPort}` : undefined
 
   function save() {
-    // Servers that leave keep what they knew of the databases they used, which new passwords lock out.
-    const left = (databases?.uses ?? []).filter((u) => !draft.backends.some((b) => key(b) === key(u)) && key(network.proxy) !== key(u))
-    const names = [...new Set(left.map((u) => u.database))]
+    // Servers that leave keep the passwords of the databases in their configuration, which new passwords lock out.
+    const left = network.backends.some((b) => !draft.backends.some((d) => key(d) === key(b)))
+    const names = left ? (datastores ?? []).flatMap((ds) => ds.databases.map((db) => `${ds.name}.${db.name}`)) : []
     operation.run((onStart) => update.mutateAsync({ settings: settingsOf(draft), onStart }), {
       title: t("Configuring {{name}}…", { name: draft.name }),
       notify: true,
       done: () => ({
         message: t("Saved {{name}}", { name: draft.name }),
         ...(names.length > 0 && {
-          description: t("Servers that left used {{databases}}. Give them new passwords, so that they lose access.", { databases: names.join(", ") }),
+          description: t("Servers that left may know the passwords of {{databases}}. Give them new passwords, so that they lose access.", {
+            databases: names.join(", "),
+          }),
           action: { label: t("Databases"), onClick: () => void navigate({ to: "/networks/$networkId/databases", params: { networkId: network.id } }) },
           warning: true,
         }),

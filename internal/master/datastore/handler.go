@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/QwikByte/noryx/internal/logging"
@@ -25,15 +26,14 @@ func NewHandler(svc *Service, ops *operation.Operations) *Handler {
 	return &Handler{svc: svc, ops: ops}
 }
 
-// Register adds the routes. Dumps contain all data of their databases, so only those who
-// manage datastores may download them.
+// Register adds the routes. Passwords, tables and dumps give away the data of the databases,
+// so only those who manage datastores may see them.
 func (h *Handler) Register(mux access.Mux) {
 	view, manage := access.Everywhere(access.DatastoresView), access.Everywhere(access.DatastoresManage)
 	mux.Handle("GET /api/datastores", view, func(w http.ResponseWriter, r *http.Request) {
 		list, err := h.svc.List(r.Context(), "")
 		write(w, r, http.StatusOK, list, err)
 	})
-	// The datastores of a network with the servers whose file sets use their databases.
 	mux.Handle("GET /api/networks/{id}/datastores", view, func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if _, err := h.svc.networks.Get(r.Context(), id); err != nil {
@@ -41,12 +41,7 @@ func (h *Handler) Register(mux access.Mux) {
 			return
 		}
 		list, err := h.svc.List(r.Context(), id)
-		if err != nil {
-			httpapi.WriteError(w, r, err)
-			return
-		}
-		uses, err := h.svc.sets.Uses(r.Context(), id)
-		write(w, r, http.StatusOK, map[string]any{"datastores": list, "uses": uses}, err)
+		write(w, r, http.StatusOK, list, err)
 	})
 	mux.Handle("POST /api/networks/{id}/datastores", manage, func(w http.ResponseWriter, r *http.Request) {
 		var in Input
@@ -66,7 +61,7 @@ func (h *Handler) Register(mux access.Mux) {
 		logging.Note(r.Context(), slog.String("version", c.Version), slog.Bool("update_image", c.UpdateImage), slog.Bool("remove_previous", c.RemovePrevious))
 		steps := []string{"container"}
 		if c.Version != "" {
-			steps = []string{"stop", "image", "dump", "container", "load", "start"}
+			steps = []string{"image", "dump", "container", "load"}
 		}
 		h.run(w, r, "datastore.update", "", steps, http.StatusOK, func(ctx context.Context) (any, error) {
 			return h.svc.Update(ctx, r.PathValue("id"), c)
@@ -93,11 +88,24 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("DELETE /api/datastores/{id}/databases/{name}", manage, func(w http.ResponseWriter, r *http.Request) {
 		write(w, r, http.StatusNoContent, nil, h.svc.DropDatabase(r.Context(), r.PathValue("id"), r.PathValue("name")))
 	})
+	mux.Handle("GET /api/datastores/{id}/databases/{name}/password", manage, func(w http.ResponseWriter, r *http.Request) {
+		password, err := h.svc.Password(r.Context(), r.PathValue("id"), r.PathValue("name"))
+		w.Header().Set("Cache-Control", "no-store")
+		write(w, r, http.StatusOK, map[string]string{"password": password}, err)
+	})
 	mux.Handle("POST /api/datastores/{id}/databases/{name}/rotate", manage, func(w http.ResponseWriter, r *http.Request) {
-		h.run(w, r, "datastore.rotate", "", []string{"password", "files", "restart"}, http.StatusOK, func(ctx context.Context) (any, error) {
-			results, err := h.svc.Rotate(ctx, r.PathValue("id"), r.PathValue("name"))
-			return map[string]any{"results": results}, err
-		})
+		write(w, r, http.StatusNoContent, nil, h.svc.Rotate(r.Context(), r.PathValue("id"), r.PathValue("name")))
+	})
+	mux.Handle("GET /api/datastores/{id}/databases/{name}/tables", manage, func(w http.ResponseWriter, r *http.Request) {
+		tables, err := h.svc.Tables(r.Context(), r.PathValue("id"), r.PathValue("name"))
+		write(w, r, http.StatusOK, tables, err)
+	})
+	mux.Handle("GET /api/datastores/{id}/databases/{name}/tables/{table}", manage, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		offset, _ := strconv.ParseUint(q.Get("offset"), 10, 64)
+		page, err := h.svc.Browse(r.Context(), r.PathValue("id"), r.PathValue("name"), q.Get("schema"), r.PathValue("table"), offset)
+		w.Header().Set("Cache-Control", "no-store")
+		write(w, r, http.StatusOK, page, err)
 	})
 	mux.Handle("GET /api/datastores/{id}/backups", view, func(w http.ResponseWriter, r *http.Request) {
 		dumps, err := h.svc.Dumps(r.Context(), r.PathValue("id"))
@@ -116,7 +124,7 @@ func (h *Handler) Register(mux access.Mux) {
 			Databases []string `json:"databases"`
 		}
 		if read(w, r, &req) {
-			h.run(w, r, "datastore.restore", "", []string{"stop", "check", "load", "start"}, http.StatusNoContent, func(ctx context.Context) (any, error) {
+			h.run(w, r, "datastore.restore", "", []string{"check", "load"}, http.StatusNoContent, func(ctx context.Context) (any, error) {
 				return nil, h.svc.Restore(ctx, r.PathValue("id"), r.PathValue("backup"), req.Databases)
 			})
 		}
