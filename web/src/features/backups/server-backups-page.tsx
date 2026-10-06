@@ -278,7 +278,7 @@ function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server
                 onChange={(e) => setLabel(e.target.value)}
               />
             </Field>
-            <SelectionField value={selection} onChange={setSelection} />
+            <SelectionField value={selection} server={{ nodeId, serverId: server.id }} onChange={setSelection} />
             <LocationField locations={node?.info?.storage.map((l) => l.name) ?? []} value={location} onChange={setLocation} />
           </FieldGroup>
           {create.error && <FieldError>{create.error.message}</FieldError>}

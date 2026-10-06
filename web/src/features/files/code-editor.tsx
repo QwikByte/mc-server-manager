@@ -9,6 +9,8 @@ import { highlight, languageOf, theme, translated } from "./editor-setup"
 
 export interface EditorHandle {
   value: () => string
+  /** Replaces the selection with text and focuses the editor. */
+  insert: (text: string) => void
 }
 
 const none: Extension = []
@@ -35,7 +37,17 @@ export function CodeEditor({
   useEffect(() => {
     changed.current = onChange
   })
-  useImperativeHandle(ref, () => ({ value: () => view.current?.state.doc.toString() ?? "" }), [])
+  useImperativeHandle(
+    ref,
+    () => ({
+      value: () => view.current?.state.doc.toString() ?? "",
+      insert: (text) => {
+        view.current?.dispatch(view.current.state.replaceSelection(text))
+        view.current?.focus()
+      },
+    }),
+    [],
+  )
 
   useEffect(() => {
     const language = new Compartment()
