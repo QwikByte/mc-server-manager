@@ -105,7 +105,7 @@ type Backups interface {
 type Overlay interface {
 	// Admit lets client, the address in the network of the node of a server's proxy, reach
 	// the server's port there, and returns the node's address in the network.
-	Admit(id string, port uint32, client string) (string, error)
+	Admit(id string, port uint32, clients ...string) (string, error)
 	// Dismiss closes the port of a server in the network.
 	Dismiss(id string) error
 }
@@ -372,6 +372,13 @@ func (s *Service) reserve(ctx context.Context, id string, port uint32, check fun
 	if err := check(servers); err != nil {
 		return nil, err
 	}
+	datastores, err := s.rt.ListDatastores(ctx)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	if slices.ContainsFunc(datastores, func(ds runtime.Datastore) bool { return ds.Port == port }) {
+		return nil, status.Errorf(codes.AlreadyExists, "Port %d is used by a datastore of a network. Choose another port.", port)
+	}
 	if other, ok := s.reserved[port]; ok && other != id {
 		return nil, status.Errorf(codes.AlreadyExists, "Port %d is about to be used by another server. Choose another port.", port)
 	}
@@ -548,7 +555,10 @@ func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
 		return network, "too many backends or forced hosts"
 	case req.GetOverlayClient() != "" && (!behind || !validIPv4(req.GetOverlayClient())):
 		return network, "invalid overlay client"
+	case len(req.GetDatastores()) > noryxv1.MaxNetworkDatastores || slices.ContainsFunc(req.GetDatastores(), func(id string) bool { return !runtime.ValidID(id) }):
+		return network, "invalid datastores"
 	}
+	network.Datastores = req.GetDatastores()
 	names := map[string]bool{}
 	for _, b := range req.GetBackends() {
 		backend := runtime.NetworkBackend{Name: b.GetName(), ServerID: b.GetServerId(), Address: b.GetAddress(), Restricted: b.GetRestricted(), Motd: b.GetMotd()}

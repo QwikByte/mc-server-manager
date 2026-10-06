@@ -1,0 +1,451 @@
+package docker
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	cerrdefs "github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
+
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/datadir"
+	"github.com/QwikByte/noryx/internal/agent/progress"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/logging"
+)
+
+// A datastore runs in the container noryx-db-<id>, which only its own internal network of
+// the same name reaches, which the servers of its network on the node join. Its files are in
+// <location>/datastores/<id>: the data of each major version in data-<version>, owned by the
+// image's user, and the superuser's password in superuser, which the image reads when it
+// initializes new data.
+const (
+	labelDatastore     = "io.noryx.datastore"
+	datastorePrefix    = "noryx-db-"
+	datastoresFolder   = "datastores"
+	superuserFile      = "superuser"
+	superuserMount     = "/run/noryx/superuser"
+	datastoreUID       = 999 // the user of both images
+	datastoreUser      = "999:999"
+	datastoreStop      = 120 // seconds; the postgres image warns that Docker's 10 are too few
+	datastorePids      = 512
+	datastoreReadyWait = 5 * time.Minute
+)
+
+// engine describes how an engine runs in its official image.
+type engine struct {
+	image    string
+	versions []string // major versions, oldest first
+	port     int
+	// data returns where a version keeps its data in the container.
+	data   func(version string) string
+	env    []string
+	health []string
+}
+
+var engines = map[noryxv1.DatastoreEngine]engine{
+	noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB: {
+		image: "mariadb", versions: []string{"11.8", "12.3"}, port: 3306,
+		data: func(string) string { return "/var/lib/mysql" },
+		// Root may only sign in on the container itself, and the system tables follow upgrades
+		// of the image.
+		env:    []string{"MARIADB_ROOT_PASSWORD_FILE=" + superuserMount, "MARIADB_ROOT_HOST=localhost", "MARIADB_AUTO_UPGRADE=1"},
+		health: []string{"CMD", "healthcheck.sh", "--connect", "--innodb_initialized"},
+	},
+	noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {
+		image: "postgres", versions: []string{"17", "18"}, port: 5432,
+		// From 18 on, the image keeps the data of each major version in a folder of its own
+		// under /var/lib/postgresql, which is its volume.
+		data: func(version string) string {
+			if major, _ := strconv.Atoi(version); major >= 18 {
+				return "/var/lib/postgresql"
+			}
+			return "/var/lib/postgresql/data"
+		},
+		env:    []string{"POSTGRES_PASSWORD_FILE=" + superuserMount},
+		health: []string{"CMD", "pg_isready", "-U", "postgres"},
+	},
+}
+
+func (d *Docker) DatastoreVersions() map[noryxv1.DatastoreEngine][]string {
+	versions := map[noryxv1.DatastoreEngine][]string{}
+	for e, eng := range engines {
+		versions[e] = slices.Clone(eng.versions)
+	}
+	return versions
+}
+
+func datastoreName(id string) string { return datastorePrefix + id }
+
+// pullOrLocal pulls an image, or takes the one the node has if the registry can't be
+// reached, e.g. as it limits the pulls of the node.
+func (d *Docker) pullOrLocal(ctx context.Context, ref string) error {
+	err := d.pull(ctx, ref)
+	if err != nil && ctx.Err() == nil {
+		if _, inspectErr := d.cli.ImageInspect(ctx, ref); inspectErr == nil {
+			slog.WarnContext(ctx, "Use the image the node has, as it can't be pulled", logging.Databases, "image", ref, "err", err)
+			return nil
+		}
+	}
+	return err
+}
+
+// datastoreDir returns the folder of the files of a datastore.
+func (d *Docker) datastoreDir(spec runtime.DatastoreSpec) (string, error) {
+	location, err := d.storage.Path(spec.Storage)
+	return filepath.Join(location, datastoresFolder, spec.ID), err
+}
+
+func dataFolder(version string) string { return "data-" + version }
+
+func (d *Docker) ListDatastores(ctx context.Context) ([]runtime.Datastore, error) {
+	res, err := d.cli.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("label", labelDatastore)})
+	if err != nil {
+		return nil, err
+	}
+	var list []runtime.Datastore
+	for _, c := range res.Items {
+		spec, ok := datastoreSpecOf(c.Labels)
+		// The name check skips the old container while a datastore is being recreated.
+		if !ok || !slices.Contains(c.Names, "/"+datastoreName(spec.ID)) {
+			continue
+		}
+		ds := runtime.Datastore{DatastoreSpec: spec, State: datastoreState(c.State, c.Health)}
+		if dir, err := d.datastoreDir(spec); err == nil {
+			ds.Size = datadir.Size(os.DirFS(dir), dataFolder(spec.Version))
+		}
+		list = append(list, ds)
+	}
+	slices.SortFunc(list, func(a, b runtime.Datastore) int { return strings.Compare(a.ID, b.ID) })
+	return list, nil
+}
+
+func datastoreSpecOf(labels map[string]string) (runtime.DatastoreSpec, bool) {
+	var spec runtime.DatastoreSpec
+	return spec, json.Unmarshal([]byte(labels[labelDatastore]), &spec) == nil && runtime.ValidID(spec.ID)
+}
+
+func datastoreState(state container.ContainerState, health *container.HealthSummary) noryxv1.DatastoreState {
+	switch {
+	case state != container.StateRunning:
+		return noryxv1.DatastoreState_DATASTORE_STATE_STOPPED
+	case health == nil || health.Status == container.Starting:
+		return noryxv1.DatastoreState_DATASTORE_STATE_STARTING
+	case health.Status == container.Unhealthy:
+		return noryxv1.DatastoreState_DATASTORE_STATE_UNHEALTHY
+	}
+	return noryxv1.DatastoreState_DATASTORE_STATE_RUNNING
+}
+
+// inspectDatastore returns the container of a datastore and its spec.
+func (d *Docker) inspectDatastore(ctx context.Context, id string) (container.InspectResponse, runtime.DatastoreSpec, error) {
+	res, err := d.cli.ContainerInspect(ctx, datastoreName(id), client.ContainerInspectOptions{})
+	if err != nil {
+		return container.InspectResponse{}, runtime.DatastoreSpec{}, notFound(err)
+	}
+	spec, ok := datastoreSpecOf(res.Container.Config.Labels)
+	if !ok || spec.ID != id {
+		return container.InspectResponse{}, runtime.DatastoreSpec{}, runtime.ErrNotFound
+	}
+	return res.Container, spec, nil
+}
+
+func (d *Docker) CreateDatastore(ctx context.Context, spec runtime.DatastoreSpec) (err error) {
+	eng, ok := engines[spec.Engine]
+	if !ok || !slices.Contains(eng.versions, spec.Version) {
+		return fmt.Errorf("%s %s isn't supported", spec.Engine, spec.Version)
+	}
+	dir, err := d.datastoreDir(spec)
+	if err != nil {
+		return err
+	}
+	if err := d.pullOrLocal(ctx, eng.image+":"+spec.Version); err != nil {
+		return err
+	}
+	progress.Step(ctx, "container", 0)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		return err
+	}
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, os.RemoveAll(dir))
+		}
+	}()
+	if err := newData(dir, spec.Version); err != nil {
+		return err
+	}
+	password := strings.ToLower(rand.Text() + rand.Text())
+	if err := os.WriteFile(filepath.Join(dir, superuserFile), []byte(password), 0o400); err != nil {
+		return err
+	}
+	if err := os.Lchown(filepath.Join(dir, superuserFile), datastoreUID, datastoreUID); err != nil && !errors.Is(err, fs.ErrPermission) {
+		return err
+	}
+	return d.createDatastoreContainer(ctx, spec, dir)
+}
+
+// newData creates the empty data folder of a version, owned by the image's user.
+func newData(dir, version string) error {
+	path := filepath.Join(dir, dataFolder(version))
+	if err := os.Mkdir(path, 0o700); err != nil {
+		return err
+	}
+	if err := os.Lchown(path, datastoreUID, datastoreUID); err != nil && !errors.Is(err, fs.ErrPermission) {
+		return err // without root, e.g. in tests, the folder stays the agent's
+	}
+	return nil
+}
+
+func (d *Docker) createDatastoreContainer(ctx context.Context, spec runtime.DatastoreSpec, dir string) error {
+	opts, err := datastoreOptions(spec, dir)
+	if err != nil {
+		return err
+	}
+	for name := range opts.NetworkingConfig.EndpointsConfig {
+		if err := d.ensureNetwork(ctx, name); err != nil {
+			return err
+		}
+	}
+	_, err = d.cli.ContainerCreate(ctx, opts)
+	return err
+}
+
+// portNetwork is the network in which a datastore publishes its port for other nodes, as
+// internal networks can't publish ports. No other container joins it.
+func portNetwork(id string) string { return datastoreName(id) + "-port" }
+
+// internalNetwork reports whether a network of the agent is the internal network of a
+// datastore, which has no route to the internet.
+func internalNetwork(name string) bool {
+	return strings.HasPrefix(name, datastorePrefix) && !strings.HasSuffix(name, "-port")
+}
+
+// datastoreOptions describes the container of a datastore with its files in dir: it runs as
+// the image's user without capabilities, in its internal network, which the servers that
+// use it on the node join, and, for other nodes, in its port network with its port published
+// at the node's address in the private network of the nodes.
+func datastoreOptions(spec runtime.DatastoreSpec, dir string) (client.ContainerCreateOptions, error) {
+	eng := engines[spec.Engine]
+	specJSON, err := json.Marshal(spec)
+	if err != nil {
+		return client.ContainerCreateOptions{}, err
+	}
+	name := datastoreName(spec.ID)
+	networks := map[string]*network.EndpointSettings{name: {}}
+	port := network.MustParsePort(fmt.Sprintf("%d/tcp", eng.port))
+	var published network.PortMap
+	if addr, err := netip.ParseAddr(spec.Overlay); err == nil && spec.Port != 0 {
+		networks[portNetwork(spec.ID)] = &network.EndpointSettings{}
+		published = network.PortMap{port: {{HostIP: addr, HostPort: strconv.Itoa(int(spec.Port))}}}
+	}
+	return client.ContainerCreateOptions{
+		Name: name,
+		Config: &container.Config{
+			Image:        eng.image + ":" + spec.Version,
+			User:         datastoreUser,
+			Env:          eng.env,
+			Labels:       map[string]string{labelDatastore: string(specJSON)},
+			ExposedPorts: network.PortSet{port: {}},
+			Healthcheck: &container.HealthConfig{
+				Test: eng.health, Interval: 10 * time.Second, Timeout: 5 * time.Second, Retries: 3,
+				StartPeriod: 5 * time.Minute, StartInterval: 2 * time.Second,
+			},
+			StopTimeout: new(datastoreStop),
+		},
+		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: networks},
+		HostConfig: &container.HostConfig{
+			Binds: []string{
+				filepath.Join(dir, dataFolder(spec.Version)) + ":" + eng.data(spec.Version),
+				filepath.Join(dir, superuserFile) + ":" + superuserMount + ":ro",
+			},
+			PortBindings:  published,
+			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
+			SecurityOpt:   []string{"no-new-privileges:true"},
+			CapDrop:       []string{"ALL"},
+			Resources: container.Resources{
+				Memory:    int64(spec.MemoryMB) << 20,
+				NanoCPUs:  int64(spec.CPUMillis) * 1e6,
+				PidsLimit: new(int64(datastorePids)),
+			},
+		},
+	}, nil
+}
+
+func (d *Docker) StartDatastore(ctx context.Context, id string) error {
+	if _, _, err := d.inspectDatastore(ctx, id); err != nil {
+		return err
+	}
+	_, err := d.cli.ContainerStart(ctx, datastoreName(id), client.ContainerStartOptions{})
+	return notFound(err)
+}
+
+func (d *Docker) StopDatastore(ctx context.Context, id string) error {
+	if _, _, err := d.inspectDatastore(ctx, id); err != nil {
+		return err
+	}
+	_, err := d.cli.ContainerStop(ctx, datastoreName(id), client.ContainerStopOptions{Timeout: new(datastoreStop)})
+	return notFound(err)
+}
+
+func (d *Docker) UpdateDatastore(ctx context.Context, spec runtime.DatastoreSpec, pull bool) error {
+	c, current, err := d.inspectDatastore(ctx, spec.ID)
+	if err != nil {
+		return err
+	}
+	spec.Engine, spec.Storage = current.Engine, current.Storage
+	dir, err := d.datastoreDir(current)
+	if err != nil {
+		return err
+	}
+	if spec.Version != current.Version {
+		return d.upgrade(ctx, c, current, spec, dir)
+	}
+	if pull {
+		if err := d.pull(ctx, engines[spec.Engine].image+":"+spec.Version); err != nil {
+			return err
+		}
+	}
+	if current.Previous != "" && spec.Previous == "" {
+		if err := os.RemoveAll(filepath.Join(dir, dataFolder(current.Previous))); err != nil {
+			return err
+		}
+	}
+	spec.Previous = current.Previous
+	if spec.Previous != "" && !exists(filepath.Join(dir, dataFolder(spec.Previous))) {
+		spec.Previous = ""
+	}
+	progress.Step(ctx, "container", 0)
+	return d.recreateDatastore(ctx, spec, dir, c.State.Running)
+}
+
+func exists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
+// recreateDatastore replaces the container of a datastore, like recreate does for servers:
+// the old one stays until the new one exists.
+func (d *Docker) recreateDatastore(ctx context.Context, spec runtime.DatastoreSpec, dir string, running bool) error {
+	if running {
+		if _, err := d.cli.ContainerStop(ctx, datastoreName(spec.ID), client.ContainerStopOptions{Timeout: new(datastoreStop)}); err != nil {
+			return err
+		}
+	}
+	name, old := datastoreName(spec.ID), datastoreName(spec.ID)+"-old"
+	if _, err := d.cli.ContainerRename(ctx, name, client.ContainerRenameOptions{NewName: old}); err != nil {
+		return err
+	}
+	if err := d.createDatastoreContainer(ctx, spec, dir); err != nil {
+		_, renameErr := d.cli.ContainerRename(ctx, old, client.ContainerRenameOptions{NewName: name})
+		if renameErr == nil && running {
+			_, renameErr = d.cli.ContainerStart(ctx, name, client.ContainerStartOptions{})
+		}
+		return errors.Join(err, renameErr)
+	}
+	if _, err := d.cli.ContainerRemove(ctx, old, client.ContainerRemoveOptions{}); err != nil {
+		return err
+	}
+	if spec.Port == 0 {
+		if err := d.removeNetwork(ctx, portNetwork(spec.ID)); err != nil {
+			return err
+		}
+	}
+	if !running {
+		return nil
+	}
+	_, err := d.cli.ContainerStart(ctx, name, client.ContainerStartOptions{})
+	return err
+}
+
+func (d *Docker) RemoveDatastore(ctx context.Context, id string) error {
+	_, spec, err := d.inspectDatastore(ctx, id)
+	if err != nil {
+		return err
+	}
+	dir, err := d.datastoreDir(spec)
+	if err != nil {
+		return err
+	}
+	if _, err := d.cli.ContainerRemove(ctx, datastoreName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
+		return notFound(err)
+	}
+	for _, name := range []string{datastoreName(id), portNetwork(id)} {
+		if err := d.removeNetwork(ctx, name); err != nil {
+			return err
+		}
+	}
+	return os.RemoveAll(dir)
+}
+
+// removeNetwork takes the containers off a network of the agent and removes it.
+func (d *Docker) removeNetwork(ctx context.Context, name string) error {
+	res, err := d.cli.NetworkInspect(ctx, name, client.NetworkInspectOptions{})
+	if cerrdefs.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for containerID := range res.Network.Containers {
+		if _, err := d.cli.NetworkDisconnect(ctx, name, client.NetworkDisconnectOptions{Container: containerID, Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
+			return err
+		}
+	}
+	_, err = d.cli.NetworkRemove(ctx, name, client.NetworkRemoveOptions{})
+	if cerrdefs.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+// waitReady waits until a datastore passes its health check.
+func (d *Docker) waitReady(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, datastoreReadyWait)
+	defer cancel()
+	for {
+		c, _, err := d.inspectDatastore(ctx, id)
+		switch {
+		case err != nil:
+			return err
+		case !c.State.Running:
+			return fmt.Errorf("%w: it stopped, its log tells why", runtime.ErrDatastoreNotRunning)
+		case c.State.Health != nil && c.State.Health.Status == container.Healthy:
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: it isn't ready after %s", runtime.ErrDatastoreNotRunning, datastoreReadyWait)
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+// ready returns the spec of a datastore that runs and passes its health check.
+func (d *Docker) ready(ctx context.Context, id string) (runtime.DatastoreSpec, string, error) {
+	c, spec, err := d.inspectDatastore(ctx, id)
+	if err != nil {
+		return spec, "", err
+	}
+	if !c.State.Running || c.State.Health == nil || c.State.Health.Status != container.Healthy {
+		return spec, "", runtime.ErrDatastoreNotRunning
+	}
+	dir, err := d.datastoreDir(spec)
+	return spec, dir, err
+}

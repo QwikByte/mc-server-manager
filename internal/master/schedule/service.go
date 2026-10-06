@@ -41,6 +41,12 @@ type Kind interface {
 	Category() slog.Attr
 }
 
+// OptionalTargets is implemented by the kinds of tasks that may target no servers, depending
+// on their settings, e.g. backup jobs that only dump datastores.
+type OptionalTargets interface {
+	TargetsOptional(settings json.RawMessage) bool
+}
+
 // Servers returns the target servers of a task in their current state. Its error names the
 // targets that couldn't be reached; the others are returned anyway.
 type Servers func(ctx context.Context) ([]Server, error)

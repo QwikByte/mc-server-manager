@@ -40,13 +40,17 @@ type Selection struct {
 	Paths      []string `json:"paths"` // relative to the server's folder
 }
 
+func (s Selection) empty() bool {
+	return !s.Everything && !s.Worlds && !s.Plugins && !s.Config && len(s.Paths) == 0
+}
+
 // check returns a message for the administrator if the selection is invalid.
 func (s *Selection) check() string {
 	if s.Paths == nil {
 		s.Paths = []string{}
 	}
 	switch {
-	case !s.Everything && !s.Worlds && !s.Plugins && !s.Config && len(s.Paths) == 0:
+	case s.empty():
 		return "Choose what to back up."
 	case len(s.Paths) > maxPaths:
 		return "Enter at most 20 files or folders."

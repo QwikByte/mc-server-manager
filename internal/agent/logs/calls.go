@@ -27,12 +27,12 @@ const (
 
 // detailFields are the request fields that are logged besides the server ID. Others may
 // hold secrets, such as the forwarding secret of a network, or file contents.
-var detailFields = []protoreflect.Name{"name", "version", "command", "path", "from", "to", "file_name", "replaces", "backup_id", "label", "location", "job_id", "set_id", "set_name"}
+var detailFields = []protoreflect.Name{"name", "version", "command", "path", "from", "to", "file_name", "replaces", "backup_id", "label", "location", "job_id", "set_id", "set_name", "dump_id"}
 
 var categories = map[string]slog.Attr{
 	"NodeService": logging.Nodes, "ServerService": logging.Servers, "FileService": logging.Files,
 	"PropertiesService": logging.Files, "PluginService": logging.Plugins, "BackupService": logging.Backups,
-	"ProxyService": logging.Files, "FileSetService": logging.Files,
+	"ProxyService": logging.Files, "FileSetService": logging.Files, "DatastoreService": logging.Databases,
 }
 
 var wordStart = regexp.MustCompile(`([a-z])([A-Z])`)
@@ -102,7 +102,11 @@ func logCall(ctx context.Context, log *slog.Logger, origin, method string, req a
 		attrs = append(attrs, slog.String("peer", p.Addr.String()))
 	}
 	if m, ok := req.(proto.Message); ok {
-		attrs = details(m.ProtoReflect(), attrs, true)
+		idKey := logging.KeyServer
+		if service == "DatastoreService" {
+			idKey = "datastore"
+		}
+		attrs = details(m.ProtoReflect(), attrs, idKey, true)
 	}
 	if err != nil && code != codes.Canceled {
 		message += " failed"
@@ -122,17 +126,17 @@ func describe(name string) string {
 	return strings.Join(words, " ")
 }
 
-// details adds the server ID and the detail fields of a request, also those of a header
-// message such as the one that starts an upload.
-func details(m protoreflect.Message, attrs []slog.Attr, nested bool) []slog.Attr {
+// details adds the ID, of a server unless idKey names another, and the detail fields of a
+// request, also those of a header message such as the one that starts an upload.
+func details(m protoreflect.Message, attrs []slog.Attr, idKey string, nested bool) []slog.Attr {
 	m.Range(func(f protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		switch {
 		case f.IsList() || f.IsMap():
 		case f.Kind() == protoreflect.MessageKind && nested:
-			attrs = details(v.Message(), attrs, false)
+			attrs = details(v.Message(), attrs, idKey, false)
 		case f.Kind() != protoreflect.StringKind:
 		case f.Name() == "id" || f.Name() == "server_id":
-			attrs = append(attrs, slog.String(logging.KeyServer, v.String()))
+			attrs = append(attrs, slog.String(idKey, v.String()))
 		case slices.Contains(detailFields, f.Name()):
 			attrs = append(attrs, slog.String(string(f.Name()), v.String()))
 		}

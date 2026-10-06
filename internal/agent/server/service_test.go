@@ -146,6 +146,8 @@ type slowRuntime struct {
 
 func (r *slowRuntime) Info(context.Context) (runtime.Info, error) { return runtime.Info{CPUs: 4}, nil }
 
+func (r *slowRuntime) ListDatastores(context.Context) ([]runtime.Datastore, error) { return nil, nil }
+
 func (r *slowRuntime) List(context.Context) ([]runtime.Server, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

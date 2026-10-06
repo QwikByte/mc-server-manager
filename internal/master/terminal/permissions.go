@@ -50,7 +50,8 @@ func guarded(use, short string, checks map[string]check) *cobra.Command {
 }
 
 // agentChecks are the checks of the agent's commands on a node. Commands that list all
-// servers need the permission on the whole node, those for one server on that server.
+// servers need the permission on the whole node, those for one server on that server, and
+// those for datastores the global permission.
 // Commands that change a server also ask moving, which refuses them while the server
 // moves to another node, as the changes would be lost.
 func agentChecks(nodeID string, moving func(serverID string) error) map[string]check {
@@ -72,19 +73,26 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 			return moving(args[0])
 		}
 	}
+	global := func(p access.Permission) check {
+		return func(_ context.Context, g access.Grants, _ []string) error { return need(p, g.Has(p)) }
+	}
 	return map[string]check{
-		"status":         node(access.ServersView),
-		"server list":    node(access.ServersView),
-		"server start":   change(access.ServersStart),
-		"server stop":    change(access.ServersStop),
-		"server restart": change(access.ServersRestart),
-		"server logs":    server(access.ConsoleView),
-		"server command": change(access.ConsoleCommands),
-		"backup list":    server(access.BackupsView),
-		"backup create":  change(access.BackupsCreate),
-		"backup restore": change(access.BackupsRestore),
-		"logs":           node(access.LogsView),
-		"overlay status": node(access.NodesView),
+		"datastore list":    global(access.DatastoresView),
+		"datastore dumps":   global(access.DatastoresView),
+		"datastore dump":    global(access.DatastoresManage),
+		"datastore restore": global(access.DatastoresManage),
+		"status":            node(access.ServersView),
+		"server list":       node(access.ServersView),
+		"server start":      change(access.ServersStart),
+		"server stop":       change(access.ServersStop),
+		"server restart":    change(access.ServersRestart),
+		"server logs":       server(access.ConsoleView),
+		"server command":    change(access.ConsoleCommands),
+		"backup list":       server(access.BackupsView),
+		"backup create":     change(access.BackupsCreate),
+		"backup restore":    change(access.BackupsRestore),
+		"logs":              node(access.LogsView),
+		"overlay status":    node(access.NodesView),
 	}
 }
 

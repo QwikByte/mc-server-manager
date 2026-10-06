@@ -22,6 +22,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/backup"
+	"github.com/QwikByte/noryx/internal/master/datastore"
 	"github.com/QwikByte/noryx/internal/master/files"
 	"github.com/QwikByte/noryx/internal/master/fileset"
 	"github.com/QwikByte/noryx/internal/master/geysermc"
@@ -139,7 +140,9 @@ func serve(ctx context.Context, cfg config) error {
 	moves := server.NewMoves()
 	// Requests whose operation takes longer are answered right away, and the operation goes on.
 	ops := operation.New(time.Second)
-	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes), policy.TaskKind: policy.New(nodes)}, moves.Busy)
+	overlays := overlay.NewService(db, nodes)
+	datastores := datastore.NewStore(db, nodes, overlays)
+	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes)}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
@@ -147,10 +150,9 @@ func serve(ctx context.Context, cfg config) error {
 	go updates.Run(ctx)
 	usageStore := usage.NewStore(db, nodes)
 	go usageStore.Run(ctx)
-	overlays := overlay.NewService(db, nodes)
 	go overlays.Run(ctx)
-	networks, tags := network.NewService(db, nodes, plugins, overlays), tag.NewStore(db)
-	fileSets := fileset.NewService(db, nodes, networks, tags, moves)
+	networks, tags := network.NewService(db, nodes, plugins, overlays, datastores), tag.NewStore(db)
+	fileSets := fileset.NewService(db, nodes, networks, tags, moves, datastores)
 	go fileSets.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}
@@ -173,7 +175,8 @@ func serve(ctx context.Context, cfg config) error {
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
-			Tasks: tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Operations: ops, Moves: moves, Restart: restart,
+			Datastores: datastore.NewService(datastores, nodes, networks, fileSets),
+			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -240,11 +243,13 @@ type Services struct {
 	Modpacks  *modpack.Service
 	Templates *template.Service
 	FileSets  *fileset.Service
-	Tasks     *schedule.Service
-	Logs      *logs.Store
-	Updates   *update.Service
-	Usage     *usage.Store
-	Tags      *tag.Store
+	// Datastores are the databases of networks.
+	Datastores *datastore.Service
+	Tasks      *schedule.Service
+	Logs       *logs.Store
+	Updates    *update.Service
+	Usage      *usage.Store
+	Tags       *tag.Store
 	// Operations are the long actions in progress.
 	Operations *operation.Operations
 	Moves      *server.Moves
@@ -289,6 +294,7 @@ func API(s Services) *http.ServeMux {
 	modpack.NewHandler(s.Modpacks).Register(m)
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
+	datastore.NewHandler(s.Datastores, s.Operations).Register(m)
 	backup.NewHandler(s.Nodes, s.Operations).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")

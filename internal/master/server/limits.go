@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"sync"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
@@ -38,8 +41,8 @@ func (r *reservations) of(nodeID string) *reserved {
 
 var noRelease = func() {}
 
-// checkLimits enforces the port range and the memory limit of a node for a server that
-// is created (serverID is empty) or changed, and reserves its memory until release is
+// checkLimits enforces the port range and the memory limit of a node, which its datastores
+// share, for a server that is created (serverID is empty) or changed, and reserves its memory until release is
 // called, once the operation that creates or changes it ended. A change that needs no
 // more memory is always allowed, e.g. on a node whose limit was lowered.
 func (h *Handler) checkLimits(ctx context.Context, nodeID, serverID string, port, memoryMB uint32) (release func(), err error) {
@@ -79,6 +82,14 @@ func (h *Handler) checkLimits(ctx context.Context, nodeID, serverID string, port
 		case memoryMB <= s.GetMemoryMb():
 			return noRelease, nil
 		}
+	}
+	// Datastores count with their limits; agents of older versions have none.
+	if datastores, err := noryxv1.NewDatastoreServiceClient(conn).ListDatastores(ctx, &noryxv1.ListDatastoresRequest{}); err == nil {
+		for _, ds := range datastores.GetDatastores() {
+			left -= int64(ds.GetMemoryMb())
+		}
+	} else if status.Code(err) != codes.Unimplemented {
+		return nil, err
 	}
 	needed := noryxv1.ContainerMemoryMB(memoryMB)
 	if needed > left {

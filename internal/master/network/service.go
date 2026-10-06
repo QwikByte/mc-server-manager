@@ -116,6 +116,8 @@ type Network struct {
 	ApplyError string    `json:"applyError,omitempty"`
 	CreatedAt  time.Time `json:"createdAt"`
 	secret     string
+	// placed are the IDs of its datastores by node, while it is applied.
+	placed map[string][]string
 }
 
 // Draft is a new network: its proxy and the servers behind it; players join the first.
@@ -160,6 +162,15 @@ type Overlay interface {
 	Addresses(ctx context.Context) (map[string]string, error)
 }
 
+// Datastores are the MariaDB and PostgreSQL servers of networks, which their servers reach.
+type Datastores interface {
+	// Placed returns the IDs of the datastores of a network, by node.
+	Placed(ctx context.Context, networkID string) (map[string][]string, error)
+	// Publish publishes the datastores of a network in the private network of the nodes for
+	// those of nodes that reach them over it, and for no others.
+	Publish(ctx context.Context, networkID string, nodes []string, members map[string]string) error
+}
+
 // members are the addresses of the nodes in the private network, by node.
 type members map[string]string
 
@@ -168,15 +179,16 @@ type members map[string]string
 func (m members) private(a, b string) bool { return a != b && m[a] != "" && m[b] != "" }
 
 type Service struct {
-	db      *sql.DB
-	nodes   Nodes
-	mods    Mods
-	overlay Overlay
-	mu      sync.Mutex // one change at a time, as changes reconfigure servers
+	db         *sql.DB
+	nodes      Nodes
+	mods       Mods
+	overlay    Overlay
+	datastores Datastores
+	mu         sync.Mutex // one change at a time, as changes reconfigure servers
 }
 
-func NewService(db *sql.DB, nodes Nodes, mods Mods, overlay Overlay) *Service {
-	return &Service{db: db, nodes: nodes, mods: mods, overlay: overlay}
+func NewService(db *sql.DB, nodes Nodes, mods Mods, overlay Overlay, datastores Datastores) *Service {
+	return &Service{db: db, nodes: nodes, mods: mods, overlay: overlay, datastores: datastores}
 }
 
 func (s *Service) List(ctx context.Context) ([]Network, error) { return s.load(ctx, "") }
@@ -295,13 +307,20 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 }
 
 // Delete makes all servers standalone again and removes the network. The proxy keeps
-// running without forwarding.
+// running without forwarding. A network with datastores stays, as its data would be lost.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n, err := s.Get(ctx, id)
 	if err != nil {
 		return err
+	}
+	placed, err := s.datastores.Placed(ctx, id)
+	if err != nil {
+		return err
+	}
+	if len(placed) > 0 {
+		return httpapi.Errorf(http.StatusConflict, "The network %q has databases. Delete its datastores first.", n.Name)
 	}
 	ctx = context.WithoutCancel(ctx)
 	operation.Step(ctx, "servers")
@@ -343,10 +362,15 @@ func (s *Service) CheckRemovable(ctx context.Context, nodeID, serverID string) e
 	return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q. Remove it from the network first.", n.Name)
 }
 
+// ErrUnreachable is the code of the conflict of a server that would move to a node that
+// doesn't reach the datastores of its network, which the client may confirm.
+const ErrUnreachable = "datastores-unreachable"
+
 // CheckMove fails if a server can't move to another node because its network forwards the
 // legacy way and the operator didn't confirm that the servers on other nodes are protected,
-// which the private network of the nodes only does for its members.
-func (s *Service) CheckMove(ctx context.Context, serverID, from, to string) error {
+// which the private network of the nodes only does for its members, or, unless confirmed,
+// because the node doesn't reach the datastores of its network.
+func (s *Service) CheckMove(ctx context.Context, serverID, from, to string, unreachable bool) error {
 	n, err := s.find(ctx, serverID)
 	if err != nil || n == nil {
 		return err
@@ -358,6 +382,15 @@ func (s *Service) CheckMove(ctx context.Context, serverID, from, to string) erro
 	}
 	if n.exposed(m) {
 		return httpapi.Errorf(http.StatusConflict, "This server is part of the network %q, which forwards the legacy way. Confirm in the network that a firewall protects its servers on other nodes first.", n.Name)
+	}
+	placed, err := s.datastores.Placed(ctx, n.ID)
+	if err != nil {
+		return err
+	}
+	for nodeID := range placed {
+		if nodeID != to && !m.private(nodeID, to) && !unreachable {
+			return httpapi.Confirm(ErrUnreachable, "The network %q has databases on a node that the new node can't reach, as they aren't both in the private network of the nodes. The plugins of the server would lose them.", n.Name)
+		}
 	}
 	// The proxy takes the Bedrock port of its network along.
 	if n.Proxy.ServerID == serverID {
@@ -477,6 +510,17 @@ func (s *Service) ApplyAcross(ctx context.Context, nodeID string) error {
 // members returns the addresses of the nodes in the private network, by node.
 func (s *Service) members(ctx context.Context) (members, error) {
 	return s.overlay.Addresses(ctx)
+}
+
+// Configure configures all servers of a network again, e.g. as a datastore joined it.
+func (s *Service) Configure(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	return s.apply(ctx, n, false)
 }
 
 // Apply configures all servers of a network again, e.g. after a node was offline, and
@@ -629,12 +673,31 @@ func (s *Service) apply(ctx context.Context, n Network, refresh bool) error {
 	return err
 }
 
-// configureAll configures the backends of a network and then its proxy.
+// configureAll configures the servers of a network, which reach its datastores on their
+// nodes, and publishes the datastores for the servers of other nodes.
 func (s *Service) configureAll(ctx context.Context, n Network, refresh bool) error {
 	m, err := s.members(ctx)
 	if err != nil {
 		return err
 	}
+	if n.placed, err = s.datastores.Placed(ctx, n.ID); err != nil {
+		return err
+	}
+	if err := s.configureServers(ctx, n, m, refresh); err != nil || len(n.placed) == 0 {
+		return err
+	}
+	nodes := []string{n.Proxy.NodeID}
+	for _, b := range n.Backends {
+		nodes = append(nodes, b.NodeID)
+	}
+	if err := s.datastores.Publish(ctx, n.ID, nodes, m); err != nil {
+		return applyFailed("the datastores", err)
+	}
+	return nil
+}
+
+// configureServers configures the backends of a network and then its proxy.
+func (s *Service) configureServers(ctx context.Context, n Network, m members, refresh bool) error {
 	operation.Step(ctx, "servers")
 	for i, b := range n.Backends {
 		operation.Count(ctx, int64(i), int64(len(n.Backends)), "servers")
@@ -695,6 +758,7 @@ func (n *Network) request(ref Ref, m members) *noryxv1.ConfigureNetworkRequest {
 	if ref != n.Proxy && m.private(n.Proxy.NodeID, ref.NodeID) {
 		req.OverlayClient = m[n.Proxy.NodeID]
 	}
+	req.Datastores = n.placed[ref.NodeID]
 	return req
 }
 

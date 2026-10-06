@@ -51,7 +51,7 @@ func TestCallDetails(t *testing.T) {
 		upload: {"path=plugins/x.yml", "server=s1"}, network: {"server=s1"}, set: {"server=s1", "set_id=set1", "set_name=Plugins"},
 	} {
 		var got []string
-		for _, a := range details(req.ProtoReflect(), nil, true) {
+		for _, a := range details(req.ProtoReflect(), nil, "server", true) {
 			got = append(got, a.Key+"="+a.Value.String())
 		}
 		if slices.Sort(got); !slices.Equal(got, want) {

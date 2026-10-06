@@ -136,12 +136,13 @@ func (s *Service) build(kind string, in Input) (Task, error) {
 	}
 	var validTargets bool
 	t.Targets, validTargets = targets(in.Targets)
+	optional, _ := k.(OptionalTargets)
 	switch msg := t.Schedule.normalize(); {
 	case t.Name == "" || len(t.Name) > 64:
 		return t, httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
 	case msg != "":
 		return t, httpapi.Errorf(http.StatusBadRequest, "%s", msg)
-	case !validTargets:
+	case !validTargets || len(t.Targets) == 0 && (optional == nil || !optional.TargetsOptional(in.Settings)):
 		return t, httpapi.Errorf(http.StatusBadRequest, "Choose 1 to %d nodes or servers.", maxTargets)
 	}
 	var err error
@@ -161,7 +162,7 @@ func targets(in []Target) ([]Target, bool) {
 			out = append(out, t)
 		}
 	}
-	return out, len(out) > 0 && len(out) <= maxTargets
+	return out, len(out) <= maxTargets
 }
 
 // save writes a task and its targets with the statement write, and schedules it.

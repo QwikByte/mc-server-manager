@@ -45,40 +45,35 @@ var jobPattern = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
 type Service struct {
 	noryxv1.UnimplementedBackupServiceServer
 	rt    runtime.Runtime
-	store store
+	store Store
 
 	mu   sync.Mutex
 	busy map[string]bool // servers with a backup or restore in progress
 }
 
 func NewService(rt runtime.Runtime, locations *storage.Locations) *Service {
-	return &Service{rt: rt, store: store{locations}, busy: map[string]bool{}}
+	return &Service{rt: rt, store: Store{locations}, busy: map[string]bool{}}
 }
 
 func (s *Service) ListBackups(ctx context.Context, req *noryxv1.ListBackupsRequest) (*noryxv1.ListBackupsResponse, error) {
 	if _, err := s.find(ctx, req.GetServerId()); err != nil {
 		return nil, err
 	}
-	backups, err := s.store.list(req.GetServerId())
+	backups, err := s.store.List(req.GetServerId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	res := &noryxv1.ListBackupsResponse{}
 	for _, b := range backups {
-		res.Backups = append(res.Backups, b.proto())
+		res.Backups = append(res.Backups, b.Proto())
 	}
 	return res, nil
 }
 
 func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupRequest) (*noryxv1.CreateBackupResponse, error) {
 	label := strings.TrimSpace(req.GetLabel())
-	switch {
-	case utf8.RuneCountInString(label) > maxLabel || strings.ContainsFunc(label, unicode.IsControl):
-		return nil, status.Errorf(codes.InvalidArgument, "Enter a label with up to %d characters.", maxLabel)
-	case req.GetJobId() != "" && !jobPattern.MatchString(req.GetJobId()):
-		return nil, status.Error(codes.InvalidArgument, "invalid job ID")
-	case req.GetKeep() > maxKeep:
-		return nil, status.Errorf(codes.InvalidArgument, "Keep at most %d backups.", maxKeep)
+	if err := CheckDetails(label, req.GetJobId(), req.GetKeep()); err != nil {
+		return nil, err
 	}
 	srv, release, err := s.lock(ctx, req.GetServerId())
 	if err != nil {
@@ -108,17 +103,17 @@ func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupReq
 		return nil, toStatus(err)
 	}
 	location := cmp.Or(req.GetLocation(), storage.Default)
-	b, err := s.store.create(ctx, data, srv.ID, location, details{Label: label, Created: time.Now(), Paths: paths, JobID: req.GetJobId()})
+	b, err := s.store.create(ctx, data, srv.ID, location, Details{Label: label, Created: time.Now(), Paths: paths, JobID: req.GetJobId()})
 	resume()
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	if req.GetJobId() != "" && req.GetKeep() > 0 {
-		if err := s.store.prune(srv.ID, req.GetJobId(), int(req.GetKeep())); err != nil {
+		if err := s.store.Prune(srv.ID, req.GetJobId(), int(req.GetKeep())); err != nil {
 			slog.Warn("Can't delete old backups", logging.Backups, logging.KeyServer, srv.ID, "job", req.GetJobId(), "err", err)
 		}
 	}
-	return &noryxv1.CreateBackupResponse{Backup: b.proto()}, nil
+	return &noryxv1.CreateBackupResponse{Backup: b.Proto()}, nil
 }
 
 // RestoreBackup extracts the backup before it stops the server, so the server is only
@@ -129,7 +124,7 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 		return nil, err
 	}
 	defer release()
-	b, err := s.store.find(srv.ID, req.GetBackupId())
+	b, err := s.store.Find(srv.ID, req.GetBackupId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -169,9 +164,9 @@ func (s *Service) DeleteBackup(ctx context.Context, req *noryxv1.DeleteBackupReq
 		return nil, err
 	}
 	defer release()
-	b, err := s.store.find(srv.ID, req.GetBackupId())
+	b, err := s.store.Find(srv.ID, req.GetBackupId())
 	if err == nil {
-		err = s.store.remove(b)
+		err = s.store.Remove(b)
 	}
 	return &noryxv1.DeleteBackupResponse{}, toStatus(err)
 }
@@ -181,11 +176,11 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 	if err != nil {
 		return err
 	}
-	b, err := s.store.find(srv.ID, req.GetBackupId())
+	b, err := s.store.Find(srv.ID, req.GetBackupId())
 	if err != nil {
 		return toStatus(err)
 	}
-	f, err := os.Open(b.archive())
+	f, err := os.Open(b.Path())
 	if err != nil {
 		return toStatus(err)
 	}
@@ -208,16 +203,21 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 		go func() { pw.CloseWithError(datadir.CopyZip(pw, zr, hidden.Censor("."))) }()
 		r, size = pr, 0
 	}
-	res := &noryxv1.DownloadBackupResponse{Size: size}
+	return Send(r, size, func(size int64, data []byte) error {
+		return stream.Send(&noryxv1.DownloadBackupResponse{Size: size, Data: data})
+	})
+}
+
+// Send sends what r reads in chunks, the first with size, until its end.
+func Send(r io.Reader, size int64, send func(size int64, data []byte) error) error {
 	buf := make([]byte, chunkSize)
 	for first := true; ; first = false {
 		n, err := io.ReadFull(r, buf)
 		if n > 0 || first {
-			res.Data = buf[:n]
-			if err := stream.Send(res); err != nil {
+			if err := send(size, buf[:n]); err != nil {
 				return err
 			}
-			res = &noryxv1.DownloadBackupResponse{}
+			size = 0
 		}
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			return nil
@@ -228,7 +228,21 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 	}
 }
 
-// ImportBackup adds a backup that a server had on another node, with its ID and details.
+// CheckDetails checks the label of a new backup, the job that creates it and how many of
+// the job's backups are kept.
+func CheckDetails(label, jobID string, keep uint32) error {
+	switch {
+	case utf8.RuneCountInString(label) > maxLabel || strings.ContainsFunc(label, unicode.IsControl):
+		return status.Errorf(codes.InvalidArgument, "Enter a label with up to %d characters.", maxLabel)
+	case jobID != "" && !jobPattern.MatchString(jobID):
+		return status.Error(codes.InvalidArgument, "invalid job ID")
+	case keep > maxKeep:
+		return status.Errorf(codes.InvalidArgument, "Keep at most %d backups.", maxKeep)
+	}
+	return nil
+}
+
+// ImportBackup adds a backup that a server had on another node, with its ID and Details.
 func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) error {
 	first, err := stream.Recv()
 	if err != nil {
@@ -248,7 +262,7 @@ func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) 
 		return err
 	}
 	defer release()
-	imported, err := s.store.add(srv.ID, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, b.GetSize(), func(w io.Writer) error {
+	imported, err := s.store.Add(srv.ID, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, b.GetSize(), func(w io.Writer) error {
 		for {
 			msg, err := stream.Recv()
 			if errors.Is(err, io.EOF) {
@@ -265,12 +279,12 @@ func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) 
 	if err != nil {
 		return toStatus(err)
 	}
-	return stream.SendAndClose(&noryxv1.ImportBackupResponse{Backup: imported.proto()})
+	return stream.SendAndClose(&noryxv1.ImportBackupResponse{Backup: imported.Proto()})
 }
 
 // importedDetails validates a backup from another node like those made here.
-func importedDetails(b *noryxv1.Backup) (details, error) {
-	d := details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId()}
+func importedDetails(b *noryxv1.Backup) (Details, error) {
+	d := Details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId()}
 	for _, p := range b.GetPaths() {
 		name, ok := datadir.Name(p)
 		if !ok {
@@ -296,7 +310,7 @@ func (s *Service) RemoveAll(serverID string) error {
 	if !runtime.ValidID(serverID) {
 		return errors.New("invalid server ID")
 	}
-	return s.store.removeAll(serverID)
+	return s.store.RemoveAll(serverID)
 }
 
 func (s *Service) find(ctx context.Context, id string) (runtime.Server, error) {

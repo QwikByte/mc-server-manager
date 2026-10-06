@@ -42,6 +42,8 @@ const (
 
 	NetworksView     Permission = "networks.view"
 	NetworksManage   Permission = "networks.manage"
+	DatastoresView   Permission = "datastores.view"
+	DatastoresManage Permission = "datastores.manage"
 	TemplatesView    Permission = "templates.view"
 	TemplatesManage  Permission = "templates.manage"
 	FileSetsView     Permission = "filesets.view"
@@ -129,9 +131,11 @@ var Catalog = []Area{
 		scoped(BackupsRestore, "Restore backups", "Replaces the backed up data; a running server restarts.", BackupsView),
 		scoped(BackupsDelete, "Delete backups", "", BackupsView),
 	}},
-	{"Networks, templates and file sets", []Info{
+	{"Networks, databases, templates and file sets", []Info{
 		global(NetworksView, "See networks", ""),
 		global(NetworksManage, "Manage networks", "Create, change and delete networks, which configures and restarts their servers.", NetworksView),
+		global(DatastoresView, "See databases", "The MariaDB and PostgreSQL datastores of networks with their databases, health and dumps, and which servers use them. Never their passwords."),
+		global(DatastoresManage, "Manage databases", "Create, change, upgrade and delete datastores and their databases, and rotate passwords, which applies file sets and restarts their servers. Back up, restore and download dumps, which contain all data of the databases.", DatastoresView),
 		global(TemplatesView, "See templates", "Creating a server from a template also needs the permission to create servers."),
 		global(TemplatesManage, "Manage templates", "Create, change and delete templates.", TemplatesView),
 		global(FileSetsView, "See file sets", "Their files, targets and the names of their secrets, and which servers have them."),

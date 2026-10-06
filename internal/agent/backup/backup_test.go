@@ -78,16 +78,16 @@ func TestSelected(t *testing.T) {
 
 func TestBackupAndRestore(t *testing.T) {
 	path, dir := paperData(t)
-	s := store{storage.New(t.TempDir())}
-	create := func(paths []string, jobID string) backup {
+	s := Store{storage.New(t.TempDir())}
+	create := func(paths []string, jobID string) Archive {
 		t.Helper()
-		b, err := s.create(t.Context(), dir, serverID, storage.Default, details{Label: "test", Created: time.Now(), Paths: paths, JobID: jobID})
+		b, err := s.create(t.Context(), dir, serverID, storage.Default, Details{Label: "test", Created: time.Now(), Paths: paths, JobID: jobID})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return b
 	}
-	restore := func(b backup) {
+	restore := func(b Archive) {
 		t.Helper()
 		staged, err := stage(t.Context(), dir, b)
 		if err == nil {
@@ -130,7 +130,7 @@ func TestBackupAndRestore(t *testing.T) {
 	if read(fileset.ManifestFile) != `{"marked":["bukkit.yml"]}` {
 		t.Fatal("restoring replaced the manifest of file sets")
 	}
-	if zr, err := zip.OpenReader(all.archive()); err != nil || slices.ContainsFunc(zr.File, func(f *zip.File) bool { return f.Name == fileset.ManifestFile }) {
+	if zr, err := zip.OpenReader(all.Path()); err != nil || slices.ContainsFunc(zr.File, func(f *zip.File) bool { return f.Name == fileset.ManifestFile }) {
 		t.Fatalf("the backup has the manifest of file sets: %v", err)
 	} else {
 		zr.Close()
@@ -143,10 +143,10 @@ func TestBackupAndRestore(t *testing.T) {
 	for range 3 {
 		create([]string{"world"}, "job1")
 	}
-	if err := s.prune(serverID, "job1", 2); err != nil {
+	if err := s.Prune(serverID, "job1", 2); err != nil {
 		t.Fatal(err)
 	}
-	backups, err := s.list(serverID)
+	backups, err := s.List(serverID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,13 +159,13 @@ func TestBackupAndRestore(t *testing.T) {
 	if len(backups) != 4 || jobs != 2 || backups[len(backups)-1].ID != worlds.ID || backups[0].Size == 0 {
 		t.Fatalf("backups after pruning = %+v", backups)
 	}
-	if _, err := s.find(serverID, "../../etc/passwd"); err == nil {
+	if _, err := s.Find(serverID, "../../etc/passwd"); err == nil {
 		t.Fatal("found a backup with an invalid ID")
 	}
-	if err := s.removeAll(serverID); err != nil {
+	if err := s.RemoveAll(serverID); err != nil {
 		t.Fatal(err)
 	}
-	if backups, _ := s.list(serverID); len(backups) != 0 {
+	if backups, _ := s.List(serverID); len(backups) != 0 {
 		t.Fatalf("backups after removing all = %v", backups)
 	}
 }
@@ -174,9 +174,9 @@ func TestBackupAndRestore(t *testing.T) {
 // the server lost as it left a set doesn't come back, and one it has keeps its content.
 func TestRestoreKeepsMarkedFiles(t *testing.T) {
 	path, dir := paperData(t)
-	s := store{storage.New(t.TempDir())}
+	s := Store{storage.New(t.TempDir())}
 	write(t, filepath.Join(path, "plugins/Sync/token.yml"), "token: old")
-	b, err := s.create(t.Context(), dir, serverID, storage.Default, details{Created: time.Now(), Paths: []string{"."}})
+	b, err := s.create(t.Context(), dir, serverID, storage.Default, Details{Created: time.Now(), Paths: []string{"."}})
 	check(t, err)
 	check(t, os.Remove(filepath.Join(path, "plugins/LuckPerms/config.yml")))
 	write(t, filepath.Join(path, "plugins/Sync/token.yml"), "token: new")

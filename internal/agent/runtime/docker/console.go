@@ -109,7 +109,7 @@ func (d *Docker) Reload(ctx context.Context, id string) error {
 	case !c.State.Running:
 		return runtime.ErrNotRunning
 	case !c.Config.OpenStdin:
-		return d.recreate(ctx, spec, true, placement(c, spec))
+		return d.recreate(ctx, c, spec, true)
 	}
 	ctx, cancel := context.WithTimeout(ctx, reloadTimeout)
 	defer cancel()

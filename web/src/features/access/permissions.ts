@@ -26,6 +26,8 @@ export const permissionIds = [
   "backups.delete",
   "networks.view",
   "networks.manage",
+  "datastores.view",
+  "datastores.manage",
   "templates.view",
   "templates.manage",
   "filesets.view",
