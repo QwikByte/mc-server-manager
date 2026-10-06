@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/backup"
-	"github.com/QwikByte/noryx/internal/master/fileset"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
 )
@@ -39,8 +37,8 @@ type Overlay interface {
 }
 
 // Store keeps the datastores and the passwords of their databases. It tells the networks
-// where their datastores are, publishes them for the servers of other nodes, and gives file
-// sets the fields of the databases and backup jobs the datastores they dump.
+// where their datastores are, publishes them for the servers of other nodes, and gives backup
+// jobs the datastores they dump.
 type Store struct {
 	db      *sql.DB
 	nodes   Nodes
@@ -280,58 +278,6 @@ func (s *Store) freePort(ctx context.Context, ds Datastore, refused map[uint32]b
 	return port, nil
 }
 
-// enginePort is the port of the engines in their containers.
-var enginePort = map[string]uint32{"mariadb": 3306, "postgres": 5432}
-
-// Fields returns the lookup of the fields of the databases of the networks for file sets: a
-// server on the node of a datastore reaches it by the name of its container, those of other
-// nodes at the address of the datastore's node in the private network, if both nodes are
-// members and the network published it.
-func (s *Store) Fields(ctx context.Context) (fileset.DatastoreFields, error) {
-	list, err := s.list(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	m, err := s.overlay.Addresses(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return func(networkID, nodeID, key string) (string, error) {
-		parts := noryxv1.DatastoreField.FindStringSubmatch("datastore:" + key)
-		if parts == nil {
-			return "", httpapi.Errorf(http.StatusConflict, "%s names no field of a database.", key)
-		}
-		i := slices.IndexFunc(list, func(ds Datastore) bool { return ds.NetworkID == networkID && ds.Name == parts[1] })
-		if i < 0 {
-			return "", httpapi.Errorf(http.StatusConflict, "The network has no datastore %q.", parts[1])
-		}
-		ds := list[i]
-		j := slices.IndexFunc(ds.Databases, func(db Database) bool { return db.Name == parts[2] })
-		if j < 0 {
-			return "", httpapi.Errorf(http.StatusConflict, "The datastore %s has no database %q.", ds.Name, parts[2])
-		}
-		host, port := datastorePrefix+ds.ID, enginePort[ds.Engine]
-		if nodeID != ds.NodeID {
-			switch {
-			case !reaches(m, nodeID, ds.NodeID):
-				return "", httpapi.Errorf(http.StatusConflict, "The servers of this node can't reach the datastore %s on another node, as both nodes must be in the private network of the nodes.", ds.Name)
-			case ds.Port == 0:
-				return "", httpapi.Errorf(http.StatusConflict, "Apply the network, so that the datastore %s is published for the servers of other nodes.", ds.Name)
-			}
-			host, port = m[ds.NodeID], ds.Port
-		}
-		switch parts[3] {
-		case "host":
-			return host, nil
-		case "port":
-			return strconv.FormatUint(uint64(port), 10), nil
-		case "password":
-			return ds.Databases[j].password, nil
-		}
-		return ds.Databases[j].Name, nil // the database and its user
-	}, nil
-}
-
 // Locate returns those of the datastores with the IDs that exist, for backup jobs.
 func (s *Store) Locate(ctx context.Context, ids []string) ([]backup.Datastore, error) {
 	if len(ids) == 0 {
@@ -358,6 +304,3 @@ func (s *Store) Locate(ctx context.Context, ids []string) ([]backup.Datastore, e
 	}
 	return found, nil
 }
-
-// datastorePrefix names the containers of datastores, which the agent creates.
-const datastorePrefix = "noryx-db-"

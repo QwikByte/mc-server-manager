@@ -56,13 +56,12 @@ func TestFileSets(t *testing.T) {
 		t.Fatalf("sets = %s", body)
 	}
 	for name, f := range map[string]fileset.File{
-		"managed file":            {Path: "server.properties", Content: "motd=x"},
-		"secret of the server":    {Path: "forwarding.secret", Content: "x"},
-		"plugin":                  {Path: "plugins/Evil.jar", Content: "x"},
-		"unknown variable":        {Path: "a.yml", Content: "{{server.nmae}}"},
-		"unknown datastore field": {Path: "a.yml", Content: "{{datastore:main.lp.secret}}"},
-		"path outside":            {Path: "../a.yml", Content: "x"},
-		"invalid secret's name":   {Path: "a.yml", Content: "{{secret:A B}}"},
+		"managed file":          {Path: "server.properties", Content: "motd=x"},
+		"secret of the server":  {Path: "forwarding.secret", Content: "x"},
+		"plugin":                {Path: "plugins/Evil.jar", Content: "x"},
+		"unknown variable":      {Path: "a.yml", Content: "{{server.nmae}}"},
+		"path outside":          {Path: "../a.yml", Content: "x"},
+		"invalid secret's name": {Path: "a.yml", Content: "{{secret:A B}}"},
 	} {
 		bad := in
 		bad.Name, bad.Files = "Bad", []fileset.File{f}

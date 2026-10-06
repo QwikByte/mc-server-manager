@@ -38,13 +38,10 @@ const ManifestFile = noryxv1.FileSetManifest
 const (
 	maxSetName  = 64
 	maxRevision = 128
-	// maxSecrets are those of a set and the fields of the datastores it uses.
-	maxSecrets = 4 * noryxv1.MaxFileSetSecrets
 )
 
-// secretKey matches the keys of the values of placeholders, e.g. secret:db-password or
-// datastore:main.luckperms.password.
-var secretKey = regexp.MustCompile(`^(secret:[a-z0-9][a-z0-9_-]{0,63}|datastore:[a-z0-9][a-z0-9_.-]{0,127})$`)
+// secretKey matches the keys of the values of placeholders, e.g. secret:db-password.
+var secretKey = regexp.MustCompile(`^secret:[a-z0-9][a-z0-9_-]{0,63}$`)
 
 type Service struct {
 	noryxv1.UnimplementedFileSetServiceServer
@@ -251,7 +248,7 @@ func render(req *noryxv1.ApplyFileSetRequest) ([]change, error) {
 		return nil, errors.New("invalid file set version")
 	case len(req.GetFiles()) > noryxv1.MaxFileSetFiles:
 		return nil, fmt.Errorf("a file set has up to %d files", noryxv1.MaxFileSetFiles)
-	case len(req.GetSecrets()) > maxSecrets:
+	case len(req.GetSecrets()) > noryxv1.MaxFileSetSecrets:
 		return nil, errors.New("too many secrets")
 	}
 	for key, value := range req.GetSecrets() {

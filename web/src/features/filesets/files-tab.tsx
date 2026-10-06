@@ -65,7 +65,7 @@ export function FilesTab({
           <ul aria-label={t("Files of the set")} className="grid gap-0.5">
             {sorted.map((f) => {
               const slash = f.path.lastIndexOf("/")
-              const secret = find(f.content).some((p) => /^(secret|datastore):/.test(p))
+              const secret = find(f.content).some((p) => p.startsWith("secret:"))
               return (
                 <li key={f.path}>
                   <button
@@ -174,10 +174,6 @@ const hints = [
   ["{{server.port}}", msg("Its port")],
   ["{{network.server}}", msg("Its name in its network, e.g. lobby")],
   ["{{secret:<name>}}", msg("A secret of the set, which only the agent fills in. It hides the file from the file manager.")],
-  [
-    "{{datastore:<datastore>.<database>.<field>}}",
-    msg("The host, port, database, user or password of a database of the network, as the server reaches it. Only the agent fills in the password."),
-  ],
 ] as const
 
 /** The editor of a file, which starts with its content and reports each change. */

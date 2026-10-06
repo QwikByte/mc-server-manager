@@ -134,8 +134,8 @@ var Catalog = []Area{
 	{"Networks, databases, templates and file sets", []Info{
 		global(NetworksView, "See networks", ""),
 		global(NetworksManage, "Manage networks", "Create, change and delete networks, which configures and restarts their servers.", NetworksView),
-		global(DatastoresView, "See databases", "The MariaDB and PostgreSQL datastores of networks with their databases, health and dumps, and which servers use them. Never their passwords."),
-		global(DatastoresManage, "Manage databases", "Create, change, upgrade and delete datastores and their databases, and rotate passwords, which applies file sets and restarts their servers. Back up, restore and download dumps, which contain all data of the databases.", DatastoresView),
+		global(DatastoresView, "See databases", "The MariaDB and PostgreSQL datastores of networks with their databases, health, addresses and dumps. Never their passwords or data."),
+		global(DatastoresManage, "Manage databases", "Create, change, upgrade and delete datastores and their databases. See and rotate the passwords of the databases and look into their tables. Back up, restore and download dumps, which contain all data of the databases.", DatastoresView),
 		global(TemplatesView, "See templates", "Creating a server from a template also needs the permission to create servers."),
 		global(TemplatesManage, "Manage templates", "Create, change and delete templates.", TemplatesView),
 		global(FileSetsView, "See file sets", "Their files, targets and the names of their secrets, and which servers have them."),

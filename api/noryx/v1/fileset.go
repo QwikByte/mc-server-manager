@@ -27,9 +27,9 @@ const FileSetManifest = "noryx-filesets.json"
 var (
 	// Placeholder matches the placeholders in the files of sets: the variables the master
 	// fills in, {{server.name}}, {{server.id}}, {{server.port}} and {{network.server}}, and
-	// the secrets only the agent fills in, {{secret:<name>}} and {{datastore:<name>.<field>}}.
-	// Other text in double braces is left alone, as some plugins use it themselves.
-	Placeholder = regexp.MustCompile(`\{\{((?:server|network)\.[^{}\s]*|(?:secret|datastore):[^{}\n]*)\}\}`)
+	// the secrets only the agent fills in, {{secret:<name>}}. Other text in double braces is
+	// left alone, as some plugins use it themselves.
+	Placeholder = regexp.MustCompile(`\{\{((?:server|network)\.[^{}\s]*|secret:[^{}\n]*)\}\}`)
 	// SecretName matches the names of the secrets of a set.
 	SecretName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 )

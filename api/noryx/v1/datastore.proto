@@ -38,6 +38,11 @@ service DatastoreService {
   rpc DeleteDump(DeleteDumpRequest) returns (DeleteDumpResponse);
   // DownloadDump sends a dump in chunks; the first message carries its size.
   rpc DownloadDump(DownloadDumpRequest) returns (stream DownloadDumpResponse);
+  // ListTables returns the tables of a database of a running datastore.
+  rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
+  // BrowseTable returns rows of a table as text, with long values cut short. It only reads,
+  // with statements the agent builds itself.
+  rpc BrowseTable(BrowseTableRequest) returns (BrowseTableResponse);
 }
 
 enum DatastoreEngine {
@@ -219,4 +224,60 @@ message DownloadDumpRequest {
 message DownloadDumpResponse {
   int64 size = 1;
   bytes data = 2;
+}
+
+message ListTablesRequest {
+  string id = 1;
+  string database = 2;
+}
+
+message Table {
+  // Schema of a PostgreSQL table; empty for MariaDB.
+  string schema = 1;
+  string name = 2;
+  // Estimated number of rows; -1 if the engine doesn't know yet.
+  int64 rows = 3;
+  // Bytes of its data and indexes.
+  int64 size = 4;
+}
+
+message ListTablesResponse {
+  repeated Table tables = 1;
+}
+
+message BrowseTableRequest {
+  string id = 1;
+  string database = 2;
+  string schema = 3;
+  string table = 4;
+  // Rows skipped, in the order of the primary key if the table has one.
+  uint64 offset = 5;
+  // Rows returned at most.
+  uint32 limit = 6;
+}
+
+message TableColumn {
+  string name = 1;
+  // Its type as the engine names it, e.g. varchar(36).
+  string type = 2;
+  bool primary_key = 3;
+}
+
+message TableValue {
+  string text = 1;
+  bool null = 2;
+  // The text is cut short.
+  bool truncated = 3;
+}
+
+message TableRow {
+  // One for each column.
+  repeated TableValue values = 1;
+}
+
+message BrowseTableResponse {
+  repeated TableColumn columns = 1;
+  repeated TableRow rows = 2;
+  // The table has more rows after these.
+  bool more = 3;
 }

@@ -1,7 +1,8 @@
 // Package datastore keeps the datastores of networks: MariaDB and PostgreSQL servers that the
 // agent of a node runs, with databases for the plugins of the network's servers. The master
-// keeps the password of each database's user, which file sets put into the configuration of
-// the plugins, and never shows or logs it; the superuser's password never leaves the node.
+// keeps the password of each database's user, which only those who manage datastores see, to
+// enter it into the configuration of the plugins; the superuser's password never leaves the
+// node. They can also look into the tables of a database, which the agent only reads.
 package datastore
 
 import (
@@ -10,7 +11,6 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
-	"github.com/QwikByte/noryx/internal/master/fileset"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
@@ -72,6 +71,16 @@ type View struct {
 	// Missing are its databases that the datastore lacks, e.g. after its data was replaced.
 	Missing []string `json:"missing"`
 	Problem string   `json:"problem,omitempty"`
+	// Endpoints are where the servers of the network reach it.
+	Endpoints []Endpoint `json:"endpoints"`
+}
+
+// Endpoint is where servers reach a datastore: those on its node by the name of its
+// container, those of other nodes at its node's address in the private network of the nodes.
+type Endpoint struct {
+	Host   string `json:"host"`
+	Port   uint32 `json:"port"`
+	Remote bool   `json:"remote"` // for the servers of other nodes
 }
 
 // Input is a new datastore.
@@ -102,22 +111,15 @@ type Networks interface {
 	Configure(ctx context.Context, id string) error
 }
 
-// FileSets put the fields of the databases into the configuration of plugins.
-type FileSets interface {
-	Uses(ctx context.Context, networkID string) ([]fileset.Use, error)
-	Reapply(ctx context.Context, id string) ([]fileset.Result, error)
-}
-
 type Service struct {
 	store    *Store
 	nodes    Nodes
 	networks Networks
-	sets     FileSets
 	mu       sync.Mutex // one new datastore or database at a time, as their number is limited
 }
 
-func NewService(store *Store, nodes Nodes, networks Networks, sets FileSets) *Service {
-	return &Service{store: store, nodes: nodes, networks: networks, sets: sets}
+func NewService(store *Store, nodes Nodes, networks Networks) *Service {
+	return &Service{store: store, nodes: nodes, networks: networks}
 }
 
 var engines = map[string]noryxv1.DatastoreEngine{
@@ -136,13 +138,18 @@ func (s *Service) List(ctx context.Context, networkID string) ([]View, error) {
 	if err != nil {
 		return nil, err
 	}
+	addresses, err := s.store.overlay.Addresses(ctx)
+	if err != nil {
+		return nil, err
+	}
 	reports := map[string]*noryxv1.ListDatastoresResponse{}
 	errs := map[string]error{}
+	asked := map[string]bool{} // only this goroutine uses it, the others write the reports
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, ds := range list {
-		if _, asked := reports[ds.NodeID]; !asked {
-			reports[ds.NodeID] = nil
+		if !asked[ds.NodeID] {
+			asked[ds.NodeID] = true
 			wg.Go(func() {
 				res, err := s.ask(ctx, ds.NodeID)
 				mu.Lock()
@@ -155,6 +162,7 @@ func (s *Service) List(ctx context.Context, networkID string) ([]View, error) {
 	views := make([]View, len(list))
 	for i, ds := range list {
 		views[i] = view(ds, reports[ds.NodeID], errs[ds.NodeID])
+		views[i].Endpoints = endpoints(ds, addresses[ds.NodeID])
 		if j := slices.IndexFunc(nodes, func(n node.Node) bool { return n.ID == ds.NodeID }); j >= 0 {
 			views[i].NodeName = nodes[j].Name
 		}
@@ -170,6 +178,22 @@ func (s *Service) ask(ctx context.Context, nodeID string) (*noryxv1.ListDatastor
 		return nil, err
 	}
 	return noryxv1.NewDatastoreServiceClient(conn).ListDatastores(ctx, &noryxv1.ListDatastoresRequest{})
+}
+
+// datastorePrefix names the containers of datastores, which the agent creates, and
+// enginePort is the port of the engines in them.
+const datastorePrefix = "noryx-db-"
+
+var enginePort = map[string]uint32{"mariadb": 3306, "postgres": 5432}
+
+// endpoints returns where the servers of a datastore's network reach it: from other nodes
+// only once it has a port and its node is in the private network of the nodes.
+func endpoints(ds Datastore, address string) []Endpoint {
+	list := []Endpoint{{Host: datastorePrefix + ds.ID, Port: enginePort[ds.Engine]}}
+	if ds.Port != 0 && address != "" {
+		list = append(list, Endpoint{Host: address, Port: ds.Port, Remote: true})
+	}
+	return list
 }
 
 // view combines a datastore with what its agent reports.
@@ -339,8 +363,7 @@ func (s *Service) checkMemory(ctx context.Context, n node.Node, id string, memor
 }
 
 // Update changes the limits of a datastore, pulls its image again, moves it to a newer major
-// version or removes the data of the previous one. During an upgrade, the running servers
-// whose file sets use its databases are stopped.
+// version or removes the data of the previous one.
 func (s *Service) Update(ctx context.Context, id string, c Change) (View, error) {
 	ds, err := s.store.get(ctx, id)
 	if err != nil {
@@ -362,19 +385,12 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (View, error)
 		return View{}, err
 	}
 	ctx = context.WithoutCancel(ctx)
-	upgrade := func(ctx context.Context) error {
-		return s.agent(ctx, ds.NodeID, func(ctx context.Context, c2 noryxv1.DatastoreServiceClient) error {
-			_, err := c2.UpdateDatastore(ctx, &noryxv1.UpdateDatastoreRequest{
-				Id: ds.ID, MemoryMb: next.MemoryMB, CpuMillis: next.CPUMillis, UpdateImage: c.UpdateImage, Version: c.Version, RemovePrevious: c.RemovePrevious,
-			})
-			return err
+	err = s.agent(ctx, ds.NodeID, func(ctx context.Context, client noryxv1.DatastoreServiceClient) error {
+		_, err := client.UpdateDatastore(ctx, &noryxv1.UpdateDatastoreRequest{
+			Id: ds.ID, MemoryMb: next.MemoryMB, CpuMillis: next.CPUMillis, UpdateImage: c.UpdateImage, Version: c.Version, RemovePrevious: c.RemovePrevious,
 		})
-	}
-	if next.Version != ds.Version {
-		err = s.whileStopped(ctx, ds, nil, upgrade)
-	} else {
-		err = upgrade(ctx)
-	}
+		return err
+	})
 	if err != nil {
 		return View{}, err
 	}
@@ -466,12 +482,9 @@ func (s *Service) ensure(ctx context.Context, ds Datastore, db Database) error {
 
 // DropDatabase drops a database of the datastore with its user and forgets it.
 func (s *Service) DropDatabase(ctx context.Context, id, name string) error {
-	ds, err := s.store.get(ctx, id)
+	ds, _, err := s.database(ctx, id, name)
 	if err != nil {
 		return err
-	}
-	if !slices.ContainsFunc(ds.Databases, func(db Database) bool { return db.Name == name }) {
-		return httpapi.Errorf(http.StatusNotFound, "Database not found.")
 	}
 	if err := s.call(ctx, ds.NodeID, func(ctx context.Context, c noryxv1.DatastoreServiceClient) error {
 		_, err := c.DropDatabase(ctx, &noryxv1.DropDatabaseRequest{Id: id, Name: name})
@@ -482,115 +495,45 @@ func (s *Service) DropDatabase(ctx context.Context, id, name string) error {
 	return s.store.dropDatabase(ctx, id, name)
 }
 
-// Rotate gives the user of a database a new password, applies the file sets that use it
-// again and restarts the running servers whose files changed.
-func (s *Service) Rotate(ctx context.Context, id, name string) ([]fileset.Result, error) {
+// database returns a datastore with one of its databases.
+func (s *Service) database(ctx context.Context, id, name string) (Datastore, Database, error) {
 	ds, err := s.store.get(ctx, id)
 	if err != nil {
-		return nil, err
-	}
-	if !slices.ContainsFunc(ds.Databases, func(db Database) bool { return db.Name == name }) {
-		return nil, httpapi.Errorf(http.StatusNotFound, "Database not found.")
-	}
-	uses, err := s.sets.Uses(ctx, ds.NetworkID)
-	if err != nil {
-		return nil, err
-	}
-	ctx = context.WithoutCancel(ctx)
-	operation.Step(ctx, "password")
-	if err := s.setPassword(ctx, ds, name); err != nil {
-		return nil, err
-	}
-	operation.Step(ctx, "files")
-	results := []fileset.Result{}
-	var sets []string
-	for _, u := range uses {
-		if u.Database == ds.Name+"."+name && !slices.Contains(sets, u.SetID) {
-			sets = append(sets, u.SetID)
-			r, err := s.sets.Reapply(ctx, u.SetID)
-			if err != nil {
-				return results, fmt.Errorf("the file set %s couldn't be applied: %w", u.SetName, err)
-			}
-			results = append(results, r...)
-		}
-	}
-	return results, nil
-}
-
-// setPassword gives the user of a database a new password, one change at a time so that the
-// master keeps the one the user has, which it sets again if it can't keep the new one.
-func (s *Service) setPassword(ctx context.Context, ds Datastore, name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ds, err := s.store.get(ctx, ds.ID)
-	if err != nil {
-		return err
+		return ds, Database{}, err
 	}
 	i := slices.IndexFunc(ds.Databases, func(db Database) bool { return db.Name == name })
 	if i < 0 {
-		return httpapi.Errorf(http.StatusNotFound, "Database not found.")
+		return ds, Database{}, httpapi.Errorf(http.StatusNotFound, "Database not found.")
 	}
-	db := ds.Databases[i]
-	db.password = newPassword()
-	if err := s.ensure(ctx, ds, db); err != nil {
+	return ds, ds.Databases[i], nil
+}
+
+// Password returns the password of a database's user, which the plugins that use the
+// database need in their configuration.
+func (s *Service) Password(ctx context.Context, id, name string) (string, error) {
+	_, db, err := s.database(ctx, id, name)
+	return db.password, err
+}
+
+// Rotate gives the user of a database a new password, which the plugins that use it need
+// then. It is one change at a time so that the master keeps the password the user has, which
+// it sets again if it can't keep the new one.
+func (s *Service) Rotate(ctx context.Context, id, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ds, db, err := s.database(ctx, id, name)
+	if err != nil {
 		return err
 	}
-	if err := s.store.setPassword(ctx, ds.ID, name, db.password); err != nil {
-		return errors.Join(err, s.ensure(ctx, ds, ds.Databases[i]))
+	ctx, next := context.WithoutCancel(ctx), db
+	next.password = newPassword()
+	if err := s.ensure(ctx, ds, next); err != nil {
+		return err
+	}
+	if err := s.store.setPassword(ctx, ds.ID, name, next.password); err != nil {
+		return errors.Join(err, s.ensure(ctx, ds, db))
 	}
 	return nil
-}
-
-// whileStopped runs fn while the running servers whose file sets use the databases of a
-// datastore, or only those named, are stopped, and starts them again afterwards.
-func (s *Service) whileStopped(ctx context.Context, ds Datastore, databases []string, fn func(context.Context) error) error {
-	uses, err := s.sets.Uses(ctx, ds.NetworkID)
-	if err != nil {
-		return err
-	}
-	var stopped []fileset.Use
-	operation.Step(ctx, "stop")
-	for _, u := range uses {
-		name, db, _ := strings.Cut(u.Database, ".")
-		if name != ds.Name || databases != nil && !slices.Contains(databases, db) || !u.Running ||
-			slices.ContainsFunc(stopped, func(o fileset.Use) bool { return o.NodeID == u.NodeID && o.ServerID == u.ServerID }) {
-			continue
-		}
-		if err := s.server(ctx, u, false); err != nil {
-			return errors.Join(fmt.Errorf("%s couldn't stop: %w", u.Name, err), s.startAll(ctx, stopped))
-		}
-		stopped = append(stopped, u)
-	}
-	return errors.Join(fn(ctx), s.startAll(ctx, stopped))
-}
-
-func (s *Service) startAll(ctx context.Context, servers []fileset.Use) error {
-	if len(servers) > 0 {
-		operation.Step(ctx, "start")
-	}
-	var errs []error
-	for _, u := range servers {
-		if err := s.server(ctx, u, true); err != nil {
-			errs = append(errs, fmt.Errorf("%s couldn't start: %w", u.Name, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func (s *Service) server(ctx context.Context, u fileset.Use, start bool) error {
-	ctx, cancel := context.WithTimeout(ctx, actionTimeout)
-	defer cancel()
-	conn, err := s.nodes.Conn(ctx, u.NodeID)
-	if err != nil {
-		return err
-	}
-	c := noryxv1.NewServerServiceClient(conn)
-	if start {
-		_, err = c.StartServer(ctx, &noryxv1.StartServerRequest{Id: u.ServerID})
-	} else {
-		_, err = c.StopServer(ctx, &noryxv1.StopServerRequest{Id: u.ServerID})
-	}
-	return err
 }
 
 // call calls the agent of a node, for what answers soon.

@@ -33,6 +33,8 @@ const (
 	DatastoreService_RestoreDump_FullMethodName      = "/noryx.v1.DatastoreService/RestoreDump"
 	DatastoreService_DeleteDump_FullMethodName       = "/noryx.v1.DatastoreService/DeleteDump"
 	DatastoreService_DownloadDump_FullMethodName     = "/noryx.v1.DatastoreService/DownloadDump"
+	DatastoreService_ListTables_FullMethodName       = "/noryx.v1.DatastoreService/ListTables"
+	DatastoreService_BrowseTable_FullMethodName      = "/noryx.v1.DatastoreService/BrowseTable"
 )
 
 // DatastoreServiceClient is the client API for DatastoreService service.
@@ -71,6 +73,11 @@ type DatastoreServiceClient interface {
 	DeleteDump(ctx context.Context, in *DeleteDumpRequest, opts ...grpc.CallOption) (*DeleteDumpResponse, error)
 	// DownloadDump sends a dump in chunks; the first message carries its size.
 	DownloadDump(ctx context.Context, in *DownloadDumpRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadDumpResponse], error)
+	// ListTables returns the tables of a database of a running datastore.
+	ListTables(ctx context.Context, in *ListTablesRequest, opts ...grpc.CallOption) (*ListTablesResponse, error)
+	// BrowseTable returns rows of a table as text, with long values cut short. It only reads,
+	// with statements the agent builds itself.
+	BrowseTable(ctx context.Context, in *BrowseTableRequest, opts ...grpc.CallOption) (*BrowseTableResponse, error)
 }
 
 type datastoreServiceClient struct {
@@ -230,6 +237,26 @@ func (c *datastoreServiceClient) DownloadDump(ctx context.Context, in *DownloadD
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DatastoreService_DownloadDumpClient = grpc.ServerStreamingClient[DownloadDumpResponse]
 
+func (c *datastoreServiceClient) ListTables(ctx context.Context, in *ListTablesRequest, opts ...grpc.CallOption) (*ListTablesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTablesResponse)
+	err := c.cc.Invoke(ctx, DatastoreService_ListTables_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *datastoreServiceClient) BrowseTable(ctx context.Context, in *BrowseTableRequest, opts ...grpc.CallOption) (*BrowseTableResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BrowseTableResponse)
+	err := c.cc.Invoke(ctx, DatastoreService_BrowseTable_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DatastoreServiceServer is the server API for DatastoreService service.
 // All implementations must embed UnimplementedDatastoreServiceServer
 // for forward compatibility.
@@ -266,6 +293,11 @@ type DatastoreServiceServer interface {
 	DeleteDump(context.Context, *DeleteDumpRequest) (*DeleteDumpResponse, error)
 	// DownloadDump sends a dump in chunks; the first message carries its size.
 	DownloadDump(*DownloadDumpRequest, grpc.ServerStreamingServer[DownloadDumpResponse]) error
+	// ListTables returns the tables of a database of a running datastore.
+	ListTables(context.Context, *ListTablesRequest) (*ListTablesResponse, error)
+	// BrowseTable returns rows of a table as text, with long values cut short. It only reads,
+	// with statements the agent builds itself.
+	BrowseTable(context.Context, *BrowseTableRequest) (*BrowseTableResponse, error)
 	mustEmbedUnimplementedDatastoreServiceServer()
 }
 
@@ -317,6 +349,12 @@ func (UnimplementedDatastoreServiceServer) DeleteDump(context.Context, *DeleteDu
 }
 func (UnimplementedDatastoreServiceServer) DownloadDump(*DownloadDumpRequest, grpc.ServerStreamingServer[DownloadDumpResponse]) error {
 	return status.Error(codes.Unimplemented, "method DownloadDump not implemented")
+}
+func (UnimplementedDatastoreServiceServer) ListTables(context.Context, *ListTablesRequest) (*ListTablesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTables not implemented")
+}
+func (UnimplementedDatastoreServiceServer) BrowseTable(context.Context, *BrowseTableRequest) (*BrowseTableResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BrowseTable not implemented")
 }
 func (UnimplementedDatastoreServiceServer) mustEmbedUnimplementedDatastoreServiceServer() {}
 func (UnimplementedDatastoreServiceServer) testEmbeddedByValue()                          {}
@@ -584,6 +622,42 @@ func _DatastoreService_DownloadDump_Handler(srv interface{}, stream grpc.ServerS
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DatastoreService_DownloadDumpServer = grpc.ServerStreamingServer[DownloadDumpResponse]
 
+func _DatastoreService_ListTables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTablesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatastoreServiceServer).ListTables(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DatastoreService_ListTables_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatastoreServiceServer).ListTables(ctx, req.(*ListTablesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DatastoreService_BrowseTable_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BrowseTableRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatastoreServiceServer).BrowseTable(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DatastoreService_BrowseTable_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatastoreServiceServer).BrowseTable(ctx, req.(*BrowseTableRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DatastoreService_ServiceDesc is the grpc.ServiceDesc for DatastoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -642,6 +716,14 @@ var DatastoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteDump",
 			Handler:    _DatastoreService_DeleteDump_Handler,
+		},
+		{
+			MethodName: "ListTables",
+			Handler:    _DatastoreService_ListTables_Handler,
+		},
+		{
+			MethodName: "BrowseTable",
+			Handler:    _DatastoreService_BrowseTable_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

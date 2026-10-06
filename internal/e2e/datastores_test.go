@@ -5,24 +5,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	agentoverlay "github.com/QwikByte/noryx/internal/agent/overlay"
 	"github.com/QwikByte/noryx/internal/master/datastore"
-	"github.com/QwikByte/noryx/internal/master/fileset"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 )
 
 // A network gets a datastore on one node, which its servers there reach by name and those of
-// another node over the private network, with databases whose fields file sets fill in. The
-// API never shows the passwords.
+// another node over the private network, with databases whose passwords and tables only those
+// who manage datastores see.
 func TestDatastores(t *testing.T) {
 	m := startMaster(t)
 	a1, a2, a3 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2"), m.startAgent(t, "node-3")
@@ -78,51 +74,47 @@ func TestDatastores(t *testing.T) {
 		t.Fatalf("password %q", password)
 	}
 
-	// A file set fills in the fields of the database for each server.
-	config := "plugins/LuckPerms/config.yml"
-	in := fileset.Input{
-		Name: "LuckPerms",
-		Files: []fileset.File{{Path: config, Content: "address: {{datastore:main.luckperms.host}}:{{datastore:main.luckperms.port}}\n" +
-			"database: {{datastore:main.luckperms.database}}\nusername: {{datastore:main.luckperms.user}}\npassword: {{datastore:main.luckperms.password}}\n"}},
-		Targets: []fileset.Target{{Kind: fileset.KindNetwork, Value: n.ID, Role: fileset.RoleServers}},
+	// Those who manage datastores see the password, which lists never show, to enter it into
+	// the configuration of plugins, at the addresses where the servers reach the datastore.
+	var shown struct {
+		Password string `json:"password"`
 	}
-	var set fileset.Set
-	api.do("POST", "/api/filesets", in, http.StatusCreated, &set)
-	api.do("POST", "/api/filesets/"+set.ID+"/apply", map[string]any{"version": set.Version}, http.StatusOK, nil)
-	read := func(a agent, ref network.Ref) string {
-		data, err := os.ReadFile(filepath.Join(a.runtime.dir, ref.ServerID, filepath.FromSlash(config)))
-		check(t, err)
-		return string(data)
-	}
-	want := func(host string) string {
-		return "address: " + host + "\ndatabase: luckperms\nusername: luckperms\npassword: " + password + "\n"
-	}
-	if got := read(a1, lobby); got != want("noryx-db-"+ds.ID+":3306") {
-		t.Errorf("lobby has %q", got)
-	}
-	if got := read(a2, game); got != want("10.213.0.1:"+strconv.Itoa(int(published.Port))) {
-		t.Errorf("game has %q", got)
-	}
+	api.do("GET", dbs+"/luckperms/password", nil, http.StatusOK, &shown)
 	body := api.do("GET", base, nil, http.StatusOK, nil)
-	var listed struct {
-		Datastores []datastore.View `json:"datastores"`
-		Uses       []fileset.Use    `json:"uses"`
-	}
+	var listed []datastore.View
 	api.do("GET", base, nil, http.StatusOK, &listed)
-	if strings.Contains(body, password) || len(listed.Uses) != 2 || listed.Uses[0].Database != "main.luckperms" || len(listed.Datastores[0].Databases) != 1 {
-		t.Fatalf("listed %s", body)
+	endpoints := []datastore.Endpoint{{Host: "noryx-db-" + ds.ID, Port: 3306}, {Host: "10.213.0.1", Port: uint32(published.Port), Remote: true}}
+	if shown.Password != password || strings.Contains(body, password) || len(listed) != 1 || !slices.Equal(listed[0].Endpoints, endpoints) {
+		t.Fatalf("password %q, listed %s", shown.Password, body)
+	}
+	viewer := m.withGrants(t, map[string]any{"name": "Database viewers", "permissions": []string{"datastores.view"}})
+	viewer.do("GET", base, nil, http.StatusOK, nil)
+	viewer.do("GET", dbs+"/luckperms/password", nil, http.StatusForbidden, nil)
+	viewer.do("GET", dbs+"/luckperms/tables", nil, http.StatusForbidden, nil)
+
+	// A new password, which the plugins need then.
+	api.do("POST", dbs+"/luckperms/rotate", nil, http.StatusNoContent, nil)
+	_, rotated := a1.runtime.Content(ds.ID, "luckperms")
+	api.do("GET", dbs+"/luckperms/password", nil, http.StatusOK, &shown)
+	if rotated == password || shown.Password != rotated {
+		t.Fatalf("rotated %q, shown %q", rotated, shown.Password)
 	}
 
-	// A new password reaches the servers that use the database.
-	api.do("POST", dbs+"/luckperms/rotate", nil, http.StatusOK, nil)
-	_, rotated := a1.runtime.Content(ds.ID, "luckperms")
-	if rotated == password || !strings.Contains(read(a1, lobby), rotated) || !strings.Contains(read(a2, game), rotated) {
-		t.Fatalf("after rotating, lobby has %q", read(a1, lobby))
+	// The tables of a database and their rows.
+	check(t, a1.runtime.Write(ds.ID, "luckperms", "groups v1"))
+	var tables []datastore.Table
+	api.do("GET", dbs+"/luckperms/tables", nil, http.StatusOK, &tables)
+	var page datastore.Page
+	api.do("GET", dbs+"/luckperms/tables/content?offset=0", nil, http.StatusOK, &page)
+	if len(tables) != 1 || tables[0].Name != "content" || len(page.Columns) != 1 || len(page.Rows) != 1 || page.Rows[0][0].Text != "groups v1" || page.More {
+		t.Fatalf("tables %+v, page %+v", tables, page)
 	}
+	api.do("GET", dbs+"/luckperms/tables/missing", nil, http.StatusNotFound, nil)
+	api.do("GET", dbs+"/luckperms/tables/a%20b", nil, http.StatusBadRequest, nil)
+	api.do("GET", dbs+"/other/tables", nil, http.StatusNotFound, nil)
 
 	// Dumps by hand and by a backup job, restored and downloaded.
 	backups := "/api/datastores/" + ds.ID + "/backups"
-	check(t, a1.runtime.Write(ds.ID, "luckperms", "groups v1"))
 	var dump datastore.Dump
 	api.do("POST", backups, map[string]any{"label": "before"}, http.StatusCreated, &dump)
 	if !slices.Equal(dump.Databases, []string{"luckperms"}) || dump.Label != "before" {

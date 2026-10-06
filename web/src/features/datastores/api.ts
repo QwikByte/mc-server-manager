@@ -1,5 +1,4 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { Result as FileSetResult } from "@/features/filesets/api"
 import { type Operation, operate } from "@/features/operations/api"
 import { api } from "@/lib/api"
 
@@ -7,7 +6,7 @@ export type Engine = "mariadb" | "postgres"
 
 export type DatastoreState = "stopped" | "starting" | "running" | "unhealthy" | "unknown"
 
-/** A database of a datastore, with a user of the same name. Its password never leaves the master but to the servers. */
+/** A database of a datastore, with a user of the same name, whose password only those who manage datastores see. */
 export interface Database {
   name: string
   createdAt: string
@@ -38,22 +37,35 @@ export interface Datastore {
   /** Databases that the datastore lacks, e.g. after its data was replaced. */
   missing: string[]
   problem?: string
+  /** Where the servers of the network reach it. */
+  endpoints: Endpoint[]
 }
 
-/** A server that a file set with fields of a database is for. */
-export interface DatabaseUse {
-  nodeId: string
-  nodeName: string
-  serverId: string
-  name?: string
-  running: boolean
-  state: string
-  problem?: string
-  setId: string
-  setName: string
-  /** <datastore>.<database> */
-  database: string
+/** Where servers reach a datastore: those on its node by the name of its container, those of other nodes over the private network of the nodes. */
+export interface Endpoint {
+  host: string
+  port: number
+  remote: boolean
 }
+
+/** A table of a database; PostgreSQL's have a schema. */
+export interface Table {
+  schema?: string
+  name: string
+  /** Estimated; -1 if unknown. */
+  rows: number
+  size: number
+}
+
+/** Rows of a table as text, with long values cut short. */
+export interface Page {
+  columns: { name: string; type: string; primaryKey?: boolean }[]
+  rows: { text: string; null?: boolean; truncated?: boolean }[][]
+  more: boolean
+}
+
+/** The rows a page of a table has. */
+export const pageRows = 50
 
 export interface Dump {
   id: string
@@ -83,12 +95,6 @@ export interface DatastoreChange {
   removePrevious?: boolean
 }
 
-/** The fields of a database that file sets fill in. */
-export const fields = ["host", "port", "database", "user", "password"] as const
-
-export const placeholderOf = (datastore: string, database: string, field: (typeof fields)[number]) =>
-  `{{datastore:${datastore}.${database}.${field}}}`
-
 export const datastoresQuery = queryOptions({
   queryKey: ["datastores"],
   queryFn: () => api<Datastore[]>("/datastores"),
@@ -97,8 +103,35 @@ export const datastoresQuery = queryOptions({
 export const networkDatastoresQuery = (networkId: string) =>
   queryOptions({
     queryKey: ["datastores", "network", networkId],
-    queryFn: () => api<{ datastores: Datastore[]; uses: DatabaseUse[] }>(`/networks/${networkId}/datastores`),
+    queryFn: () => api<Datastore[]>(`/networks/${networkId}/datastores`),
     refetchInterval: 10_000,
+  })
+
+const databasePath = (id: string, database: string) => `/datastores/${id}/databases/${database}`
+
+/** The password of a database's user, which is fetched each time it is shown and never kept. */
+export const passwordQuery = (id: string, database: string) =>
+  queryOptions({
+    queryKey: ["datastores", id, "databases", database, "password"],
+    queryFn: () => api<{ password: string }>(`${databasePath(id, database)}/password`),
+    gcTime: 0,
+    staleTime: 0,
+  })
+
+export const tablesQuery = (id: string, database: string) =>
+  queryOptions({
+    queryKey: ["datastores", id, "databases", database, "tables"],
+    queryFn: () => api<Table[]>(`${databasePath(id, database)}/tables`),
+  })
+
+export const pageQuery = (id: string, database: string, table: Table, offset: number) =>
+  queryOptions({
+    queryKey: ["datastores", id, "databases", database, "tables", table.schema, table.name, offset],
+    queryFn: () =>
+      api<Page>(
+        `${databasePath(id, database)}/tables/${encodeURIComponent(table.name)}?${new URLSearchParams({ schema: table.schema ?? "", offset: String(offset) })}`,
+      ),
+    placeholderData: (previous) => previous,
   })
 
 export const dumpsQuery = (id: string) =>
@@ -133,11 +166,7 @@ export function useDatastore(id: string) {
     remove: useMutation({ mutationFn: () => api(base, { method: "DELETE" }), onSettled }),
     addDatabase: useMutation({ mutationFn: (name: string) => api<Database>(`${base}/databases`, { body: { name } }), onSettled }),
     dropDatabase: useMutation({ mutationFn: (name: string) => api(`${base}/databases/${name}`, { method: "DELETE" }), onSettled }),
-    rotate: useMutation({
-      mutationFn: ({ name, onStart }: { name: string } & Started) =>
-        operate<{ results: FileSetResult[] }>(`${base}/databases/${name}/rotate`, { method: "POST" }, onStart),
-      onSettled,
-    }),
+    rotate: useMutation({ mutationFn: (name: string) => api(`${base}/databases/${name}/rotate`, { method: "POST" }), onSettled }),
     dump: useMutation({
       mutationFn: ({ onStart, ...input }: { label: string; databases: string[] } & Started) =>
         operate<Dump>(`${base}/backups`, { body: input }, onStart),

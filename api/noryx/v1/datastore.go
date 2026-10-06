@@ -14,9 +14,9 @@ var (
 	DatabasePassword = regexp.MustCompile(`^[a-z2-7]{32}$`)
 	// DatastoreName matches the names of the datastores of a network.
 	DatastoreName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
-	// DatastoreField matches the keys of the placeholders of the databases of datastores in
-	// file sets, datastore:<datastore>.<database>.<field>.
-	DatastoreField = regexp.MustCompile(`^datastore:([a-z0-9][a-z0-9-]{0,31})\.([a-z][a-z0-9_]{0,31})\.(host|port|database|user|password)$`)
+	// TableName matches the names of the tables, schemas and columns that the agent shows,
+	// which need no escaping in SQL.
+	TableName = regexp.MustCompile(`^[A-Za-z0-9_$-]{1,64}$`)
 )
 
 // Limits of datastores, which master and agent both check.

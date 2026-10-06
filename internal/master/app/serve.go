@@ -153,7 +153,7 @@ func serve(ctx context.Context, cfg config) error {
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
 	networks, tags := network.NewService(db, nodes, plugins, overlays, datastores), tag.NewStore(db)
-	fileSets := fileset.NewService(db, nodes, networks, tags, moves, datastores)
+	fileSets := fileset.NewService(db, nodes, networks, tags, moves)
 	go fileSets.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}
@@ -176,7 +176,7 @@ func serve(ctx context.Context, cfg config) error {
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
-			Datastores: datastore.NewService(datastores, nodes, networks, fileSets),
+			Datastores: datastore.NewService(datastores, nodes, networks),
 			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),

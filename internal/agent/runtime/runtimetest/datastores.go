@@ -2,6 +2,7 @@
 package runtimetest
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -157,6 +158,30 @@ func (f *Datastores) Load(_ context.Context, id, name string, r io.Reader) error
 		db.content = string(data)
 		return nil
 	})
+}
+
+// Tables returns the one table of a database, content, whose one row is its content.
+func (f *Datastores) Tables(_ context.Context, id, name string) (tables []*noryxv1.Table, err error) {
+	return tables, f.with(id, true, func(ds *datastore) error {
+		db := ds.databases[name]
+		if db == nil {
+			return fmt.Errorf("no database %s", name)
+		}
+		tables = []*noryxv1.Table{{Name: "content", Rows: 1, Size: int64(len(db.content))}}
+		return nil
+	})
+}
+
+func (f *Datastores) Browse(ctx context.Context, id, name, _, table string, offset uint64, limit uint32) (*noryxv1.BrowseTableResponse, error) {
+	if _, err := f.Tables(ctx, id, name); err != nil || table != "content" {
+		return nil, cmp.Or(err, runtime.ErrNoTable)
+	}
+	content, _ := f.Content(id, name)
+	res := &noryxv1.BrowseTableResponse{Columns: []*noryxv1.TableColumn{{Name: "content", Type: "text"}}}
+	if offset == 0 && limit > 0 {
+		res.Rows = []*noryxv1.TableRow{{Values: []*noryxv1.TableValue{{Text: content}}}}
+	}
+	return res, nil
 }
 
 // Write sets the content of a database, as its user would.

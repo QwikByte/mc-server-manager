@@ -248,9 +248,8 @@ proxy of a network. Paths are relative to the server's folder, e.g. `plugins/Luc
   the server's name in its network, for each server; these only hold letters, digits and a few other characters, so
   they can't add lines to a file. `{{secret:<name>}}` is a secret of the set: a single line of up to 1 KiB, typed in or
   generated randomly. The API only tells the names of secrets and when they changed, never their values. Other text in
-  double braces stays as it is, as some plugins use it themselves. `{{datastore:<datastore>.<database>.<field>}}` is a
-  field of a [database](#databases) of the server's network: `host`, `port`, `database`, `user` or `password`, as the
-  server reaches it; only the agent fills in the password, like a secret.
+  double braces stays as it is, as some plugins use it themselves. The connection of a [database](#databases) is
+  typed in like any other setting, its password best as a secret.
 - **Applying.** Saving changes no server. **Apply** shows first what changes on each server, with the diff of each file
   between the server's copy and the new version, servers with the same changes together; files with secrets show the
   version the server has and the new one, with placeholders instead of values, and whether the server's copy changed. It
@@ -483,21 +482,24 @@ databases, each with a user of the same name that has rights on that database on
   leaves applies its networks again. Without the private network, servers of other nodes can't reach it, and
   the file sets that use it tell why. Moving a server to a node that can't reach the datastores of its network needs a
   confirmation.
-- **Credentials.** The master generates the password of each database: 32 characters from `a-z2-7`, which need no
-  quoting in YAML, TOML, HOCON or properties files. File sets put them into the configuration of plugins with
-  `{{datastore:<datastore>.<database>.<field>}}`, e.g. `{{datastore:main.luckperms.password}}`, filled in for each
-  server: `host` and `port` as the server reaches the datastore, `database`, `user` and `password`. The panel never shows
-  passwords; the tab lists the placeholders to copy and the servers whose file sets use each database. **New password**
-  gives a user another one, applies the file sets that use it again and restarts their running servers.
+- **Connection.** **Connection** on the tab shows what to enter into the configuration of a plugin, or of a file set:
+  the host and port for the servers on the datastore's node (`noryx-db-<id>` and 3306 or 5432), those for the servers of
+  other nodes once it is published (the node's address in the private network and the datastore's port, which it keeps),
+  and the database and its user, which share their name. The master generates the password of each database: 32
+  characters from `a-z2-7`, which need no quoting in YAML, TOML, HOCON or properties files. Only those who may manage
+  datastores see it, once they ask for it; in a file set, a [secret](#file-sets) keeps it out of sight. **New password**
+  gives a user another one, which the plugins that use the database need then.
+- **Browsing.** **Browse** looks into a database: its tables with their estimated rows and size, and their columns and
+  rows 50 at a time, in the order of the primary key, with values cut to 200 characters and binary ones in hexadecimal.
+  It only reads, also only for those who may manage datastores.
 - **Backups.** **Back up now** and backup jobs dump the databases into a ZIP archive with one `<database>.sql` each
   (`mariadb-dump --single-transaction`, `pg_dump`), kept next to the backups of servers in
   `<backups of the location>/datastores/<id>`, while the datastore keeps running. Restoring creates the databases of a
-  dump again and loads them as each database's own user, while the running servers whose file sets use them are
-  stopped. Dumps can be downloaded. Locally, `noryx-agent datastore list|backup|backups|restore` works without the master; restoring there leaves the servers running, and the panel's terminal only lists and backs up.
+  dump again and loads them as each database's own user; the plugins that use them lose their connection meanwhile, so
+  their servers are best stopped first. Dumps can be downloaded. Locally, `noryx-agent datastore list|backup|backups|restore` works without the master, and the panel's terminal only lists and backs up.
 - **Changes.** The settings change the memory and CPU limits, download the newest image of the version, or move the
   datastore to a newer major version: the agent dumps the databases, creates the datastore again on new data, loads the
-  dumps and creates the users again with the hashes of their passwords, while the servers that use the databases are
-  stopped. A failure goes back to the old version, and its data stays until it is removed on the tab. The overview
+  dumps and creates the users again with the hashes of their passwords, while the plugins can't reach the databases. A failure goes back to the old version, and its data stays until it is removed on the tab. The overview
   lists datastores that are unhealthy, or stopped while servers of their network run.
 - **Deleting** a datastore, once its name is typed, removes its container, network, data and dumps. A network with
   datastores can't be deleted.
@@ -735,9 +737,13 @@ Users get their permissions from groups; a user can be in several groups and has
   superuser, with MariaDB's sandbox mode, so a dump can't gain more rights; as MariaDB has no way to sign in as a user
   without its password, the user gets a random one for the time of the load. The agent never stores the passwords of
   users: upgrades keep the hashes, which it checks before it uses them in a statement. Dumps are kept like backups and
-  checked before a restore drops anything, so a damaged one changes nothing. The passwords are stored in the master's
-  database like the forwarding secret, never returned by the API or logged, and reach servers only as values of file
-  sets, which hide the files that hold them. A compromised master knows them, as it knows the forwarding secret, and
+  checked before a restore drops anything, so a damaged one changes nothing. Browsing reads as the superuser in a
+  session that only reads and stops each statement after 10 seconds, with statements the agent builds itself from
+  names that need no escaping: tables, schemas and columns whose names don't match `^[A-Za-z0-9_$-]{1,64}$` aren't
+  shown, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. The passwords are stored in the master's
+  database like the forwarding secret, and are never logged. The API returns them only to those who may manage
+  datastores, one at a time on request, without caching, and logs who asked; they can download all data in dumps
+  anyway. A compromised master knows them, as it knows the forwarding secret, and
   could restore or delete data, but can't learn the superuser's password or place data outside the allowed storage
   locations.
 - **Duplicates.** Copying never follows symbolic links, so a copy can't pull in files from outside the server's
@@ -846,7 +852,7 @@ internal/master/
   template/             templates for new servers
   fileset/              file sets: versions, targets, secrets, variables, the state of servers, previews and applying
   datastore/            datastores of networks: databases and their passwords, ports in the private network, the
-                        fields of file sets, dumps, upgrades and rotating passwords
+                        addresses servers reach them at, dumps, upgrades, rotating passwords and browsing tables
   schedule/             tasks that run on servers or nodes at set times: storage, scheduler, REST API
   backup/               backups of servers, and backup jobs as scheduled tasks
   policy/               policies as scheduled tasks: restarts with warnings, stops, starts, console commands
@@ -870,7 +876,8 @@ internal/agent/
   properties/           reads and updates server.properties, keeping comments
   plugin/               plugin and mod files of servers
   backup/               backups of servers: selection, archives, restoring, and the store that keeps dumps too
-  datastore/            datastores of networks: databases and users, dumps loaded as their users, the local CLI's part
+  datastore/            datastores of networks: databases and users, dumps loaded as their users, tables shown read
+                        only, the local CLI's part
   logs/                 latest log entries in memory, log service, logging of every call
   progress/             tells the master the progress of calls, e.g. downloading an image, through ProgressService
   stats/                measures what the node and its servers use: CPU, memory, network, data, players with names, TPS
