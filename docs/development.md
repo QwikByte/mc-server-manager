@@ -71,6 +71,16 @@ pre-release: it tags the newest commit of `main`. Pushing such a tag runs it too
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
+### Release notes
+
+The notes of a release are the **Release notes** sections of its pull requests, which the [pull request
+template](../.github/pull_request_template.md) asks for: one line per change that administrators notice, starting with
+`New:`, `Improved:`, `Fixed:` or `Security:`. `scripts/release-notes.sh` collects them from the pull requests merged
+since the previous release (for a pre-release, since the previous tag) and groups them by these kinds; lines without a
+kind, pull requests without the section and updates of dependencies end up under **Other changes**, and an empty section
+adds nothing. Edit a pull request's description before releasing to change its lines. To see the notes of a tag, run
+`scripts/release-notes.sh v1.2.0` with `gh` signed in. The panel shows them in **What's new** of its update notice.
+
 ### Release key
 
 Installers only accept releases signed with the Ed25519 key in `RELEASE_KEY` of `packaging/install.sh`, and the second

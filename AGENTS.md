@@ -103,7 +103,7 @@ web/                   admin panel (React, Vite, Tailwind CSS, shadcn/ui), embed
   src/locales/         translations of the panel's texts
 docs/                  user documentation
 packaging/             installer, systemd units, options and package scripts; .goreleaser.yaml builds releases
-scripts/               test environments and deploying test builds
+scripts/               test environments, deploying test builds, release notes
 ```
 
 ## Checks
@@ -142,3 +142,15 @@ The tests need Linux. [docs/development.md](docs/development.md) explains how to
 - Describe a feature in its page under [docs/](docs/), and keep [docs/security.md](docs/security.md) true. A new page
   also goes into the table of the README.
 
+## Pull requests and release notes
+
+Fill in the [pull request template](.github/pull_request_template.md). Its **Release notes** section becomes part of the
+notes of the next release, which administrators also read in the panel:
+
+- One line per change they notice, starting with `New:`, `Improved:`, `Fixed:` or `Security:`. Write what they can do
+  now or what no longer goes wrong, not how the code does it.
+- Leave the section empty for refactoring, tests, CI, documentation and fixes of something not released yet.
+- The panel renders the notes with a small Markdown renderer: use **bold**, `code` and links, but no nested lists,
+  tables or images.
+
+`scripts/release-notes.sh <tag>` prints the notes a release gets; it needs `gh` signed in.

@@ -123,6 +123,7 @@ checksum:
   extra_files:
     - glob: bin/install.sh
 
+# The release workflow writes the notes with scripts/release-notes.sh and passes them with --release-notes.
 release:
   prerelease: auto
   # The release workflow publishes the draft once it has signed checksums.txt.
@@ -130,8 +131,3 @@ release:
   replace_existing_draft: true
   extra_files:
     - glob: bin/install.sh
-
-changelog:
-  sort: asc
-  filters:
-    exclude: ["^Merge "]
