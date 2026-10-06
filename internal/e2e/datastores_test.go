@@ -72,6 +72,7 @@ func TestDatastores(t *testing.T) {
 	api.do("POST", dbs, map[string]string{"name": "luckperms"}, http.StatusCreated, nil)
 	api.do("POST", dbs, map[string]string{"name": "luckperms"}, http.StatusCreated, nil) // again is fine
 	api.do("POST", dbs, map[string]string{"name": "mysql"}, http.StatusBadRequest, nil)
+	api.do("DELETE", dbs+"/mysql", nil, http.StatusNotFound, nil)
 	_, password := a1.runtime.Content(ds.ID, "luckperms")
 	if !noryxv1.DatabasePassword.MatchString(password) {
 		t.Fatalf("password %q", password)
@@ -168,6 +169,23 @@ func TestDatastores(t *testing.T) {
 	if changed.Previous != "" || changed.MemoryMB != 1024 {
 		t.Fatalf("after removing the previous version: %+v", changed)
 	}
+
+	// A datastore of a node that joins the private network is published for the nodes of the
+	// servers once the network is applied, and no longer once the node leaves.
+	a4 := m.startAgent(t, "node-4")
+	var stats datastore.View
+	api.do("POST", base, map[string]any{"name": "stats", "nodeId": a4.node.ID, "engine": "postgres", "memoryMb": 512}, http.StatusCreated, &stats)
+	check(t, agentoverlay.Allow(a4.dir))
+	api.do("POST", "/api/nodes/"+a4.node.ID+"/overlay", map[string]string{"endpoint": "203.0.113.4:51820"}, http.StatusOK, nil)
+	api.do("POST", "/api/networks/"+n.ID+"/apply", nil, http.StatusOK, nil)
+	if c := a4.kernel.applied().Clients["db-"+stats.ID]; c.Port == 0 || c.Address.String() != "10.213.0.1" || len(c.Others) != 1 || c.Others[0].String() != "10.213.0.2" {
+		t.Fatalf("node-4 publishes stats for %+v", c)
+	}
+	api.do("DELETE", "/api/nodes/"+a4.node.ID+"/overlay", nil, http.StatusNoContent, nil)
+	if list, _ := a4.runtime.ListDatastores(t.Context()); len(list) != 1 || list[0].Port != 0 {
+		t.Fatalf("after leaving, node-4 publishes %+v", list)
+	}
+	api.do("DELETE", "/api/datastores/"+stats.ID, nil, http.StatusNoContent, nil)
 
 	// A move to a node that can't reach the datastore needs a confirmation, and the network
 	// stays while it has datastores.

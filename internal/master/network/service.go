@@ -481,8 +481,9 @@ func (s *Service) CheckLeave(ctx context.Context, nodeID string) error {
 	return nil
 }
 
-// ApplyAcross configures the networks again that have servers on the node and on other
-// nodes, e.g. as it joined or left the private network of the nodes. It tells which failed.
+// ApplyAcross configures the networks again that have servers or datastores on the node and
+// on other nodes, e.g. as it joined or left the private network of the nodes. It tells which
+// failed.
 func (s *Service) ApplyAcross(ctx context.Context, nodeID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -492,9 +493,16 @@ func (s *Service) ApplyAcross(ctx context.Context, nodeID string) error {
 	}
 	var errs []error
 	for _, n := range networks {
-		refs := append([]Ref{n.Proxy}, refs(n.Backends)...)
-		on := func(r Ref) bool { return r.NodeID == nodeID }
-		if !slices.ContainsFunc(refs, on) || !slices.ContainsFunc(refs, func(r Ref) bool { return !on(r) }) {
+		nodes := []string{n.Proxy.NodeID}
+		for _, b := range n.Backends {
+			nodes = append(nodes, b.NodeID)
+		}
+		placed, err := s.datastores.Placed(ctx, n.ID)
+		if err != nil {
+			return err
+		}
+		nodes = slices.AppendSeq(nodes, maps.Keys(placed))
+		if !slices.Contains(nodes, nodeID) || !slices.ContainsFunc(nodes, func(id string) bool { return id != nodeID }) {
 			continue
 		}
 		if err := s.apply(ctx, n, false); err != nil {

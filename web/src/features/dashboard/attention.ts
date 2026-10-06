@@ -155,7 +155,9 @@ export function problemsOf(
   for (const ds of datastores) {
     const network = networks.find((n) => n.id === ds.networkId)
     const link = { to: "/networks/$networkId/databases", params: { networkId: ds.networkId } } as const
-    const running = network?.backends.some((b) => servers.find((s) => s.nodeId === b.nodeId && s.id === b.serverId)?.state === "running")
+    const running = [network?.proxy, ...(network?.backends ?? [])].some(
+      (r) => r && servers.find((s) => s.nodeId === r.nodeId && s.id === r.serverId)?.state === "running",
+    )
     if (ds.state === "unhealthy") {
       add({
         key: `datastore/${ds.id}`,

@@ -341,37 +341,49 @@ func exists(path string) bool {
 }
 
 // recreateDatastore replaces the container of a datastore, like recreate does for servers:
-// the old one stays until the new one exists.
-func (d *Docker) recreateDatastore(ctx context.Context, spec runtime.DatastoreSpec, dir string, running bool) error {
+// the old one stays until the new one runs, and any failure brings it back as it was.
+func (d *Docker) recreateDatastore(ctx context.Context, spec runtime.DatastoreSpec, dir string, running bool) (err error) {
+	name, old := datastoreName(spec.ID), datastoreName(spec.ID)+"-old"
 	if running {
-		if _, err := d.cli.ContainerStop(ctx, datastoreName(spec.ID), client.ContainerStopOptions{Timeout: new(datastoreStop)}); err != nil {
+		if _, err := d.cli.ContainerStop(ctx, name, client.ContainerStopOptions{Timeout: new(datastoreStop)}); err != nil {
 			return err
 		}
 	}
-	name, old := datastoreName(spec.ID), datastoreName(spec.ID)+"-old"
 	if _, err := d.cli.ContainerRename(ctx, name, client.ContainerRenameOptions{NewName: old}); err != nil {
 		return err
 	}
-	if err := d.createDatastoreContainer(ctx, spec, dir); err != nil {
+	defer func() {
+		if err == nil {
+			return
+		}
+		ctx := context.WithoutCancel(ctx)
+		_, removeErr := d.cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
+		if cerrdefs.IsNotFound(removeErr) {
+			removeErr = nil
+		}
 		_, renameErr := d.cli.ContainerRename(ctx, old, client.ContainerRenameOptions{NewName: name})
 		if renameErr == nil && running {
 			_, renameErr = d.cli.ContainerStart(ctx, name, client.ContainerStartOptions{})
 		}
-		return errors.Join(err, renameErr)
+		err = errors.Join(err, removeErr, renameErr)
+	}()
+	if err := d.createDatastoreContainer(ctx, spec, dir); err != nil {
+		return err
+	}
+	if running {
+		if _, err := d.cli.ContainerStart(ctx, name, client.ContainerStartOptions{}); err != nil {
+			return err
+		}
 	}
 	if _, err := d.cli.ContainerRemove(ctx, old, client.ContainerRemoveOptions{}); err != nil {
 		return err
 	}
 	if spec.Port == 0 {
-		if err := d.removeNetwork(ctx, portNetwork(spec.ID)); err != nil {
-			return err
+		if err := d.removeNetwork(ctx, portNetwork(spec.ID)); err != nil { // unused now, only clutter
+			slog.WarnContext(ctx, "Can't remove the port network of a datastore", logging.Databases, "datastore", spec.ID, "err", err)
 		}
 	}
-	if !running {
-		return nil
-	}
-	_, err := d.cli.ContainerStart(ctx, name, client.ContainerStartOptions{})
-	return err
+	return nil
 }
 
 func (d *Docker) RemoveDatastore(ctx context.Context, id string) error {

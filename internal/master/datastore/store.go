@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -180,17 +181,43 @@ func (s *Store) Publish(ctx context.Context, networkID string, nodes []string, m
 			}
 		}
 		slices.Sort(clients)
-		req := &noryxv1.PublishDatastoreRequest{Id: ds.ID, Clients: clients}
-		if len(clients) > 0 {
-			if req.Port, err = s.port(ctx, ds); err != nil {
-				return fmt.Errorf("%s: %w", ds.Name, err)
-			}
-		}
-		if err := s.publish(ctx, ds.NodeID, req); err != nil {
+		if err := s.publishFor(ctx, ds, clients); err != nil {
 			return fmt.Errorf("%s: %w", ds.Name, err)
 		}
 	}
 	return nil
+}
+
+// tries is how many free ports publishing a datastore tries, as one may be in use by
+// something else on the node.
+const tries = 3
+
+// publishFor publishes a datastore for clients, or for none. One without a port yet gets a
+// free one of its node, which it keeps once the agent published it.
+func (s *Store) publishFor(ctx context.Context, ds Datastore, clients []string) error {
+	req := &noryxv1.PublishDatastoreRequest{Id: ds.ID, Clients: clients, Port: ds.Port}
+	if len(clients) == 0 || ds.Port != 0 {
+		if len(clients) == 0 {
+			req.Port = 0
+		}
+		return s.publish(ctx, ds.NodeID, req)
+	}
+	refused := map[uint32]bool{}
+	var err error
+	for range tries {
+		if req.Port, err = s.freePort(ctx, ds, refused); err != nil {
+			return err
+		}
+		if err = s.publish(ctx, ds.NodeID, req); err == nil {
+			_, err = s.db.ExecContext(ctx, `UPDATE datastores SET port = ? WHERE id = ?`, req.Port, ds.ID)
+			return err
+		}
+		if !strings.Contains(err.Error(), "already") { // used by a server, or by something else on the node
+			return err
+		}
+		refused[req.Port] = true
+	}
+	return err
 }
 
 func (s *Store) publish(ctx context.Context, nodeID string, req *noryxv1.PublishDatastoreRequest) error {
@@ -207,12 +234,9 @@ func (s *Store) publish(ctx context.Context, nodeID string, req *noryxv1.Publish
 // range, away from the ports of Minecraft servers and of the databases on the host itself.
 var portBase = map[string]uint32{"mariadb": 23306, "postgres": 25432}
 
-// port returns the port of a datastore, or chooses a free one of its node: from the top of
+// freePort chooses a free port of the node of a datastore, but none refused: from the top of
 // its port range, as servers take theirs from the bottom.
-func (s *Store) port(ctx context.Context, ds Datastore) (uint32, error) {
-	if ds.Port != 0 {
-		return ds.Port, nil
-	}
+func (s *Store) freePort(ctx context.Context, ds Datastore, refused map[uint32]bool) (uint32, error) {
 	n, err := s.nodes.Get(ctx, ds.NodeID)
 	if err != nil {
 		return 0, err
@@ -225,7 +249,7 @@ func (s *Store) port(ctx context.Context, ds Datastore) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	used := map[uint32]bool{}
+	used := maps.Clone(refused)
 	for _, srv := range servers.GetServers() {
 		used[srv.GetPort()], used[srv.GetBedrockPort()] = true, true
 	}
@@ -253,8 +277,7 @@ func (s *Store) port(ctx context.Context, ds Datastore) (uint32, error) {
 			return 0, httpapi.Errorf(http.StatusConflict, "%s has no free port for the datastore %s. Widen its port range.", n.Name, ds.Name)
 		}
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE datastores SET port = ? WHERE id = ?`, port, ds.ID)
-	return port, err
+	return port, nil
 }
 
 // enginePort is the port of the engines in their containers.

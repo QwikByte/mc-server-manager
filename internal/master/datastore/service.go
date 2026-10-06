@@ -464,11 +464,14 @@ func (s *Service) ensure(ctx context.Context, ds Datastore, db Database) error {
 	})
 }
 
-// DropDatabase drops a database with its user and forgets it.
+// DropDatabase drops a database of the datastore with its user and forgets it.
 func (s *Service) DropDatabase(ctx context.Context, id, name string) error {
 	ds, err := s.store.get(ctx, id)
 	if err != nil {
 		return err
+	}
+	if !slices.ContainsFunc(ds.Databases, func(db Database) bool { return db.Name == name }) {
+		return httpapi.Errorf(http.StatusNotFound, "Database not found.")
 	}
 	if err := s.call(ctx, ds.NodeID, func(ctx context.Context, c noryxv1.DatastoreServiceClient) error {
 		_, err := c.DropDatabase(ctx, &noryxv1.DropDatabaseRequest{Id: id, Name: name})
@@ -486,8 +489,7 @@ func (s *Service) Rotate(ctx context.Context, id, name string) ([]fileset.Result
 	if err != nil {
 		return nil, err
 	}
-	i := slices.IndexFunc(ds.Databases, func(db Database) bool { return db.Name == name })
-	if i < 0 {
+	if !slices.ContainsFunc(ds.Databases, func(db Database) bool { return db.Name == name }) {
 		return nil, httpapi.Errorf(http.StatusNotFound, "Database not found.")
 	}
 	uses, err := s.sets.Uses(ctx, ds.NetworkID)
@@ -496,12 +498,7 @@ func (s *Service) Rotate(ctx context.Context, id, name string) ([]fileset.Result
 	}
 	ctx = context.WithoutCancel(ctx)
 	operation.Step(ctx, "password")
-	db := ds.Databases[i]
-	db.password = newPassword()
-	if err := s.ensure(ctx, ds, db); err != nil {
-		return nil, err
-	}
-	if err := s.store.setPassword(ctx, id, name, db.password); err != nil {
+	if err := s.setPassword(ctx, ds, name); err != nil {
 		return nil, err
 	}
 	operation.Step(ctx, "files")
@@ -518,6 +515,30 @@ func (s *Service) Rotate(ctx context.Context, id, name string) ([]fileset.Result
 		}
 	}
 	return results, nil
+}
+
+// setPassword gives the user of a database a new password, one change at a time so that the
+// master keeps the one the user has, which it sets again if it can't keep the new one.
+func (s *Service) setPassword(ctx context.Context, ds Datastore, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ds, err := s.store.get(ctx, ds.ID)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(ds.Databases, func(db Database) bool { return db.Name == name })
+	if i < 0 {
+		return httpapi.Errorf(http.StatusNotFound, "Database not found.")
+	}
+	db := ds.Databases[i]
+	db.password = newPassword()
+	if err := s.ensure(ctx, ds, db); err != nil {
+		return err
+	}
+	if err := s.store.setPassword(ctx, ds.ID, name, db.password); err != nil {
+		return errors.Join(err, s.ensure(ctx, ds, ds.Databases[i]))
+	}
+	return nil
 }
 
 // whileStopped runs fn while the running servers whose file sets use the databases of a

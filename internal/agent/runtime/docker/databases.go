@@ -54,7 +54,7 @@ var dialects = map[noryxv1.DatastoreEngine]dialect{
 		databases: "SHOW DATABASES",
 		ensure: func(n, p string) string {
 			return fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%[1]s`; CREATE USER IF NOT EXISTS '%[1]s'@'%%' IDENTIFIED BY '%[2]s';"+
-				" ALTER USER '%[1]s'@'%%' IDENTIFIED BY '%[2]s'; GRANT ALL PRIVILEGES ON `%[1]s`.* TO '%[1]s'@'%%';", n, p)
+				" ALTER USER '%[1]s'@'%%' IDENTIFIED BY '%[2]s'; GRANT ALL PRIVILEGES ON `%[3]s`.* TO '%[1]s'@'%%';", n, p, grantable(n))
 		},
 		drop: func(n string) string {
 			return fmt.Sprintf("DROP DATABASE IF EXISTS `%[1]s`; DROP USER IF EXISTS '%[1]s'@'%%';", n)
@@ -66,7 +66,7 @@ var dialects = map[noryxv1.DatastoreEngine]dialect{
 		login: func(n, c string, create bool) string {
 			plugin, hash, _ := strings.Cut(c, " ")
 			if create {
-				return fmt.Sprintf("CREATE USER '%[1]s'@'%%' IDENTIFIED VIA %[2]s USING '%[3]s'; GRANT ALL PRIVILEGES ON `%[1]s`.* TO '%[1]s'@'%%';", n, plugin, hash)
+				return fmt.Sprintf("CREATE USER '%[1]s'@'%%' IDENTIFIED VIA %[2]s USING '%[3]s'; GRANT ALL PRIVILEGES ON `%[4]s`.* TO '%[1]s'@'%%';", n, plugin, hash, grantable(n))
 			}
 			return fmt.Sprintf("ALTER USER '%s'@'%%' IDENTIFIED VIA %s USING '%s';", n, plugin, hash)
 		},
@@ -86,7 +86,7 @@ var dialects = map[noryxv1.DatastoreEngine]dialect{
 	// itself, as the image allows it there.
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {
 		superuser: func(string) ([]string, []string) {
-			return []string{"psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres"}, nil
+			return slices.Concat(psql, []string{"-A", "-t", "-U", "postgres", "-d", "postgres"}), nil
 		},
 		databases: "SELECT datname FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres' ORDER BY 1",
 		// Only the user of a database may connect to it, and none to the superuser's.
@@ -108,16 +108,25 @@ var dialects = map[noryxv1.DatastoreEngine]dialect{
 			return fmt.Sprintf("ALTER ROLE %s PASSWORD '%s';", n, c)
 		},
 		recreate: func(n string) string {
-			return fmt.Sprintf("DROP DATABASE IF EXISTS %[1]s WITH (FORCE);\nCREATE DATABASE %[1]s OWNER %[1]s;\nREVOKE ALL ON DATABASE %[1]s FROM PUBLIC;", n)
+			return fmt.Sprintf("DROP DATABASE IF EXISTS %[1]s WITH (FORCE);\nCREATE DATABASE %[1]s OWNER %[1]s;\n"+
+				"REVOKE ALL ON DATABASE %[1]s FROM PUBLIC; REVOKE ALL ON DATABASE postgres FROM PUBLIC;", n)
 		},
 		dump: func(n string) []string {
 			return []string{"pg_dump", "-U", "postgres", "--no-owner", "--no-privileges", n}
 		},
 		load: func(n, _ string) ([]string, []string) {
-			return []string{"psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", n, "-d", n}, nil
+			return slices.Concat(psql, []string{"-U", n, "-d", n}), nil
 		},
 	},
 }
+
+// psql runs PostgreSQL's client so that it stops at the first error, which it tells without
+// the statement or the data it was about, as both may hold secrets.
+var psql = []string{"psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=terse", "-v", "SHOW_CONTEXT=never"}
+
+// grantable returns the name of a database in MariaDB's grants, where _ matches any character
+// unless escaped.
+func grantable(name string) string { return strings.ReplaceAll(name, "_", `\_`) }
 
 // systemDatabases are the databases of MariaDB itself.
 var systemDatabases = []string{"information_schema", "mysql", "performance_schema", "sys"}
@@ -127,8 +136,9 @@ const maxStderr = 4 << 10
 
 // exec runs a command in the container of a datastore as the image's user, with in as its
 // standard input if not nil, and copies its standard output to out if not nil. It fails
-// with what the command wrote to its standard error.
-func (d *Docker) exec(ctx context.Context, id string, cmd, env []string, in io.Reader, out io.Writer) error {
+// with what the command wrote to its standard error, without the secrets, as clients repeat
+// the statement that failed.
+func (d *Docker) exec(ctx context.Context, id string, cmd, env []string, in io.Reader, out io.Writer, secrets ...string) error {
 	res, err := d.cli.ExecCreate(ctx, datastoreName(id), client.ExecCreateOptions{
 		User: datastoreUser, Cmd: cmd, Env: env, AttachStdin: in != nil, AttachStdout: true, AttachStderr: true,
 	})
@@ -163,7 +173,13 @@ func (d *Docker) exec(ctx context.Context, id string, cmd, env []string, in io.R
 		return err
 	}
 	if inspect.ExitCode != 0 {
-		return fmt.Errorf("%s failed: %s", cmd[0], strings.TrimSpace(stderr.String()))
+		msg := stderr.String()
+		for _, secret := range secrets {
+			if secret != "" {
+				msg = strings.ReplaceAll(msg, secret, "<hidden>")
+			}
+		}
+		return fmt.Errorf("%s failed: %s", cmd[0], strings.TrimSpace(msg))
 	}
 	return nil
 }
@@ -191,8 +207,8 @@ type session struct {
 
 func (d *Docker) session(ctx context.Context, id string, names ...string) (*session, error) {
 	for _, n := range names { // the service checks them before
-		if !noryxv1.DatabaseName.MatchString(n) {
-			return nil, fmt.Errorf("%q is no valid name of a database", n)
+		if problem := noryxv1.DatabaseNameProblem(n); problem != "" {
+			return nil, fmt.Errorf("%q can't name a database: %s", n, problem)
 		}
 	}
 	spec, dir, err := d.ready(ctx, id)
@@ -203,11 +219,11 @@ func (d *Docker) session(ctx context.Context, id string, names ...string) (*sess
 	return &session{d, id, dialects[spec.Engine], strings.TrimSpace(string(password))}, err
 }
 
-// query runs SQL and returns the words it prints.
-func (s *session) query(ctx context.Context, sql string) ([]string, error) {
+// query runs SQL with secrets in it and returns the words it prints.
+func (s *session) query(ctx context.Context, sql string, secrets ...string) ([]string, error) {
 	cmd, env := s.dialect.superuser(s.password)
 	var out bytes.Buffer
-	err := s.d.exec(ctx, s.id, cmd, env, strings.NewReader(sql), &out)
+	err := s.d.exec(ctx, s.id, cmd, env, strings.NewReader(sql), &out, append(secrets, s.password)...)
 	return strings.Fields(out.String()), err
 }
 
@@ -237,7 +253,7 @@ func (d *Docker) EnsureDatabase(ctx context.Context, id, name, password string) 
 	}
 	s, err := d.session(ctx, id, name)
 	if err == nil {
-		_, err = s.query(ctx, s.dialect.ensure(name, password))
+		_, err = s.query(ctx, s.dialect.ensure(name, password), password)
 	}
 	return err
 }
@@ -256,7 +272,7 @@ func (d *Docker) Dump(ctx context.Context, id, name string, w io.Writer) error {
 		return err
 	}
 	_, env := s.dialect.superuser(s.password)
-	return d.exec(ctx, id, s.dialect.dump(name), env, nil, w)
+	return d.exec(ctx, id, s.dialect.dump(name), env, nil, w, s.password)
 }
 
 func (d *Docker) Load(ctx context.Context, id, name string, r io.Reader) (err error) {
@@ -276,16 +292,16 @@ func (d *Docker) Load(ctx context.Context, id, name string, r io.Reader) (err er
 		// The user signs in with a password, which only the master knows, so it gets another
 		// one for the time of the load.
 		password = strings.ToLower(rand.Text())
-		if _, err := s.query(ctx, s.dialect.password(name, password)); err != nil {
+		if _, err := s.query(ctx, s.dialect.password(name, password), password); err != nil {
 			return err
 		}
 		defer func() {
-			_, restoreErr := s.query(context.WithoutCancel(ctx), s.dialect.login(name, cred, false))
+			_, restoreErr := s.query(context.WithoutCancel(ctx), s.dialect.login(name, cred, false), cred)
 			err = errors.Join(err, restoreErr)
 		}()
 	}
 	cmd, env := s.dialect.load(name, password)
-	return d.exec(ctx, id, cmd, env, r, nil)
+	return d.exec(ctx, id, cmd, env, r, nil, password)
 }
 
 var _ runtime.Datastores = (*Docker)(nil)

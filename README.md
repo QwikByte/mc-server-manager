@@ -465,7 +465,8 @@ databases, each with a user of the same name that has rights on that database on
   `noryx-db-<id>`, which has no route to the internet, while they run, and keep it when their container is created
   again; they reach it by the name of its container. Servers of other nodes reach it over the
   [private network of the nodes](#networks) if both nodes are part of it: the datastore's node publishes its port there,
-  for the nodes of the network's servers only. Without the private network, servers of other nodes can't reach it, and
+  for the nodes of the network's servers only, once the network is applied, e.g. after a node joined; a node that
+  leaves applies its networks again. Without the private network, servers of other nodes can't reach it, and
   the file sets that use it tell why. Moving a server to a node that can't reach the datastores of its network needs a
   confirmation.
 - **Credentials.** The master generates the password of each database: 32 characters from `a-z2-7`, which need no
@@ -478,7 +479,7 @@ databases, each with a user of the same name that has rights on that database on
   (`mariadb-dump --single-transaction`, `pg_dump`), kept next to the backups of servers in
   `<backups of the location>/datastores/<id>`, while the datastore keeps running. Restoring creates the databases of a
   dump again and loads them as each database's own user, while the running servers whose file sets use them are
-  stopped. Dumps can be downloaded. Locally, `noryx-agent datastore list|backup|backups|restore` works without the master.
+  stopped. Dumps can be downloaded. Locally, `noryx-agent datastore list|backup|backups|restore` works without the master; restoring there leaves the servers running, and the panel's terminal only lists and backs up.
 - **Changes.** The settings change the memory and CPU limits, download the newest image of the version, or move the
   datastore to a newer major version: the agent dumps the databases, creates the datastore again on new data, loads the
   dumps and creates the users again with the hashes of their passwords, while the servers that use the databases are

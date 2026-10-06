@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 // upgradeFolder holds the dumps of an upgrade, in the folder of the datastore.
@@ -70,9 +72,15 @@ func (d *Docker) upgrade(ctx context.Context, c container.InspectResponse, curre
 		return errors.Join(err, os.RemoveAll(data))
 	}
 	defer func() {
-		if err != nil {
-			err = errors.Join(err, d.recreateDatastore(context.WithoutCancel(ctx), current, dir, true), os.RemoveAll(data))
+		if err == nil {
+			return
 		}
+		// The new data goes only once the old version runs again.
+		if back := d.recreateDatastore(context.WithoutCancel(ctx), current, dir, true); back != nil {
+			err = errors.Join(err, fmt.Errorf("back to %s: %w", current.Version, back))
+			return
+		}
+		err = errors.Join(err, os.RemoveAll(data))
 	}()
 	if err := d.waitReady(ctx, spec.ID); err != nil {
 		return err
@@ -84,15 +92,17 @@ func (d *Docker) upgrade(ctx context.Context, c container.InspectResponse, curre
 		return err
 	}
 	for _, name := range names {
-		if _, err := s.query(ctx, s.dialect.login(name, credentials[name], true)); err != nil {
+		if _, err := s.query(ctx, s.dialect.login(name, credentials[name], true), credentials[name]); err != nil {
 			return err
 		}
 		if err := d.loadFile(ctx, spec.ID, name, filepath.Join(work, name+".sql")); err != nil {
 			return fmt.Errorf("load %s: %w", name, err)
 		}
 	}
-	if current.Previous != "" {
-		return os.RemoveAll(filepath.Join(dir, dataFolder(current.Previous)))
+	if current.Previous != "" { // the upgrade worked, so this can't undo it
+		if err := os.RemoveAll(filepath.Join(dir, dataFolder(current.Previous))); err != nil {
+			slog.WarnContext(ctx, "Can't remove the data of an older version", logging.Databases, "datastore", spec.ID, "version", current.Previous, "err", err)
+		}
 	}
 	return nil
 }

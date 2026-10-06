@@ -256,8 +256,8 @@ func (s *Service) EnsureDatabase(ctx context.Context, req *noryxv1.EnsureDatabas
 }
 
 func (s *Service) DropDatabase(ctx context.Context, req *noryxv1.DropDatabaseRequest) (*noryxv1.DropDatabaseResponse, error) {
-	if !noryxv1.DatabaseName.MatchString(req.GetName()) {
-		return nil, status.Error(codes.InvalidArgument, "invalid database name")
+	if problem := noryxv1.DatabaseNameProblem(req.GetName()); problem != "" { // also the engine's own
+		return nil, status.Error(codes.InvalidArgument, problem)
 	}
 	ds, release, err := s.lock(ctx, req.GetId())
 	if err != nil {

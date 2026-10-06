@@ -75,6 +75,11 @@ func TestCreateChecks(t *testing.T) {
 	if _, err := s.EnsureDatabase(t.Context(), &noryxv1.EnsureDatabaseRequest{Id: id, Name: "shop", Password: "short"}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("weak password: %v", err)
 	}
+	for _, name := range []string{"mysql", "sys", "postgres", "template1"} {
+		if _, err := s.DropDatabase(t.Context(), &noryxv1.DropDatabaseRequest{Id: id, Name: name}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("dropped %s: %v", name, err)
+		}
+	}
 }
 
 func TestDumpAndRestore(t *testing.T) {

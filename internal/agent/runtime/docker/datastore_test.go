@@ -97,6 +97,23 @@ func liveDatastore(t *testing.T, d *Docker, engine noryxv1.DatastoreEngine) {
 	if err := d.EnsureDatabase(ctx, spec.ID, "shop; DROP", password); err == nil {
 		t.Error("ensured a database with an invalid name")
 	}
+	if err := d.DropDatabase(ctx, spec.ID, "mysql"); err == nil {
+		t.Error("dropped a database of the engine")
+	}
+	// A user has rights on its own database only, also with _ in its name, which MariaDB's
+	// grants read as any character.
+	must(t, d.EnsureDatabase(ctx, spec.ID, "a_b", password))
+	must(t, d.EnsureDatabase(ctx, spec.ID, "axb", password))
+	if _, err := as(t, d, spec.ID, "a_b", "axb", password, "CREATE TABLE stolen (v INT);"); err == nil {
+		t.Error("a_b created a table in axb")
+	}
+	must(t, d.DropDatabase(ctx, spec.ID, "a_b"))
+	must(t, d.DropDatabase(ctx, spec.ID, "axb"))
+	// Errors hold no secrets, as clients repeat what failed.
+	err := d.exec(ctx, spec.ID, []string{"sh", "-c", "echo the password is s3cr3t >&2; exit 1"}, nil, nil, nil, "s3cr3t")
+	if err == nil || strings.Contains(err.Error(), "s3cr3t") || !strings.Contains(err.Error(), "<hidden>") {
+		t.Errorf("error = %v", err)
+	}
 
 	var dump bytes.Buffer
 	must(t, d.Dump(ctx, spec.ID, "shop", &dump))
@@ -118,6 +135,13 @@ func liveDatastore(t *testing.T, d *Docker, engine noryxv1.DatastoreEngine) {
 		t.Errorf("after the upgrade, the sum is %q", got)
 	}
 	reaches(t, d, server, spec.ID)
+	if engine == noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES {
+		s, err := d.session(ctx, spec.ID)
+		must(t, err)
+		if got, err := s.query(ctx, "SELECT has_database_privilege('shop', 'postgres', 'CONNECT')"); err != nil || !slices.Equal(got, []string{"f"}) {
+			t.Errorf("after the upgrade, shop may connect to postgres: %v, %v", got, err)
+		}
+	}
 
 	spec.Previous = ""
 	must(t, d.UpdateDatastore(ctx, spec, false))
@@ -140,17 +164,25 @@ func (d *Docker) mustDir(t *testing.T, spec runtime.DatastoreSpec) string {
 // asUser runs SQL as the user of the database shop over TCP, so with its password, and
 // returns what it prints.
 func asUser(t *testing.T, d *Docker, id, password, sql string) string {
+	t.Helper()
+	out, err := as(t, d, id, "shop", "shop", password, sql)
+	must(t, err)
+	return out
+}
+
+// as runs SQL as a user on a database over TCP, so with its password.
+func as(t *testing.T, d *Docker, id, user, database, password, sql string) (string, error) {
 	c, spec, err := d.inspectDatastore(t.Context(), id)
 	must(t, err)
-	cmd, env := []string{"mariadb", "-N", "-B", "-h127.0.0.1", "-ushop", "shop"}, []string{"MYSQL_PWD=" + password}
+	cmd, env := []string{"mariadb", "-N", "-B", "-h127.0.0.1", "-u" + user, database}, []string{"MYSQL_PWD=" + password}
 	if spec.Engine == noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES {
 		// The image trusts connections from the container itself, but not from its address.
 		ip := c.NetworkSettings.Networks[datastoreName(id)].IPAddress.String()
-		cmd, env = []string{"psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-h", ip, "-U", "shop", "-d", "shop"}, []string{"PGPASSWORD=" + password}
+		cmd, env = []string{"psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-h", ip, "-U", user, "-d", database}, []string{"PGPASSWORD=" + password}
 	}
 	var out bytes.Buffer
-	must(t, d.exec(t.Context(), id, cmd, env, strings.NewReader(sql), &out))
-	return strings.TrimSpace(out.String())
+	err = d.exec(t.Context(), id, cmd, env, strings.NewReader(sql), &out)
+	return strings.TrimSpace(out.String()), err
 }
 
 // joinedContainer creates a container in the shared network that joins the internal network

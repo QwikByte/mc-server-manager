@@ -14,7 +14,10 @@ import (
 // grants lack, or nil.
 type check func(ctx context.Context, g access.Grants, args []string) error
 
-var errUnchecked = errors.New("this command can't be run in the panel")
+var (
+	errUnchecked        = errors.New("this command can't be run in the panel")
+	errDatastoreRestore = errors.New("restore datastores on the Databases tab of their network, which stops the servers that use them first")
+)
 
 // need is the result of a check for permission p.
 func need(p access.Permission, ok bool) error {
@@ -80,7 +83,9 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 		"datastore list":    global(access.DatastoresView),
 		"datastore backups": global(access.DatastoresView),
 		"datastore backup":  global(access.DatastoresManage),
-		"datastore restore": global(access.DatastoresManage),
+		// Only the panel's Databases tab restores, as it stops the servers that use the databases
+		// first and gives their users their passwords; the local CLI is for emergencies.
+		"datastore restore": func(context.Context, access.Grants, []string) error { return errDatastoreRestore },
 		"status":            node(access.ServersView),
 		"server list":       node(access.ServersView),
 		"server start":      change(access.ServersStart),
