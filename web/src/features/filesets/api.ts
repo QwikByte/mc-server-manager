@@ -115,9 +115,6 @@ export interface Result extends ServerStatus {
   restarted?: boolean
 }
 
-/** The placeholders the master fills in for each server. */
-export const variables = ["server.name", "server.id", "server.port", "network.server"] as const
-
 export const fileSetsQuery = queryOptions({
   queryKey: ["filesets"],
   queryFn: () => api<Summary[]>("/filesets"),

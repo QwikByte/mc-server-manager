@@ -235,28 +235,33 @@ A file set keeps text files that many servers share in one place, e.g. the confi
 anti-cheat plugins, and puts them on the servers of tags and networks: those with a tag, or the game servers or the
 proxy of a network. Paths are relative to the server's folder, e.g. `plugins/LuckPerms/config.yml`.
 
-- **Files.** The **File sets** page edits the files of a set in the browser, imports them from a server as the file
-  manager shows them, and keeps the newest 20 versions with who saved them; the history shows what each version
-  changed and loads an older one into the editor to save it as the newest. A save based on an older version than the
-  newest is refused, so that it can't undo what someone else saved. A set has up to 100 text files (UTF-8 without NUL
-  bytes) of up to 1 MiB, 3 MiB in all. A file can be written only to servers that don't have it, for files that plugins
-  rewrite. Files that Noryx writes itself (`server.properties`, `eula.txt`, `velocity.toml`, BungeeCord's `config.yml`,
-  `spigot.yml`, `config/paper-global.yml`, the lists of players, `noryx-*` files), those with secrets of the server and
-  `.jar`, `.zip` and `.class` files can't be part of a set; plugins come from the **Plugins** page, with their hashes
-  checked. On a server, a path comes from one set only.
+- **Files.** The page of a set is one workspace: its files as folders next to the editor, with an **Insert** menu for
+  variables and secrets, and beside them the set's targets, secrets and details. A bar above tells what the set needs,
+  e.g. servers that are outdated or secrets without a value, and offers to apply it. **Import** browses the folders of
+  a server and takes chosen files or whole folders at the same paths, as the file manager shows them, skipping binary
+  files and those larger than 1 MiB; a new file's folder can be chosen on a server too. A set keeps the newest 20
+  versions with who saved them; the history shows what each version changed and loads an older one into the editor to
+  save it as the newest. A save based on an older version than the newest is refused, so that it can't undo what
+  someone else saved. A set has up to 100 text files (UTF-8 without NUL bytes) of up to 1 MiB, 3 MiB in all. A file
+  can be written only to servers that don't have it, for files that plugins rewrite. Files that Noryx writes itself
+  (`server.properties`, `eula.txt`, `velocity.toml`, BungeeCord's `config.yml`, `spigot.yml`,
+  `config/paper-global.yml`, the lists of players, `noryx-*` files), those with secrets of the server and `.jar`,
+  `.zip` and `.class` files can't be part of a set; plugins come from the **Plugins** page, with their hashes checked.
+  On a server, a path comes from one set only.
 - **Placeholders.** The master fills in `{{server.name}}`, `{{server.id}}`, `{{server.port}}` and `{{network.server}}`,
   the server's name in its network, for each server; these only hold letters, digits and a few other characters, so
   they can't add lines to a file. `{{secret:<name>}}` is a secret of the set: a single line of up to 1 KiB, typed in or
   generated randomly. The API only tells the names of secrets and when they changed, never their values. Other text in
   double braces stays as it is, as some plugins use it themselves. The connection of a [database](#databases) is
   typed in like any other setting, its password best as a secret.
-- **Applying.** Saving changes no server. **Apply** shows first what changes on each server, with the diff of each file
-  between the server's copy and the new version, servers with the same changes together; files with secrets show the
-  version the server has and the new one, with placeholders instead of values, and whether the server's copy changed. It
-  names the servers that get the secrets for the first time. Applying writes the files atomically as the server's user,
-  removes those the set no longer has unless they changed on the server, at most 8 servers of a node at a time, and
-  leaves moving servers alone. It can then restart the running servers whose files changed, the game servers of a
-  network a few at a time like a rolling restart, as most plugins only read their configuration when they start.
+- **Applying.** Saving changes no server; **Save and apply** saves and goes on to apply. **Apply** shows first what
+  changes on each server, with the diff of each file between the server's copy and the new version, servers with the
+  same changes together; files with secrets show the version the server has and the new one, with placeholders instead
+  of values, and whether the server's copy changed. It names the servers that get the secrets for the first time.
+  Applying writes the files atomically as the server's user, removes those the set no longer has unless they changed
+  on the server, at most 8 servers of a node at a time, and leaves moving servers alone. It can then restart the
+  running servers whose files changed, the game servers of a network a few at a time like a rolling restart, as most
+  plugins only read their configuration when they start.
 - **State.** The page of a set tells for each server whether it has the newest files, an older version or other
   values of its variables or secrets (outdated), files that changed on it since, none yet, whether it is no longer a
   target but still has files of the set, or whether its node can't be reached. The file manager marks the files that
@@ -301,8 +306,9 @@ pack is deleted again. Creating servers from modpacks needs the permission to ma
 Backups are ZIP archives that the agent keeps on the server's node, in the `backups` folder of a storage location
 (`<data-dir>/backups` by default). What a backup contains is chosen per backup or job: worlds (every folder with a
 `level.dat`, also those added later), plugins or mods with their settings, configuration (the files in the server's
-folder except jars and logs, and `config/`), everything, or further files and folders. A running game server writes
-its worlds to disk first and pauses saving while they are archived, so players stay connected.
+folder except jars and logs, and `config/`), everything, or further files and folders, chosen in a browser of the
+server's folders (of one of a job's servers) or typed in. A running game server writes its worlds to disk first and
+pauses saving while they are archived, so players stay connected.
 
 - **By hand.** The **Backups** tab of a server backs it up now, e.g. before an update, and lists, downloads, restores
   and deletes its backups.

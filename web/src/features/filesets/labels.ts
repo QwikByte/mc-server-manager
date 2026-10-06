@@ -35,3 +35,11 @@ export function targetLabel(target: Target, networks: Network[] | undefined) {
 }
 
 export const targetKey = (target: Target) => `${target.kind}:${target.value}:${target.role ?? ""}`
+
+/** The variables the master fills in for each server, with what they are. */
+export const variables = [
+  ["{{server.name}}", msg("The server's name")],
+  ["{{server.id}}", msg("Its ID")],
+  ["{{server.port}}", msg("Its port")],
+  ["{{network.server}}", msg("Its name in its network, e.g. lobby")],
+] as const

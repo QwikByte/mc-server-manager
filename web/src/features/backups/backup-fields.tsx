@@ -1,10 +1,14 @@
+import { FolderOpenIcon, XIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { useState } from "react"
 import { Trans } from "react-i18next"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
+import type { ServerFiles } from "@/features/files/api"
+import { PickDialog } from "@/features/files/path-picker"
 import { msg } from "@/lib/i18n"
 import { pathsError, type Selection } from "./api"
 
@@ -15,10 +19,8 @@ const choices: [key: keyof Omit<Selection, "paths">, label: string, description:
   ["config", msg("Configuration"), msg("server.properties, whitelist and other settings, without jars and logs.")],
 ]
 
-/** Chooses what of a server is backed up. */
-export function SelectionField({ value, onChange }: { value: Selection; onChange: (selection: Selection) => void }) {
-  const [paths, setPaths] = useState(value.paths.join("\n"))
-  const error = pathsError(value.paths)
+/** Chooses what of a server, or of the servers of a job, is backed up. */
+export function SelectionField({ value, server, onChange }: { value: Selection; server?: ServerFiles; onChange: (selection: Selection) => void }) {
   return (
     <>
       <FieldSet>
@@ -45,30 +47,80 @@ export function SelectionField({ value, onChange }: { value: Selection; onChange
           })}
         </div>
       </FieldSet>
-      {!value.everything && (
-        <Field data-invalid={!!error}>
-          <FieldLabel htmlFor="selection-paths">{t("More files and folders")}</FieldLabel>
-          <Textarea
-            id="selection-paths"
-            rows={3}
-            className="font-mono"
-            // i18next-instrument-ignore-next-line: an example of what to enter
-            placeholder={"plugins/LuckPerms\nbanned-players.json"}
-            value={paths}
-            aria-invalid={!!error}
-            onChange={(e) => {
-              setPaths(e.target.value)
-              onChange({ ...value, paths: e.target.value.split("\n").flatMap((p) => p.trim() || []) })
-            }}
-          />
-          {error ? (
-            <FieldError>{error}</FieldError>
-          ) : (
-            <FieldDescription>{t("One path per line, inside the server's folder. Paths a server doesn't have are skipped.")}</FieldDescription>
-          )}
-        </Field>
-      )}
+      {!value.everything && <PathsField paths={value.paths} server={server} onChange={(paths) => onChange({ ...value, paths })} />}
     </>
+  )
+}
+
+// An example in an empty field, which needs no translation.
+const examplePath = "plugins/LuckPerms"
+
+/** Further files and folders to back up: picked on a server, or typed for those other servers have. */
+function PathsField({ paths, server, onChange }: { paths: string[]; server?: ServerFiles; onChange: (paths: string[]) => void }) {
+  const [browsing, setBrowsing] = useState(false)
+  const [typed, setTyped] = useState("")
+  const error = pathsError(paths)
+  const add = (more: string[]) => onChange([...new Set([...paths, ...more])])
+  const addTyped = () => {
+    if (typed.trim()) add([typed.trim().replace(/^\/+|\/+$/g, "")])
+    setTyped("")
+  }
+  return (
+    <Field data-invalid={!!error}>
+      <FieldLabel htmlFor="selection-path">{t("More files and folders")}</FieldLabel>
+      {paths.length > 0 && (
+        <ul aria-label={t("More files and folders")} className="flex flex-wrap gap-1.5">
+          {paths.map((p) => (
+            <li key={p} className="flex items-center gap-1 rounded-md bg-muted py-0.5 pr-0.5 pl-2 font-mono text-xs">
+              {p}
+              <button
+                type="button"
+                aria-label={t("Remove {{name}}", { name: p })}
+                onClick={() => onChange(paths.filter((other) => other !== p))}
+                className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
+              >
+                <XIcon className="size-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => setBrowsing(true)}>
+          <FolderOpenIcon />
+          {t("Browse…")}
+        </Button>
+        <Input
+          id="selection-path"
+          className="h-8 max-w-64 font-mono text-xs"
+          placeholder={examplePath}
+          aria-invalid={!!error}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          onBlur={addTyped}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return
+            e.preventDefault()
+            addTyped()
+          }}
+        />
+      </div>
+      {error ? (
+        <FieldError>{error}</FieldError>
+      ) : (
+        <FieldDescription>{t("Choose them on a server, or type a path. Paths a server doesn't have are skipped.")}</FieldDescription>
+      )}
+      {browsing && (
+        <PickDialog
+          title={t("Files and folders to back up")}
+          description={!server && t("Browse one of the servers; the others are backed up with the same paths.")}
+          server={server}
+          action={t("Add")}
+          onClose={() => setBrowsing(false)}
+          onPick={(_, picked) => add(picked.map((p) => p.path))}
+        />
+      )}
+    </Field>
   )
 }
 
