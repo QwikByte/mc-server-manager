@@ -23,7 +23,7 @@ const icons: Record<StepState, { icon: typeof CircleIcon; className: string; lab
 }
 
 /** How far the current step is: a bar that fills, or runs while that is unknown. */
-export function Bar({ op, className }: { op: Operation; className?: string }) {
+function Bar({ op, className }: { op: Operation; className?: string }) {
   const share = shareOf(op)
   return (
     <div

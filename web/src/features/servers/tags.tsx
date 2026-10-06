@@ -23,7 +23,7 @@ function hue(tag: string) {
 }
 
 /** A tag as a small label with its colour; with onRemove, it has a button to remove it. */
-export function TagChip({ tag, detail, onRemove, className }: { tag: string; detail?: string; onRemove?: () => void; className?: string }) {
+function TagChip({ tag, detail, onRemove, className }: { tag: string; detail?: string; onRemove?: () => void; className?: string }) {
   return (
     <span
       className={cn(

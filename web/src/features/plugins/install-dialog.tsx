@@ -183,7 +183,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
 }
 
 /** What was installed on each server, with the pre-releases installed where no release suits it. Servers load new plugins when they restart. */
-export function Results({ results, servers, versions }: { results: InstallResult[]; servers: NodeServer[]; versions?: Record<string, string> }) {
+function Results({ results, servers, versions }: { results: InstallResult[]; servers: NodeServer[]; versions?: Record<string, string> }) {
   const preReleases = results.some((r) => r.installed.some((f) => fallback(f, versions)))
   return (
     <div className="grid gap-3">
