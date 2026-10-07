@@ -22,7 +22,7 @@ func TestRequireTellsVersion(t *testing.T) {
 	if _, err := svc.CreateUser(ctx, "admin", "a-long-enough-password"); err != nil {
 		t.Fatal(err)
 	}
-	_, token, err := svc.Login(ctx, "admin", "a-long-enough-password", "", time.Hour)
+	_, token, err := svc.Login(ctx, "admin", "a-long-enough-password", "", time.Hour, Client{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -61,6 +61,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/mfa", perUser(h.enableMFA))
 	mux.HandleFunc("DELETE /api/auth/mfa", perUser(h.disableMFA))
 	mux.HandleFunc("POST /api/auth/mfa/recovery-codes", perUser(h.newRecoveryCodes))
+	// Ending sessions needs no password, as it only takes rights away.
+	mux.HandleFunc("GET /api/auth/sessions", h.sessions)
+	mux.HandleFunc("DELETE /api/auth/sessions", h.endOtherSessions)
+	mux.HandleFunc("DELETE /api/auth/sessions/{id}", h.endSession)
 }
 
 // RegisterPublic adds the routes that work without a session: signing in and setting a
@@ -109,7 +113,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ttl := h.sessionTTL()
-	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, req.Code, ttl)
+	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, req.Code, ttl, clientOf(r))
 	switch {
 	case errors.Is(err, ErrCodeRequired):
 		httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"mfaRequired": true})
@@ -155,7 +159,7 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ttl := h.sessionTTL()
-	user, token, err := h.svc.Setup(r.Context(), req.Token, req.Password, ttl)
+	user, token, err := h.svc.Setup(r.Context(), req.Token, req.Password, ttl, clientOf(r))
 	if errors.Is(err, errInvalidSetup) {
 		slog.Warn("Set password with setup link failed", logging.Auth, "ip", ClientIP(r), "err", err)
 	}
@@ -240,6 +244,25 @@ type recoveryCodes struct {
 	Codes []string `json:"recoveryCodes"`
 }
 
+// sessions lists where the signed-in user is signed in.
+func (h *Handler) sessions(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	sessions, err := h.svc.Sessions(r.Context(), user.ID, sessionToken(r))
+	reply(w, r, "", sessions, err)
+}
+
+// endSession ends a session of the signed-in user, e.g. in a lost browser.
+func (h *Handler) endSession(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	reply(w, r, "Sign out other session", nil, h.svc.EndSession(r.Context(), user.ID, r.PathValue("id")))
+}
+
+// endOtherSessions ends all sessions of the signed-in user but the one of the request.
+func (h *Handler) endOtherSessions(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	reply(w, r, "Sign out everywhere else", nil, h.svc.EndOtherSessions(r.Context(), user.ID, sessionToken(r)))
+}
+
 // readPassword reads a request that confirms a change with the user's password.
 func readPassword(w http.ResponseWriter, r *http.Request) (string, bool) {
 	var req struct {
@@ -320,7 +343,7 @@ func (h *Handler) Require(next http.Handler) http.Handler {
 			httpapi.WriteError(w, r, httpapi.Errorf(http.StatusUnauthorized, "Sign in to continue."))
 			return
 		}
-		user, err := h.svc.Authenticate(r.Context(), c.Value)
+		user, err := h.svc.Authenticate(r.Context(), c.Value, clientOf(r))
 		if errors.Is(err, ErrNoSession) {
 			err = httpapi.Errorf(http.StatusUnauthorized, "Your session has expired. Sign in again.")
 		}

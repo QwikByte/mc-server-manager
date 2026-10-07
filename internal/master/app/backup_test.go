@@ -53,7 +53,7 @@ func TestBackupMaster(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db2.Close()
-	if _, _, err := auth.NewService(db2).Login(t.Context(), "admin", "correct horse battery", "", time.Hour); err != nil {
+	if _, _, err := auth.NewService(db2).Login(t.Context(), "admin", "correct horse battery", "", time.Hour, auth.Client{}); err != nil {
 		t.Errorf("sign in after restoring: %v", err)
 	}
 	ca2, err := pki.LoadOrCreateCA(filepath.Join(restored.dataDir, "pki"))

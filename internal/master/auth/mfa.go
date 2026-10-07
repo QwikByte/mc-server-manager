@@ -98,7 +98,7 @@ func (s *Service) EnableMFA(ctx context.Context, id int64, password, code, keep 
 			codes, err = replaceRecoveryCodes(ctx, tx, id)
 		}
 		if err == nil {
-			_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`, id, hashToken(keep))
+			_, err = tx.ExecContext(ctx, endOtherSessions, id, hashToken(keep))
 		}
 		return err
 	})

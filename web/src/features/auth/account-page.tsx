@@ -2,11 +2,15 @@ import {
   ArrowsInLineVerticalIcon,
   CheckIcon,
   ClockIcon,
+  DesktopIcon,
+  DeviceMobileIcon,
+  DeviceTabletIcon,
   type Icon,
   KeyIcon,
   PaletteIcon,
   ShieldCheckIcon,
   ShieldIcon,
+  SignOutIcon,
   SwatchesIcon,
   TranslateIcon,
   UserCircleIcon,
@@ -17,6 +21,7 @@ import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
 import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
@@ -27,9 +32,21 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSettings } from "@/features/preferences/api"
+import { formatAgo, formatDateTime } from "@/lib/format"
 import { type Clock, clock, languageName, languages, msg, timeWith } from "@/lib/i18n"
 import { type Accent, accents, type Density, type Theme, useLook } from "@/lib/theme"
-import { meQuery, mfaQuery, useDisableMfa, useEnableMfa, useNewRecoveryCodes, useSetLanguage, type User } from "./api"
+import {
+  meQuery,
+  mfaQuery,
+  type Session,
+  sessionsQuery,
+  useDisableMfa,
+  useEnableMfa,
+  useEndSessions,
+  useNewRecoveryCodes,
+  useSetLanguage,
+  type User,
+} from "./api"
 import { ConfirmPasswordDialog, MfaSetupDialog, RecoveryCodesDialog } from "./mfa-dialogs"
 import { PasswordDialog } from "./password-dialog"
 
@@ -53,6 +70,9 @@ export function AccountPage() {
         </FormSection>
         <FormSection title={t("Two-factor authentication")}>
           <MfaSettings username={user.username} />
+        </FormSection>
+        <FormSection title={t("Sessions")}>
+          <Sessions />
         </FormSection>
         <FormSection title={t("Panel")}>
           <PanelSettings user={user} />
@@ -268,6 +288,81 @@ function MfaSettings({ username }: { username: string }) {
       <RecoveryCodesDialog codes={codes} onClose={() => setCodes(undefined)} />
     </>
   )
+}
+
+/** Where the user is signed in, each with a way to sign out there, e.g. in a lost or shared browser. */
+function Sessions() {
+  const { data, isPending, error } = useQuery(sessionsQuery)
+  const end = useEndSessions()
+  if (isPending) return <Skeleton className="h-20 rounded-xl" />
+  if (error) return <ErrorCallout error={error} />
+
+  const signOut = (id?: string) =>
+    end.mutate(id, {
+      onSuccess: () => toast.success(id ? t("Signed out there") : t("Signed out everywhere else")),
+      onError: (e) => toast.error(e.message),
+    })
+  return (
+    <>
+      {data.map((session) => (
+        <AccountRow
+          key={session.id}
+          icon={deviceIcon(session.os)}
+          tone={session.current ? "success" : "neutral"}
+          title={describeBrowser(session)}
+          status={session.current ? { tone: "success", label: msg("This browser") } : undefined}
+          actions={
+            !session.current && (
+              <Button variant="outline" disabled={end.isPending && end.variables === session.id} onClick={() => signOut(session.id)}>
+                {t("Sign out")}
+              </Button>
+            )
+          }
+        >
+          {session.ip && (
+            <>
+              <span className="font-mono">{session.ip}</span> ·{" "}
+            </>
+          )}
+          {[
+            session.current
+              ? t("Active now")
+              : session.lastUsedAt && t("Last active {{time}}", { time: formatAgo(session.lastUsedAt) }),
+            session.createdAt ? t("Signed in {{time}}", { time: formatDateTime(session.createdAt) }) : t("Sign-in time not recorded"),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </AccountRow>
+      ))}
+      {data.length > 1 && (
+        <ConfirmDialog
+          trigger={
+            <Button variant="outline" className="justify-self-start">
+              <SignOutIcon /> {t("Sign out everywhere else")}
+            </Button>
+          }
+          title={t("Sign out everywhere else?")}
+          description={t("Your other sessions end, e.g. in a lost or shared browser. This browser stays signed in.")}
+          action={t("Sign out everywhere else")}
+          destructive
+          onConfirm={() => signOut()}
+        />
+      )}
+    </>
+  )
+}
+
+/** The browser and operating system of a session, as far as the master recognised them. */
+function describeBrowser({ browser, os }: Session) {
+  if (browser && os) return t("{{browser}} on {{os}}", { browser, os })
+  if (os) return t("Browser on {{os}}", { os })
+  return browser || t("Unknown browser")
+}
+
+function deviceIcon(os?: string) {
+  if (os === "iOS" || os === "Android") return DeviceMobileIcon
+  if (os === "iPadOS") return DeviceTabletIcon
+  return DesktopIcon
 }
 
 /** A way of signing in, with what it is and the actions that change it. */

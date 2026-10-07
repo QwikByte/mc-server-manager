@@ -47,7 +47,7 @@ panel.example.com {
 
 Then add `--trusted-proxy 127.0.0.1` to `NORYX_MASTER_OPTS` in `/etc/noryx/master.env`, so that the master takes the
 address of each client from the proxy's `X-Forwarded-For` header. Otherwise all clients share the proxy's address, and
-with it the budget of the sign-in rate limit, and the log shows only the proxy's address.
+with it the budget of the sign-in rate limit, and the log and the sessions of users show only the proxy's address.
 
 ## Nodes
 

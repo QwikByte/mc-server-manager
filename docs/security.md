@@ -34,7 +34,11 @@ Argon2id password hashes, session tokens stored as SHA-256 hashes, `__Host-` coo
 `SameSite=Strict`), cross-origin request protection, a strict Content Security Policy and self-hosted fonts. Sign-in
 attempts are rate limited per client address (IPv6 per /64 network) and per username, changes that need the password per
 user. A username has a larger budget than a client, so that a single client can't keep a user out. Client addresses come
-from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`. The CSV
+from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`, also those
+that sessions show. The panel names a session by a random ID of its own, never by its token or the token's hash, and
+users only see and end their own sessions, which needs no password, as it only takes rights away. A session notes the
+address, browser and time of its last use at most once a minute; the browser and operating system are only names from
+fixed lists that the master recognises in the User-Agent, which are shown but never trusted. The CSV
 files of servers and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
 reasons as the export of the log does. Notes of servers are plain text, which the panel shows as text only.
 

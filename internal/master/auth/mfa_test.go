@@ -49,16 +49,16 @@ func TestMFA(t *testing.T) {
 		t.Fatal(err)
 	}
 	login := func(code string) error {
-		_, _, err := svc.Login(ctx, "alice", password, code, time.Hour)
+		_, _, err := svc.Login(ctx, "alice", password, code, time.Hour, Client{})
 		return err
 	}
 
 	// Two-factor authentication is off until a code of the app confirms the setup.
-	_, other, err := svc.Login(ctx, "alice", password, "", time.Hour)
+	_, other, err := svc.Login(ctx, "alice", password, "", time.Hour, Client{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, keep, err := svc.Login(ctx, "alice", password, "", time.Hour)
+	_, keep, err := svc.Login(ctx, "alice", password, "", time.Hour, Client{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,10 +84,10 @@ func TestMFA(t *testing.T) {
 	if err != nil || len(codes) != recoveryCodeCount {
 		t.Fatalf("EnableMFA = %v, %v", codes, err)
 	}
-	if _, err := svc.Authenticate(ctx, other); !errors.Is(err, ErrNoSession) {
+	if _, err := svc.Authenticate(ctx, other, Client{}); !errors.Is(err, ErrNoSession) {
 		t.Fatalf("session without a code still valid: %v", err)
 	}
-	if _, err := svc.Authenticate(ctx, keep); err != nil {
+	if _, err := svc.Authenticate(ctx, keep, Client{}); err != nil {
 		t.Fatalf("current session ended: %v", err)
 	}
 	if _, err := svc.SetUpMFA(ctx, user); !errors.Is(err, errMFAOn) {
@@ -98,7 +98,7 @@ func TestMFA(t *testing.T) {
 	if err := login(""); !errors.Is(err, ErrCodeRequired) {
 		t.Fatalf("no code: %v", err)
 	}
-	if _, _, err := svc.Login(ctx, "alice", "wrong-password", "", time.Hour); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "alice", "wrong-password", "", time.Hour, Client{}); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("wrong password: %v", err)
 	}
 	if err := login(totp(key, step)); !errors.Is(err, errWrongCode) {
@@ -150,7 +150,7 @@ func TestMFA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, session, err := svc.Setup(ctx, link.Token, password, time.Hour); err != nil || session != "" {
+	if _, session, err := svc.Setup(ctx, link.Token, password, time.Hour, Client{}); err != nil || session != "" {
 		t.Fatalf("Setup = %q, %v", session, err)
 	}
 
