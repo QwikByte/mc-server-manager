@@ -191,6 +191,9 @@ func TestEnrollAndControlNode(t *testing.T) {
 	if renewed.Equal(enrolled) || !presented.Equal(renewed) || !stored.Leaf.Equal(renewed) {
 		t.Fatal("the renewed certificate is not in use")
 	}
+	if n, err := m.nodes.Get(ctx, a.node.ID); err != nil || n.CertificateExpiresAt == nil || !n.CertificateExpiresAt.Equal(renewed.NotAfter) {
+		t.Fatalf("stored expiry = %v, %v, want %v", n.CertificateExpiresAt, err, renewed.NotAfter)
+	}
 
 	// A certificate for a key the agent did not create is rejected.
 	nodeClient := noryxv1.NewNodeServiceClient(conn)

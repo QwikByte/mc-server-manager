@@ -12,8 +12,9 @@ like the **Nodes** page: servers that run, not those that start or crash, and th
 online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
 
 A node's certificate is renewed a month before it expires while the node is online; one that stays offline until then
-has to be connected again with a new join token. The master remembers the expiry of an offline node's certificate as
-long as it runs; after a restart it learns it again once the node is online.
+has to be connected again with a new join token. The master stores when a node's certificate expires as it issues or
+renews it and when the node presents a newer one, so it warns about an offline node also after the master restarted.
+Of a node that was offline when the master was updated to store it, it learns it once the node is online again.
 
 The Overview is made of widgets: key figures, what needs attention, the nodes with their CPU of the last 24 hours, the
 load of all nodes over the last 24 hours, pinned servers, networks, the servers with the most players, the latest

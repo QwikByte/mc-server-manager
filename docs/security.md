@@ -13,7 +13,10 @@ change their address without re-enrolling.
 Master and node certificates are valid for 90 days and renewed automatically once a third of their lifetime is left. For
 a node, the agent creates the new key and only sends a signing request; it installs the signed certificate after
 checking it, without a restart. The panel can renew a node on demand. A node that stays offline until its certificate
-expires has to be enrolled again with a new join token.
+expires has to be enrolled again with a new join token. So that the panel warns about such a node in time, also after
+the master restarted, the master stores when each node's certificate expires: from the certificates it issues and those
+a node presents when it connects, which the CA signed for that node, and only when it is later than the stored expiry.
+A compromised node can't make its certificate seem to expire sooner or later than the latest one issued.
 
 ## Enrollment
 

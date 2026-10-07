@@ -13,6 +13,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	agentenroll "github.com/QwikByte/noryx/internal/agent/enroll"
+	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/pki"
 )
 
@@ -51,6 +52,15 @@ func TestNodeErrors(t *testing.T) {
 	api.do("GET", path, nil, http.StatusOK, &offline)
 	if offline.Status != "offline" || offline.CertificateExpiresAt == nil || !offline.CertificateExpiresAt.Equal(*online.CertificateExpiresAt) {
 		t.Fatalf("offline node = %+v, online it was %+v", offline, online)
+	}
+
+	// So does a master that restarted while the node is offline.
+	m.nodes = node.NewService(m.db, m.ca, m.cert, m.settings)
+	t.Cleanup(m.nodes.Close)
+	var restarted nodeView
+	apiClient{t: t, url: m.panel(t).URL}.do("GET", path, nil, http.StatusOK, &restarted)
+	if restarted.Status != "offline" || restarted.CertificateExpiresAt == nil || !restarted.CertificateExpiresAt.Equal(*online.CertificateExpiresAt) {
+		t.Fatalf("offline node after a restart = %+v, online it was %+v", restarted, online)
 	}
 }
 

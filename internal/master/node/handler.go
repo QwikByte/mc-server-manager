@@ -74,9 +74,8 @@ func (h *Handler) Register(mux access.Mux) {
 
 type view struct {
 	Node
-	Status               string     `json:"status"` // pending, online or offline
-	Info                 *info      `json:"info,omitempty"`
-	CertificateExpiresAt *time.Time `json:"certificateExpiresAt,omitempty"`
+	Status string `json:"status"` // pending, online or offline
+	Info   *info  `json:"info,omitempty"`
 	// Warning tells what didn't follow a change, e.g. the networks of a changed address.
 	Warning string `json:"warning,omitempty"`
 }
@@ -120,7 +119,9 @@ func (h *Handler) probeFor(ctx context.Context, n Node) view {
 	return v
 }
 
-// probe asks the agent for its machine info, which also tells whether it is reachable.
+// probe asks the agent for its machine info, which also tells whether it is reachable. The
+// expiry of its certificate is the stored one, as an offline node has to be enrolled again
+// once its certificate expired.
 func (h *Handler) probe(ctx context.Context, n Node) view {
 	v := view{Node: n, Status: "pending"}
 	if n.EnrolledAt == nil {
@@ -130,11 +131,6 @@ func (h *Handler) probe(ctx context.Context, n Node) view {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	res, _, err := h.svc.Status(ctx, n.ID)
-	// An offline node has to be enrolled again once its certificate expires, so its expiry
-	// stays known.
-	if expiry, ok := h.svc.CertificateExpiry(n.ID); ok {
-		v.CertificateExpiresAt = &expiry
-	}
 	if err != nil {
 		return v
 	}
