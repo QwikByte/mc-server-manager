@@ -20,6 +20,8 @@ func TestPlainRemovesFormatting(t *testing.T) {
 		"§6There are §c2§6 of a max of §A20§r players":    "There are 2 of a max of 20 players",
 		"plain line":   "plain line",
 		"caf\xe9 \xff": "caf� �",
+		// Other sequences, e.g. that write the clipboard or the title, lose their control characters.
+		"\x1b]52;c;aGk=\a\x1b]0;title\a text\x1bc\tend\nnext": "]52;c;aGk=]0;title textc\tend\nnext",
 	} {
 		if got := plain(in); got != want {
 			t.Errorf("plain(%q) = %q, want %q", in, got, want)

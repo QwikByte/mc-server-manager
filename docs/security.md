@@ -214,7 +214,9 @@ server's `server.properties` and connects to the server's console port inside Do
 leaves the node.
 
 Servers and their plugins write the output, so the panel shows it only as text: the agent turns its colours into
-Minecraft's colour codes, which the panel only maps to class names of a fixed set, never to markup.
+Minecraft's colour codes, which the panel only maps to class names of a fixed set, never to markup. The plain output,
+which the CLI and the terminal show, has no control characters but line breaks and tabs, so that a server can't control
+the terminal it is shown in.
 
 ## Private network
 

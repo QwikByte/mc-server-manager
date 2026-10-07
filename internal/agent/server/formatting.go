@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // formatting matches the escape sequences of terminals, with the parameters and final byte of
@@ -11,10 +12,17 @@ import (
 // (§x§r§r§g§g§b§b) or a single code (§a, §l, ...).
 var formatting = regexp.MustCompile(`\x1b\[([0-9;?]*)[ -/]*([@-~])|§[xX]((?:§[0-9a-fA-F]){6})|§([0-9a-fk-orxA-FK-ORX])|\r`)
 
-// plain removes colours and formatting so that console output reads as plain text, and
-// replaces invalid UTF-8, which gRPC can't send in a string.
+// plain removes colours and formatting so that console output reads as plain text, drops the
+// other control characters but line breaks and tabs, so that a server can't control the
+// terminal of the local CLI, and replaces invalid UTF-8, which gRPC can't send in a string,
+// as strings.Map does.
 func plain(text string) string {
-	return strings.ToValidUTF8(formatting.ReplaceAllString(text, ""), "�")
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return -1
+		}
+		return r
+	}, formatting.ReplaceAllString(text, ""))
 }
 
 // formatted turns the colours and formatting of console output into Minecraft's codes, as
