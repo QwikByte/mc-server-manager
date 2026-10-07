@@ -24,6 +24,9 @@ service FileService {
   rpc MoveFile(MoveFileRequest) returns (MoveFileResponse);
   // DeleteFile deletes a file, or a directory with everything in it.
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  // HashFiles tells the SHA-512 hashes of files, e.g. so that the master learns which files
+  // of a modpack changed since it wrote them. Agents of older versions answer UNIMPLEMENTED.
+  rpc HashFiles(HashFilesRequest) returns (HashFilesResponse);
 }
 
 message FileInfo {
@@ -140,3 +143,16 @@ message DeleteFileRequest {
 }
 
 message DeleteFileResponse {}
+
+message HashFilesRequest {
+  string server_id = 1;
+  // Up to MaxHashPaths paths.
+  repeated string paths = 2;
+}
+
+message HashFilesResponse {
+  // The hex SHA-512 hash of each regular file by its path in the request. A path that is
+  // something else, a file with secrets or one larger than MaxHashedSize maps to "".
+  // Missing files are left out.
+  map<string, string> sha512 = 1;
+}

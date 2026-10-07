@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha512"
+	"encoding/hex"
 	"io"
 	"maps"
 	"os"
@@ -140,6 +142,41 @@ func TestMoveIntoItself(t *testing.T) {
 	}
 	if _, err := svc.MoveFile(t.Context(), &noryxv1.MoveFileRequest{ServerId: id, From: "plugins/sub", To: "sub"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Only regular files without secrets are hashed, and paths stay in the server's folder.
+func TestHashFiles(t *testing.T) {
+	rt := dataRuntime{dir: t.TempDir()}
+	svc, id := NewService(rt), runtime.NewID()
+	data := filepath.Join(rt.dir, id)
+	for name, content := range map[string]string{
+		"mods/a.jar": "a", "server.properties": "rcon.password=secret\n", ".rcon-cli.env": "password=secret\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(data, name)), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(data, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("a.jar", filepath.Join(data, "mods", "link.jar")); err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{"mods/a.jar", "mods/link.jar", "mods", "server.properties", ".rcon-cli.env", "mods/gone.jar"}
+	res, err := svc.HashFiles(t.Context(), &noryxv1.HashFilesRequest{ServerId: id, Paths: paths})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha512.Sum512([]byte("a"))
+	want := map[string]string{"mods/a.jar": hex.EncodeToString(sum[:]), "mods/link.jar": "", "mods": "", "server.properties": "", ".rcon-cli.env": ""}
+	if !maps.Equal(res.GetSha512(), want) {
+		t.Fatalf("hashes = %v", res.GetSha512())
+	}
+	for _, paths := range [][]string{{"../other/a.jar"}, make([]string, noryxv1.MaxHashPaths+1)} {
+		if _, err := svc.HashFiles(t.Context(), &noryxv1.HashFilesRequest{ServerId: id, Paths: paths}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("hash %d paths, the first %q: %v", len(paths), paths[0], err)
+		}
 	}
 }
 
