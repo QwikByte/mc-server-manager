@@ -32,6 +32,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/overlay"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 )
 
@@ -159,8 +160,8 @@ type Mods interface {
 // Overlay is the private network of the nodes, over which a proxy reaches the servers of
 // another node if both nodes are members.
 type Overlay interface {
-	// Addresses returns the addresses of the members in it, by node.
-	Addresses(ctx context.Context) (map[string]string, error)
+	// ByNode returns its members, by node.
+	ByNode(ctx context.Context) (map[string]overlay.Member, error)
 }
 
 // Datastores are the MariaDB and PostgreSQL servers of networks, which their servers reach.
@@ -169,15 +170,15 @@ type Datastores interface {
 	Placed(ctx context.Context, networkID string) (map[string][]string, error)
 	// Publish publishes the datastores of a network in the private network of the nodes for
 	// those of nodes that reach them over it, and for no others.
-	Publish(ctx context.Context, networkID string, nodes []string, members map[string]string) error
+	Publish(ctx context.Context, networkID string, nodes []string, members map[string]overlay.Member) error
 }
 
-// members are the addresses of the nodes in the private network, by node.
-type members map[string]string
+// members are the nodes in the private network, by node.
+type members map[string]overlay.Member
 
 // private reports whether a proxy on node a reaches the servers of node b over the private
 // network: their ports are only published there, and only for it.
-func (m members) private(a, b string) bool { return a != b && m[a] != "" && m[b] != "" }
+func (m members) private(a, b string) bool { return a != b && m[a].Address != "" && m[b].Address != "" }
 
 type Service struct {
 	db         *sql.DB
@@ -516,9 +517,9 @@ func (s *Service) ApplyAcross(ctx context.Context, nodeID string) error {
 	return nil
 }
 
-// members returns the addresses of the nodes in the private network, by node.
+// members returns the nodes in the private network, by node.
 func (s *Service) members(ctx context.Context) (members, error) {
-	return s.overlay.Addresses(ctx)
+	return s.overlay.ByNode(ctx)
 }
 
 // Configure configures all servers of a network again, e.g. as a datastore joined it.
@@ -756,7 +757,8 @@ func (s *Service) configureServers(ctx context.Context, n Network, m members, re
 }
 
 // request returns the configuration of a server of the network. A backend that its proxy
-// reaches over the private network publishes its port there, only for the proxy's node.
+// reaches over the private network publishes its port there, only for the proxy's node with
+// its current key.
 func (n *Network) request(ref Ref, m members) *noryxv1.ConfigureNetworkRequest {
 	req := &noryxv1.ConfigureNetworkRequest{Id: ref.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_MODERN, ForwardingSecret: n.secret}
 	if n.Forwarding == Legacy {
@@ -765,7 +767,7 @@ func (n *Network) request(ref Ref, m members) *noryxv1.ConfigureNetworkRequest {
 	req.ProxyOnNode = ref != n.Proxy && ref.NodeID == n.Proxy.NodeID
 	req.BedrockPlayers = ref != n.Proxy && n.BedrockPort != 0
 	if ref != n.Proxy && m.private(n.Proxy.NodeID, ref.NodeID) {
-		req.OverlayClient = m[n.Proxy.NodeID]
+		req.OverlayClient, req.OverlayClientKey = m[n.Proxy.NodeID].Address, m[n.Proxy.NodeID].PublicKey
 	}
 	req.Datastores = n.placed[ref.NodeID]
 	return req
@@ -819,7 +821,7 @@ func (s *Service) target(ctx context.Context, proxy Ref, b Backend, m members) (
 	if err != nil {
 		return nil, err
 	}
-	host := m[b.NodeID]
+	host := m[b.NodeID].Address
 	if !m.private(proxy.NodeID, b.NodeID) {
 		n, err := s.nodes.Get(ctx, b.NodeID)
 		if err != nil {

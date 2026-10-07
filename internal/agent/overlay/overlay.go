@@ -158,9 +158,11 @@ func (s *Service) LeaveOverlay(context.Context, *noryxv1.LeaveOverlayRequest) (*
 }
 
 // Admit lets clients, the addresses in the network of the nodes of a server's proxy or of the
-// servers that use a datastore, reach the port it publishes in the network, as the only ones.
+// servers that use a datastore, reach the port it publishes in the network, as the only ones,
+// as long as their peers have the keys they have now. The master sends these keys, in the
+// order of clients, to make sure that they are the nodes it means; older masters send none.
 // It returns the node's address in the network, at which the port is published.
-func (s *Service) Admit(id string, port uint32, clients ...string) (string, error) {
+func (s *Service) Admit(id string, port uint32, clients, keys []string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, err := s.state()
@@ -170,11 +172,18 @@ func (s *Service) Admit(id string, port uint32, clients ...string) (string, erro
 	if st == nil || len(clients) == 0 || port == 0 || port > 65535 {
 		return "", errors.New("this node is no member of the private network")
 	}
-	addrs := make([]netip.Addr, len(clients))
+	if len(keys) != 0 && len(keys) != len(clients) {
+		return "", errors.New("the master sent the keys of other clients")
+	}
+	addrs, bound := make([]netip.Addr, len(clients)), make([]string, len(clients))
 	for i, client := range clients {
 		addr, _ := netip.ParseAddr(client)
-		if !st.isPeer(addr) || slices.Contains(addrs[:i], addr) {
+		bound[i] = st.key(addr)
+		switch {
+		case bound[i] == "" || slices.Contains(addrs[:i], addr):
 			return "", fmt.Errorf("%s is no node of the private network of this node", client)
+		case len(keys) != 0 && keys[i] != bound[i]:
+			return "", fmt.Errorf("the key of %s in the private network of this node isn't the one the master sent: the master hasn't configured this node since it changed", client)
 		}
 		addrs[i] = addr
 	}
@@ -184,7 +193,7 @@ func (s *Service) Admit(id string, port uint32, clients ...string) (string, erro
 	}
 	previous := *st
 	// A port belongs to one server or datastore; one that had it before is gone.
-	updated := map[string]Client{id: newClient(uint16(port), addrs)} //nolint:gosec // checked
+	updated := map[string]Client{id: newClient(uint16(port), addrs, bound)} //nolint:gosec // checked
 	for other, c := range st.Clients {
 		if other != id && c.Port != uint16(port) { //nolint:gosec // checked
 			updated[other] = c
@@ -257,7 +266,11 @@ func readState(dir string) (*State, error) {
 		return nil, err
 	}
 	var st State
-	return &st, json.Unmarshal(data, &st)
+	if err := json.Unmarshal(data, &st); err != nil {
+		return nil, err
+	}
+	st.bindClients()
+	return &st, nil
 }
 
 // key returns the node's private key, which it creates the first time. It never leaves the node.

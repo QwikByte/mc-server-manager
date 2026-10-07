@@ -52,7 +52,7 @@ type Runtime interface {
 
 // Overlay publishes the ports of datastores in the private network of the nodes.
 type Overlay interface {
-	Admit(id string, port uint32, clients ...string) (string, error)
+	Admit(id string, port uint32, clients, keys []string) (string, error)
 	Dismiss(id string) error
 }
 
@@ -187,7 +187,7 @@ func (s *Service) PublishDatastore(ctx context.Context, req *noryxv1.PublishData
 		if err := s.free(ctx, ds.ID, port); err != nil {
 			return nil, err
 		}
-		addr, err := s.overlay.Admit(overlayPrefix+ds.ID, port, req.GetClients()...)
+		addr, err := s.overlay.Admit(overlayPrefix+ds.ID, port, req.GetClients(), req.GetClientKeys())
 		if err != nil {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}

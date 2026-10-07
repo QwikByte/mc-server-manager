@@ -91,10 +91,10 @@ func TestExposed(t *testing.T) {
 		moved := n
 		moved.Backends = slices.Clone(n.Backends)
 		moved.moved(move, "n1", "n2")
-		if !moved.exposed(nil) || !moved.exposed(members{"n1": "10.213.0.1"}) {
+		if !moved.exposed(nil) || !moved.exposed(members{"n1": {Address: "10.213.0.1"}}) {
 			t.Errorf("moving %s didn't expose the server", move)
 		}
-		if moved.exposed(members{"n1": "10.213.0.1", "n2": "10.213.0.2"}) {
+		if moved.exposed(members{"n1": {Address: "10.213.0.1"}, "n2": {Address: "10.213.0.2"}}) {
 			t.Errorf("moving %s exposed the server in the private network", move)
 		}
 		if moved.Firewalled = true; moved.exposed(nil) {
@@ -107,21 +107,21 @@ func TestExposed(t *testing.T) {
 }
 
 // A backend that its proxy reaches over the private network publishes its port there for the
-// proxy's node; one on the proxy's node, or outside the network, doesn't.
+// proxy's node with its key; one on the proxy's node, or outside the network, doesn't.
 func TestRequest(t *testing.T) {
 	n := Network{Proxy: Ref{"n1", "proxy"}, Forwarding: Modern, secret: "s3cret"}
-	m := members{"n1": "10.213.0.1", "n2": "10.213.0.2"}
+	m := members{"n1": {Address: "10.213.0.1", PublicKey: "key-1"}, "n2": {Address: "10.213.0.2", PublicKey: "key-2"}}
 	for _, tc := range []struct {
-		ref  Ref
-		want string
+		ref       Ref
+		want, key string
 	}{
-		{Ref{"n2", "survival"}, "10.213.0.1"},
-		{Ref{"n3", "skyblock"}, ""},
-		{Ref{"n1", "lobby"}, ""},
-		{n.Proxy, ""},
+		{Ref{"n2", "survival"}, "10.213.0.1", "key-1"},
+		{Ref{"n3", "skyblock"}, "", ""},
+		{Ref{"n1", "lobby"}, "", ""},
+		{n.Proxy, "", ""},
 	} {
-		if got := n.request(tc.ref, m).GetOverlayClient(); got != tc.want {
-			t.Errorf("%s: overlay client %q, want %q", tc.ref.ServerID, got, tc.want)
+		if req := n.request(tc.ref, m); req.GetOverlayClient() != tc.want || req.GetOverlayClientKey() != tc.key {
+			t.Errorf("%s: overlay client %q with key %q, want %q with %q", tc.ref.ServerID, req.GetOverlayClient(), req.GetOverlayClientKey(), tc.want, tc.key)
 		}
 	}
 }

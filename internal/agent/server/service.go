@@ -104,9 +104,10 @@ type Backups interface {
 
 // Overlay publishes the ports of backends in the private network of the nodes.
 type Overlay interface {
-	// Admit lets client, the address in the network of the node of a server's proxy, reach
-	// the server's port there, and returns the node's address in the network.
-	Admit(id string, port uint32, clients ...string) (string, error)
+	// Admit lets clients, the address in the network of the node of a server's proxy, reach
+	// the server's port there as long as its peer has its key, the one the master sent or
+	// else the one it has now, and returns the node's address in the network.
+	Admit(id string, port uint32, clients, keys []string) (string, error)
 	// Dismiss closes the port of a server in the network.
 	Dismiss(id string) error
 }
@@ -476,7 +477,7 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNe
 		return nil, err
 	}
 	defer release()
-	if network.Overlay, err = s.publish(ctx, req.GetId(), req.GetOverlayClient()); err != nil {
+	if network.Overlay, err = s.publish(ctx, req.GetId(), req.GetOverlayClient(), req.GetOverlayClientKey()); err != nil {
 		return nil, err
 	}
 	restarted, err := s.rt.Configure(ctx, req.GetId(), network)
@@ -514,9 +515,10 @@ func (s *Service) checkBedrock(ctx context.Context, id string, port uint32) (rel
 }
 
 // networkOf validates a network configuration, which ends up in configuration files.
-// publish lets the client of a backend reach its port in the private network of the nodes,
-// and returns the node's address there; without a client, it closes the port there.
-func (s *Service) publish(ctx context.Context, id, client string) (string, error) {
+// publish lets the client of a backend, the peer with key if one is given, reach its port in
+// the private network of the nodes, and returns the node's address there; without a client,
+// it closes the port there.
+func (s *Service) publish(ctx context.Context, id, client, key string) (string, error) {
 	if client == "" {
 		return "", toStatus(s.overlay.Dismiss(id))
 	}
@@ -527,7 +529,11 @@ func (s *Service) publish(ctx context.Context, id, client string) (string, error
 	if srv.Type.Proxy() {
 		return "", status.Error(codes.InvalidArgument, "Players reach a proxy at all of the node's addresses.")
 	}
-	addr, err := s.overlay.Admit(id, srv.Port, client)
+	var keys []string
+	if key != "" {
+		keys = []string{key}
+	}
+	addr, err := s.overlay.Admit(id, srv.Port, []string{client}, keys)
 	if status.Code(err) == codes.Unknown {
 		err = status.Error(codes.FailedPrecondition, err.Error())
 	}

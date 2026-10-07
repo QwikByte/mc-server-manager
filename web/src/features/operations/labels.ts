@@ -50,6 +50,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn off maintenance of {{name}}", { name: subject })
     case "overlay.leave":
       return t("Remove {{name}} from the private network", { name: subject })
+    case "overlay.rotate":
+      return t("Rotate the key of {{name}}", { name: subject })
     case "players.kick":
       return t("Kick {{name}}", { name: subject })
     case "players.ban":
@@ -160,6 +162,8 @@ export function stepOf(op: Operation, step: string): string {
       return op.kind === "network.maintenance-off" ? t("Turn maintenance off") : t("Turn maintenance on")
     case "overlay":
       return t("Leave the private network")
+    case "key":
+      return t("Create a new key and give it to the other nodes")
     case "networks":
       return t("Configure the networks again")
     case "files":

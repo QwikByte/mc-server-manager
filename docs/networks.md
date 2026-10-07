@@ -137,8 +137,12 @@ WireGuard (it is part of Linux since 5.6; RHEL 9 has it only as an unsupported T
 master configures the members every 5 minutes, so those that were offline catch up, and right away after a change, e.g.
 when a node is removed or its address changes. Each node's page shows its address, endpoint, key and peers with their
 latest handshake and traffic, and rotates its key; the overview names members that had no handshake with another one for
-5 minutes, e.g. as the UDP port is closed. The kernel keeps the interface `noryx0` while the agent restarts or updates,
-and `noryx-overlay.service` restores it at boot, before Docker starts the servers.
+5 minutes, e.g. as the UDP port is closed. The ports a node publishes there only let in the keys that the other nodes
+had when the network was applied, so that a node that later gets the address of a removed one reaches nothing: rotating
+a key therefore applies the networks with servers on the node and on other nodes again. Apply them again yourself if one
+of their nodes was offline meanwhile, or if a node's key changed otherwise, e.g. as it lost its data. The kernel keeps
+the interface `noryx0` while the agent restarts or updates, and `noryx-overlay.service` restores it at boot, before
+Docker starts the servers.
 
 ## Legacy forwarding
 

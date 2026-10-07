@@ -1675,9 +1675,13 @@ type ConfigureNetworkRequest struct {
 	OverlayClient string `protobuf:"bytes,10,opt,name=overlay_client,json=overlayClient,proto3" json:"overlay_client,omitempty"`
 	// Datastores of the server's network on this node, which it reaches by the name of their
 	// container, e.g. noryx-db-<id>.
-	Datastores    []string `protobuf:"bytes,11,rep,name=datastores,proto3" json:"datastores,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Datastores []string `protobuf:"bytes,11,rep,name=datastores,proto3" json:"datastores,omitempty"`
+	// The public key of the proxy's node in the private network. The node publishes the port
+	// only for its peer at overlay_client with this key, and closes it once that address has
+	// another key. Older masters send none: then the key the peer has now.
+	OverlayClientKey string `protobuf:"bytes,12,opt,name=overlay_client_key,json=overlayClientKey,proto3" json:"overlay_client_key,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ConfigureNetworkRequest) Reset() {
@@ -1785,6 +1789,13 @@ func (x *ConfigureNetworkRequest) GetDatastores() []string {
 		return x.Datastores
 	}
 	return nil
+}
+
+func (x *ConfigureNetworkRequest) GetOverlayClientKey() string {
+	if x != nil {
+		return x.OverlayClientKey
+	}
+	return ""
 }
 
 type NetworkBackend struct {
@@ -2343,7 +2354,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"K\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
 	"\x06output\x18\x01 \x01(\tR\x06output\x12\x1c\n" +
-	"\tformatted\x18\x02 \x01(\tR\tformatted\"\xc4\x03\n" +
+	"\tformatted\x18\x02 \x01(\tR\tformatted\"\xf2\x03\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x124\n" +
@@ -2360,7 +2371,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	" \x01(\tR\roverlayClient\x12\x1e\n" +
 	"\n" +
 	"datastores\x18\v \x03(\tR\n" +
-	"datastores\"\x9d\x01\n" +
+	"datastores\x12,\n" +
+	"\x12overlay_client_key\x18\f \x01(\tR\x10overlayClientKey\"\x9d\x01\n" +
 	"\x0eNetworkBackend\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\tserver_id\x18\x02 \x01(\tH\x00R\bserverId\x12\x1a\n" +

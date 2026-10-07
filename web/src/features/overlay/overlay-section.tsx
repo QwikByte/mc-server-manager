@@ -192,12 +192,15 @@ function MemberActions({ node, overlay }: { node: Node; overlay: NodeOverlay }) 
           </Button>
         }
         title={t("Rotate the key of {{name}}?", { name: node.name })}
-        description={t("The node creates a new key, and the others get its public key. Until then, which takes a few seconds, they don't reach it.")}
+        description={t(
+          "The node creates a new key, the others get its public key, and the networks with servers on it and on other nodes are applied again. Until then, which takes a few seconds, they don't reach it.",
+        )}
         action={t("Rotate key")}
         onConfirm={() =>
-          rotate.mutate(undefined, {
-            onSuccess: () => toast.success(t("Rotated the key of {{name}}", { name: node.name })),
-            onError: (e) => toast.error(e.message),
+          operation.run((onStart) => rotate.mutateAsync({ onStart }), {
+            title: t("Rotating the key of {{name}}…", { name: node.name }),
+            notify: true,
+            done: () => ({ message: t("Rotated the key of {{name}}", { name: node.name }) }),
           })
         }
       />

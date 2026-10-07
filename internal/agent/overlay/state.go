@@ -36,16 +36,21 @@ type Peer struct {
 
 // Client is the address in the network of the node of a server's proxy, the only one that
 // reaches the port the server publishes in it, or those of the nodes whose servers reach a
-// datastore.
+// datastore. Each address is bound to the public key of its peer when the client was
+// admitted, so that a node that gets the address later reaches nothing of the one before.
 type Client struct {
 	Port    uint16       `json:"port"`
 	Address netip.Addr   `json:"address"`
 	Others  []netip.Addr `json:"others,omitempty"`
+	// Keys are the public keys of the peers at Address and Others, in this order. Older
+	// agents kept none.
+	Keys []string `json:"keys,omitempty"`
 }
 
-// newClient returns the client of a port with its addresses, of which there is at least one.
-func newClient(port uint16, addrs []netip.Addr) Client {
-	c := Client{Port: port, Address: addrs[0]}
+// newClient returns the client of a port with its addresses and their keys, of which there
+// is at least one.
+func newClient(port uint16, addrs []netip.Addr, keys []string) Client {
+	c := Client{Port: port, Address: addrs[0], Keys: keys}
 	if len(addrs) > 1 {
 		c.Others = addrs[1:]
 	}
@@ -140,19 +145,45 @@ func hostAddress(network netip.Prefix, addr netip.Addr) bool {
 	return host != 0 && host != mask
 }
 
-// isPeer reports whether addr is the address of a peer.
-func (st State) isPeer(addr netip.Addr) bool {
-	return slices.ContainsFunc(st.Peers, func(p Peer) bool { return p.Address == addr })
+// key returns the public key of the peer at addr, or "" if no peer has it.
+func (st State) key(addr netip.Addr) string {
+	if i := slices.IndexFunc(st.Peers, func(p Peer) bool { return p.Address == addr }); i >= 0 {
+		return st.Peers[i].PublicKey
+	}
+	return ""
 }
 
-// peerClients returns the clients with only the addresses of peers. A node that left the
-// network is no client anymore, as a node that joins later may get its address.
+// peerClients returns the clients with only the addresses whose peer still has the key it had
+// when it was admitted. A node that left the network is no client anymore, nor one that joins
+// later with its address, even if this node never saw the configuration without the first.
 func (st State) peerClients(clients map[string]Client) map[string]Client {
 	kept := map[string]Client{}
 	for id, c := range clients {
-		if addrs := slices.DeleteFunc(c.addresses(), func(a netip.Addr) bool { return !st.isPeer(a) }); len(addrs) > 0 {
-			kept[id] = newClient(c.Port, addrs)
+		var addrs []netip.Addr
+		var keys []string
+		for i, a := range c.addresses() {
+			if i < len(c.Keys) && c.Keys[i] != "" && st.key(a) == c.Keys[i] {
+				addrs, keys = append(addrs, a), append(keys, c.Keys[i])
+			}
+		}
+		if len(addrs) > 0 {
+			kept[id] = newClient(c.Port, addrs, keys)
 		}
 	}
 	return kept
+}
+
+// bindClients binds the addresses of clients that older agents kept without keys to the keys
+// of their peers in this state, which is the one these agents saved, and drops those of no
+// peer.
+func (st *State) bindClients() {
+	for id, c := range st.Clients {
+		if len(c.Keys) == 0 {
+			for _, a := range c.addresses() {
+				c.Keys = append(c.Keys, st.key(a))
+			}
+			st.Clients[id] = c
+		}
+	}
+	st.Clients = st.peerClients(st.Clients)
 }

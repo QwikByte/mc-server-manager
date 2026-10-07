@@ -232,9 +232,14 @@ pull other traffic of the node into the tunnel. An nftables table of its own (`i
 Docker's iptables and nftables rules, drops packets for the node's address that don't arrive through the tunnel, new
 connections from the tunnel to the node itself, e.g. to SSH or the agent, and forwarded connections from the tunnel
 except those of a proxy's node to the ports of its servers. WireGuard accepts from a peer only its own address and
-doesn't answer unauthenticated packets. A compromised node reaches only the ports of its own servers on other nodes;
-removing it removes it everywhere. A compromised master could add a peer of its own, but it can already reconfigure
-every server. If the interface is missing, e.g. after a failed boot, the ports of these servers are reachable nowhere.
+doesn't answer unauthenticated packets. The agent binds each address it lets reach a port to the public key the peer at
+that address had then, which the master sends along, and drops the address once a peer has it with another key: a node
+that gets the address of a removed one, even while a member was offline and never saw the removal, reaches none of the
+ports published for the removed one. A compromised node reaches only the ports of its own servers on other nodes;
+removing it removes it everywhere. A rotated key is let in again as the master applies the node's networks again; a key
+that changes otherwise, e.g. as a node lost its data, needs its networks applied again in the panel. A compromised
+master could add a peer of its own, but it can already reconfigure every server. If the interface is missing, e.g.
+after a failed boot, the ports of these servers are reachable nowhere.
 
 ## Storage locations
 

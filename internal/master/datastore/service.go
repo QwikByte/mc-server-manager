@@ -138,7 +138,7 @@ func (s *Service) List(ctx context.Context, networkID string) ([]View, error) {
 	if err != nil {
 		return nil, err
 	}
-	addresses, err := s.store.overlay.Addresses(ctx)
+	members, err := s.store.overlay.ByNode(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (s *Service) List(ctx context.Context, networkID string) ([]View, error) {
 	views := make([]View, len(list))
 	for i, ds := range list {
 		views[i] = view(ds, reports[ds.NodeID], errs[ds.NodeID])
-		views[i].Endpoints = endpoints(ds, addresses[ds.NodeID])
+		views[i].Endpoints = endpoints(ds, members[ds.NodeID].Address)
 		if j := slices.IndexFunc(nodes, func(n node.Node) bool { return n.ID == ds.NodeID }); j >= 0 {
 			views[i].NodeName = nodes[j].Name
 		}
