@@ -1,7 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { chooseLanguage } from "@/lib/i18n"
-import { forgetCommandHistories } from "@/lib/use-command-history"
+import { forgetCommandHistories, ownCommandHistories } from "@/lib/use-command-history"
 
 export interface User {
   id: number
@@ -38,7 +38,9 @@ export function useLogin() {
     mutationFn: (credentials: { username: string; password: string; code?: string }) =>
       api<LoginResult>("/auth/login", { body: credentials }),
     onSuccess: (result) => {
-      if (!("mfaRequired" in result)) queryClient.setQueryData(meQuery.queryKey, result)
+      if ("mfaRequired" in result) return
+      ownCommandHistories(result.id)
+      queryClient.setQueryData(meQuery.queryKey, result)
     },
   })
 }
@@ -70,7 +72,9 @@ export function useSetup() {
     mutationFn: (input: { token: string; password: string }) => api<LoginResult>("/auth/setup", { body: input }),
     onSuccess: (result) => {
       queryClient.clear()
-      if (!("mfaRequired" in result)) queryClient.setQueryData(meQuery.queryKey, result)
+      if ("mfaRequired" in result) return
+      ownCommandHistories(result.id)
+      queryClient.setQueryData(meQuery.queryKey, result)
     },
   })
 }

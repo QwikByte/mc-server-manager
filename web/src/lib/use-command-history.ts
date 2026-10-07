@@ -54,3 +54,19 @@ export function forgetCommandHistories() {
     // Without storage, there is nothing to forget.
   }
 }
+
+const ownerKey = `${prefix}owner`
+
+/**
+ * Keeps the commands of the prompts for the user who signed in, and forgets them if another user typed them, e.g.
+ * when a session expired and someone else signs in in the same tab.
+ */
+export function ownCommandHistories(userId: number) {
+  try {
+    if (sessionStorage.getItem(ownerKey) === String(userId)) return
+    forgetCommandHistories()
+    sessionStorage.setItem(ownerKey, String(userId))
+  } catch {
+    // Without storage, there are no commands to keep.
+  }
+}
