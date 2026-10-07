@@ -147,6 +147,14 @@ func TestWriteProxyVelocity(t *testing.T) {
 			if changed, removed, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, network); changed || removed || err != nil {
 				t.Fatalf("second run: changed = %v, removed = %v, err = %v", changed, removed, err)
 			}
+			// A proxy that leaves its network loses the secret, which the network may keep with
+			// another proxy.
+			if changed, _, err := WriteProxy(dir, noryxv1.ServerType_SERVER_TYPE_VELOCITY, runtime.Network{}); !changed || err != nil {
+				t.Fatalf("leaving: changed = %v, err = %v", changed, err)
+			}
+			if _, err := dir.Lstat(ForwardingSecretFile); !os.IsNotExist(err) {
+				t.Errorf("the secret stayed after leaving: %v", err)
+			}
 		})
 	}
 }

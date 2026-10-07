@@ -60,7 +60,7 @@ host names and Bedrock port. The new proxy takes over the old one's configuratio
 BungeeCord reads Waterfall's `config.yml`, and the Maintenance plugin with its state and team; other plugins stay with
 the old proxy. Changing to Velocity can switch to modern forwarding, which restarts the servers once, as does a proxy
 that comes to or leaves the node of a server. The dialog tells all this beforehand and where players join from then on.
-The old proxy leaves the network and stops; the new one starts if either ran.
+The old proxy leaves the network without its forwarding secret and stops; the new one starts if either ran.
 
 ## Proxy configuration
 
