@@ -123,7 +123,34 @@ export interface InstallResult extends ServerRef {
   /** The projects with a newer release that the server keeps at their version. */
   pinned?: string[]
   error?: string
+  /** The server runs without what changed, or was restarted to load it. */
+  restart?: boolean
+  restarted?: boolean
 }
+
+/** Restarts the running servers whose plugins changed afterwards, the game servers of a network batch at a time. */
+export interface Restart {
+  restart?: boolean
+  batch?: number
+}
+
+/** A file of a project on a server, as the server's listing describes it. */
+export type InstalledOn = ServerRef & Omit<InstalledPlugin, "project">
+
+/** What the servers the user may see have installed, by project of Modrinth or Hangar. */
+export interface Everywhere {
+  projects: { project: Project; servers: InstalledOn[] }[]
+  /** Nodes, or single servers, whose plugins couldn't be listed. */
+  unreachable: { nodeId: string; nodeName: string; serverId?: string; error: string }[]
+  catalogueError?: string
+}
+
+/** What the servers have installed; it asks all nodes, so it isn't asked often. */
+export const installedQuery = queryOptions({
+  queryKey: ["plugins", "installed"],
+  queryFn: () => api<Everywhere>("/plugins/installed"),
+  staleTime: 30_000,
+})
 
 /** Whether a pre-release was installed because no release suits the server, rather than chosen among the versions. */
 export const fallback = (file: InstalledFile, versions?: Record<string, string>) => file.channel !== undefined && !versions?.[file.projectId]
@@ -204,7 +231,8 @@ export function useInstallPlugins() {
       servers,
       versions,
       onStart,
-    }: {
+      ...restart
+    }: Restart & {
       projects: string[]
       servers: ServerRef[]
       versions?: Record<string, string>
@@ -217,7 +245,7 @@ export function useInstallPlugins() {
         try {
           const res = await operate<{ results: InstallResult[] }>(
             "/plugins/install",
-            { body: { projects, servers: batch, versions } },
+            { body: { projects, servers: batch, versions, ...restart } },
             (op) => onStart?.(op, i / maxServers),
           )
           results.push(...res.results)
@@ -244,6 +272,19 @@ export function useUpdatePlugins(ref: ServerRef) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async () => (await operate<{ results: InstallResult[] }>("/plugins/update", { body: { servers: [ref] } })).results[0],
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
+  })
+}
+
+/**
+ * Updates a project to the newest release that suits each server, except where it is kept at its version or turned
+ * off, or removes it, also where it is turned off, on many servers at once.
+ */
+export function usePluginsEverywhere(action: "update" | "remove") {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ onStart, ...body }: Restart & { project: string; servers: ServerRef[]; onStart?: (op: Operation) => void }) =>
+      (await operate<{ results: InstallResult[] }>(`/plugins/${action}`, { body }, onStart)).results,
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
   })
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
@@ -40,8 +41,9 @@ const (
 
 var errVanilla = httpapi.Errorf(http.StatusConflict, "Vanilla servers can't load plugins or mods.")
 
-// Nodes provides connections to node agents.
+// Nodes provides the nodes and connections to their agents.
 type Nodes interface {
+	List(ctx context.Context) ([]node.Node, error)
 	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
 }
 
@@ -228,19 +230,30 @@ type Installed struct {
 	FileName  string `json:"fileName"`
 	Version   string `json:"version"`
 	// Channel is beta or alpha for a version that isn't a release.
-	Channel string `json:"channel,omitempty"`
-	written bool   // rather than present already
+	Channel  string `json:"channel,omitempty"`
+	written  bool   // rather than present already
+	disabled bool   // into the folder of turned-off plugins
 }
 
-// Result tells what an action did on a server, installing or updating plugins, and why it failed.
+// loads reports whether the server loads the file once it restarts, as it is new and turned on.
+func (i Installed) loads() bool { return i.written && !i.disabled }
+
+// Result tells what an action did on a server, installing, updating or removing plugins, and
+// why it failed.
 type Result struct {
 	Ref
 	// Installed are the files of the projects installed or updated, also those present already
 	// when installing; updates only tell the files they wrote.
 	Installed []Installed `json:"installed"`
+	// Removed are the files removed.
+	Removed []string `json:"removed,omitempty"`
 	// Pinned are the titles of the projects with a newer release that the server keeps at their version.
 	Pinned []string `json:"pinned,omitempty"`
 	Error  string   `json:"error,omitempty"`
+	// Restart tells that the server runs without what changed, and Restarted that it was restarted
+	// to load it.
+	Restart   bool `json:"restart,omitempty"`
+	Restarted bool `json:"restarted,omitempty"`
 }
 
 // each calls fn for each server, at most operation.PerNode of a node at a time, and returns their
@@ -294,10 +307,11 @@ type installation struct {
 
 // onServer is a server whose plugins an installation changes, with its plugin files.
 type onServer struct {
-	ref    Ref
-	client noryxv1.PluginServiceClient
-	target target
-	files  []*noryxv1.PluginFile
+	ref     Ref
+	client  noryxv1.PluginServiceClient
+	target  target
+	running bool
+	files   []*noryxv1.PluginFile
 	// known and newer are the versions of the files and their newer releases, by SHA-512.
 	known, newer map[string]modrinth.Version
 	present      map[string]installedFile // see present
@@ -310,7 +324,7 @@ func (r *installation) open(ctx context.Context, ref Ref, updates bool) (*onServ
 	if err != nil {
 		return nil, err
 	}
-	o := &onServer{ref: ref, client: noryxv1.NewPluginServiceClient(conn)}
+	o := &onServer{ref: ref, client: noryxv1.NewPluginServiceClient(conn), running: srv.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING}
 	if o.target, err = r.target(ctx, srv.GetType(), srv.GetVersion()); err != nil {
 		return nil, err
 	}
@@ -342,6 +356,7 @@ func (r *installation) install(ctx context.Context, res *Result, projects []stri
 	}
 	installed, err := r.put(ctx, o, projects)
 	res.Installed = append(res.Installed, installed...)
+	res.Restart = o.running && slices.ContainsFunc(installed, Installed.loads)
 	return err
 }
 
@@ -368,7 +383,9 @@ func (r *installation) put(ctx context.Context, o *onServer, projects []string) 
 			}
 			o.present[v.ProjectID] = installedFile{file}
 		}
-		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, Channel: preRelease(v), written: !old.is(f)})
+		installed = append(installed, Installed{
+			ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, Channel: preRelease(v), written: !old.is(f), disabled: old.GetDisabled(),
+		})
 	}
 	return installed, nil
 }

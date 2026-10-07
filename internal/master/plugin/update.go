@@ -68,10 +68,33 @@ func (r *installation) update(ctx context.Context, res *Result, projects []strin
 			failed = append(failed, fmt.Sprintf("%s: %s", r.title(ctx, project), httpapi.Message(err)))
 		}
 	}
+	res.Restart = o.running && slices.ContainsFunc(res.Installed, Installed.loads)
 	if len(failed) > 0 {
 		return fmt.Errorf("%s", strings.Join(failed, " "))
 	}
 	return nil
+}
+
+// RemoveProject removes the files of a project from servers, the turned-off ones too.
+func (s *Service) RemoveProject(ctx context.Context, project string, servers []Ref) []Result {
+	run := &installation{Service: s}
+	return each(ctx, servers, func(ctx context.Context, res *Result) error {
+		o, err := run.open(ctx, res.Ref, false)
+		if err != nil {
+			return err
+		}
+		for _, f := range o.files {
+			if o.known[f.GetSha512()].ProjectID != project {
+				continue
+			}
+			if err := s.Remove(ctx, res.Ref, f.GetFileName(), f.GetDisabled()); err != nil {
+				return err
+			}
+			res.Removed = append(res.Removed, f.GetFileName())
+			res.Restart = res.Restart || o.running && !f.GetDisabled()
+		}
+		return nil
+	})
 }
 
 // Change is a version of a project with what changed in it, as Markdown of its author.

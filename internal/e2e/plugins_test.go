@@ -267,7 +267,7 @@ func TestPluginsOfAServer(t *testing.T) {
 		t.Fatalf("update of a turned-off plugin = %+v", r)
 	}
 	api.do("POST", base+"/luckperms-1.0.jar/enable", nil, http.StatusNoContent, nil)
-	if r := update(); r.Error != "" || len(r.Installed) != 1 || r.Installed[0].Version != "2.0" {
+	if r := update(); r.Error != "" || len(r.Installed) != 1 || r.Installed[0].Version != "2.0" || r.Restart {
 		t.Fatalf("update = %+v", r)
 	}
 	if _, ok := plugins()["luckperms-2.0.jar"]; !ok {

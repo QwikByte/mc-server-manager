@@ -1,6 +1,6 @@
 import { MagnifyingGlassIcon, PuzzlePieceIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { Chip } from "@/components/chip"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
@@ -12,33 +12,40 @@ import type { Forwarding, ServerRef } from "./api"
 import { canJoin, forwardingMod, key, refOf } from "./servers"
 
 /** Why a server can't join a network with the forwarding, if it can't. */
-function reason(type: string, forwarding: Forwarding) {
-  if (canJoin(type, forwarding)) return undefined
+function reason(type: string, forwarding?: Forwarding) {
+  if (!forwarding || canJoin(type, forwarding)) return undefined
   if (isFabric(type)) return t("FabricProxy-Lite only supports Velocity's modern forwarding.")
   return t("Vanilla servers can't verify the players a proxy forwards.")
 }
 
-/** Picks the servers that join a network, in the order they are picked. */
+/**
+ * Picks servers, which it finds by name, node, software and #tag. With forwarding, it picks the servers that join a
+ * network, in the order they are picked; otherwise any of them, e.g. to install a plugin on.
+ */
 export function ServerPicker({
   servers,
   forwarding,
   selected,
   onChange,
+  badge,
 }: {
   servers: NodeServer[]
-  forwarding: Forwarding
+  forwarding?: Forwarding
   selected: ServerRef[]
   onChange: (refs: ServerRef[]) => void
+  /** What to know about a server besides, e.g. what it has installed. */
+  badge?: (server: NodeServer) => ReactNode
 }) {
   const [search, setSearch] = useState("")
-  if (servers.length === 0)
+  if (servers.length === 0 && forwarding)
     return <p className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">{t("No game server is free to join. Create a Paper, Fabric, Forge or NeoForge server or one of their forks first.")}</p>
+  const joins = (type: string) => !forwarding || canJoin(type, forwarding)
   const order = selected.map(key)
   const words = search.toLowerCase().split(/\s+/).filter(Boolean)
   const sorted = [...servers]
     .filter((s) => words.every((w) => [s.name, s.nodeName, serverType(s.type).label, ...s.tags.map((tag) => `#${tag}`)].join(" ").toLowerCase().includes(w)))
-    .sort((a, b) => Number(!canJoin(a.type, forwarding)) - Number(!canJoin(b.type, forwarding)) || a.name.localeCompare(b.name, undefined, { numeric: true }))
-  const joinable = sorted.filter((s) => canJoin(s.type, forwarding))
+    .sort((a, b) => Number(!joins(a.type)) - Number(!joins(b.type)) || a.name.localeCompare(b.name, undefined, { numeric: true }))
+  const joinable = sorted.filter((s) => joins(s.type))
   const all = joinable.length > 0 && joinable.every((s) => order.includes(key(refOf(s))))
 
   return (
@@ -73,7 +80,7 @@ export function ServerPicker({
           const k = key(refOf(s))
           const position = order.indexOf(k)
           const why = reason(s.type, forwarding)
-          const mod = forwardingMod(s.type)
+          const mod = forwarding && forwardingMod(s.type)
           return (
             <li key={k}>
               <label className={cn("flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-muted/50", why && "cursor-not-allowed opacity-60")}>
@@ -94,10 +101,13 @@ export function ServerPicker({
                     {t("+ {{mod}}", { mod })}
                   </Chip>
                 )}
-                <Chip>{serverType(s.type).label}</Chip>
-                <span aria-hidden className={cn("grid size-6 place-items-center rounded-md text-xs font-bold tabular-nums", position >= 0 ? "bg-primary text-primary-foreground" : "invisible")}>
-                  {position + 1}
-                </span>
+                {badge?.(s)}
+                <Chip className={cn(badge && "max-sm:hidden")}>{serverType(s.type).label}</Chip>
+                {forwarding && (
+                  <span aria-hidden className={cn("grid size-6 place-items-center rounded-md text-xs font-bold tabular-nums", position >= 0 ? "bg-primary text-primary-foreground" : "invisible")}>
+                    {position + 1}
+                  </span>
+                )}
               </label>
             </li>
           )

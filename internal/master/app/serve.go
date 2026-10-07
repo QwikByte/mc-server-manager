@@ -303,7 +303,7 @@ func API(s Services) *http.ServeMux {
 	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
-	plugin.NewHandler(s.Plugins, s.Operations).Register(m)
+	plugin.NewHandler(s.Plugins, s.Operations, s.Networks).Register(m)
 	modpack.NewHandler(s.Modpacks).Register(m)
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)

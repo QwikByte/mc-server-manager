@@ -1,8 +1,9 @@
-import { CaretDownIcon, CheckCircleIcon, DownloadSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import { CaretDownIcon, CheckCircleIcon, CheckIcon, DownloadSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { type ReactNode, useId, useState } from "react"
 import { Callout } from "@/components/callout"
+import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -18,21 +19,23 @@ import {
 import { FieldError } from "@/components/ui/field"
 import { useAccess } from "@/features/access/use-access"
 import { networksQuery, type ServerRef } from "@/features/networks/api"
+import { ServerPicker } from "@/features/networks/server-picker"
 import { key, refOf } from "@/features/networks/servers"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
-import { displayVersion, serverType } from "@/features/servers/server-types"
 import { OperationStatus } from "@/features/operations/operation-status"
 import { mergeResults } from "@/features/operations/retry"
 import { RetryButton } from "@/features/operations/retry-button"
 import { guard, useOperation } from "@/features/operations/use-operation"
-import { fallback, type InstallResult, maxServers, type ProjectVersion, type SearchHit, supports, useInstallPlugins } from "./api"
+import { fallback, type InstallResult, installedQuery, maxServers, type ProjectVersion, type SearchHit, supports, useInstallPlugins } from "./api"
 import { ChannelPill } from "./channel-pill"
 import { PluginIcon } from "./plugin-icon"
+import { RestartOption, RestartPill } from "./restart-option"
+import { useRestart } from "./use-restart"
 import { VersionMenu } from "./version-menu"
 
 /**
  * Installs a plugin or mod on any number of servers it runs on, also on the game servers or the proxy of a network at
- * once.
+ * once, and marks the servers that have it already.
  */
 export function InstallDialog({ hit }: { hit: SearchHit }) {
   const [open, setOpen] = useState(false)
@@ -43,17 +46,21 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
   const { can } = useAccess()
   const { data: servers = [] } = useQuery({ ...allServersQuery, enabled: open })
   const { data: networks = [] } = useQuery({ ...networksQuery, enabled: open && can("networks.view") })
+  const { data: everywhere } = useQuery({ ...installedQuery, enabled: open })
   const install = useInstallPlugins()
   const operation = useOperation()
   const suitable = servers.filter((s) => supports(hit.loaders, s.type) && can("plugins.manage", s.nodeId, s.id))
   const picked = new Set(selected)
   const chosen = suitable.filter((s) => picked.has(key(refOf(s))))
+  const restart = useRestart(chosen.filter((s) => s.state === "running").map(refOf))
   // A version can be chosen for servers that run the same software and Minecraft version.
   const same = chosen.length > 0 && chosen.every((s) => s.type === chosen[0].type && s.version === chosen[0].version)
   const choose = (keys: string[], on: boolean) => {
     setSelected((list) => (on ? [...new Set([...list, ...keys])] : list.filter((k) => !keys.includes(k))))
     setPinned(undefined)
   }
+  // The servers that have the project, with its file.
+  const has = new Map(everywhere?.projects.find((p) => p.project.id === hit.id)?.servers.map((s) => [key(s), s]))
   // The servers of networks that can run the project, to choose them at once.
   const groups = networks.flatMap((n) => {
     const of = (refs: ServerRef[]) => {
@@ -80,6 +87,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
           projects: [hit.id],
           servers,
           versions,
+          ...restart.request,
           onStart: (op, batch) => {
             setPart([batch + 1, Math.ceil(servers.length / maxServers)])
             onStart(op)
@@ -126,7 +134,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
           {t("Install")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg" {...guard(install.isPending)}>
+      <DialogContent className="sm:max-w-xl" {...guard(install.isPending)}>
         {operation.live && !install.data ? (
           <OperationStatus
             op={operation.live}
@@ -155,7 +163,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
             ) : suitable.length === 0 ? (
               <p className="py-4 text-sm text-muted-foreground">{t("None of your servers can run {{name}}.", { name: hit.title })}</p>
             ) : (
-              <div className="-mx-1 grid max-h-96 gap-4 overflow-y-auto px-1">
+              <div className="-mx-1 grid max-h-[28rem] gap-4 overflow-y-auto px-1">
                 {groups.length > 0 && (
                   <Group title={t("Networks")}>
                     {groups.map((g) => {
@@ -178,15 +186,26 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
                   </Group>
                 )}
                 <Group title={groups.length > 0 ? t("Servers") : undefined}>
-                  {suitable.map((s) => (
-                    <Row
-                      key={key(refOf(s))}
-                      checked={picked.has(key(refOf(s)))}
-                      onChange={(on) => choose([key(refOf(s))], on)}
-                      title={s.name}
-                      detail={`${serverType(s.type).label} ${displayVersion(s.version)} · ${s.nodeName}`}
-                    />
-                  ))}
+                  <ServerPicker
+                    servers={suitable}
+                    selected={chosen.map(refOf)}
+                    onChange={(refs) => {
+                      setSelected(refs.map(key))
+                      setPinned(undefined)
+                    }}
+                    badge={(s) => {
+                      const file = has.get(key(refOf(s)))
+                      return (
+                        file && (
+                          <Pill tone={file.disabled ? "neutral" : "success"}>
+                            <CheckIcon weight="bold" />
+                            <span className="max-w-24 truncate font-mono">{file.version}</span>
+                            <span className="sr-only">{file.disabled ? t("Installed, but turned off") : t("Installed")}</span>
+                          </Pill>
+                        )
+                      )
+                    }}
+                  />
                 </Group>
               </div>
             )}
@@ -215,6 +234,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
                 )}
               </div>
             )}
+            {!install.data && <RestartOption restart={restart} />}
             {install.error && <FieldError>{install.error.message}</FieldError>}
             <DialogFooter>
               {results && (
@@ -250,20 +270,18 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
 function Group({ title, children }: { title?: string; children: ReactNode }) {
   const id = useId()
   return (
-    <div className="grid gap-1.5">
+    <div role="group" aria-labelledby={title && id} className="grid gap-1.5">
       {title && (
         <p id={id} className="text-xs font-medium text-muted-foreground">
           {title}
         </p>
       )}
-      <ul aria-labelledby={title && id} className="grid gap-1">
-        {children}
-      </ul>
+      {children}
     </div>
   )
 }
 
-/** A server, or the servers of a network, to tick; a network of which only some are ticked shows a mixed state. */
+/** The servers of a network to tick; a network of which only some are ticked shows a mixed state. */
 function Row({
   checked,
   onChange,
@@ -276,15 +294,13 @@ function Row({
   detail: string
 }) {
   return (
-    <li>
-      <label className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 ring-1 ring-foreground/8 hover:bg-muted/50">
-        <Checkbox checked={checked} onCheckedChange={(on) => onChange(on === true)} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{title}</span>
-          <span className="block truncate text-xs text-muted-foreground">{detail}</span>
-        </span>
-      </label>
-    </li>
+    <label className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 ring-1 ring-foreground/8 hover:bg-muted/50">
+      <Checkbox checked={checked} onCheckedChange={(on) => onChange(on === true)} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="block truncate text-xs text-muted-foreground">{detail}</span>
+      </span>
+    </label>
   )
 }
 
@@ -301,11 +317,13 @@ function Results({ results, servers, versions }: { results: InstallResult[]; ser
             ) : (
               <CheckCircleIcon className="mt-0.5 size-4 shrink-0 text-success" weight="fill" />
             )}
-            <span className="min-w-0">
-              <span className="block font-medium">{servers.find((s) => key(refOf(s)) === key(r))?.name ?? r.serverId}</span>
-              {r.error ? (
-                <span className="block text-xs text-muted-foreground">{r.error}</span>
-              ) : (
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-2 font-medium">
+                {servers.find((s) => key(refOf(s)) === key(r))?.name ?? r.serverId}
+                <RestartPill result={r} />
+              </span>
+              {r.error && <span className="block text-xs text-muted-foreground">{r.error}</span>}
+              {r.installed.length > 0 && (
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   {r.installed.map((f) => (
                     <span key={f.fileName} className="inline-flex items-center gap-1.5">
@@ -322,7 +340,7 @@ function Results({ results, servers, versions }: { results: InstallResult[]; ser
       {preReleases && (
         <Callout tone="warning">{t("No release suits some of the servers, so a pre-release was installed there. Test it before you use it in production.")}</Callout>
       )}
-      <p className="text-xs text-muted-foreground">{t("Restart the servers to load what was installed.")}</p>
+      {results.some((r) => r.restart) && <p className="text-xs text-muted-foreground">{t("Restart the servers to load what was installed.")}</p>}
     </div>
   )
 }

@@ -26,6 +26,13 @@ export function titleOf(op: Operation, name?: string): string {
       return op.serverId && name
         ? t("Install plugins on {{name}}", { name })
         : t("Install plugins on {{count}} servers", { count, defaultValue_one: "Install plugins on {{count}} server" })
+    case "plugins.update":
+      if (op.serverId && name) return t("Update the plugins of {{name}}", { name })
+      return count
+        ? t("Update the plugins of {{count}} servers", { count, defaultValue_one: "Update the plugins of {{count}} server" })
+        : t("Update {{name}} everywhere", { name: subject })
+    case "plugins.remove":
+      return t("Remove {{name}} everywhere", { name: subject })
     case "backup.create":
       return t("Back up {{name}}", { name: subject })
     case "backup.restore":
@@ -125,6 +132,8 @@ export function stepOf(op: Operation, step: string): string {
     case "container":
       return t("Create the container")
     case "plugins":
+      if (op.kind === "plugins.update") return t("Update the plugins")
+      if (op.kind === "plugins.remove") return t("Remove the plugin")
       return t("Install the plugins")
     case "modpack":
       return t("Download the modpack")
@@ -179,12 +188,13 @@ export function stepOf(op: Operation, step: string): string {
     case "files":
       return t("Write the files on the servers")
     case "restart":
+      if (op.kind.startsWith("plugins.")) return t("Restart the servers whose plugins changed")
       return op.kind === "server.restart" ? t("Restart the server") : t("Restart the servers whose files changed")
     case "warn":
       return t("Warn the players")
     case "servers":
       if (op.kind.startsWith("players.")) return t("Apply it on the servers")
-      if (verb === "rolling-restart" || verb === "safe-restart") return t("Restart the servers one after the other")
+      if (verb === "rolling-restart" || verb === "safe-restart" || op.kind.startsWith("plugins.")) return t("Restart the servers one after the other")
       if (verb === "start") return t("Start the servers")
       if (verb === "stop") return t("Stop the servers")
       if (verb === "restart") return t("Restart the servers")

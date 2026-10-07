@@ -95,10 +95,24 @@ loads, and back when it is turned on again. Turned-off files are listed as off, 
 folder and are left out of **Update all**. Before a project is turned off or removed, the tab names the turned-on
 projects that require it, as Modrinth and Hangar list their dependencies. **Open its settings** opens the folder of a
 plugin's settings in the file manager, e.g. `plugins/LuckPerms/`, named by its `plugin.yml`, `paper-plugin.yml`,
-`bungee.yml` or `velocity-plugin.json`. On the **Plugins** page, the game servers
-or the proxy of a network are chosen at once, and more than 100 servers are installed on in batches of 100, one after
-the other. Installing on many servers handles at most 8 of a node at a time and tells what it installed on each;
-**Retry the failed ones** installs the same again where it failed.
+`bungee.yml` or `velocity-plugin.json`.
+
+To install from the **Plugins** page, the game servers or the proxy of a network are chosen at once, and servers are
+found by name, node, software or `#tag`; those that have the project already are marked with their version. More than
+100 servers are installed on in batches of 100, one after the other. Installing on many servers handles at most 8 of a
+node at a time and tells what it installed on each; **Retry the failed ones** installs the same again where it failed.
+
+**Installed** on the **Plugins** page gathers the plugins or mods of all servers you may see, recognised by their hash
+like on the tabs: each project with its servers, versions and updates, and the servers that keep it at its version or
+have it turned off. Nodes that can't be reached or don't answer within 15 seconds are named instead. **Update
+everywhere** updates a project on all its servers to the newest release that suits each, never to a beta or alpha,
+except where it is kept at its version or turned off; **Remove everywhere** deletes its files, turned-off ones too, and
+names the plugins that need it first. Both run as an operation that tells how it went on each server, with **Retry the
+failed ones**. Servers whose plugins you may not manage are left out and named.
+
+Installing from the **Plugins** page, **Update everywhere** and **Remove everywhere** can restart the running servers
+whose plugins changed afterwards, as applying a file set does: the game servers of a network a few at a time like a
+rolling restart, so that it stays open, others at once. Once it restarts servers, it can't be cancelled.
 
 ### Hangar
 

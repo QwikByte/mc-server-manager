@@ -126,7 +126,10 @@ folder `.disabled` of the plugin folder, which backups of the plugins include; t
 folder, never replaces a file when it moves one, and refuses a link in its place. To link a plugin to the folder of its
 settings, the agent reads the name from the plugin's jar, which the server could have written: at most 4 MiB of the jar
 and 64 KiB of its `plugin.yml` or the like, and only a name of letters, digits, spaces, `_`, `.` and `-` that doesn't
-start with a dot and is a folder of the plugin folder. Changelogs are Markdown of the projects' authors, which the panel
+start with a dot and is a folder of the plugin folder. What servers have installed only lists the servers a user may
+see. Installing, updating or removing plugins on many servers needs the permission to manage the plugins of each:
+installing refuses servers without it, updating and removing leave them out and tell so, and restarting servers
+afterwards needs the permission to restart each. Changelogs are Markdown of the projects' authors, which the panel
 renders without HTML and without loading images. Project icons are fetched by the master, so the browser never contacts
 Modrinth or Hangar and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the
 master sends their gamertag to GeyserMC's global API, and the agent only accepts the IDs Floodgate gives Bedrock

@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 const (
@@ -25,32 +27,45 @@ const (
 	// installTimeout covers downloading and sending the files to all servers.
 	installTimeout = 10 * time.Minute
 	maxServers     = 100
-	// everywhereTimeout covers updating the plugins of up to maxEverywhere servers.
+	// everywhereTimeout covers updating or removing a project on up to maxEverywhere servers;
+	// restarting them afterwards takes as long as they need.
 	everywhereTimeout = 30 * time.Minute
 	maxEverywhere     = 500
+	// maxBatch is the most game servers of a network that restart at a time, as for rolling restarts.
+	maxBatch = 50
 )
 
 var gameVersion = regexp.MustCompile(`^[A-Za-z0-9._-]{0,32}$`)
 
+// Restarter restarts servers so that they load their plugins: the game servers of a network a
+// few at a time, so that it stays open, the others at once. It returns the error of each.
+type Restarter interface {
+	RestartServers(ctx context.Context, servers []tag.Server, batch int) []error
+}
+
 type Handler struct {
-	svc *Service
-	ops *operation.Operations
+	svc      *Service
+	ops      *operation.Operations
+	networks Restarter
 }
 
-func NewHandler(svc *Service, ops *operation.Operations) *Handler {
-	return &Handler{svc: svc, ops: ops}
+func NewHandler(svc *Service, ops *operation.Operations, networks Restarter) *Handler {
+	return &Handler{svc: svc, ops: ops, networks: networks}
 }
 
-// Register adds the routes. Searching Modrinth needs no permission; actions on many servers
-// at once check the permission for each of them.
+// Register adds the routes. Searching Modrinth needs no permission; what servers have installed
+// only shows the servers the user may see, and actions on many servers at once check the
+// permission for each of them.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/plugins/search", access.SignedIn, h.search)
 	mux.Handle("GET /api/plugins/game-versions", access.SignedIn, h.gameVersions)
 	mux.Handle("GET /api/plugins/projects/{project}/versions", access.SignedIn, h.versions)
 	mux.Handle("GET /api/plugins/projects/{project}/changes", access.SignedIn, h.changes)
 	mux.Handle("GET /api/plugins/icons/{project}/{file}", access.SignedIn, h.icon)
+	mux.Handle("GET /api/plugins/installed", access.SignedIn, h.installed)
 	mux.Handle("POST /api/plugins/install", access.SignedIn, h.install)
 	mux.Handle("POST /api/plugins/update", access.SignedIn, h.update)
+	mux.Handle("POST /api/plugins/remove", access.SignedIn, h.removeEverywhere)
 	const base = "/api/nodes/{node}/servers/{id}/plugins"
 	mux.Handle("GET "+base, access.OnServer(access.ServersView), h.list)
 	mux.Handle("PUT "+base+"/{file}", access.OnServer(access.Plugins), h.upload)
@@ -181,14 +196,30 @@ func (h *Handler) icon(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data) //nolint:gosec // an image of a fixed type, sandboxed, see above
 }
 
-// many are the servers of an action on many servers.
+// installed tells what the servers the user may see have installed, by project.
+func (h *Handler) installed(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+	everywhere, err := h.svc.Everywhere(ctx, access.From(r.Context()))
+	write(w, r, http.StatusOK, everywhere, err)
+}
+
+// many are the servers of an action on many servers, and whether the running ones whose
+// plugins changed restart afterwards: the game servers of a network Batch at a time.
 type many struct {
 	Servers []Ref `json:"servers"`
+	Restart bool  `json:"restart"`
+	Batch   int   `json:"batch"`
 }
 
 func (m *many) check(limit int) error {
-	if len(m.Servers) == 0 || len(m.Servers) > limit || len(slices.Compact(slices.SortedFunc(slices.Values(m.Servers), compareRefs))) != len(m.Servers) {
+	switch {
+	case len(m.Servers) == 0 || len(m.Servers) > limit || len(slices.Compact(slices.SortedFunc(slices.Values(m.Servers), compareRefs))) != len(m.Servers):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", limit)
+	case m.Restart && m.Batch == 0:
+		m.Batch = 1
+	case m.Restart && (m.Batch < 1 || m.Batch > maxBatch):
+		return httpapi.Errorf(http.StatusBadRequest, "Restart from 1 to %d servers of a network at a time.", maxBatch)
 	}
 	return nil
 }
@@ -203,25 +234,36 @@ type action struct {
 	run    func(ctx context.Context, servers []Ref) []Result
 }
 
-// run runs an action on the servers of a request as an operation.
+// run runs an action on the servers of a request as an operation, and restarts the running
+// servers whose plugins changed if asked, which then can't be cancelled.
 func (h *Handler) run(w http.ResponseWriter, r *http.Request, m many, limit int, a action) {
 	grants := access.From(r.Context())
 	allowed := slices.DeleteFunc(slices.Clone(m.Servers), func(s Ref) bool { return !grants.On(access.Plugins, s.NodeID, s.ServerID) })
 	err := m.check(limit)
-	if err == nil && (len(allowed) == 0 || !a.partly && len(allowed) < len(m.Servers)) {
+	switch {
+	case err != nil:
+	case len(allowed) == 0 || !a.partly && len(allowed) < len(m.Servers):
 		err = access.Denied(access.Plugins)
+	case m.Restart && !onAll(grants, access.ServersRestart, allowed):
+		err = access.Denied(access.ServersRestart)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	logging.Note(r.Context(), slog.Int("servers", len(m.Servers)))
+	logging.Note(r.Context(), slog.Int("servers", len(m.Servers)), slog.Bool("restart", m.Restart))
 	spec := operation.Spec{
 		Kind: a.kind, Subject: a.subject, Steps: []string{"plugins"}, Status: http.StatusOK, Timeout: a.timeout, Category: logging.Plugins,
 		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, m.Servers) },
 		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
-			return access.Plugins, onAll(g, access.Plugins, allowed)
+			if !onAll(g, access.Plugins, allowed) {
+				return access.Plugins, false
+			}
+			return access.ServersRestart, !m.Restart || onAll(g, access.ServersRestart, allowed)
 		},
+	}
+	if m.Restart {
+		spec.Steps = append(spec.Steps, "restart")
 	}
 	if len(m.Servers) == 1 {
 		spec.NodeID, spec.ServerID = m.Servers[0].NodeID, m.Servers[0].ServerID
@@ -234,8 +276,34 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request, m many, limit int,
 				results = append(results, Result{Ref: ref, Installed: []Installed{}, Error: denied})
 			}
 		}
+		if !m.Restart || !slices.ContainsFunc(results, func(r Result) bool { return r.Restart }) {
+			return map[string]any{"results": results}, nil
+		}
+		if err := operation.Keep(ctx); err != nil {
+			return map[string]any{"results": results}, err // nothing restarts; the results tell which servers need it
+		}
+		operation.Step(ctx, "restart")
+		h.restart(ctx, results, m.Batch)
 		return map[string]any{"results": results}, nil
 	})
+}
+
+// restart restarts the servers of results that run without what changed.
+func (h *Handler) restart(ctx context.Context, results []Result, batch int) {
+	var servers []tag.Server
+	var indexes []int
+	for i, r := range results {
+		if r.Restart {
+			servers, indexes = append(servers, tag.Server(r.Ref)), append(indexes, i)
+		}
+	}
+	for j, err := range h.networks.RestartServers(ctx, servers, batch) {
+		r := &results[indexes[j]]
+		r.Restart, r.Restarted = err != nil, err == nil
+		if err != nil {
+			r.Error = strings.TrimSpace(r.Error + " " + fmt.Sprintf("It couldn't restart: %s", httpapi.Message(err)))
+		}
+	}
 }
 
 func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
@@ -268,18 +336,60 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// update updates all plugins and mods of servers to the newest suitable release; see
-// Service.Update.
+// update updates all plugins and mods of servers, or one project, to the newest suitable
+// release; see Service.Update.
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
-	var req many
+	var req struct {
+		// Project, if set, is the only project to update.
+		Project string `json:"project"`
+		many
+	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	h.run(w, r, req, maxEverywhere, action{
-		kind: "plugins.update", subject: strconv.Itoa(len(req.Servers)), timeout: everywhereTimeout, partly: true,
-		run: func(ctx context.Context, servers []Ref) []Result { return h.svc.Update(ctx, servers, nil) },
+	var projects []string
+	subject := strconv.Itoa(len(req.Servers))
+	if req.Project != "" {
+		if !ValidProjectID(req.Project) {
+			httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "invalid project ID"))
+			return
+		}
+		projects, subject = []string{req.Project}, h.title(r.Context(), req.Project)
+	}
+	h.run(w, r, req.many, maxEverywhere, action{
+		kind: "plugins.update", subject: subject, timeout: everywhereTimeout, partly: true,
+		run: func(ctx context.Context, servers []Ref) []Result { return h.svc.Update(ctx, servers, projects) },
 	})
+}
+
+// removeEverywhere removes a project from servers, also where it is turned off.
+func (h *Handler) removeEverywhere(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Project string `json:"project"`
+		many
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	if !ValidProjectID(req.Project) {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "invalid project ID"))
+		return
+	}
+	h.run(w, r, req.many, maxEverywhere, action{
+		kind: "plugins.remove", subject: h.title(r.Context(), req.Project), timeout: everywhereTimeout, partly: true,
+		run: func(ctx context.Context, servers []Ref) []Result {
+			return h.svc.RemoveProject(ctx, req.Project, servers)
+		},
+	})
+}
+
+// title returns the title of a project to name an operation by, or its ID.
+func (h *Handler) title(ctx context.Context, project string) string {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	return (&installation{Service: h.svc}).title(ctx, project)
 }
 
 // checkProjects checks the Modrinth projects to install, before anything is looked up.
