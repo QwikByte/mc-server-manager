@@ -35,6 +35,8 @@ type MFA struct {
 	Enabled bool `json:"enabled"`
 	// RecoveryCodes is the number of recovery codes left.
 	RecoveryCodes int `json:"recoveryCodes"`
+	// Required tells whether the settings require two-factor authentication of the user.
+	Required bool `json:"required"`
 }
 
 // MFASetup is a new secret for an authenticator app. It applies once a code confirms it.

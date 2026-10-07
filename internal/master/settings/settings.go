@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,9 +34,13 @@ const (
 	maxLogDays          = 365
 	minLogSizeMB        = 100
 	maxLogSizeMB        = 100 << 10 // 100 GiB
+	maxMFAGroups        = 100
 )
 
-var hostname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
+var (
+	hostname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
+	groupID  = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
+)
 
 // Settings are the settings of the master.
 type Settings struct {
@@ -65,11 +70,23 @@ type Settings struct {
 	LogSizeMB int `json:"logSizeMb"`
 	// CheckUpdates makes the master look for new releases, which administrators can install.
 	CheckUpdates bool `json:"checkUpdates"`
+	// RequireMFA tells who has to use two-factor authentication.
+	RequireMFA MFARequirement `json:"requireMfa"`
+}
+
+// MFARequirement tells who has to use two-factor authentication: all users, or the members
+// of the groups it names by their IDs. Groups that don't exist (any more) have no members.
+type MFARequirement struct {
+	All    bool     `json:"all"`
+	Groups []string `json:"groups"`
 }
 
 // defaults apply until the settings are changed, and to settings added later.
 func defaults() Settings {
-	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true}
+	return Settings{
+		SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true,
+		RequireMFA: MFARequirement{Groups: []string{}},
+	}
 }
 
 // Master describes the running master. Apart from its certificates, it only changes with a restart.
@@ -130,6 +147,7 @@ func (s *Service) Get() Settings {
 	st := *s.current.Load()
 	l := &st.NodeDefaults
 	l.PortMin, l.PortMax, l.MemoryReserveMB = clone(l.PortMin), clone(l.PortMax), clone(l.MemoryReserveMB)
+	st.RequireMFA.Groups = slices.Clone(st.RequireMFA.Groups)
 	return st
 }
 
@@ -145,6 +163,11 @@ func clone[T any](p *T) *T {
 func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
 	next.EnrollAddr, next.PanelAddr = strings.TrimSpace(next.EnrollAddr), strings.TrimSpace(next.PanelAddr)
 	next.PanelDomain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(next.PanelDomain), "."))
+	if next.RequireMFA.All || next.RequireMFA.Groups == nil {
+		next.RequireMFA.Groups = []string{}
+	}
+	slices.Sort(next.RequireMFA.Groups)
+	next.RequireMFA.Groups = slices.Compact(next.RequireMFA.Groups)
 	err := validate(next, cmp.Or(next.PanelAddr, s.master.PanelDefaultAddr))
 	if err == nil && next.PanelAddr != "" && next.PanelAddr != s.Get().PanelAddr {
 		err = s.checkPanelAddr(next.PanelAddr)
@@ -277,6 +300,8 @@ func validate(s Settings, panelAddr string) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter how long log entries are kept, from 1 to %d days.", maxLogDays)
 	case s.LogSizeMB < minLogSizeMB || s.LogSizeMB > maxLogSizeMB:
 		return httpapi.Errorf(http.StatusBadRequest, "Enter how large the log may grow, from %d to %d MiB.", minLogSizeMB, maxLogSizeMB)
+	case len(s.RequireMFA.Groups) > maxMFAGroups || slices.ContainsFunc(s.RequireMFA.Groups, func(id string) bool { return !groupID.MatchString(id) }):
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d groups that have to use two-factor authentication.", maxMFAGroups)
 	}
 	return s.NodeDefaults.Validate()
 }

@@ -29,10 +29,12 @@ export function MfaSetupDialog({
   username,
   enable,
   onEnabled,
+  trigger = <Button>{t("Set up")}</Button>,
 }: {
   username: string
   enable: UseMutationResult<Codes, Error, { password: string; code: string }>
   onEnabled: (codes: string[]) => void
+  trigger?: ReactElement
 }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ code: "", password: "" })
@@ -58,9 +60,7 @@ export function MfaSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button>{t("Set up")}</Button>
-      </DialogTrigger>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>

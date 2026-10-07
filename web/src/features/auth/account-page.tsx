@@ -16,6 +16,7 @@ import {
   UserCircleIcon,
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
+import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 import { type ReactNode, useState } from "react"
@@ -227,6 +228,7 @@ function MfaSettings({ username }: { username: string }) {
   const disable = useDisableMfa()
   const renew = useNewRecoveryCodes()
   const [codes, setCodes] = useState<string[]>()
+  const navigate = useNavigate()
 
   if (isPending) return <Skeleton className="h-20 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
@@ -251,16 +253,26 @@ function MfaSettings({ username }: { username: string }) {
               <ConfirmPasswordDialog
                 trigger={<Button variant="destructive">{t("Turn off")}</Button>}
                 title={t("Turn off two-factor authentication")}
-                description={t("Then your password alone signs you in. Your authenticator app and recovery codes stop working.")}
+                description={
+                  data.required
+                    ? t(
+                        "Your authenticator app and recovery codes stop working. As your account requires two-factor authentication, you then set it up again right away, e.g. with a new phone.",
+                      )
+                    : t("Then your password alone signs you in. Your authenticator app and recovery codes stop working.")
+                }
                 action={t("Turn off")}
                 destructive
                 change={disable}
-                onSuccess={() => toast.success(t("Turned off two-factor authentication"))}
+                onSuccess={() =>
+                  data.required
+                    ? navigate({ to: "/two-factor", search: { redirect: "/account" } })
+                    : toast.success(t("Turned off two-factor authentication"))
+                }
               />
             </>
           }
         >
-          {t("Signing in asks for a code from the app.")}{" "}
+          {t("Signing in asks for a code from the app.")} {data.required && `${t("Your account requires it.")} `}
           <span className={data.recoveryCodes <= 3 ? "font-medium text-warning" : undefined}>
             {t("{{count}} recovery codes left.", { count: data.recoveryCodes, defaultValue_one: "{{count}} recovery code left." })}
           </span>

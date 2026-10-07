@@ -46,7 +46,12 @@ reasons as the export of the log does. Notes of servers are plain text, which th
 
 Codes of the app (RFC 6238) work only once, and from the fifth wrong code in a row on, codes aren't checked for a minute
 that doubles with every further wrong one, up to a day; parallel guesses count too. Recovery codes have 50 random bits
-and are stored as SHA-256 hashes. The secret of the app is stored in the master's database, which needs the same
+and are stored as SHA-256 hashes. Those who may change the master's settings can require two-factor authentication for
+all users or for groups; the change is logged. Until a user it applies to has set it up, the master refuses every route
+but those of the user's own account (setting it up, signing out, the password, sessions, language and preferences) with
+403, the terminal, streams and the permissions the panel loads included. Setting it up is never refused, so the
+requirement locks nobody out, and `noryx-master user add` stays the way back for administrators who lost their app and
+recovery codes. The secret of the app is stored in the master's database, which needs the same
 protection as the CA key next to it. The panel must be served over HTTPS (its settings, a reverse proxy or
 `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt). With a certificate
 of Let's Encrypt or `--tls-cert`, the master tells browsers to use HTTPS only (HSTS, one year), but not with a

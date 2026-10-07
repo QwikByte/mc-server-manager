@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/QwikByte/noryx/internal/master/database"
 )
+
+func notRequired(context.Context, int64) (bool, error) { return false, nil }
 
 // Users see and end only their own sessions.
 func TestSessions(t *testing.T) {

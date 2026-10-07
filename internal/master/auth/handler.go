@@ -24,19 +24,40 @@ type userKey struct{}
 // for signed-in users, per user, each on its own: anonymous requests can't use up the
 // budget of signed-in users.
 type Handler struct {
-	svc        *Service
-	sessionTTL func() time.Duration
-	clients    *ratelimit.Limiter
-	usernames  *ratelimit.Limiter
-	users      *ratelimit.Limiter
+	svc         *Service
+	sessionTTL  func() time.Duration
+	mfaRequired MFARequired
+	clients     *ratelimit.Limiter
+	usernames   *ratelimit.Limiter
+	users       *ratelimit.Limiter
+}
+
+// MFARequired tells whether the settings require a user to use two-factor authentication.
+type MFARequired func(ctx context.Context, userID int64) (bool, error)
+
+// ErrSetUpMFA answers the requests of users who have to set up two-factor authentication
+// before anything else. Its code tells the panel to send them to the setup.
+var ErrSetUpMFA error = &httpapi.Error{
+	Status: http.StatusForbidden, Code: "mfa-setup-required",
+	Message: "Set up two-factor authentication first: it is required for your account.",
 }
 
 // NewHandler returns the handler of the sign-in. sessionTTL tells how long new sessions last.
-func NewHandler(svc *Service, sessionTTL func() time.Duration) *Handler {
+func NewHandler(svc *Service, sessionTTL func() time.Duration, mfaRequired MFARequired) *Handler {
 	return &Handler{
-		svc: svc, sessionTTL: sessionTTL, clients: ratelimit.New(clientBurst, clientEvery),
+		svc: svc, sessionTTL: sessionTTL, mfaRequired: mfaRequired, clients: ratelimit.New(clientBurst, clientEvery),
 		usernames: ratelimit.New(usernameBurst, usernameEvery), users: ratelimit.New(clientBurst, clientEvery),
 	}
+}
+
+// checkMFA notes whether the user has to set up two-factor authentication before anything else.
+func (h *Handler) checkMFA(ctx context.Context, user User) (User, error) {
+	if user.MFA {
+		return user, nil
+	}
+	required, err := h.mfaRequired(ctx, user.ID)
+	user.MustSetUpMFA = required
+	return user, err
 }
 
 // UserFrom returns the signed in user of a request that passed Require.
@@ -46,7 +67,8 @@ func UserFrom(ctx context.Context) (User, bool) {
 }
 
 // Register adds the routes for the signed-in user's own account. They need a session but
-// no permission. Those that check the password are rate limited per user.
+// no permission, and work for users who have to set up two-factor authentication first, so
+// that they can. Those that check the password are rate limited per user.
 func (h *Handler) Register(mux *http.ServeMux) {
 	perUser := limitedBy(h.users, func(r *http.Request) string {
 		user, _ := UserFrom(r.Context())
@@ -120,6 +142,8 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, errWrongCode), errors.Is(err, errCodeLocked):
 		slog.Warn("Sign in failed", logging.Auth, logging.KeyUser, req.Username, "ip", ClientIP(r), "reason", err)
+	case err == nil:
+		user, err = h.checkMFA(r.Context(), user)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -163,6 +187,9 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, errInvalidSetup) {
 		slog.Warn("Set password with setup link failed", logging.Auth, "ip", ClientIP(r), "err", err)
 	}
+	if err == nil && token != "" {
+		user, err = h.checkMFA(r.Context(), user)
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -191,10 +218,14 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	reply(w, r, "Change password", nil, err)
 }
 
-// mfa tells whether two-factor authentication is on for the signed-in user.
+// mfa tells whether two-factor authentication is on for the signed-in user, and whether the
+// settings require it.
 func (h *Handler) mfa(w http.ResponseWriter, r *http.Request) {
 	user, _ := UserFrom(r.Context())
 	m, err := h.svc.MFA(r.Context(), user.ID)
+	if err == nil {
+		m.Required, err = h.mfaRequired(r.Context(), user.ID)
+	}
 	reply(w, r, "", m, err)
 }
 
@@ -335,7 +366,8 @@ func (h *Handler) setLanguage(w http.ResponseWriter, r *http.Request) {
 const VersionHeader = "Noryx-Version"
 
 // Require rejects requests without a valid session. Answers to the others tell the master's
-// version in VersionHeader.
+// version in VersionHeader. The user of the request tells whether two-factor authentication
+// has to be set up first, which access.Mux enforces.
 func (h *Handler) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(cookieName)
@@ -346,6 +378,9 @@ func (h *Handler) Require(next http.Handler) http.Handler {
 		user, err := h.svc.Authenticate(r.Context(), c.Value, clientOf(r))
 		if errors.Is(err, ErrNoSession) {
 			err = httpapi.Errorf(http.StatusUnauthorized, "Your session has expired. Sign in again.")
+		}
+		if err == nil {
+			user, err = h.checkMFA(r.Context(), user)
 		}
 		if err != nil {
 			httpapi.WriteError(w, r, err)

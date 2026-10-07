@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { ApiError, api } from "@/lib/api"
 import { chooseLanguage } from "@/lib/i18n"
 import { forgetCommandHistories, ownCommandHistories } from "@/lib/use-command-history"
 
@@ -8,7 +8,14 @@ export interface User {
   username: string
   /** The language of the panel the user chose, e.g. de; missing follows the browser. */
   language?: string
+  /** Whether signing in needs a code of an authenticator app too. */
+  mfa: boolean
+  /** Set while the settings require two-factor authentication of the user, who hasn't set it up yet. */
+  mustSetUpMfa?: boolean
 }
+
+/** Whether the master refused a request because the user has to set up two-factor authentication first. */
+export const mustSetUpMfa = (error: unknown) => error instanceof ApiError && error.code === "mfa-setup-required"
 
 export const meQuery = queryOptions({
   queryKey: ["me"],
@@ -92,6 +99,8 @@ export interface MfaStatus {
   enabled: boolean
   /** How many unused recovery codes are left. */
   recoveryCodes: number
+  /** Whether the settings require two-factor authentication of the user. */
+  required: boolean
 }
 
 /** A new secret for an authenticator app; uri is what its QR code contains. */
@@ -106,13 +115,18 @@ export function useSetUpMfa() {
   return useMutation({ mutationFn: () => api<MfaSetup>("/auth/mfa/setup", { method: "POST" }) })
 }
 
-/** The changes of two-factor authentication need the password; some return new recovery codes. Turning it on ends the other sessions. */
+/**
+ * The changes of two-factor authentication need the password; some return new recovery codes. Turning it on
+ * or off changes the user, e.g. whether it has to be set up, and turning it on ends the other sessions.
+ */
 function useMfaChange<T, R>(mutationFn: (input: T) => Promise<R>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn,
     onSuccess: () =>
-      Promise.all([mfaQuery.queryKey, sessionsQuery.queryKey].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
+      Promise.all(
+        [mfaQuery.queryKey, meQuery.queryKey, sessionsQuery.queryKey].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      ),
   })
 }
 

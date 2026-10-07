@@ -10,7 +10,7 @@ import { DocumentTitle } from "@/components/page-title"
 import { Toaster } from "@/components/ui/sonner"
 import { accessQuery } from "@/features/access/api"
 import { accessOf } from "@/features/access/use-access"
-import { meQuery } from "@/features/auth/api"
+import { meQuery, mustSetUpMfa, type User } from "@/features/auth/api"
 import { LoginPage } from "@/features/auth/login-page"
 import { validateLogSearch } from "@/features/logs/search"
 import { validatePlayerSearch } from "@/features/players/search"
@@ -26,13 +26,24 @@ notifyManager.setScheduler(queueMicrotask)
 
 // An expired session sends the user back to the sign-in page, and from there back to where they
 // were, after a query or a change. Not if the panel is already on its way there, e.g. because
-// signing in is checked before a page opens, or the change was signing in.
+// signing in is checked before a page opens, or the change was signing in. Likewise, a user who
+// has to set up two-factor authentication first, e.g. since it became required, is sent there.
 function signInAgain(error: Error) {
   const { pathname, href } = router.latestLocation
   if (error instanceof ApiError && error.status === 401 && pathname !== "/login" && pathname !== "/setup") {
     queryClient.clear()
     void router.navigate({ to: "/login", search: { redirect: href } })
+  } else if (mustSetUpMfa(error) && pathname !== "/two-factor") {
+    void router.navigate({ to: "/two-factor", search: { redirect: href } })
   }
+}
+
+// Only same-site paths are accepted as redirect targets. The key must be set explicitly,
+// because the router merges the validated values over the raw search parameters.
+function validateRedirect(search: Record<string, unknown>): { redirect?: string } {
+  const target = search.redirect
+  const safe = typeof target === "string" && target.startsWith("/") && !target.startsWith("//")
+  return { redirect: safe ? target : undefined }
 }
 
 export const queryClient = new QueryClient({
@@ -58,14 +69,27 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
   staticData: { title: msg("Sign in") },
-  // Only same-site paths are accepted as redirect targets. The key must be set explicitly,
-  // because the router merges the validated values over the raw search parameters.
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
-    const target = search.redirect
-    const safe = typeof target === "string" && target.startsWith("/") && !target.startsWith("//")
-    return { redirect: safe ? target : undefined }
-  },
+  validateSearch: validateRedirect,
   component: LoginPage,
+})
+
+// Users whom the settings require to use two-factor authentication set it up here before
+// anything else, and then go on to where they were going.
+const twoFactorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/two-factor",
+  staticData: { title: msg("Set up two-factor authentication") },
+  validateSearch: validateRedirect,
+  beforeLoad: async ({ context, search }) => {
+    let user: User
+    try {
+      user = await context.queryClient.fetchQuery({ ...meQuery, staleTime: 0 })
+    } catch {
+      throw redirect({ to: "/login", search: { redirect: search.redirect } })
+    }
+    if (!user.mustSetUpMfa) throw redirect({ to: search.redirect ?? "/" })
+  },
+  component: lazyRouteComponent(() => import("@/features/auth/two-factor-page"), "TwoFactorPage"),
 })
 
 // Users set their password here with a setup link; the token is in the fragment.
@@ -79,13 +103,17 @@ const setupRoute = createRoute({
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_app",
-  // The permissions are loaded first, so that the panel only offers what the user may do.
+  // The permissions are loaded first, so that the panel only offers what the user may do. Users who have to set up
+  // two-factor authentication first, whom the master refuses the permissions, do that.
   beforeLoad: async ({ context, location }) => {
+    const search = { redirect: location.href }
+    let user: User
     try {
-      await Promise.all([context.queryClient.ensureQueryData(meQuery), context.queryClient.ensureQueryData(accessQuery)])
-    } catch {
-      throw redirect({ to: "/login", search: { redirect: location.href } })
+      ;[user] = await Promise.all([context.queryClient.ensureQueryData(meQuery), context.queryClient.ensureQueryData(accessQuery)])
+    } catch (error) {
+      throw redirect({ to: mustSetUpMfa(error) ? "/two-factor" : "/login", search })
     }
+    if (user.mustSetUpMfa) throw redirect({ to: "/two-factor", search })
   },
   component: AppShell,
 })
@@ -419,6 +447,7 @@ const terminalRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
+    twoFactorRoute,
     setupRoute,
     appRoute.addChildren([
       indexRoute,

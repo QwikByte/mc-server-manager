@@ -25,6 +25,8 @@ export interface MasterSettings {
   logSizeMb: number
   /** Whether the master looks for new releases, which administrators can install. */
   checkUpdates: boolean
+  /** Who has to use two-factor authentication: all users, or the members of the groups with these IDs. */
+  requireMfa: { all: boolean; groups: string[] }
 }
 
 /** The certificate the panel serves. */

@@ -1,4 +1,14 @@
-import { ArrowClockwiseIcon, CertificateIcon, ClockIcon, CubeIcon, LockIcon, LockOpenIcon, ShieldCheckIcon } from "@phosphor-icons/react"
+import {
+  ArrowClockwiseIcon,
+  CertificateIcon,
+  ClockIcon,
+  CubeIcon,
+  LockIcon,
+  LockOpenIcon,
+  ShieldCheckIcon,
+  ShieldIcon,
+  UsersThreeIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -15,6 +25,8 @@ import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { groupsQuery } from "@/features/access/api"
+import { GroupPicker } from "@/features/access/group-picker"
 import { useAccess } from "@/features/access/use-access"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
@@ -174,7 +186,7 @@ function PanelCertificateFacts({ master }: { master: Master }) {
 }
 
 function formOf(s: MasterSettings) {
-  const { panelAddr, panelHttps, panelDomain, enrollAddr, sessionHours, joinTokenMinutes, logDays, logSizeMb, checkUpdates } = s
+  const { panelAddr, panelHttps, panelDomain, enrollAddr, sessionHours, joinTokenMinutes, logDays, logSizeMb, checkUpdates, requireMfa } = s
   return {
     panelAddr,
     panelHttps,
@@ -185,6 +197,7 @@ function formOf(s: MasterSettings) {
     logDays,
     logSizeMb,
     checkUpdates,
+    requireMfa,
     nodeDefaults: limitsForm(s.nodeDefaults),
   }
 }
@@ -284,6 +297,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
             />
             <FieldDescription>{t("Up to a week. Applies from the next sign-in; shorter sessions are safer.")}</FieldDescription>
           </Field>
+          <MfaRequirementFields value={form.requireMfa} onChange={(requireMfa) => set({ requireMfa })} />
         </FormSection>
 
         <FormSection title={t("Log")}>
@@ -444,6 +458,85 @@ function PanelHTTPSFields({
         </Field>
       )}
     </>
+  )
+}
+
+type MfaRequirement = MasterSettings["requireMfa"]
+
+/** Who has to use two-factor authentication. */
+const mfaChoices = {
+  none: {
+    label: msg("Optional"),
+    description: msg("Each user decides on their account page."),
+    icon: ShieldIcon,
+  },
+  all: {
+    label: msg("Required for everyone"),
+    description: msg("All users have to use it, also those invited later."),
+    icon: ShieldCheckIcon,
+  },
+  groups: {
+    label: msg("Required for groups"),
+    description: msg("The members of the groups chosen here have to use it, e.g. the administrators."),
+    icon: UsersThreeIcon,
+  },
+} satisfies Record<string, { label: string; description: string; icon: typeof LockIcon }>
+
+/** Chooses who has to use two-factor authentication: nobody, all users, or the members of groups. */
+function MfaRequirementFields({ value, onChange }: { value: MfaRequirement; onChange: (value: MfaRequirement) => void }) {
+  // Choosing groups shows them before any is chosen, which would otherwise mean nobody.
+  const [choice, setChoice] = useState<keyof typeof mfaChoices>(value.all ? "all" : value.groups.length ? "groups" : "none")
+  const canSeeGroups = useAccess().can("users.view")
+  const groups = useQuery({ ...groupsQuery, enabled: canSeeGroups && choice === "groups" })
+
+  function choose(next: keyof typeof mfaChoices) {
+    setChoice(next)
+    onChange({ all: next === "all", groups: next === "groups" ? value.groups : [] })
+  }
+
+  return (
+    <Field>
+      <FieldLabel id="settings-require-mfa">{t("Two-factor authentication")}</FieldLabel>
+      <RadioGroup
+        value={choice}
+        onValueChange={(next) => choose(next as keyof typeof mfaChoices)}
+        aria-labelledby="settings-require-mfa"
+        className="gap-3"
+      >
+        {Object.entries(mfaChoices).map(([key, { label, description, icon: Icon }]) => (
+          <FieldLabel key={key} htmlFor={`settings-require-mfa-${key}`}>
+            <Field orientation="horizontal" className="items-start">
+              <Icon className="mt-0.5 size-5 shrink-0 text-primary" weight="duotone" />
+              <FieldContent>
+                <FieldTitle>{t(label)}</FieldTitle>
+                <FieldDescription>{t(description)}</FieldDescription>
+              </FieldContent>
+              <RadioGroupItem id={`settings-require-mfa-${key}`} value={key} />
+            </Field>
+          </FieldLabel>
+        ))}
+      </RadioGroup>
+      {choice === "groups" &&
+        (!canSeeGroups ? (
+          <FieldDescription>
+            {t("{{count}} groups chosen. Choosing others needs the permission to see users and groups.", {
+              count: value.groups.length,
+              defaultValue_one: "{{count}} group chosen. Choosing others needs the permission to see users and groups.",
+            })}
+          </FieldDescription>
+        ) : groups.error ? (
+          <ErrorCallout error={groups.error} />
+        ) : groups.data ? (
+          <GroupPicker groups={groups.data} value={value.groups} onChange={(chosen) => onChange({ all: false, groups: chosen })} />
+        ) : (
+          <Skeleton className="h-24 rounded-xl" />
+        ))}
+      <FieldDescription>
+        {t(
+          "Users it applies to who haven't set it up are asked to as soon as they use the panel, and can do nothing else until they did. Setting it up always works, so nobody is locked out.",
+        )}
+      </FieldDescription>
+    </Field>
   )
 }
 

@@ -273,6 +273,17 @@ func (s *Service) setGroups(ctx context.Context, userID int64, groupIDs []string
 	return err
 }
 
+// InGroups reports whether a user is a member of one of the groups.
+func (s *Service) InGroups(ctx context.Context, userID int64, groupIDs []string) (bool, error) {
+	ids, err := json.Marshal(groupIDs)
+	var in bool
+	if err == nil {
+		err = s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM group_members WHERE user_id = ? AND group_id IN (SELECT value FROM json_each(?)))`,
+			userID, ids).Scan(&in)
+	}
+	return in, err
+}
+
 // MakeAdmin adds a user to the Administrators, e.g. the first user created on the command line.
 func (s *Service) MakeAdmin(ctx context.Context, userID int64) error {
 	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)`, AdminGroup, userID)

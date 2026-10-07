@@ -24,9 +24,14 @@ type Wrapper func(pattern string, h http.HandlerFunc) http.HandlerFunc
 
 func NewMux(mux *http.ServeMux, wrap ...Wrapper) Mux { return Mux{mux: mux, wrap: wrap} }
 
-// Handle registers a route that runs h only if need allows the request.
+// Handle registers a route that runs h only if need allows the request, and if the user
+// doesn't have to set up two-factor authentication first.
 func (m Mux) Handle(pattern string, need Need, h http.HandlerFunc) {
 	checked := func(w http.ResponseWriter, r *http.Request) {
+		if user, _ := auth.UserFrom(r.Context()); user.MustSetUpMFA {
+			httpapi.WriteError(w, r, auth.ErrSetUpMFA)
+			return
+		}
 		if p, ok := need(r, From(r.Context())); !ok {
 			httpapi.WriteError(w, r, Denied(p))
 			return

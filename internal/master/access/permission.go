@@ -152,7 +152,7 @@ var Catalog = []Area{
 	}},
 	{"System", []Info{
 		global(SettingsView, "See the master's settings", "Its version, addresses and settings."),
-		global(SettingsEdit, "Change the master's settings", "Enrollment address, join tokens, sessions and limits of new nodes.", SettingsView),
+		global(SettingsEdit, "Change the master's settings", "Enrollment address, join tokens, sessions, who has to use two-factor authentication and limits of new nodes.", SettingsView),
 		global(Terminal, "Use the terminal", "Each command also needs its own permission, e.g. to restart a server."),
 	}},
 	{"Users and groups", []Info{

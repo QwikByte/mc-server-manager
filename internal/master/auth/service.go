@@ -39,6 +39,12 @@ type User struct {
 	Username string `json:"username"`
 	// Language is the language of the panel the user chose, e.g. de or pt-BR; empty follows the browser.
 	Language string `json:"language,omitempty"`
+	// MFA tells whether signing in needs a code of an authenticator app too.
+	MFA bool `json:"mfa"`
+	// MustSetUpMFA is set for a signed-in user whom the settings require to use two-factor
+	// authentication, but who hasn't set it up: until then, the user may only use the routes
+	// of the own account, see access.Mux.
+	MustSetUpMFA bool `json:"mustSetUpMfa,omitempty"`
 }
 
 // Account is a user as the user management shows it.
@@ -46,10 +52,8 @@ type Account struct {
 	User
 	Disabled bool `json:"disabled"`
 	// PasswordSet is false until an invited user sets a password with the setup link.
-	PasswordSet bool `json:"passwordSet"`
-	// MFA tells whether signing in needs a code of an authenticator app too.
-	MFA       bool      `json:"mfa"`
-	CreatedAt time.Time `json:"createdAt"`
+	PasswordSet bool      `json:"passwordSet"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // SetupLink lets a user set a password once until it expires. Token goes into the link.
@@ -243,10 +247,9 @@ func (s *Service) ChangePassword(ctx context.Context, id int64, current, next, k
 func (s *Service) Login(ctx context.Context, username, password, code string, ttl time.Duration, client Client) (User, string, error) {
 	user := User{Username: username}
 	var hash string
-	var mfa bool
 	err := s.db.QueryRowContext(ctx, `
 		SELECT u.id, u.username, u.language, u.password_hash, COALESCE(m.enabled, 0) FROM users u LEFT JOIN user_mfa m ON m.user_id = u.id
-		WHERE u.username = ? AND u.disabled = 0`, username).Scan(&user.ID, &user.Username, &user.Language, &hash, &mfa)
+		WHERE u.username = ? AND u.disabled = 0`, username).Scan(&user.ID, &user.Username, &user.Language, &hash, &user.MFA)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && hash == "" {
 		verifyPassword(dummyHash(), password) // takes as long as for existing users
 		return User{}, "", ErrInvalidCredentials
@@ -257,7 +260,7 @@ func (s *Service) Login(ctx context.Context, username, password, code string, tt
 	switch {
 	case !verifyPassword(hash, password):
 		err = ErrInvalidCredentials
-	case !mfa:
+	case !user.MFA:
 	case code == "":
 		err = ErrCodeRequired
 	default:
@@ -277,9 +280,10 @@ func (s *Service) Authenticate(ctx context.Context, token string, client Client)
 	var lastUsed int64
 	hash := hashToken(token)
 	err := s.db.QueryRowContext(ctx, `
-		SELECT u.id, u.username, u.language, s.last_used_at FROM sessions s JOIN users u ON u.id = s.user_id
+		SELECT u.id, u.username, u.language, COALESCE(m.enabled, 0), s.last_used_at
+		FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN user_mfa m ON m.user_id = u.id
 		WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0`, hash, time.Now().Unix()).
-		Scan(&user.ID, &user.Username, &user.Language, &lastUsed)
+		Scan(&user.ID, &user.Username, &user.Language, &user.MFA, &lastUsed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return user, ErrNoSession
 	}

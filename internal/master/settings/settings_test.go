@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -190,5 +191,61 @@ func TestRefusedUpdate(t *testing.T) {
 	NewHandler(s, nil).update(rec, r.WithContext(access.WithGrants(t.Context(), access.Admin())))
 	if l := s.NodeDefaults(); rec.Code != http.StatusBadRequest || l.PortMin != nil || *l.MemoryReserveMB != 1024 {
 		t.Fatalf("status %d, limits of new nodes %+v", rec.Code, l)
+	}
+}
+
+// Two-factor authentication is required of all users or of groups, which are checked,
+// sorted and named once. A refused change leaves them as they are.
+func TestRequireMFA(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s, err := Load(t.Context(), db, Master{PanelDefaultAddr: "127.0.0.1:0"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := s.Get().RequireMFA; r.All || r.Groups == nil || len(r.Groups) != 0 {
+		t.Fatalf("default = %+v", r)
+	}
+	set := func(r MFARequirement) error {
+		next := s.Get()
+		next.RequireMFA = r
+		_, err := s.Update(t.Context(), next)
+		return err
+	}
+	many := make([]string, maxMFAGroups+1)
+	for i := range many {
+		many[i] = "group" + strconv.Itoa(i)
+	}
+	for _, bad := range [][]string{{"../admins"}, {""}, many} {
+		if err := set(MFARequirement{Groups: bad}); err == nil {
+			t.Errorf("groups %v accepted", bad)
+		}
+	}
+	if err := set(MFARequirement{Groups: []string{"mods", "administrators", "mods"}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := s.Get().RequireMFA; r.All || !slices.Equal(r.Groups, []string{"administrators", "mods"}) {
+		t.Fatalf("requirement = %+v", r)
+	}
+
+	body := `{"requireMfa": {"all": false, "groups": ["other"]}, "logDays": 0}`
+	r := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	NewHandler(s, nil).update(rec, r.WithContext(access.WithGrants(t.Context(), access.Admin())))
+	if r := s.Get().RequireMFA; rec.Code != http.StatusBadRequest || !slices.Equal(r.Groups, []string{"administrators", "mods"}) {
+		t.Fatalf("status %d, requirement %+v", rec.Code, r)
+	}
+
+	if err := set(MFARequirement{All: true, Groups: []string{"mods"}}); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = Load(t.Context(), db, Master{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r := s.Get().RequireMFA; !r.All || len(r.Groups) != 0 {
+		t.Fatalf("requirement for all = %+v", r)
 	}
 }
