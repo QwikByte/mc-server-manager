@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"iter"
 	"log/slog"
 	"net/netip"
 	"os"
@@ -425,6 +426,10 @@ func (d *Docker) removeNetwork(ctx context.Context, name string) error {
 		return nil
 	}
 	return err
+}
+
+func (d *Docker) DatastoreLogs(ctx context.Context, id string, tail int, after time.Time) iter.Seq2[runtime.LogLine, error] {
+	return d.logs(ctx, datastoreName(id), tail, after)
 }
 
 // waitReady waits until a datastore passes its health check.

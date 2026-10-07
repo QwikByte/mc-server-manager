@@ -12,11 +12,17 @@ import { useAccess } from "@/features/access/use-access"
 import { type Node, nodesQuery } from "@/features/nodes/api"
 import { NodeSettingsDialog } from "@/features/nodes/node-settings-dialog"
 import { NodeStatusBadge } from "@/features/nodes/node-status"
+import { type OutdatedAgent, updateQuery, waitsForUpdate } from "@/features/updates/api"
+import { UpdateAgentButton } from "@/features/updates/update-agent-button"
 import { formatDate, formatMegabytes } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 /** The Agents tab: every node with its agent and settings at a glance. */
 export function AgentsSettingsPage() {
+  const { admin } = useAccess()
   const { data: nodes, isPending, error } = useQuery(nodesQuery)
+  // Only administrators update agents.
+  const { data: updates } = useQuery({ ...updateQuery, enabled: admin })
   if (isPending) return <Skeleton className="h-64 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
   if (nodes.length === 0) {
@@ -46,7 +52,12 @@ export function AgentsSettingsPage() {
         </TableHeader>
         <TableBody>
           {nodes.map((node) => (
-            <AgentRow key={node.id} node={node} />
+            <AgentRow
+              key={node.id}
+              node={node}
+              outdated={updates?.agents.find((a) => a.nodeId === node.id)}
+              version={updates?.version ?? ""}
+            />
           ))}
         </TableBody>
       </Table>
@@ -54,7 +65,8 @@ export function AgentsSettingsPage() {
   )
 }
 
-function AgentRow({ node }: { node: Node }) {
+/** A node with its agent; outdated is set while the agent is older than the master. */
+function AgentRow({ node, outdated, version }: { node: Node; outdated?: OutdatedAgent; version: string }) {
   const { can } = useAccess()
   return (
     <TableRow>
@@ -74,7 +86,13 @@ function AgentRow({ node }: { node: Node }) {
         {node.info ? (
           <>
             <span className="block font-medium">{node.info.agentVersion}</span>
-            <span className="block text-xs text-muted-foreground">{node.info.os || node.info.runtime}</span>
+            {outdated?.update ? (
+              <span className={cn("block text-xs", outdated.update.error ? "text-destructive" : "text-muted-foreground")}>
+                {outdated.update.error ?? t("updating…")}
+              </span>
+            ) : (
+              <span className="block text-xs text-muted-foreground">{node.info.os || node.info.runtime}</span>
+            )}
           </>
         ) : (
           <span className="text-muted-foreground">–</span>
@@ -91,7 +109,8 @@ function AgentRow({ node }: { node: Node }) {
       </TableCell>
       <TableCell className="hidden xl:table-cell">{node.defaultStorage}</TableCell>
       <TableCell>
-        <span className="flex justify-end gap-1">
+        <span className="flex items-center justify-end gap-1">
+          {outdated && waitsForUpdate(outdated) && <UpdateAgentButton agent={outdated} version={version} />}
           {node.enrolledAt && can("terminal.use") && (
             <Button variant="ghost" size="icon-sm" asChild>
               <Link

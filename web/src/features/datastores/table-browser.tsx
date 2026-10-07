@@ -6,6 +6,7 @@ import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
+import { usePageName } from "@/components/page-title"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table as Grid, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -24,6 +25,7 @@ const nameOf = (table: Table) => (table.schema && table.schema !== "public" ? `$
 /** Looks into the tables of a database, which the agent only reads. */
 export function TableBrowser() {
   const { networkId, datastoreId, database } = route.useParams()
+  usePageName(database)
   const search = route.useSearch()
   const navigate = route.useNavigate()
   const { data: datastores } = useQuery(networkDatastoresQuery(networkId))

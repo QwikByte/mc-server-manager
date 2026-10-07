@@ -90,13 +90,21 @@ func TestUpdates(t *testing.T) {
 		check(t, err)
 	}
 
+	// The agent of one node is updated on its own only while it is online and older than the
+	// master, which it isn't here.
+	pending, _, err := m.nodes.Create(t.Context(), "node-2", "127.0.0.1:7443")
+	check(t, err)
+	for id, want := range map[string]int{"unknown": http.StatusNotFound, pending.ID: http.StatusConflict, a.node.ID: http.StatusConflict} {
+		api.do("POST", "/api/update/agents/"+id, nil, want, nil)
+	}
+
 	// Only administrators see and install updates.
 	handler := masterapp.API(m.services(t))
 	user := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r.WithContext(access.WithGrants(r.Context(), access.Grants{})))
 	}))
 	t.Cleanup(user.Close)
-	for _, path := range []string{"/api/update", "/api/update/check", "/api/update/master", "/api/update/agents"} {
+	for _, path := range []string{"/api/update", "/api/update/check", "/api/update/master", "/api/update/agents", "/api/update/agents/" + a.node.ID} {
 		method := "POST"
 		if path == "/api/update" {
 			method = "GET"

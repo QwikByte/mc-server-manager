@@ -56,15 +56,28 @@ func (c *Consoles) Command(ctx context.Context, id, run string, target Target, c
 	return answer, err
 }
 
-// Close closes the connection to the console of a server, e.g. one that stopped.
+// Close closes the connection to the console of a server, e.g. one that stopped, or does so
+// once the command that runs on it is done, without waiting for it: the answer of a server
+// that crashed can take until the command's timeout.
 func (c *Consoles) Close(id string) {
 	c.mu.Lock()
 	con, ok := c.consoles[id]
 	c.mu.Unlock()
-	if ok {
-		con.turn <- struct{}{}
+	if !ok {
+		return
+	}
+	closeConn := func() {
 		con.close()
 		<-con.turn
+	}
+	select {
+	case con.turn <- struct{}{}:
+		closeConn()
+	default:
+		go func() {
+			con.turn <- struct{}{}
+			closeConn()
+		}()
 	}
 }
 

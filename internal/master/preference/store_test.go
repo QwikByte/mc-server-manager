@@ -127,12 +127,15 @@ func TestStore(t *testing.T) {
 	lobby, game := id(), id()
 	check := func(user int64, want Preferences) {
 		t.Helper()
+		if want.Settings == nil {
+			want.Settings = Settings{}
+		}
 		got, err := s.Get(ctx, user)
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("Get(%d) = %+v, %v, want %+v", user, got, err, want)
 		}
 	}
-	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}}
+	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Settings: Settings{}}
 	// Users start with the default layout and no pins, as empty lists rather than nil.
 	check(alice, none)
 
@@ -190,9 +193,67 @@ func TestStore(t *testing.T) {
 	if err := s.SetPinned(ctx, alice, []Server{{n1, lobby}}); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.ChangeSettings(ctx, alice, map[string]*string{"theme": ptr("dark")}); err != nil {
+		t.Fatal(err)
+	}
 	exec(t, db, `DELETE FROM users WHERE id = ?`, alice)
 	var left int
-	if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM dashboards) + (SELECT COUNT(*) FROM pinned_servers)`).Scan(&left); err != nil || left != 0 {
+	if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM dashboards) + (SELECT COUNT(*) FROM pinned_servers) + (SELECT COUNT(*) FROM user_settings)`).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("%d preferences left of a deleted user, %v", left, err)
 	}
+}
+
+func ptr(s string) *string { return &s }
+
+func TestSettings(t *testing.T) {
+	db := open(t)
+	s, ctx := NewStore(db), t.Context()
+	alice, bob := addUser(t, db, "alice"), addUser(t, db, "bob")
+	change := func(user int64, c map[string]*string) {
+		t.Helper()
+		if err := s.ChangeSettings(ctx, user, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(user int64, want Settings) {
+		t.Helper()
+		got, err := s.Get(ctx, user)
+		if err != nil || !reflect.DeepEqual(got.Settings, want) {
+			t.Fatalf("settings of %d = %v, %v, want %v", user, got.Settings, err, want)
+		}
+	}
+
+	// Unknown keys and values are refused, and nothing changes.
+	for name, c := range map[string]map[string]*string{
+		"unknown key":   {"font": ptr("large")},
+		"unknown value": {"theme": ptr("blue")},
+		"accent":        {"accent": ptr("#ff0000")},
+		"density":       {"density": ptr("tight")},
+		"capitals":      {"theme": ptr("Dark")},
+		"empty":         {"clock": ptr("")},
+		"key of a list": {"serverview": ptr("table")},
+		"one of two":    {"theme": ptr("dark"), "clock": ptr("25h")},
+	} {
+		var apiErr *httpapi.Error
+		if err := s.ChangeSettings(ctx, alice, c); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+			t.Errorf("%s: ChangeSettings = %v, want a bad request", name, err)
+		}
+	}
+	check(alice, Settings{})
+
+	// Changes merge with what is stored; null removes a key, and nothing changes nothing.
+	change(alice, map[string]*string{"theme": ptr("dark"), "serverSort": ptr("players"), "accent": ptr("violet")})
+	change(alice, map[string]*string{"clock": ptr("24h"), "serverSort": ptr("cpu"), "density": ptr("compact")})
+	change(bob, map[string]*string{"theme": ptr("light")})
+	check(alice, Settings{"theme": "dark", "accent": "violet", "density": "compact", "clock": "24h", "serverSort": "cpu"})
+	change(alice, map[string]*string{"theme": nil, "accent": nil, "serverView": nil})
+	change(alice, nil)
+	check(alice, Settings{"density": "compact", "clock": "24h", "serverSort": "cpu"})
+	check(bob, Settings{"theme": "light"})
+
+	// Values that a newer version stored, or an older one knew, aren't shown.
+	exec(t, db, `UPDATE user_settings SET settings = '{"theme":"sepia","clock":"12h","font":"large"}' WHERE user_id = ?`, bob)
+	check(bob, Settings{"clock": "12h"})
+	change(bob, map[string]*string{"theme": ptr("system")})
+	check(bob, Settings{"theme": "system", "clock": "12h"})
 }

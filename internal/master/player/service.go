@@ -57,19 +57,19 @@ type Result struct {
 // they do.
 func (s *Service) Change(ctx context.Context, c *noryxv1.PlayerChange, servers []network.Ref) []Result {
 	results := make([]Result, len(servers))
-	operation.Each(ctx, nodesOf(servers), func(i int) {
-		results[i].Ref = servers[i]
+	failed := func(i int, err error) { results[i] = Result{Ref: servers[i], Error: httpapi.Message(err)} }
+	operation.Each(ctx, nodesOf(servers), func(ctx context.Context, i int) {
 		var res *noryxv1.ChangePlayerResponse
 		err := s.call(ctx, servers[i].NodeID, func(ctx context.Context, conn grpc.ClientConnInterface) (err error) {
 			res, err = noryxv1.NewPlayerServiceClient(conn).ChangePlayer(ctx, &noryxv1.ChangePlayerRequest{ServerId: servers[i].ServerID, Change: c})
 			return err
 		})
 		if err != nil {
-			results[i].Error = httpapi.Message(err)
+			failed(i, err)
 			return
 		}
-		results[i].Pending, results[i].Output = res.GetPending(), res.GetOutput()
-	})
+		results[i] = Result{Ref: servers[i], Pending: res.GetPending(), Output: res.GetOutput()}
+	}, failed)
 	return results
 }
 
@@ -116,7 +116,7 @@ type Lists struct {
 func (s *Service) Lists(ctx context.Context, servers []network.Ref) Lists {
 	got := make([]*noryxv1.GetPlayerListsResponse, len(servers))
 	out := Lists{Servers: make([]ServerState, len(servers))}
-	operation.Each(ctx, nodesOf(servers), func(i int) {
+	operation.Each(ctx, nodesOf(servers), func(ctx context.Context, i int) {
 		out.Servers[i] = ServerState{Ref: servers[i], Pending: []Pending{}}
 		err := s.call(ctx, servers[i].NodeID, func(ctx context.Context, conn grpc.ClientConnInterface) (err error) {
 			got[i], err = noryxv1.NewPlayerServiceClient(conn).GetPlayerLists(ctx, &noryxv1.GetPlayerListsRequest{ServerId: servers[i].ServerID})
@@ -125,7 +125,7 @@ func (s *Service) Lists(ctx context.Context, servers []network.Ref) Lists {
 		if err != nil {
 			out.Servers[i].Error = httpapi.Message(err)
 		}
-	})
+	}, nil)
 	var banned, whitelisted, operators joined
 	for i, res := range got {
 		ref := servers[i]
@@ -188,7 +188,7 @@ func (s *Service) GameServers(ctx context.Context, keep func(network.Ref) bool) 
 	for i, n := range nodes {
 		ids[i] = n.ID
 	}
-	operation.Each(ctx, ids, func(i int) {
+	operation.Each(ctx, ids, func(ctx context.Context, i int) {
 		if nodes[i].EnrolledAt == nil {
 			return
 		}
@@ -205,7 +205,7 @@ func (s *Service) GameServers(ctx context.Context, keep func(network.Ref) bool) 
 				perNode[i] = append(perNode[i], ref)
 			}
 		}
-	})
+	}, nil)
 	return slices.Concat(perNode...), nil
 }
 

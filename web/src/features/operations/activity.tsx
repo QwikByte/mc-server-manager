@@ -1,4 +1,4 @@
-import { CheckCircleIcon, CircleNotchIcon, ListChecksIcon, XCircleIcon } from "@phosphor-icons/react"
+import { CheckCircleIcon, CircleNotchIcon, ListChecksIcon, ProhibitIcon, XCircleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -9,6 +9,7 @@ import { allServersQuery, type Move, movesQuery } from "@/features/servers/api"
 import { formatAgo } from "@/lib/format"
 import { useNow } from "@/lib/use-now"
 import { type Operation, operationsQuery, useLiveOperations } from "./api"
+import { CancelButton } from "./cancel-button"
 import { titleOf } from "./labels"
 import { OperationLine } from "./operation-progress"
 
@@ -85,24 +86,33 @@ export function Activity() {
         ) : (
           <ul className="grid gap-2 p-4">
             {ops.map((op) => (
-              <li key={op.id}>
-                <Target op={op} onNavigate={() => setOpen(false)}>
-                  <div className="flex items-start gap-3">
-                    <StateIcon op={op} />
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <p className="truncate text-sm font-medium">{titleOf(op, nameOf(op))}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[op.user, formatAgo(op.startedAt)].filter(Boolean).join(" · ")}
-                      </p>
-                      {!op.finishedAt && (
-                        <div className="pt-1">
-                          <OperationLine op={op} />
-                        </div>
-                      )}
-                      {op.error && <p className="line-clamp-2 text-xs text-destructive">{op.error}</p>}
+              <li
+                key={op.id}
+                className="relative flex items-start gap-3 rounded-xl p-3 ring-1 ring-foreground/8 transition-colors has-[a:hover]:bg-muted/50"
+              >
+                <StateIcon op={op} />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="truncate text-sm font-medium">
+                    <Target op={op} onNavigate={() => setOpen(false)}>
+                      {titleOf(op, nameOf(op))}
+                    </Target>
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {[op.user, formatAgo(op.startedAt)].filter(Boolean).join(" · ")}
+                  </p>
+                  {!op.finishedAt && (
+                    <div className="pt-1">
+                      <OperationLine op={op} />
                     </div>
-                  </div>
-                </Target>
+                  )}
+                  {op.cancelled && op.finishedAt ? (
+                    <p className="text-xs text-muted-foreground">{t("Cancelled")}</p>
+                  ) : (
+                    op.error && <p className="line-clamp-2 text-xs text-destructive">{op.error}</p>
+                  )}
+                </div>
+                {/* Above the link, which covers the whole item. */}
+                <CancelButton op={op} size="sm" className="relative" />
               </li>
             ))}
           </ul>
@@ -121,13 +131,15 @@ function StateIcon({ op }: { op: Operation }) {
         weight="bold"
       />
     )
+  if (op.cancelled) return <ProhibitIcon aria-label={t("Cancelled")} className="mt-0.5 size-5 shrink-0 text-muted-foreground" weight="bold" />
   if (op.error) return <XCircleIcon aria-label={t("Failed")} className="mt-0.5 size-5 shrink-0 text-destructive" weight="fill" />
   return <CheckCircleIcon aria-label={t("Done")} className="mt-0.5 size-5 shrink-0 text-success" weight="fill" />
 }
 
-/** Leads to what an operation is about: its server or network. */
+/** Leads to what an operation is about, its server or network, from anywhere in its item. */
 function Target({ op, onNavigate, children }: { op: Operation; onNavigate: () => void; children: ReactNode }) {
-  const className = "block rounded-xl p-3 ring-1 ring-foreground/8 transition-colors hover:bg-muted/50"
+  const className =
+    "outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
   if (op.nodeId && op.serverId) {
     return (
       <Link
@@ -147,5 +159,5 @@ function Target({ op, onNavigate, children }: { op: Operation; onNavigate: () =>
       </Link>
     )
   }
-  return <div className={className}>{children}</div>
+  return children
 }

@@ -43,6 +43,15 @@ type Client struct {
 	Others  []netip.Addr `json:"others,omitempty"`
 }
 
+// newClient returns the client of a port with its addresses, of which there is at least one.
+func newClient(port uint16, addrs []netip.Addr) Client {
+	c := Client{Port: port, Address: addrs[0]}
+	if len(addrs) > 1 {
+		c.Others = addrs[1:]
+	}
+	return c
+}
+
 func (c Client) addresses() []netip.Addr { return append([]netip.Addr{c.Address}, c.Others...) }
 
 // private are the IPv4 ranges of private networks (RFC 1918).
@@ -134,4 +143,16 @@ func hostAddress(network netip.Prefix, addr netip.Addr) bool {
 // isPeer reports whether addr is the address of a peer.
 func (st State) isPeer(addr netip.Addr) bool {
 	return slices.ContainsFunc(st.Peers, func(p Peer) bool { return p.Address == addr })
+}
+
+// peerClients returns the clients with only the addresses of peers. A node that left the
+// network is no client anymore, as a node that joins later may get its address.
+func (st State) peerClients(clients map[string]Client) map[string]Client {
+	kept := map[string]Client{}
+	for id, c := range clients {
+		if addrs := slices.DeleteFunc(c.addresses(), func(a netip.Addr) bool { return !st.isPeer(a) }); len(addrs) > 0 {
+			kept[id] = newClient(c.Port, addrs)
+		}
+	}
+	return kept
 }

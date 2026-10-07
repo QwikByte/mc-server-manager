@@ -14,7 +14,7 @@ import { suggestPort, usedPorts } from "@/features/servers/server-types"
 import type { Network } from "./api"
 import type { Draft } from "./draft"
 import { bedrockPortError } from "./problems"
-import { findServer } from "./servers"
+import { findServer, joinAddress } from "./servers"
 
 /** The port Bedrock players use unless it is taken, Geyser's default. */
 const bedrockDefault = 19132
@@ -110,7 +110,7 @@ export function BedrockSection({
                 title={
                   proxyHost &&
                   t("Bedrock players connect to {{address}}", {
-                    address: `${proxyHost}:${port}`,
+                    address: joinAddress(proxyHost, port),
                   })
                 }
               >

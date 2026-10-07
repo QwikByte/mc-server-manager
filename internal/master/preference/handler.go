@@ -19,6 +19,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/preferences", h.get)
 	mux.HandleFunc("PUT /api/preferences/dashboard", h.setDashboard)
 	mux.HandleFunc("PUT /api/preferences/pinned", h.setPinned)
+	mux.HandleFunc("PATCH /api/preferences/settings", h.changeSettings)
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) { h.reply(w, r, nil) }
@@ -45,6 +46,17 @@ func (h *Handler) setPinned(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		user, _ := auth.UserFrom(r.Context())
 		err = h.store.SetPinned(r.Context(), user.ID, req.Servers)
+	}
+	h.reply(w, r, err)
+}
+
+// changeSettings changes the settings in the body, e.g. {"theme": "dark"}; null removes one.
+func (h *Handler) changeSettings(w http.ResponseWriter, r *http.Request) {
+	var change map[string]*string
+	err := httpapi.ReadJSON(w, r, &change)
+	if err == nil {
+		user, _ := auth.UserFrom(r.Context())
+		err = h.store.ChangeSettings(r.Context(), user.ID, change)
 	}
 	h.reply(w, r, err)
 }

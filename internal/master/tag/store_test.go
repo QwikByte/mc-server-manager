@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/QwikByte/noryx/internal/master/database"
@@ -60,7 +61,33 @@ func TestStore(t *testing.T) {
 	}
 	check(map[Server][]string{lobby: {"eu", "lobby"}, game: {"bedwars", "eu"}})
 
-	// Tags follow copies and moves, and go with the server.
+	// Notes are trimmed text with lines; empty notes delete them.
+	checkNotes := func(want map[Server]string) {
+		t.Helper()
+		got, err := s.Notes(ctx)
+		if err != nil || fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("Notes = %q, %v, want %q", got, err, want)
+		}
+	}
+	for srv, notes := range map[Server]string{lobby: " Test server\r\n\tAsk Alex ", game: "Bedwars", {"n2", "gone"}: "x"} {
+		if err := s.SetNotes(ctx, srv, notes); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetNotes(ctx, Server{"n2", "gone"}, " "); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{strings.Repeat("ü", maxNotes+1), "a\x1b[31mb", "a\rb"} {
+		if err := s.SetNotes(ctx, game, bad); err == nil {
+			t.Errorf("SetNotes accepted %q", bad)
+		}
+	}
+	if err := s.SetNotes(ctx, game, strings.Repeat("ü", maxNotes)); err != nil {
+		t.Fatal(err)
+	}
+	checkNotes(map[Server]string{lobby: "Test server\n\tAsk Alex", game: strings.Repeat("ü", maxNotes)})
+
+	// Tags and notes follow copies and moves, and go with the server.
 	copied, moved := Server{"n1", "copy"}, Server{"n2", "lobby"}
 	if err := s.Copy(ctx, game, copied); err != nil {
 		t.Fatal(err)
@@ -72,4 +99,5 @@ func TestStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(map[Server][]string{copied: {"bedwars", "eu"}, moved: {"eu", "lobby"}})
+	checkNotes(map[Server]string{copied: strings.Repeat("ü", maxNotes), moved: "Test server\n\tAsk Alex"})
 }

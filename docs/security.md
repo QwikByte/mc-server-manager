@@ -34,7 +34,9 @@ Argon2id password hashes, session tokens stored as SHA-256 hashes, `__Host-` coo
 `SameSite=Strict`), cross-origin request protection, a strict Content Security Policy and self-hosted fonts. Sign-in
 attempts are rate limited per client address (IPv6 per /64 network) and per username, changes that need the password per
 user. A username has a larger budget than a client, so that a single client can't keep a user out. Client addresses come
-from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`.
+from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`. The CSV
+files of servers and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
+reasons as the export of the log does. Notes of servers are plain text, which the panel shows as text only.
 
 ## Two-factor authentication
 
@@ -74,6 +76,9 @@ module paths, commands on errors, options read from files, class data archives, 
 and the system properties of Java, JNDI, logging libraries and JNA, which name classes, libraries or configurations to
 load (also from URLs), are refused. A server that got such an option before an update refused it keeps it until it is
 removed: the agent logs a warning when it starts, and the panel shows it on the server's page and the overview.
+Settings can't set other variables of the images, such as `CUSTOM_SERVER`, `PLUGINS` or `JVM_XX_OPTS`, which download or
+run code and would get around these checks: besides the variables of checked settings, a container only gets its time
+zone as `TZ`, once the agent found it among the IANA time zones it knows.
 
 ## File manager
 
@@ -81,7 +86,9 @@ The agent confines every path to the server's data directory, including through 
 the server's user. Downloads are sent as attachments with a sandboxing CSP, so an uploaded HTML file can't run scripts
 in the panel. Secrets of the server stay on the node: files that only hold them can't be listed, read, written or moved,
 others show them as `<hidden>`, no file or folder with secrets can be moved where they would show, and archives leave
-them out. Only moving a server to another node copies them.
+them out. Only moving a server to another node copies them. Moving or deleting several files and folders at once
+checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the browser
+only up to 16 MB, so that a small archive can't exhaust the browser's memory.
 
 ## Plugins and downloads
 
@@ -133,8 +140,13 @@ the time of the load. The agent never stores the passwords of users: upgrades ke
 uses them in a statement. Dumps are kept like backups and checked before a restore drops anything, so a damaged one
 changes nothing. Browsing reads as the superuser in a session that only reads and stops each statement after 10 seconds,
 with statements the agent builds itself from names that need no escaping: tables, schemas and columns whose names don't
-match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. The
-passwords are stored in the master's database like the forwarding secret, and are never logged. The API returns them
+match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. The log
+of a datastore's container, which only those who may manage datastores see, shows the statements that the engines log,
+e.g. when one fails, so the agent hides every quoted value after `PASSWORD`, `PASSWORD(`, `IDENTIFIED BY` and `USING`,
+the hashes of passwords too, before it sends a line: also with escaped quotes, and to the end of the line where it can't
+tell where a value ends. It drops control characters, so that a line can't control the terminal of the local CLI, and
+the master relays the log without logging it. The passwords are stored in the master's database like the forwarding
+secret, and are never logged. The API returns them
 only to those who may manage datastores, one at a time on request, without caching, and logs who asked; they can
 download all data in dumps anyway. A compromised master knows them, as it knows the forwarding secret, and could restore
 or delete data, but can't learn the superuser's password or place data outside the allowed storage locations.
@@ -159,12 +171,15 @@ same way; the backups on the node keep them, so restoring works.
 
 Every API route states the permission it needs when it is registered, so none can be added without; the terminal checks
 each command the same way and refuses commands without a check. Permissions are loaded for every request, so changes,
-disabling and deleting apply right away; disabled users are signed out. Streams that follow output, the console and
-terminal commands such as `server logs`, end every 5 minutes, so the panel checks the session and the permissions again;
-the console connects again on its own and continues. Users can only grant permissions they have themselves, within their
-own scope, and only manage users who have no more permissions than they do, so no one can raise their own permissions.
+disabling and deleting apply right away; disabled users are signed out. Streams that follow output, the console, the
+log of a datastore and terminal commands such as `server logs`, end every 5 minutes, so the panel checks the session and
+the permissions again; the console and the log connect again on their own and continue. Users can only grant
+permissions they have themselves, within their own scope, and only manage users who have no more permissions than they
+do, so no one can raise their own permissions.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
-change with the user who made it, also denied attempts.
+change with the user who made it, also denied attempts. An operation in progress can only be cancelled by the user who
+started it, or by one who has the permissions it needed on what it is about, and only while it is at steps that stop
+safely: restoring a backup, moving a server and restarting servers one after the other always finish.
 
 ## Terminal
 
@@ -172,12 +187,14 @@ The panel's terminal is not a shell. The agent's commands are the same code as i
 reach the agent through the existing mutually authenticated connection, so the agent offers nothing new to the master.
 Commands that only the node's administrator may run (`storage`, `enroll`, `overlay allow`, `deny` and `up`) don't exist
 there. Command lines are split like a shell would, but nothing is expanded or executed by one, and the master logs every
-command with the user who ran it.
+command with the user who ran it. Completion offers only the commands that the user's permissions allow on some server
+or node of the target, and only the servers, nodes, datastores and backups the panel shows the user anyway; each command
+still checks its permission with its arguments when it runs.
 
 ## Log
 
-An agent can only add entries about its own node and its servers, at a limited rate, and entries are cut to a maximum
-size, so a compromised agent can't fill the database or write entries about other nodes. Request fields that may hold
+An agent can only add entries about its own node and its servers, at a limited rate of entries and of bytes, and entries
+are cut to a maximum size, so a compromised agent can't fill the database or write entries about other nodes. Request fields that may hold
 secrets, such as the forwarding secret of a network, are never logged. Exports protect spreadsheets from formulas in
 entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the browser connects
 again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP address is that of the
@@ -195,6 +212,11 @@ files, and to create servers on the new node.
 To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console password from the
 server's `server.properties` and connects to the server's console port inside Docker's network; the password never
 leaves the node.
+
+Servers and their plugins write the output, so the panel shows it only as text: the agent turns its colours into
+Minecraft's colour codes, which the panel only maps to class names of a fixed set, never to markup. The plain output,
+which the CLI and the terminal show, has no control characters but line breaks and tabs, so that a server can't control
+the terminal it is shown in.
 
 ## Private network
 

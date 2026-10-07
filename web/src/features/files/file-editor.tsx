@@ -2,7 +2,7 @@ import { ArrowCounterClockwiseIcon, CaretLeftIcon, DownloadSimpleIcon, FloppyDis
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
-import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react"
 import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -14,7 +14,7 @@ import { useAccess } from "@/features/access/use-access"
 import { guard } from "@/features/operations/use-operation"
 import { ApiError } from "@/lib/api"
 import { contentUrl, FileChangedError, readText, saveText, type ServerFiles, type TextFile } from "./api"
-import type { EditorHandle } from "./code-editor"
+import type { EditorHandle, Problem } from "./code-editor"
 
 // CodeMirror is only loaded when a file is opened.
 const CodeEditor = lazy(() => import("./code-editor").then((m) => ({ default: m.CodeEditor })))
@@ -74,20 +74,29 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
     },
   })
   const blocker = useBlocker({ shouldBlockFn: () => dirty, enableBeforeUnload: () => dirty, withResolver: true })
-  const { mutate } = save
+  const [problem, setProblem] = useState<Problem>()
   const opened = file?.version
 
+  /** Saves the changes, after a warning about a syntax error, which servers trip over. */
+  async function trySave() {
+    if (!dirty || save.isPending) return
+    const found = await editor.current?.problem()
+    if (found) setProblem(found)
+    else save.mutate({ over: saved.current ?? opened })
+  }
+
   // Ctrl+S saves wherever the focus is, e.g. after a dialog closed.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault()
-        if (dirty) mutate({ over: saved.current ?? opened })
-      }
+  const onKey = useEffectEvent((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault()
+      void trySave()
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [dirty, mutate, opened])
+  })
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => onKey(e)
+    window.addEventListener("keydown", listener)
+    return () => window.removeEventListener("keydown", listener)
+  }, [])
 
   /** Discards the changes and edits the file as it is on the server. */
   const takeServers = (server: TextFile) => {
@@ -118,7 +127,7 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
             </a>
           </Button>
           {writable && (
-            <Button disabled={!dirty || save.isPending} onClick={() => save.mutate({ over: saved.current ?? opened })}>
+            <Button disabled={!dirty || save.isPending} onClick={trySave}>
               <FloppyDiskIcon />
               {save.isPending ? t("Saving…") : t("Save")}
             </Button>
@@ -176,6 +185,27 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
           </DialogContent>
         )}
       </Dialog>
+      {problem && (
+        <ConfirmDialog
+          open
+          onOpenChange={() => {
+            setProblem(undefined)
+            editor.current?.reveal(problem.at)
+          }}
+          title={t("{{name}} has a syntax error", { name })}
+          description={
+            <>
+              <span className="mb-2 block font-mono text-xs break-words text-foreground">
+                {t("Line {{line}}: {{message}}", { line: problem.line, message: problem.message })}
+              </span>
+              {t("Servers and plugins may fail to read the file, or replace it with their defaults.")}
+            </>
+          }
+          action={t("Save anyway")}
+          destructive
+          onConfirm={() => save.mutate({ over: saved.current ?? opened })}
+        />
+      )}
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}

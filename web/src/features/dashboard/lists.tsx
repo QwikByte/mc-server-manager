@@ -23,8 +23,10 @@ import { cn } from "@/lib/utils"
 import { problemsOf } from "./attention"
 import { useOverview } from "./overview"
 import { Calm, Panel } from "./panel"
+import { useAutomationTasks } from "./tasks"
 
-const row = "transition-colors hover:bg-muted/50"
+/** A row of a widget that links somewhere. */
+export const row = "transition-colors hover:bg-muted/50"
 
 /** What needs an operator, the most urgent first; solved problems fade away. */
 export function Attention({ title }: { title: string }) {
@@ -32,7 +34,8 @@ export function Attention({ title }: { title: string }) {
   const { nodes, servers = [], networks, usages } = useOverview()
   const { data: overlay } = useQuery(overlayQuery)
   const { data: datastores } = useQuery({ ...datastoresQuery, enabled: access.can("datastores.view") })
-  const problems = problemsOf(nodes, servers, networks, usages, overlay, datastores)
+  const tasks = useAutomationTasks()
+  const problems = problemsOf(nodes, servers, networks, usages, overlay, datastores, tasks)
   return (
     <Panel title={title} count={problems.length}>
       {problems.length === 0 ? (

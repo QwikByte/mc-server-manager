@@ -13,7 +13,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -185,24 +184,22 @@ type Result struct {
 // Install installs the newest suitable release of each project on the given servers,
 // or the version chosen for it by project ID, together with the projects it requires.
 // Installed projects are updated, but projects that are only required are left as they
-// are.
+// are. A server it began gets all of them, also if the operation is cancelled.
 func (s *Service) Install(ctx context.Context, projects []string, chosen map[string]string, servers []Ref) []Result {
 	run := &installation{Service: s, chosen: chosen}
 	results := make([]Result, len(servers))
-	var wg sync.WaitGroup
-	var finished atomic.Int64
-	operation.Count(ctx, 0, int64(len(servers)), "servers")
+	nodes := make([]string, len(servers))
 	for i, ref := range servers {
-		wg.Go(func() {
-			installed, err := run.install(ctx, ref, projects)
-			results[i] = Result{Ref: ref, Installed: installed}
-			if err != nil {
-				results[i].Error = httpapi.Message(err)
-			}
-			operation.Count(ctx, finished.Add(1), int64(len(servers)), "servers")
-		})
+		results[i], nodes[i] = Result{Ref: ref, Installed: []Installed{}}, ref.NodeID // a list also if nothing is installed
 	}
-	wg.Wait()
+	failed := func(i int, err error) { results[i].Error = httpapi.Message(err) }
+	operation.Each(ctx, nodes, func(ctx context.Context, i int) {
+		installed, err := run.install(ctx, servers[i], projects)
+		results[i].Installed = append(results[i].Installed, installed...)
+		if err != nil {
+			failed(i, err)
+		}
+	}, failed)
 	return results
 }
 

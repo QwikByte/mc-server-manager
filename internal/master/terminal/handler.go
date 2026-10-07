@@ -62,9 +62,10 @@ func NewHandler(nodes Nodes, master Master, logs *logs.Store, moving func(server
 	return &Handler{nodes: nodes, master: master, logs: logs, moving: moving}
 }
 
-// Register adds the route; besides the terminal permission, every command needs its own.
+// Register adds the routes; besides the terminal permission, every command needs its own.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/terminal", access.Everywhere(access.Terminal), h.run)
+	mux.Handle("GET /api/terminal/commands", access.Everywhere(access.Terminal), h.commands)
 }
 
 // run runs a command line on a target and streams its output as JSON lines: {"output": …}
@@ -82,7 +83,7 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 	args, err := parse(req.Command)
 	var root *cobra.Command
 	if err == nil {
-		root, err = h.root(r.Context(), req.Target)
+		root, _, err = h.root(r.Context(), req.Target)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -128,22 +129,24 @@ func parse(line string) ([]string, error) {
 	return args, nil
 }
 
-// root returns the commands of a target: the master or the agent of a node. Each command
-// checks the permission it needs before it runs.
-func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, error) {
+// root returns the commands of a target, the master or the agent of a node, and their checks.
+// Each command checks the permission it needs before it runs.
+func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, map[string]check, error) {
 	if target == MasterTarget {
-		root := guarded("noryx-master", "Commands of the master. Choose a node to run the commands of its agent.", h.masterChecks())
+		checks := h.masterChecks()
+		root := guarded("noryx-master", "Commands of the master. Choose a node to run the commands of its agent.", checks)
 		root.AddCommand(h.masterCommands()...)
-		return root, nil
+		return root, checks, nil
 	}
 	n, err := h.nodes.Get(ctx, target)
 	if err == nil && !access.From(ctx).SeesNode(n.ID) {
 		err = access.Denied(access.ServersView)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	root := guarded("noryx-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations and the private network are only allowed on the node itself.", n.Name), agentChecks(n.ID, h.moving))
+	checks := agentChecks(n.ID, h.moving)
+	root := guarded("noryx-agent", fmt.Sprintf("Commands of the agent of %s. Storage locations and the private network are only allowed on the node itself.", n.Name), checks)
 	root.AddCommand(agentcli.Commands(func(ctx context.Context, fn func(grpc.ClientConnInterface) error) error {
 		conn, err := h.nodes.Conn(ctx, n.ID)
 		if err != nil {
@@ -151,7 +154,7 @@ func (h *Handler) root(ctx context.Context, target string) (*cobra.Command, erro
 		}
 		return fn(conn)
 	})...)
-	return root, nil
+	return root, checks, nil
 }
 
 type event struct {

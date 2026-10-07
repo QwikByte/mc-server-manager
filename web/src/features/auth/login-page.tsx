@@ -21,7 +21,7 @@ export function LoginPage() {
     event.preventDefault()
     login.mutate(
       { ...credentials, code },
-      { onSuccess: (result) => ("mfaRequired" in result ? setCode("") : navigate({ to: redirect ?? "/nodes" })) },
+      { onSuccess: (result) => ("mfaRequired" in result ? setCode("") : navigate({ to: redirect ?? "/" })) },
     )
   }
 
@@ -96,7 +96,7 @@ function CodeField({ value, onChange }: { value: string; onChange: (code: string
         inputMode={recovery ? "text" : "numeric"}
         maxLength={recovery ? 11 : 6}
         placeholder={recovery ? "XXXXX-XXXXX" : "000000"}
-        className="h-12 text-center font-mono text-xl tracking-[0.3em] placeholder:text-muted-foreground/40"
+        className="h-12 text-center font-mono text-xl tracking-[0.3em]"
         value={value}
         onChange={(e) => onChange(recovery ? e.target.value.trim() : e.target.value.replace(/\D/g, ""))}
       />

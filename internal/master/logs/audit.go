@@ -44,7 +44,9 @@ var actions = map[string]action{
 	"POST /api/update/check":                                   {logging.System, "Check for updates"},
 	"POST /api/update/master":                                  {logging.System, "Update master"},
 	"POST /api/update/agents":                                  {logging.Nodes, "Update agents"},
+	"POST /api/update/agents/{node}":                           {logging.Nodes, "Update agent"},
 	"POST /api/terminal":                                       {logging.Terminal, "Run terminal command"},
+	"POST /api/operations/{id}/cancel":                         {logging.System, "Cancel operation"}, // noted in the operation's category
 	"GET /api/logs/export":                                     {logging.System, "Export log"},
 	"POST /api/nodes":                                          {logging.Nodes, "Add node"},
 	"PUT /api/nodes/{id}":                                      {logging.Nodes, "Change node"},
@@ -61,6 +63,7 @@ var actions = map[string]action{
 	"POST /api/servers/tags":                                   {logging.Servers, "Change server tags"},
 	"PUT " + routeServer:                                       {logging.Servers, "Change server settings"},
 	"POST " + routeServer + "/update-image":                    {logging.Servers, "Update server image"},
+	"PUT " + routeServer + "/notes":                            {logging.Servers, "Change server notes"},
 	"DELETE " + routeServer:                                    {logging.Servers, "Delete server"},
 	"POST " + routeServer + "/start":                           {logging.Servers, "Start server"},
 	"POST " + routeServer + "/stop":                            {logging.Servers, "Stop server"},

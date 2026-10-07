@@ -1,5 +1,6 @@
 // Package preference keeps each user's preferences of the panel: the layout of their
-// overview and the servers they pinned. They follow the user into every browser.
+// overview, the servers they pinned and settings such as the colour theme. They follow the
+// user into every browser.
 package preference
 
 import (
@@ -7,8 +8,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"regexp"
+	"slices"
+	"strings"
 
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
@@ -25,13 +29,33 @@ var (
 	idPattern = regexp.MustCompile(`^[a-z2-7]{26}$`)
 )
 
+// settings are the keys of Settings and the values each takes, which the panel knows too
+// (web/src/features/preferences/api.ts).
+var settings = map[string][]string{
+	"theme":   {"light", "dark", "system"},
+	"accent":  {"emerald", "blue", "violet", "graphite"},
+	"density": {"comfortable", "compact"},
+	"clock":   {"12h", "24h"},
+	// How lists of servers are shown where their address doesn't say.
+	"serverView":  {"grid", "table"},
+	"serverSort":  {"name", "state", "players", "cpu", "memory", "node"},
+	"serverOrder": {"asc", "desc"},
+	"serverGroup": {"none", "network", "node", "type", "tag"},
+}
+
 // Preferences are what a user chose for the panel.
 type Preferences struct {
 	// Dashboard is the order of the widgets of the overview; empty shows the panel's default layout.
 	Dashboard []Widget `json:"dashboard"`
 	// Pinned are the servers the user pinned, in their order.
 	Pinned []Server `json:"pinned"`
+	// Settings are the user's other choices, e.g. the colour theme.
+	Settings Settings `json:"settings"`
 }
+
+// Settings are values of the panel's settings by their keys, e.g. {"theme": "dark"}. Keys a
+// user never set follow the browser.
+type Settings map[string]string
 
 // Widget is a widget of the overview, which spans 1 to 3 columns of its grid.
 type Widget struct {
@@ -52,18 +76,15 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 // Get returns the preferences of a user. Those the user never set are empty, not nil.
 func (s *Store) Get(ctx context.Context, userID int64) (Preferences, error) {
-	p := Preferences{Dashboard: []Widget{}, Pinned: []Server{}}
-	var widgets string
-	err := s.db.QueryRowContext(ctx, `SELECT widgets FROM dashboards WHERE user_id = ?`, userID).Scan(&widgets)
-	switch {
-	case err == nil:
-		err = json.Unmarshal([]byte(widgets), &p.Dashboard)
-	case errors.Is(err, sql.ErrNoRows):
-		err = nil
-	}
-	if err != nil {
+	p := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Settings: Settings{}}
+	if err := s.readJSON(ctx, `SELECT widgets FROM dashboards WHERE user_id = ?`, userID, &p.Dashboard); err != nil {
 		return p, err
 	}
+	if err := s.readJSON(ctx, `SELECT settings FROM user_settings WHERE user_id = ?`, userID, &p.Settings); err != nil {
+		return p, err
+	}
+	// Values that only an older version knew are left out.
+	maps.DeleteFunc(p.Settings, func(key, value string) bool { return !slices.Contains(settings[key], value) })
 	rows, err := s.db.QueryContext(ctx, `SELECT node_id, server_id FROM pinned_servers WHERE user_id = ? ORDER BY position`, userID)
 	if err != nil {
 		return p, err
@@ -120,6 +141,37 @@ func (s *Store) SetPinned(ctx context.Context, userID int64, servers []Server) e
 	return tx.Commit()
 }
 
+// ChangeSettings changes some of a user's settings: a value sets its key, null removes it so
+// that it follows the browser again. The other keys keep their values, also those that another
+// change sets at the same time.
+func (s *Store) ChangeSettings(ctx context.Context, userID int64, change map[string]*string) error {
+	if err := checkSettings(change); err != nil || len(change) == 0 {
+		return err
+	}
+	data, err := json.Marshal(change)
+	if err != nil {
+		return err
+	}
+	// json_patch merges as RFC 7396 describes, in a single statement.
+	_, err = s.db.ExecContext(ctx, `INSERT INTO user_settings (user_id, settings) VALUES (?1, json_patch('{}', ?2))
+		ON CONFLICT (user_id) DO UPDATE SET settings = json_patch(settings, ?2)`, userID, string(data))
+	return err
+}
+
+// readJSON decodes the JSON that query returns for a user into v, which stays as it is
+// without a row.
+func (s *Store) readJSON(ctx context.Context, query string, userID int64, v any) error {
+	var data string
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(&data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(data), v)
+}
+
 // Forget unpins a deleted server for every user.
 func (s *Store) Forget(ctx context.Context, nodeID, serverID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM pinned_servers WHERE node_id = ? AND server_id = ?`, nodeID, serverID)
@@ -168,6 +220,19 @@ func checkPinned(servers []Server) error {
 			return httpapi.Errorf(http.StatusBadRequest, "A server is pinned twice.")
 		}
 		seen[srv] = true
+	}
+	return nil
+}
+
+func checkSettings(change map[string]*string) error {
+	for _, key := range slices.Sorted(maps.Keys(change)) {
+		values, known := settings[key]
+		switch {
+		case !known:
+			return httpapi.Errorf(http.StatusBadRequest, "The panel has no setting %q.", key)
+		case change[key] != nil && !slices.Contains(values, *change[key]):
+			return httpapi.Errorf(http.StatusBadRequest, "The setting %q is one of %s, or null.", key, strings.Join(values, ", "))
+		}
 	}
 	return nil
 }

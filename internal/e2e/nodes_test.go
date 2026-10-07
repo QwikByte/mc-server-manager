@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
@@ -21,6 +22,15 @@ func TestNodeErrors(t *testing.T) {
 	a := m.startAgent(t, "node-1")
 	api := apiClient{t: t, url: m.panel(t).URL}
 	path := "/api/nodes/" + a.node.ID
+	type nodeView struct {
+		Status               string
+		CertificateExpiresAt *time.Time
+	}
+	var online nodeView
+	api.do("GET", path, nil, http.StatusOK, &online)
+	if online.Status != "online" || online.CertificateExpiresAt == nil {
+		t.Fatalf("online node = %+v", online)
+	}
 
 	a.runtime.mu.Lock()
 	a.runtime.down = true
@@ -34,6 +44,13 @@ func TestNodeErrors(t *testing.T) {
 	api.do("PUT", path, map[string]any{"name": "node-1", "address": gone.Addr().String(), "defaultStorage": "default"}, http.StatusOK, nil)
 	if body := api.do("GET", path+"/servers", nil, http.StatusBadGateway, nil); !strings.Contains(body, "node-1 can't be reached.") {
 		t.Errorf("while the agent can't be reached: %s", body)
+	}
+
+	// The panel still learns when the certificate of the offline node expires.
+	var offline nodeView
+	api.do("GET", path, nil, http.StatusOK, &offline)
+	if offline.Status != "offline" || offline.CertificateExpiresAt == nil || !offline.CertificateExpiresAt.Equal(*online.CertificateExpiresAt) {
+		t.Fatalf("offline node = %+v, online it was %+v", offline, online)
 	}
 }
 

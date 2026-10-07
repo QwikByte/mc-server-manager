@@ -2,7 +2,10 @@ package e2e
 
 import (
 	"errors"
+	"maps"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -98,6 +101,63 @@ func TestBulkActionsAndTags(t *testing.T) {
 	}
 }
 
+// The agent applies a stop timeout and a time zone it checked, and the master keeps the notes
+// of servers, which those who may see a server see in its lists.
+func TestStopTimeoutTimeZoneAndNotes(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	api := apiClient{t: t, url: m.panel(t).URL}
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	path := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID
+	type listed struct {
+		StopTimeout uint32
+		TimeZone    string
+		Notes       string
+	}
+	get := func() listed {
+		var servers []listed
+		api.do("GET", "/api/nodes/"+lobby.NodeID+"/servers", nil, http.StatusOK, &servers)
+		return servers[0]
+	}
+	if s := get(); s.StopTimeout != 60 || s.TimeZone != "" || s.Notes != "" {
+		t.Fatalf("new server = %+v", s)
+	}
+
+	settings := map[string]any{"name": "Lobby", "memoryMb": 1024, "port": 25565, "stopTimeout": 300, "timeZone": "Europe/Berlin"}
+	api.do("PUT", path, settings, http.StatusOK, nil)
+	if s, spec := get(), a.runtime.spec(lobby.ServerID); s.StopTimeout != 300 || s.TimeZone != "Europe/Berlin" || spec.StopTimeout != 300 || spec.TimeZone != "Europe/Berlin" {
+		t.Fatalf("server = %+v, spec = %+v", s, spec)
+	}
+	for key, value := range map[string]any{"stopTimeout": 20, "timeZone": "Local"} {
+		bad := maps.Clone(settings)
+		bad[key] = value
+		api.do("PUT", path, bad, http.StatusBadRequest, nil)
+	}
+
+	api.do("PUT", path+"/notes", map[string]any{"notes": " For the event in May.\nAsk Alex. "}, http.StatusNoContent, nil)
+	if s := get(); s.Notes != "For the event in May.\nAsk Alex." {
+		t.Fatalf("notes = %q", s.Notes)
+	}
+	api.do("PUT", path+"/notes", map[string]any{"notes": strings.Repeat("x", 501)}, http.StatusBadRequest, nil)
+	api.do("PUT", "/api/nodes/"+lobby.NodeID+"/servers/aaaaaaaaaaaaaaaaaaaaaaaaaa/notes", map[string]any{"notes": "x"}, http.StatusNotFound, nil)
+
+	// A copy gets the notes and settings of the original.
+	var copied struct {
+		ID string
+		listed
+	}
+	api.do("POST", path+"/duplicate", map[string]any{"name": "Lobby 2", "port": 25566}, http.StatusCreated, &copied)
+	notes, err := tag.NewStore(m.db).Notes(t.Context())
+	if err != nil || notes[tag.Server{NodeID: lobby.NodeID, ServerID: copied.ID}] != "For the event in May.\nAsk Alex." ||
+		copied.StopTimeout != 300 || copied.TimeZone != "Europe/Berlin" {
+		t.Fatalf("copy = %+v, notes = %q, %v", copied, notes, err)
+	}
+	api.do("PUT", path+"/notes", map[string]any{"notes": ""}, http.StatusNoContent, nil)
+	if s := get(); s.Notes != "" {
+		t.Fatalf("notes = %q", s.Notes)
+	}
+}
+
 // waitForOperation waits until an operation is as ok wants it.
 func waitForOperation(t *testing.T, api apiClient, id string, ok func(operation.Operation) bool) operation.Operation {
 	t.Helper()
@@ -158,6 +218,61 @@ func TestOperations(t *testing.T) {
 		t.Fatalf("operation = %+v", got)
 	}
 	api.do("GET", "/api/operations/unknown", nil, http.StatusNotFound, nil)
+}
+
+// Creating a server can be cancelled while the agent downloads its image, which stops it
+// and leaves no server. Restoring a backup can't be cancelled.
+func TestCancelOperations(t *testing.T) {
+	m := startMaster(t)
+	m.quick = 0
+	a := m.startAgent(t, "node-1")
+	api := apiClient{t: t, url: m.panel(t).URL}
+	path := "/api/nodes/" + a.node.ID + "/servers"
+	hold := make(chan struct{})
+	a.runtime.mu.Lock()
+	a.runtime.hold = hold
+	a.runtime.mu.Unlock()
+	var op operation.Operation
+	api.do("POST", path, map[string]any{"name": "Lobby", "type": "paper", "memoryMb": 1024, "port": 25565, "acceptEula": true}, http.StatusAccepted, &op)
+	if !op.Cancellable {
+		t.Fatalf("operation = %+v", op)
+	}
+	waitForOperation(t, api, op.ID, func(op operation.Operation) bool { return op.Done == 50 })
+	var cancelled operation.Operation
+	api.do("POST", "/api/operations/"+op.ID+"/cancel", nil, http.StatusAccepted, &cancelled)
+	if !cancelled.Cancelled || cancelled.Cancellable {
+		t.Fatalf("operation = %+v", cancelled)
+	}
+	got := waitForOperation(t, api, op.ID, func(op operation.Operation) bool { return op.FinishedAt != nil })
+	if !got.Cancelled || got.Error != "The operation was cancelled." || got.Steps[got.Step] != "image" {
+		t.Fatalf("operation = %+v", got)
+	}
+	var servers []struct{ ID string }
+	api.do("GET", path, nil, http.StatusOK, &servers)
+	if len(servers) != 0 {
+		t.Fatalf("servers = %+v", servers)
+	}
+	api.do("POST", "/api/operations/"+op.ID+"/cancel", nil, http.StatusConflict, nil)
+	api.do("POST", "/api/operations/unknown/cancel", nil, http.StatusNotFound, nil)
+
+	close(hold)
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	check(t, os.WriteFile(filepath.Join(a.runtime.dir, lobby.ServerID, "server.properties"), []byte("motd=Lobby\n"), 0o600))
+	backups := path + "/" + lobby.ServerID + "/backups"
+	var backingUp, restoring operation.Operation
+	api.do("POST", backups, map[string]any{"selection": map[string]bool{"everything": true}}, http.StatusAccepted, &backingUp)
+	if !backingUp.Cancellable {
+		t.Fatalf("backing up: %+v", backingUp)
+	}
+	backup := waitForOperation(t, api, backingUp.ID, func(op operation.Operation) bool { return op.FinishedAt != nil })
+	id, _ := backup.Result.(map[string]any)["id"].(string)
+	api.do("POST", backups+"/"+id+"/restore", nil, http.StatusAccepted, &restoring)
+	if restoring.ID == "" || restoring.Cancellable {
+		t.Fatalf("restoring: %+v", restoring)
+	}
+	if got := waitForOperation(t, api, restoring.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); got.Error != "" {
+		t.Fatalf("restoring: %+v", got)
+	}
 }
 
 // Servers created at the same time, e.g. after a double click, can't take the same port,

@@ -10,7 +10,10 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { useAccess } from "@/features/access/use-access"
+import type { ServerRef } from "@/features/networks/api"
 import { OperationStatus } from "@/features/operations/operation-status"
+import { mergeResults } from "@/features/operations/retry"
+import { RetryButton } from "@/features/operations/retry-button"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Action, type FileSet, type Preview, type PreviewFile, type PreviewServer, type Result, useApply, usePreview } from "./api"
 import { DiffView } from "./diff-view"
@@ -64,8 +67,10 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
   const restarting = groups.flatMap((g) => g.servers).filter((s) => s.running)
   const mayRestart = restarting.every((s) => can("servers.restart", s.nodeId, s.serverId))
 
-  function start() {
-    operation.run((onStart) => apply.mutateAsync({ version: set.version, restart: restart && mayRestart, batch: Number(batch), onStart }), {
+  /** Applies the set to all its servers, or again to those where it failed, whose results take the place of the earlier ones. */
+  function start(retry?: { servers: ServerRef[]; earlier: Result[] }) {
+    const body = { version: set.version, restart: restart && mayRestart, batch: Number(batch), servers: retry?.servers }
+    operation.run((onStart) => apply.mutateAsync({ ...body, onStart }), {
       title,
       done: ({ results }) => {
         const failed = results.filter((r) => r.error).length
@@ -73,7 +78,7 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
           ? { message: t("Applied {{name}}, but not on {{count}} servers", { name: set.name, count: failed, defaultValue_one: "Applied {{name}}, but not on {{count}} server" }), warning: true }
           : { message: t("Applied {{name}}", { name: set.name }) }
       },
-      then: ({ results }) => setResults(results),
+      then: ({ results }) => setResults(mergeResults(retry?.earlier, results)),
     })
   }
 
@@ -81,7 +86,14 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-4xl" {...guard(apply.isPending)}>
         {results ? (
-          <Results title={title} results={results} />
+          <Results
+            title={title}
+            results={results}
+            onRetry={(servers) => {
+              start({ servers, earlier: results })
+              setResults(undefined)
+            }}
+          />
         ) : operation.live ? (
           <OperationStatus
             op={operation.live}
@@ -165,7 +177,7 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
               <DialogClose asChild>
                 <Button variant="outline">{t("Cancel")}</Button>
               </DialogClose>
-              <Button disabled={touched.length === 0 || apply.isPending} onClick={start}>
+              <Button disabled={touched.length === 0 || apply.isPending} onClick={() => start()}>
                 <PaperPlaneTiltIcon />
                 {t("Apply to {{count}} servers", { count: touched.length, defaultValue_one: "Apply to {{count}} server" })}
               </Button>
@@ -239,7 +251,7 @@ function FileChange({ file: f, contents }: { file: PreviewFile; contents: Record
 }
 
 /** How applying ended on each server. */
-function Results({ title, results }: { title: string; results: Result[] }) {
+function Results({ title, results, onRetry }: { title: string; results: Result[]; onRetry: (servers: ServerRef[]) => void }) {
   const pending = results.filter((r) => r.restart)
   return (
     <div className="grid gap-6">
@@ -272,6 +284,7 @@ function Results({ title, results }: { title: string; results: Result[] }) {
         })}
       </ul>
       <DialogFooter>
+        <RetryButton results={results} onRetry={onRetry} />
         <DialogClose asChild>
           <Button>{t("Close")}</Button>
         </DialogClose>

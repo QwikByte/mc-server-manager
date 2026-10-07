@@ -18,10 +18,34 @@ func TestPlainRemovesFormatting(t *testing.T) {
 	for in, want := range map[string]string{
 		"\x1b[0;32m[12:00:00 INFO]: Done (3.2s)!\x1b[m\r": "[12:00:00 INFO]: Done (3.2s)!",
 		"§6There are §c2§6 of a max of §A20§r players":    "There are 2 of a max of 20 players",
-		"plain line": "plain line",
+		"plain line":   "plain line",
+		"caf\xe9 \xff": "caf� �",
+		// Other sequences, e.g. that write the clipboard or the title, lose their control characters.
+		"\x1b]52;c;aGk=\a\x1b]0;title\a text\x1bc\tend\nnext": "]52;c;aGk=]0;title textc\tend\nnext",
 	} {
 		if got := plain(in); got != want {
 			t.Errorf("plain(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Colours of terminals and Minecraft's codes both become Minecraft's codes for the panel.
+func TestFormattedKeepsColours(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain line":           "",
+		"\x1b[2K\rplain again": "",
+		// Paper writes Minecraft's light colours as bright ones and resets after each line.
+		"\x1b[0;32;1m[12:00:00 INFO]: Done\x1b[m\r":               "§a[12:00:00 INFO]: Done",
+		"\x1b[0;31m[ERROR]\x1b[m: crashed":                        "§4[ERROR]§r: crashed",
+		"\x1b[1m\x1b[33mwarn\x1b[22m ok\x1b[39m.":                 "§ewarn§6 ok§r.",
+		"\x1b[21;4mbold\x1b[24m only":                             "§l§nbold§r§l only",
+		"\x1b[38;5;203mred\x1b[48;5;21m \x1b[38;2;85;85;255mblue": "§cred §9blue",
+		"§6There are §c2§6 of §lmax§r players":                    "§6There are §c2§6 of §lmax§r players",
+		"§x§F§F§5§5§5§5Hex §kmagic":                               "§cHex magic",
+		"§zno code":                                               "",
+	} {
+		if got := formatted(in); got != want {
+			t.Errorf("formatted(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -56,6 +80,17 @@ func TestCheckSettings(t *testing.T) {
 		{"loader version", func(s *runtime.Spec) { s.Type, s.LoaderVersion = noryxv1.ServerType_SERVER_TYPE_FORGE, "1.20.1-47.3.0" }, true},
 		{"loader version without loader", func(s *runtime.Spec) { s.LoaderVersion = "0.16.10" }, false},
 		{"loader version with shell syntax", func(s *runtime.Spec) { s.Type, s.LoaderVersion = noryxv1.ServerType_SERVER_TYPE_FABRIC, "$(id)" }, false},
+		{"longest stop timeout", func(s *runtime.Spec) { s.StopTimeout = 600 }, true},
+		{"shortest stop timeout", func(s *runtime.Spec) { s.StopTimeout = 30 }, true},
+		{"too short a stop timeout", func(s *runtime.Spec) { s.StopTimeout = 29 }, false},
+		{"too long a stop timeout", func(s *runtime.Spec) { s.StopTimeout = 601 }, false},
+		{"time zone", func(s *runtime.Spec) { s.TimeZone = "America/Argentina/Buenos_Aires" }, true},
+		{"time zone with an offset", func(s *runtime.Spec) { s.TimeZone = "Etc/GMT+5" }, true},
+		{"UTC", func(s *runtime.Spec) { s.TimeZone = "UTC" }, true},
+		{"unknown time zone", func(s *runtime.Spec) { s.TimeZone = "Mars/Olympus_Mons" }, false},
+		{"time zone of the agent", func(s *runtime.Spec) { s.TimeZone = "Local" }, false},
+		{"time zone file outside the database", func(s *runtime.Spec) { s.TimeZone = "../../../etc/localtime" }, false},
+		{"time zone with shell syntax", func(s *runtime.Spec) { s.TimeZone = "Europe/Berlin;id" }, false},
 	}
 	for _, tt := range tests {
 		spec := valid

@@ -1,6 +1,7 @@
 import { ShieldCheckIcon, ShieldWarningIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { Callout } from "@/components/callout"
+import { radios } from "@/components/radios"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
@@ -34,17 +35,15 @@ export function ForwardingChoice({
       description: t("Compatible with BungeeCord and Minecraft before 1.13, but unsigned: only the proxy may reach the servers, or anyone can join as any player."),
     },
   ].filter((o) => !bungee || o.value === "legacy")
+  const radio = radios<Forwarding>(options.map((o) => o.value), value, onChange)
 
   return (
     <div role="radiogroup" aria-label={t("Forwarding")} className="grid gap-3 sm:grid-cols-2">
       {options.map((o) => (
         <button
           key={o.value}
-          type="button"
-          role="radio"
-          aria-checked={value === o.value}
+          {...radio(o.value)}
           disabled={disabled || bungee}
-          onClick={() => onChange(o.value)}
           className={cn(
             "flex gap-3 rounded-xl p-4 text-left ring-1 ring-border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
             "aria-checked:bg-primary/5 aria-checked:ring-2 aria-checked:ring-primary enabled:hover:bg-muted/50 disabled:cursor-default",

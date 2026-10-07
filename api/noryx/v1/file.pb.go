@@ -205,9 +205,15 @@ func (x *ListFilesResponse) GetTruncated() bool {
 }
 
 type ReadFileRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	Path     string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// Reads only part of the file, e.g. the end of a large log: from offset, or with a negative
+	// offset from that many bytes before the end, and at most limit bytes; 0 reads to the end.
+	// Offsets count in the file as the panel sees it, with hidden secrets. Agents of older
+	// versions send the whole file and leave out file_size.
+	Offset        int64 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Limit         int64 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -256,13 +262,31 @@ func (x *ReadFileRequest) GetPath() string {
 	return ""
 }
 
+func (x *ReadFileRequest) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ReadFileRequest) GetLimit() int64 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ReadFileResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The size of what is sent, which hidden secrets change.
 	Size int64  `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
 	Data []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	// The version of the file, in the first message.
-	Version       *FileVersion `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	Version *FileVersion `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	// Where what is sent starts in the file, and the size of the whole file, in the first
+	// message if part of the file was asked for.
+	Offset        int64 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	FileSize      int64 `protobuf:"varint,5,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -316,6 +340,20 @@ func (x *ReadFileResponse) GetVersion() *FileVersion {
 		return x.Version
 	}
 	return nil
+}
+
+func (x *ReadFileResponse) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ReadFileResponse) GetFileSize() int64 {
+	if x != nil {
+		return x.FileSize
+	}
+	return 0
 }
 
 // FileVersion tells a version of a file apart from others, by when it was last modified and
@@ -593,7 +631,10 @@ type ArchiveDirectoryRequest struct {
 	Path     string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	// Leaves out the files that only hold secrets, such as the RCON password, and replaces
 	// the secrets in others, as for the panel's users. Moves need all of it.
-	HideSecrets   bool `protobuf:"varint,3,opt,name=hide_secrets,json=hideSecrets,proto3" json:"hide_secrets,omitempty"`
+	HideSecrets bool `protobuf:"varint,3,opt,name=hide_secrets,json=hideSecrets,proto3" json:"hide_secrets,omitempty"`
+	// Files and folders in path to archive instead of all of it, by their paths relative to
+	// path, which name them in the archive. Agents of older versions archive all of path.
+	Paths         []string `protobuf:"bytes,4,rep,name=paths,proto3" json:"paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -649,9 +690,18 @@ func (x *ArchiveDirectoryRequest) GetHideSecrets() bool {
 	return false
 }
 
+func (x *ArchiveDirectoryRequest) GetPaths() []string {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
 type ArchiveDirectoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Data  []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	// Set in the first message if the archive holds only the paths of the request.
+	PathsOnly     bool `protobuf:"varint,2,opt,name=paths_only,json=pathsOnly,proto3" json:"paths_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -691,6 +741,13 @@ func (x *ArchiveDirectoryResponse) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *ArchiveDirectoryResponse) GetPathsOnly() bool {
+	if x != nil {
+		return x.PathsOnly
+	}
+	return false
 }
 
 type CreateDirectoryRequest struct {
@@ -981,14 +1038,18 @@ const file_noryx_v1_file_proto_rawDesc = "" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"[\n" +
 	"\x11ListFilesResponse\x12(\n" +
 	"\x05files\x18\x01 \x03(\v2\x12.noryx.v1.FileInfoR\x05files\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"B\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"p\n" +
 	"\x0fReadFileRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\"k\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x03R\x05limit\"\xa0\x01\n" +
 	"\x10ReadFileResponse\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12/\n" +
-	"\aversion\x18\x03 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\"O\n" +
+	"\aversion\x18\x03 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x03R\x06offset\x12\x1b\n" +
+	"\tfile_size\x18\x05 \x01(\x03R\bfileSize\"O\n" +
 	"\vFileVersion\x12,\n" +
 	"\x12modified_unix_nano\x18\x01 \x01(\x03R\x10modifiedUnixNano\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\"h\n" +
@@ -1004,13 +1065,16 @@ const file_noryx_v1_file_proto_rawDesc = "" +
 	"\bexpected\x18\x05 \x01(\v2\x15.noryx.v1.FileVersionR\bexpected\"l\n" +
 	"\x11WriteFileResponse\x12&\n" +
 	"\x04file\x18\x01 \x01(\v2\x12.noryx.v1.FileInfoR\x04file\x12/\n" +
-	"\aversion\x18\x02 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\"m\n" +
+	"\aversion\x18\x02 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\"\x83\x01\n" +
 	"\x17ArchiveDirectoryRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
-	"\fhide_secrets\x18\x03 \x01(\bR\vhideSecrets\".\n" +
+	"\fhide_secrets\x18\x03 \x01(\bR\vhideSecrets\x12\x14\n" +
+	"\x05paths\x18\x04 \x03(\tR\x05paths\"M\n" +
 	"\x18ArchiveDirectoryResponse\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\"I\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
+	"\n" +
+	"paths_only\x18\x02 \x01(\bR\tpathsOnly\"I\n" +
 	"\x16CreateDirectoryRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"\x19\n" +

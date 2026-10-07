@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
@@ -24,7 +25,13 @@ const (
 	sampleInterval = time.Minute
 	retention      = 7 * 24 * time.Hour
 	statsTimeout   = 10 * time.Second
+	// maxServers is the most servers of a node recorded per sample, far more than a node runs, so
+	// that a compromised agent can't fill the database.
+	maxServers = 500
 )
+
+// serverPattern matches the IDs of servers, random base32 in lowercase.
+var serverPattern = regexp.MustCompile(`^[a-z2-7]{26}$`)
 
 // Ranges are the time spans a history covers, with the step its averages are taken over.
 var Ranges = map[string]struct{ Span, Step time.Duration }{
@@ -120,10 +127,12 @@ func (s *Store) add(ctx context.Context, nodeID string, at time.Time, stats *nor
 	if _, err := insert.ExecContext(ctx, at.Unix(), nodeID, "", n.GetCpuMillis(), n.GetMemoryUsedBytes(), 0, 0, 0, nil, nil); err != nil {
 		return err
 	}
+	recorded := map[string]bool{}
 	for _, srv := range stats.GetServers() {
-		if !srv.GetRunning() {
+		if !srv.GetRunning() || !serverPattern.MatchString(srv.GetId()) || recorded[srv.GetId()] || len(recorded) == maxServers {
 			continue
 		}
+		recorded[srv.GetId()] = true
 		var players, tps any
 		if p := srv.GetPlayers(); p != nil {
 			players = p.GetOnline()

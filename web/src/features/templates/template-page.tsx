@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { serverLook } from "@/features/servers/server-types"
@@ -17,6 +18,7 @@ export function TemplatePage() {
   const { can } = useAccess()
   const { templateId } = route.useParams()
   const { data: template, isPending, error } = useQuery(templateQuery(templateId))
+  usePageName(template?.name)
   const save = useSaveTemplate(templateId)
 
   return (
@@ -49,6 +51,7 @@ export function TemplatePage() {
 
 export function NewTemplatePage() {
   const save = useSaveTemplate()
+  usePageName(t("New template"))
   const navigate = useNavigate()
   return (
     <>

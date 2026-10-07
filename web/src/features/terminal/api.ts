@@ -1,8 +1,41 @@
+import { queryOptions } from "@tanstack/react-query"
 import { t } from "i18next"
-import { responseError } from "@/lib/api"
+import { api, responseError } from "@/lib/api"
 
 /** The target of the master's own commands; other targets are node IDs. */
 export const masterTarget = "master"
+
+/** A command as the terminal completes it: its subcommands, or its arguments and flags. */
+export interface Command {
+  name: string
+  short: string
+  args?: Arg[]
+  flags?: Flag[]
+  commands?: Command[]
+}
+
+/** An argument of a command; kind is what it names, e.g. server, backup or datastore. */
+export interface Arg {
+  name: string
+  kind: string
+  optional?: boolean
+  repeated?: boolean
+}
+
+/** A flag of a command; value is the kind of value it takes, e.g. server, and missing for switches such as --follow. */
+export interface Flag {
+  name: string
+  shorthand?: string
+  usage: string
+  value?: string
+}
+
+/** The commands of the master or of a node's agent that the user may run. */
+export const commandsQuery = (target: string) =>
+  queryOptions({
+    queryKey: ["terminal", target, "commands"],
+    queryFn: () => api<Command[]>(`/terminal/commands?${new URLSearchParams({ target })}`),
+  })
 
 interface TerminalEvent {
   output?: string

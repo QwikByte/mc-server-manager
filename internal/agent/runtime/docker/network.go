@@ -273,6 +273,10 @@ func (d *Docker) recreate(ctx context.Context, c container.InspectResponse, spec
 	if _, err := d.cli.ContainerRename(ctx, name, client.ContainerRenameOptions{NewName: old}); err != nil {
 		return err
 	}
+	// The replacement finishes also when ctx ends, e.g. with the timeout of the master's call:
+	// otherwise the server could be left without its container, stopped, or with an old one
+	// in the way of the next replacement.
+	ctx = context.WithoutCancel(ctx)
 	if err := d.createContainer(ctx, spec, placement(c, spec), datastoreNetworks(c)...); err != nil {
 		_, renameErr := d.cli.ContainerRename(ctx, old, client.ContainerRenameOptions{NewName: name})
 		if renameErr == nil && running {

@@ -2,6 +2,7 @@ package docker
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
@@ -78,5 +79,44 @@ func TestPublishedPort(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%+v: host IP %q, want %q", tc.spec, got, tc.want)
 		}
+	}
+}
+
+// The time zone is the only variable of the container besides those the agent sets from
+// checked settings, and the stop timeout also applies when Docker stops the container itself.
+func TestStopTimeoutAndTimeZone(t *testing.T) {
+	for _, tc := range []struct {
+		spec    runtime.Spec
+		tz      string
+		seconds int
+	}{
+		{runtime.Spec{}, "", 60},
+		{runtime.Spec{StopTimeout: 300, TimeZone: "Europe/Berlin"}, "TZ=Europe/Berlin", 300},
+	} {
+		tc.spec.ID, tc.spec.Type, tc.spec.Port = "server", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565
+		opts, err := containerOptions(tc.spec, "/data", sharedNetwork)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tz := ""
+		if i := slices.IndexFunc(opts.Config.Env, func(v string) bool { return strings.HasPrefix(v, "TZ=") }); i >= 0 {
+			tz = opts.Config.Env[i]
+		}
+		if tz != tc.tz || *opts.Config.StopTimeout != tc.seconds {
+			t.Errorf("%+v: time zone %q, stop timeout %d", tc.spec, tz, *opts.Config.StopTimeout)
+		}
+	}
+}
+
+// A line longer than any the agent sends is cut, and the lines after it still come.
+func TestEachLine(t *testing.T) {
+	long := strings.Repeat("x", 3*maxLineBytes)
+	var got []string
+	err := eachLine(strings.NewReader("a\r\n"+long+"\nb\nc"), func(line string) bool {
+		got = append(got, line)
+		return line != "b"
+	})
+	if want := []string{"a", long[:maxLineBytes], "b"}; err != nil || !slices.Equal(got, want) {
+		t.Fatalf("lines = %d, %v", len(got), err)
 	}
 }

@@ -17,7 +17,7 @@ service FileService {
   // WriteFile creates or replaces a file. The first message names the file, the others
   // carry its content. The file only appears once it has been written completely.
   rpc WriteFile(stream WriteFileRequest) returns (WriteFileResponse);
-  // ArchiveDirectory sends a directory as a ZIP archive in chunks.
+  // ArchiveDirectory sends a directory, or files and folders in it, as a ZIP archive in chunks.
   rpc ArchiveDirectory(ArchiveDirectoryRequest) returns (stream ArchiveDirectoryResponse);
   rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse);
   // MoveFile renames or moves a file or directory. It never replaces an existing one.
@@ -50,6 +50,12 @@ message ListFilesResponse {
 message ReadFileRequest {
   string server_id = 1;
   string path = 2;
+  // Reads only part of the file, e.g. the end of a large log: from offset, or with a negative
+  // offset from that many bytes before the end, and at most limit bytes; 0 reads to the end.
+  // Offsets count in the file as the panel sees it, with hidden secrets. Agents of older
+  // versions send the whole file and leave out file_size.
+  int64 offset = 3;
+  int64 limit = 4;
 }
 
 message ReadFileResponse {
@@ -58,6 +64,10 @@ message ReadFileResponse {
   bytes data = 2;
   // The version of the file, in the first message.
   FileVersion version = 3;
+  // Where what is sent starts in the file, and the size of the whole file, in the first
+  // message if part of the file was asked for.
+  int64 offset = 4;
+  int64 file_size = 5;
 }
 
 // FileVersion tells a version of a file apart from others, by when it was last modified and
@@ -98,10 +108,15 @@ message ArchiveDirectoryRequest {
   // Leaves out the files that only hold secrets, such as the RCON password, and replaces
   // the secrets in others, as for the panel's users. Moves need all of it.
   bool hide_secrets = 3;
+  // Files and folders in path to archive instead of all of it, by their paths relative to
+  // path, which name them in the archive. Agents of older versions archive all of path.
+  repeated string paths = 4;
 }
 
 message ArchiveDirectoryResponse {
   bytes data = 1;
+  // Set in the first message if the archive holds only the paths of the request.
+  bool paths_only = 2;
 }
 
 message CreateDirectoryRequest {

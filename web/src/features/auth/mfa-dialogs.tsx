@@ -98,7 +98,7 @@ export function MfaSetupDialog({
                     inputMode="numeric"
                     maxLength={6}
                     placeholder="000000"
-                    className="font-mono tracking-[0.3em] placeholder:text-muted-foreground/40"
+                    className="font-mono tracking-[0.3em]"
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value.replace(/\D/g, "") })}
                   />

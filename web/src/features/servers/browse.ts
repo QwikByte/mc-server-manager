@@ -1,7 +1,9 @@
 import { t } from "i18next"
 import type { Network } from "@/features/networks/api"
 import type { ServerUsage } from "@/features/usage/api"
+import type { Cell } from "@/lib/csv"
 import { msg } from "@/lib/i18n"
+import { type Order, orders, sortBy } from "@/lib/sort"
 import type { NodeServer, ServerState } from "./api"
 import { serverType, states } from "./server-types"
 
@@ -13,6 +15,9 @@ export const sorts = {
   memory: msg("Memory"),
   node: msg("Node"),
 } as const
+
+/** The direction each sort starts in: names and states from the top, figures with the largest first. */
+export const sortOrders: Record<Sort, Order> = { name: "asc", state: "asc", players: "desc", cpu: "desc", memory: "desc", node: "asc" }
 
 export const groupings = {
   none: msg("No grouping"),
@@ -39,6 +44,7 @@ export interface ServerSearch {
   network?: string
   tag?: string
   sort?: Sort
+  order?: Order
   group?: Grouping
   view?: View
 }
@@ -55,6 +61,7 @@ export function validateServerSearch(search: Record<string, unknown>): ServerSea
     network: text("network"),
     tag: text("tag"),
     sort: pick("sort", Object.keys(sorts) as Sort[]),
+    order: pick("order", orders),
     group: pick("group", Object.keys(groupings) as Grouping[]),
     view: pick("view", ["grid", "table"] as const),
   }
@@ -97,7 +104,7 @@ export function filterServers(servers: NodeServer[], search: ServerSearch, facts
         .filter(([v]) => !isNone(v))
         .map(([, label]) => label),
     )
-    const text = [s.name, s.version, s.port, ...labels].join(" ").toLowerCase()
+    const text = [s.name, s.version, s.port, ...labels, s.notes].join(" ").toLowerCase()
     return (
       words.every((w) => text.includes(w)) && properties.every((p) => !search[p] || valuesOf(p, s, facts).some(([v]) => v === search[p]))
     )
@@ -109,23 +116,45 @@ export function filterServers(servers: NodeServer[], search: ServerSearch, facts
   return { found: matching.filter((s) => !search.state || s.state === search.state), counts, total: matching.length }
 }
 
-/** Sorts by name, or by a figure with the largest first; ties are sorted by name. */
-export function sortServers(servers: NodeServer[], sort: Sort = "name", facts: Facts) {
-  const live = (s: NodeServer) => (facts.usage(s)?.running ? facts.usage(s) : undefined)
-  const figure: Record<Sort, (s: NodeServer) => number | string> = {
-    name: () => 0,
+const live = (facts: Facts, s: NodeServer) => (facts.usage(s)?.running ? facts.usage(s) : undefined)
+
+/** Sorts servers; ties are sorted by name, and servers that don't run come last by their figures. */
+export function sortServers(servers: NodeServer[], sort: Sort, order: Order, facts: Facts) {
+  const value: Record<Sort, (s: NodeServer) => number | string | undefined> = {
+    name: (s) => s.name,
     state: (s) => states.indexOf(s.state),
-    players: (s) => -(live(s)?.players?.online ?? -1),
-    cpu: (s) => -(live(s)?.cpuMillis ?? -1),
-    memory: (s) => -(live(s)?.memoryBytes ?? -1),
-    node: (s) => s.nodeName.toLowerCase(),
+    players: (s) => live(facts, s)?.players?.online,
+    cpu: (s) => live(facts, s)?.cpuMillis,
+    memory: (s) => live(facts, s)?.memoryBytes,
+    node: (s) => s.nodeName,
   }
-  const by = figure[sort]
-  return [...servers].sort((a, b) => {
-    const [x, y] = [by(a), by(b)]
-    return (x < y ? -1 : x > y ? 1 : 0) || a.name.localeCompare(b.name, undefined, { numeric: true })
-  })
+  return sortBy(servers, order, value[sort], (s) => s.name)
 }
+
+/** The columns of the CSV file of servers: what the table shows, as values for spreadsheets. */
+const csvColumns: Record<string, (s: NodeServer, usage: ServerUsage | undefined, facts: Facts) => Cell> = {
+  name: (s) => s.name,
+  id: (s) => s.id,
+  node: (s) => s.nodeName,
+  node_id: (s) => s.nodeId,
+  network: (s, _, facts) => facts.network(s)?.name,
+  type: (s) => s.type,
+  version: (s) => s.version,
+  port: (s) => s.port,
+  state: (s) => s.state,
+  tags: (s) => s.tags.join(" "),
+  players: (_, usage) => usage?.players?.online,
+  max_players: (_, usage) => usage?.players?.max,
+  cpu_cores: (_, usage) => usage && usage.cpuMillis / 1000,
+  memory_used_bytes: (_, usage) => usage?.memoryBytes,
+  memory_mb: (s) => s.memoryMb,
+}
+
+/** The servers as rows of a CSV file, after a header. */
+export const serverRows = (servers: NodeServer[], facts: Facts): Cell[][] => [
+  Object.keys(csvColumns),
+  ...servers.map((s) => Object.values(csvColumns).map((value) => value(s, live(facts, s), facts))),
+]
 
 export interface Group {
   key: string

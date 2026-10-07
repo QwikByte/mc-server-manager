@@ -1,12 +1,15 @@
+import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
+import { TimeZonePicker } from "@/components/time-zone-picker"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { gameVersionsQuery } from "@/features/plugins/api"
 import { formatMegabytes } from "@/lib/format"
-import { msg } from "@/lib/i18n"
+import { locale, msg } from "@/lib/i18n"
 import type { RestartPolicy } from "./api"
 import { containerMemoryMb, memoryOptionsMb } from "./server-types"
 
@@ -26,6 +29,29 @@ const restartPolicies: [RestartPolicy, string, string][] = [
   ["on_crash", msg("After a crash"), msg("Starts again when it crashes, up to 5 times in a row.")],
   ["never", msg("Only manually"), msg("Starts only when you start it.")],
 ]
+
+/** The Minecraft version of a game server, with the releases as suggestions; empty is the latest. */
+export function VersionField({ id, value, onChange }: { id: string; value: string; onChange: (version: string) => void }) {
+  const { data: releases = [] } = useQuery(gameVersionsQuery)
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{t("Minecraft version")}</FieldLabel>
+      <Input
+        id={id}
+        list={`${id}-releases`}
+        autoComplete="off"
+        placeholder={t("Latest")}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <datalist id={`${id}-releases`}>
+        {releases.map((release) => (
+          <option key={release} value={release} />
+        ))}
+      </datalist>
+    </Field>
+  )
+}
 
 /** Chooses the memory of a server. freeMb, if the node limits it, leaves out what doesn't fit. */
 export function MemoryField({
@@ -150,6 +176,51 @@ export function JvmOptionsField({ value, onChange }: { value: string; onChange: 
       <FieldDescription>
         {t("One option per line. The memory is set above, not here. Options that run code, such as Java agents, aren't allowed.")}
       </FieldDescription>
+    </Field>
+  )
+}
+
+const stopTimeouts = [30, 60, 120, 180, 300, 600]
+
+/** Formats a stop timeout in seconds, e.g. "30 seconds" or "2 minutes". */
+function formatStopTimeout(seconds: number) {
+  const [unit, value] = seconds % 60 === 0 ? ["minute", seconds / 60] : ["second", seconds]
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long" }).format(value)
+}
+
+/** How long a server may take to stop, from 30 seconds to 10 minutes. */
+export function StopTimeoutField({ value, onChange }: { value: number; onChange: (seconds: number) => void }) {
+  return (
+    <Field>
+      <FieldLabel htmlFor="settings-stop-timeout">{t("Stop timeout")}</FieldLabel>
+      <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
+        <SelectTrigger id="settings-stop-timeout" className="w-full sm:w-64">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {[...new Set([...stopTimeouts, value])]
+            .sort((a, b) => a - b)
+            .map((seconds) => (
+              <SelectItem key={seconds} value={String(seconds)}>
+                {formatStopTimeout(seconds)}
+                {seconds === 60 && <span className="text-muted-foreground">{t("Default")}</span>}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+      <FieldDescription>
+        {t("How long the server may take to save its worlds when it stops or restarts before it is killed. Large modded worlds may need longer.")}
+      </FieldDescription>
+    </Field>
+  )
+}
+
+export function TimeZoneField({ value, onChange }: { value: string; onChange: (zone: string) => void }) {
+  return (
+    <Field>
+      <FieldLabel htmlFor="settings-time-zone">{t("Time zone")}</FieldLabel>
+      <TimeZonePicker id="settings-time-zone" value={value} onChange={onChange} className="w-full sm:w-72" />
+      <FieldDescription>{t("The time of the server's log and of plugins that work with times, e.g. for daily rewards.")}</FieldDescription>
     </Field>
   )
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,8 +78,31 @@ func TestTerminal(t *testing.T) {
 
 	api := apiClient{t: t, url: url}
 	api.do("POST", "/api/terminal", map[string]string{"target": "unknown", "command": "status"}, http.StatusNotFound, nil)
+	api.do("GET", "/api/terminal/commands?target=unknown", nil, http.StatusNotFound, nil)
+	// The panel completes the commands that the terminal runs.
+	var commands []terminalCommand
+	api.do("GET", "/api/terminal/commands?target="+a.node.ID, nil, http.StatusOK, &commands)
+	if paths := commandPaths(commands, ""); !slices.Contains(paths, "backup restore") || slices.Contains(paths, "storage") {
+		t.Errorf("commands of the agent: %v", paths)
+	}
 	api.do("POST", "/api/terminal", map[string]string{"target": a.node.ID, "command": "status\nserver list"}, http.StatusBadRequest, nil)
 	api.do("POST", "/api/terminal", map[string]string{"target": a.node.ID, "command": `server command x say "hi`}, http.StatusBadRequest, nil)
+}
+
+// terminalCommand is a command as the panel completes it.
+type terminalCommand struct {
+	Name     string
+	Commands []terminalCommand
+}
+
+// commandPaths lists the paths of the commands, e.g. "node" and "node list".
+func commandPaths(list []terminalCommand, prefix string) []string {
+	var paths []string
+	for _, c := range list {
+		paths = append(paths, prefix+c.Name)
+		paths = append(paths, commandPaths(c.Commands, prefix+c.Name+" ")...)
+	}
+	return paths
 }
 
 // runTerminal runs a command in the panel's terminal and returns its output and error.

@@ -1,22 +1,39 @@
-import { type Icon, KeyIcon, ShieldCheckIcon, ShieldIcon, UserCircleIcon } from "@phosphor-icons/react"
+import {
+  ArrowsInLineVerticalIcon,
+  CheckIcon,
+  ClockIcon,
+  type Icon,
+  KeyIcon,
+  PaletteIcon,
+  ShieldCheckIcon,
+  ShieldIcon,
+  SwatchesIcon,
+  TranslateIcon,
+  UserCircleIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
+import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
 import { FormSection } from "@/components/form-section"
 import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
+import { Segmented } from "@/components/segmented"
 import { StatusBadge } from "@/components/status"
 import type { Tone } from "@/components/tone"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { msg } from "@/lib/i18n"
-import { meQuery, mfaQuery, useDisableMfa, useEnableMfa, useNewRecoveryCodes } from "./api"
+import { useSettings } from "@/features/preferences/api"
+import { type Clock, clock, languageName, languages, msg, timeWith } from "@/lib/i18n"
+import { type Accent, accents, type Density, type Theme, useLook } from "@/lib/theme"
+import { meQuery, mfaQuery, useDisableMfa, useEnableMfa, useNewRecoveryCodes, useSetLanguage, type User } from "./api"
 import { ConfirmPasswordDialog, MfaSetupDialog, RecoveryCodesDialog } from "./mfa-dialogs"
 import { PasswordDialog } from "./password-dialog"
 
-/** The signed-in user's own account: how they sign in. */
+/** The signed-in user's own account: how they sign in, and how the panel looks for them. */
 export function AccountPage() {
   const { data: user } = useQuery(meQuery)
   if (!user) return null
@@ -37,8 +54,149 @@ export function AccountPage() {
         <FormSection title={t("Two-factor authentication")}>
           <MfaSettings username={user.username} />
         </FormSection>
+        <FormSection title={t("Panel")}>
+          <PanelSettings user={user} />
+        </FormSection>
       </div>
     </>
+  )
+}
+
+const themes = [
+  { value: "light", label: msg("Light") },
+  { value: "dark", label: msg("Dark") },
+  { value: "system", label: msg("System") },
+] satisfies { value: Theme; label: string }[]
+
+// A time in the afternoon shows what each clock means, e.g. 14:30 and 2:30 PM.
+const afternoon = new Date(2000, 0, 1, 14, 30)
+
+/** How the panel looks for the user, in all their browsers. */
+function PanelSettings({ user }: { user: User }) {
+  const { settings, change } = useSettings()
+  const look = useLook()
+  const setLanguage = useSetLanguage()
+  return (
+    <>
+      <AccountRow
+        icon={PaletteIcon}
+        tone="violet"
+        title={t("Colour theme")}
+        actions={
+          <Segmented
+            label={t("Colour theme")}
+            value={look.theme}
+            options={themes.map((o) => ({ value: o.value, label: t(o.label) }))}
+            onChange={(value) => change({ theme: value })}
+          />
+        }
+      >
+        {t("System follows your operating system.")}
+      </AccountRow>
+      <AccountRow
+        icon={SwatchesIcon}
+        tone="violet"
+        title={t("Accent colour")}
+        actions={<AccentChoices value={look.accent} onChange={(value) => change({ accent: value })} />}
+      >
+        {t("The colour of buttons, links and highlights. The colours of states stay.")}
+      </AccountRow>
+      <AccountRow
+        icon={ArrowsInLineVerticalIcon}
+        tone="violet"
+        title={t("Density")}
+        actions={
+          <Segmented<Density>
+            label={t("Density")}
+            value={look.density}
+            options={[
+              { value: "comfortable", label: t("Comfortable") },
+              { value: "compact", label: t("Compact") },
+            ]}
+            onChange={(value) => change({ density: value })}
+          />
+        }
+      >
+        {t("Compact fits more on the screen, e.g. long lists of servers. Touch screens keep the room to tap.")}
+      </AccountRow>
+      <AccountRow
+        icon={ClockIcon}
+        tone="info"
+        title={t("Time format")}
+        actions={
+          <Segmented<Clock>
+            label={t("Time format")}
+            value={settings.clock ?? clock}
+            options={(["24h", "12h"] as const).map((value) => ({ value, label: timeWith(value, afternoon) }))}
+            onChange={(value) => change({ clock: value })}
+          />
+        }
+      >
+        {t("Times show 24 hours, or 12 hours with AM and PM.")}
+      </AccountRow>
+      <AccountRow
+        icon={TranslateIcon}
+        tone="info"
+        title={t("Language")}
+        actions={
+          <Select
+            value={user.language || "browser"}
+            onValueChange={(language) =>
+              setLanguage.mutate(language === "browser" ? "" : language, { onError: (error) => toast.error(error.message) })
+            }
+          >
+            <SelectTrigger aria-label={t("Language")} className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="browser">{t("Browser language")}</SelectItem>
+              {languages.map((code) => (
+                <SelectItem key={code} value={code} lang={code}>
+                  {languageName(code)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      >
+        {t("Dates, times and numbers follow it too.")}
+      </AccountRow>
+    </>
+  )
+}
+
+const accentNames: Record<Accent, string> = {
+  emerald: msg("Emerald"),
+  blue: msg("Blue"),
+  violet: msg("Violet"),
+  graphite: msg("Graphite"),
+}
+
+/** The accents as swatches in their own colours; the arrow keys move through them. */
+function AccentChoices({ value, onChange }: { value: Accent; onChange: (accent: Accent) => void }) {
+  return (
+    <RadioGroupPrimitive.Root
+      value={value}
+      onValueChange={(accent) => onChange(accent as Accent)}
+      orientation="horizontal"
+      aria-label={t("Accent colour")}
+      className="flex gap-2"
+    >
+      {accents.map((accent) => (
+        <RadioGroupPrimitive.Item
+          key={accent}
+          value={accent}
+          data-accent={accent}
+          aria-label={t(accentNames[accent])}
+          title={t(accentNames[accent])}
+          className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm ring-offset-2 ring-offset-card transition-transform outline-none hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:size-10 motion-reduce:hover:scale-100"
+        >
+          <RadioGroupPrimitive.Indicator className="grid place-items-center">
+            <CheckIcon weight="bold" className="size-4" />
+          </RadioGroupPrimitive.Indicator>
+        </RadioGroupPrimitive.Item>
+      ))}
+    </RadioGroupPrimitive.Root>
   )
 }
 

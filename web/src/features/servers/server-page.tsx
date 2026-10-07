@@ -5,11 +5,11 @@ import {
   FolderIcon,
   GearIcon,
   HardDrivesIcon,
-  HashIcon,
   MemoryIcon,
   PuzzlePieceIcon,
   SlidersHorizontalIcon,
   TerminalIcon,
+  UsersThreeIcon,
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Outlet, useNavigate } from "@tanstack/react-router"
@@ -19,6 +19,7 @@ import { Chip } from "@/components/chip"
 import { BackLink } from "@/components/back-link"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { TabLink } from "@/components/tab-link"
 import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -28,7 +29,9 @@ import { PinButton } from "@/features/preferences/pin-button"
 import { formatMegabytes } from "@/lib/format"
 import { useServer } from "./api"
 import { Console } from "./console"
+import { JoinAddress } from "./join-address"
 import { MoveStatus } from "./move-status"
+import { ServerNotes } from "./notes"
 import { ServerActions } from "./server-actions"
 import { CrashNotice, RefusedOptionsNotice, ServerStateBadge } from "./server-state"
 import { displayVersion, memoryTitle, serverLook, serverType } from "./server-types"
@@ -44,6 +47,13 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId")
 const tabs = [
   { to: "/nodes/$nodeId/servers/$serverId", label: () => t("Console"), icon: TerminalIcon, exact: true, permission: "console.view" },
   { to: "/nodes/$nodeId/servers/$serverId/usage", label: () => t("Usage"), icon: ChartLineIcon, exact: false, permission: "servers.view" },
+  {
+    to: "/nodes/$nodeId/servers/$serverId/players",
+    label: (type: string) => (serverType(type).proxy ? undefined : t("Players")),
+    icon: UsersThreeIcon,
+    exact: false,
+    permission: "servers.view",
+  },
   { to: "/nodes/$nodeId/servers/$serverId/files", label: () => t("Files"), icon: FolderIcon, exact: false, permission: "files.read" },
   {
     to: "/nodes/$nodeId/servers/$serverId/properties",
@@ -99,6 +109,7 @@ export function ServerPage() {
   const navigate = useNavigate()
   const { data: node } = useQuery(nodeQuery(nodeId))
   const { server, isPending, error } = useServer(nodeId, serverId)
+  usePageName(server?.name)
 
   return (
     <>
@@ -128,9 +139,7 @@ export function ServerPage() {
                 <Chip>
                   {serverType(server.type).label} {displayVersion(server.version)}
                 </Chip>
-                <Chip icon={HashIcon}>
-                  <span className="font-mono">{server.port}</span>
-                </Chip>
+                <JoinAddress nodeId={nodeId} server={server} />
                 <Chip icon={MemoryIcon} title={memoryTitle(server)}>
                   {formatMegabytes(server.memoryMb)}
                 </Chip>
@@ -145,6 +154,7 @@ export function ServerPage() {
           <CrashNotice server={server} nodeId={nodeId} canReadFiles={can("files.read", nodeId, serverId)} />
           <RefusedOptionsNotice server={server} nodeId={nodeId} canEdit={can("servers.settings", nodeId, serverId)} />
           <EndOfLifeNotice type={server.type} className="mb-6" />
+          <ServerNotes nodeId={nodeId} server={server} canEdit={can("servers.settings", nodeId, serverId)} />
           <Tabs label={t("Server")}>
             {tabs
               .map((tab) => ({ ...tab, label: tab.label(server.type) }))

@@ -1,6 +1,5 @@
 import {
   ArchiveIcon,
-  ArrowCounterClockwiseIcon,
   DatabaseIcon,
   DownloadSimpleIcon,
   EyeIcon,
@@ -20,7 +19,8 @@ import {
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { t } from "i18next"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useRef, useState } from "react"
+import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
@@ -34,10 +34,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
-import { useOperation } from "@/features/operations/use-operation"
 import { formatBytes, formatDateTime, formatMegabytes } from "@/lib/format"
 import { type Database, type Datastore, downloadUrl, type Dump, dumpsQuery, networkDatastoresQuery, passwordQuery, useDatastore } from "./api"
 import { ChangeDatastoreDialog, CreateDatastoreDialog, DeleteDatastoreDialog } from "./datastore-dialogs"
+import { DatastoreLog } from "./datastore-log"
+import { BackUpDialog, RestoreDialog } from "./dump-dialogs"
 import { engines, states } from "./labels"
 
 const route = getRouteApi("/_app/networks/$networkId/databases")
@@ -84,6 +85,13 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
   const { can } = useAccess()
   const manage = can("datastores.manage")
   const { power, addDatabase, update } = useDatastore(ds.id)
+  const [logOpen, setLogOpen] = useState(false)
+  const log = useRef<HTMLElement>(null)
+  const showLog = () => {
+    setLogOpen(true)
+    log.current?.focus({ preventScroll: true })
+    log.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
   const run = (action: "start" | "stop") =>
     power.mutate(action, {
       onSuccess: () => toast.success(action === "start" ? t("Started {{name}}", { name: ds.name }) : t("Stopped {{name}}", { name: ds.name })),
@@ -163,7 +171,17 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
         )}
         {ds.state === "unhealthy" && (
           <Callout tone="destructive" icon={WarningCircleIcon} role="alert">
-            {t("Its health check fails. The log of its container on {{node}} tells why.", { node: ds.nodeName })}
+            {manage ? (
+              <Trans
+                i18nKey="Its health check fails. <link>The log of its container</link> on <node/> tells why."
+                components={{
+                  link: <button type="button" className="font-medium underline underline-offset-4" onClick={showLog} />,
+                  node: <span>{ds.nodeName}</span>,
+                }}
+              />
+            ) : (
+              t("Its health check fails. The log of its container on {{node}} tells why.", { node: ds.nodeName })
+            )}
           </Callout>
         )}
         {ds.missing.length > 0 && (
@@ -203,6 +221,7 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
         )}
         <Databases datastore={ds} />
         <Dumps datastore={ds} />
+        {manage && <DatastoreLog ref={log} datastore={ds} open={logOpen} onOpenChange={setLogOpen} />}
       </div>
     </article>
   )
@@ -411,28 +430,12 @@ function PasswordField({ datastoreId, database }: { datastoreId: string; databas
 function Dumps({ datastore: ds }: { datastore: Datastore }) {
   const { can } = useAccess()
   const { data: dumps, isPending, error } = useQuery(dumpsQuery(ds.id))
-  const { dump } = useDatastore(ds.id)
-  const operation = useOperation()
-
-  const create = () => {
-    const title = t("Backing up {{name}}…", { name: ds.name })
-    operation.run((onStart) => dump.mutateAsync({ label: "", databases: [], onStart }), {
-      title,
-      notify: true,
-      done: (d) => ({ message: t("Backed up {{name}} ({{size}})", { name: ds.name, size: formatBytes(d.size) }) }),
-    })
-  }
 
   return (
     <section aria-label={t("Backups")} className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">{t("Backups")}</h3>
-        {can("datastores.manage") && (
-          <Button size="sm" variant="outline" disabled={dump.isPending || ds.state !== "running" || ds.databases.length === 0} onClick={create}>
-            <ArchiveIcon />
-            {t("Back up now")}
-          </Button>
-        )}
+        {can("datastores.manage") && <BackUpDialog datastore={ds} />}
       </div>
       {isPending ? (
         <Skeleton className="h-12 rounded-lg" />
@@ -453,8 +456,7 @@ function Dumps({ datastore: ds }: { datastore: Datastore }) {
 
 function DumpRow({ datastore: ds, dump: d }: { datastore: Datastore; dump: Dump }) {
   const { can } = useAccess()
-  const { restore, removeDump } = useDatastore(ds.id)
-  const operation = useOperation()
+  const { removeDump } = useDatastore(ds.id)
   const created = formatDateTime(d.createdAt)
   return (
     <li className="flex flex-wrap items-center gap-3 px-3 py-2">
@@ -476,28 +478,7 @@ function DumpRow({ datastore: ds, dump: d }: { datastore: Datastore; dump: Dump 
               <span className="max-sm:sr-only">{t("Download")}</span>
             </a>
           </Button>
-          <ConfirmDialog
-            trigger={
-              <Button size="sm" variant="outline" disabled={restore.isPending}>
-                <ArrowCounterClockwiseIcon />
-                <span className="max-sm:sr-only">{t("Restore")}</span>
-              </Button>
-            }
-            title={t("Restore the backup of {{time}}?", { time: created })}
-            description={t(
-              "This replaces {{names}} with the backed up state; what was added since is lost. The plugins that use them lose their connection meanwhile, so stop their servers first.",
-              { names: d.databases.join(", ") },
-            )}
-            action={t("Restore")}
-            destructive
-            onConfirm={() =>
-              operation.run((onStart) => restore.mutateAsync({ dump: d.id, databases: [], onStart }), {
-                title: t("Restoring {{name}}…", { name: ds.name }),
-                notify: true,
-                done: () => ({ message: t("Restored the backup of {{time}}", { time: created }) }),
-              })
-            }
-          />
+          <RestoreDialog datastore={ds} dump={d} />
           <ConfirmDialog
             trigger={
               <Button

@@ -40,9 +40,8 @@ const (
 	serverImage = "itzg/minecraft-server"
 	proxyImage  = "itzg/mc-proxy"
 
-	stopTimeoutSeconds = 60 // time for the server to save its worlds
-	pidsLimit          = 1024
-	maxLineBytes       = 1 << 20
+	pidsLimit    = 1024
+	maxLineBytes = 1 << 20
 )
 
 // image describes how a server type maps onto the itzg images.
@@ -178,7 +177,10 @@ func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {
 	if err := os.Mkdir(path, 0o750); err != nil {
 		return err
 	}
-	return d.createContainer(ctx, spec, home(spec))
+	if err := d.createContainer(ctx, spec, home(spec)); err != nil {
+		return errors.Join(err, os.Remove(path)) // still empty
+	}
+	return nil
 }
 
 // dataPath returns the host directory with the data of a server.
@@ -277,6 +279,9 @@ func containerOptions(spec runtime.Spec, path, netName string) (client.Container
 	if len(spec.JVMOptions) > 0 {
 		env = append(env, "JVM_OPTS="+strings.Join(spec.JVMOptions, " "))
 	}
+	if spec.TimeZone != "" {
+		env = append(env, "TZ="+spec.TimeZone)
+	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", img.port))
 	exposed := network.PortSet{port: {}}
 	published := network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}}
@@ -305,6 +310,8 @@ func containerOptions(spec runtime.Spec, path, netName string) (client.Container
 			ExposedPorts: exposed,
 			// Proxies read console commands from their standard input, as they have no RCON.
 			OpenStdin: spec.Type.Proxy(),
+			// Also when Docker stops the container by itself, e.g. as its daemon stops.
+			StopTimeout: new(stopSeconds(spec)),
 		},
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{netName: {}}},
 		HostConfig: &container.HostConfig{
@@ -331,9 +338,20 @@ func (d *Docker) Start(ctx context.Context, id string) error {
 	return notFound(err)
 }
 
+// Stop gives the server its stop timeout, which containers created by older agents don't
+// know, to save its worlds.
 func (d *Docker) Stop(ctx context.Context, id string) error {
-	_, err := d.cli.ContainerStop(ctx, containerName(id), client.ContainerStopOptions{Timeout: new(stopTimeoutSeconds)})
+	_, spec, err := d.inspect(ctx, id)
+	if err != nil {
+		return err
+	}
+	_, err = d.cli.ContainerStop(ctx, containerName(id), client.ContainerStopOptions{Timeout: new(stopSeconds(spec))})
 	return notFound(err)
+}
+
+// stopSeconds is the stop timeout of a server in seconds.
+func stopSeconds(spec runtime.Spec) int {
+	return int(noryxv1.StopTimeout(spec.StopTimeout) / time.Second)
 }
 
 func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {
@@ -418,12 +436,18 @@ func (d *Docker) removeData(spec runtime.Spec) error {
 }
 
 func (d *Docker) Logs(ctx context.Context, id string, tail int, after time.Time) iter.Seq2[runtime.LogLine, error] {
+	return d.logs(ctx, containerName(id), tail, after)
+}
+
+// logs yields the last tail lines of the output of a container written after the time after,
+// if it isn't zero, then follows it until the container stops or ctx is cancelled.
+func (d *Docker) logs(ctx context.Context, name string, tail int, after time.Time) iter.Seq2[runtime.LogLine, error] {
 	return func(yield func(runtime.LogLine, error) bool) {
 		opts := client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Follow: true, Timestamps: true, Tail: strconv.Itoa(tail)}
 		if !after.IsZero() {
 			opts.Since = after.Format(time.RFC3339Nano) // includes the line written at that time
 		}
-		logs, err := d.cli.ContainerLogs(ctx, containerName(id), opts)
+		logs, err := d.cli.ContainerLogs(ctx, name, opts)
 		if err != nil {
 			yield(runtime.LogLine{}, notFound(err))
 			return
@@ -436,17 +460,39 @@ func (d *Docker) Logs(ctx context.Context, id string, tail int, after time.Time)
 			_, err := stdcopy.StdCopy(w, w, logs)
 			w.CloseWithError(err)
 		}()
-		lines := bufio.NewScanner(r)
-		lines.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
-		for lines.Scan() {
-			line := logLine(lines.Text())
-			if (after.IsZero() || line.Time.After(after)) && !yield(line, nil) {
-				return
-			}
-		}
-		if err := lines.Err(); err != nil && ctx.Err() == nil {
+		stopped := false
+		err = eachLine(r, func(text string) bool {
+			line := logLine(text)
+			stopped = (after.IsZero() || line.Time.After(after)) && !yield(line, nil)
+			return !stopped
+		})
+		if err != nil && !stopped && ctx.Err() == nil {
 			yield(runtime.LogLine{}, err)
 		}
+	}
+}
+
+// eachLine calls fn with each line of r until it returns false, with lines cut after
+// maxLineBytes: a server can write longer ones, which would otherwise end every stream of
+// its log at the same line.
+func eachLine(r io.Reader, fn func(string) bool) error {
+	br := bufio.NewReaderSize(r, 64<<10)
+	var line []byte
+	for {
+		chunk, more, err := br.ReadLine()
+		if errors.Is(err, io.EOF) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		line = append(line, chunk[:min(len(chunk), maxLineBytes-len(line))]...)
+		if more {
+			continue
+		}
+		if !fn(string(line)) {
+			return nil
+		}
+		line = line[:0]
 	}
 }
 

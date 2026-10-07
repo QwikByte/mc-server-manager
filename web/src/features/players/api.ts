@@ -54,13 +54,15 @@ export interface PlayerLists {
   operators: Listed[]
 }
 
-/** The lists of the game servers of a network, or of all game servers the user may see. */
-export const playerListsQuery = (network?: string) =>
-  queryOptions({
-    queryKey: ["players", "lists", network ?? "all"],
-    queryFn: () => api<PlayerLists>(network ? `/players/lists?network=${encodeURIComponent(network)}` : "/players/lists"),
+/** The lists of the game servers of a network, of one game server, or of all game servers the user may see. */
+export function playerListsQuery({ network, server }: { network?: string; server?: ServerRef } = {}) {
+  const filter = new URLSearchParams(server ? { node: server.nodeId, server: server.serverId } : network ? { network } : {})
+  return queryOptions({
+    queryKey: ["players", "lists", filter.toString()],
+    queryFn: () => api<PlayerLists>(`/players/lists?${filter}`),
     refetchInterval: 30_000, // the lists change in the game and through plugins too
   })
+}
 
 export interface PlayerChange {
   action: PlayerAction

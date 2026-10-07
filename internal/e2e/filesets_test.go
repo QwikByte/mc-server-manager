@@ -99,6 +99,12 @@ func TestFileSets(t *testing.T) {
 	if len(applied.Results) != 2 || applied.Results[0].Error != "" {
 		t.Fatalf("results = %+v", applied.Results)
 	}
+	// It can be applied again to some of its servers, e.g. to those where it failed.
+	api.do("POST", path+"/apply", map[string]any{"version": 1, "servers": []network.Ref{game}}, http.StatusOK, &applied)
+	if len(applied.Results) != 1 || applied.Results[0].ServerID != game.ServerID || applied.Results[0].Error != "" {
+		t.Fatalf("results = %+v", applied.Results)
+	}
+	api.do("POST", path+"/apply", map[string]any{"version": 1, "servers": []network.Ref{proxy}}, http.StatusConflict, nil)
 	if got := read(lobby, lp); got != "server: lobby\npassword: "+secret+"\n" {
 		t.Fatalf("LuckPerms config of the lobby = %q", got)
 	}

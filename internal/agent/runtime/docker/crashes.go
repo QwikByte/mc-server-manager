@@ -126,9 +126,13 @@ func (d *Docker) crashed(ctx context.Context, actor events.Actor, inRow map[stri
 	if !noteCrash(inRow, actor, spec.ID, res.Container.RestartCount) {
 		return
 	}
-	if err := d.Stop(ctx, spec.ID); err != nil {
-		slog.Warn("Can't stop a crashing server", logging.Servers, logging.KeyServer, spec.ID, "err", err)
-	}
+	// A stop waits for the server's stop timeout, up to minutes, while the events of the other
+	// servers go on.
+	go func() {
+		if err := d.Stop(ctx, spec.ID); err != nil {
+			slog.Warn("Can't stop a crashing server", logging.Servers, logging.KeyServer, spec.ID, "err", err)
+		}
+	}()
 }
 
 // noteCrash logs the crash of a server that Docker starts again, with how many crashes in a

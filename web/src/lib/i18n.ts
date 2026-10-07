@@ -53,7 +53,7 @@ export function chooseLanguage(choice: string) {
     if (choice) localStorage.setItem(storageKey, choice)
     else localStorage.removeItem(storageKey)
   } catch {
-    // Only this page then shows the language.
+    return // the panel would show the same after reloading, again and again for a signed-in user
   }
   if (resolve(choice) !== language) location.reload()
 }
@@ -61,13 +61,51 @@ export function chooseLanguage(choice: string) {
 // The language the panel shows, chosen before anything renders.
 const language = resolve(chosenLanguage())
 
+/** Whether times have 12 or 24 hours. */
+export type Clock = "12h" | "24h"
+
+const hourCycles = { "12h": "h12", "24h": "h23" } as const
+
+// The clock the signed-in user chose, which this browser keeps to show it from the start.
+const clockKey = "noryx-clock"
+
+function chosenClock(): Clock | undefined {
+  try {
+    const clock = localStorage.getItem(clockKey)
+    return clock === "12h" || clock === "24h" ? clock : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const regional = language.includes("-") ? language : (navigator.languages.find((l) => base(l) === language && valid(l)) ?? language)
+const chosen = chosenClock()
+
 /**
  * The locale of dates and numbers: the panel's language, in the browser's region for it if there
- * is one, e.g. de-AT. A language with its own script or region, e.g. pt-BR, keeps it.
+ * is one, e.g. de-AT. A language with its own script or region, e.g. pt-BR, keeps it. A chosen
+ * clock replaces the region's, e.g. en-US-u-hc-h23.
  */
-export const locale = language.includes("-")
-  ? language
-  : (navigator.languages.find((l) => base(l) === language && valid(l)) ?? language)
+export const locale = chosen ? new Intl.Locale(regional, { hourCycle: hourCycles[chosen] }).toString() : regional
+
+/** Formats a time with the panel's locale and a clock, e.g. to show what choosing it means. */
+export const timeWith = (clock: Clock, date: Date) =>
+  date.toLocaleTimeString(new Intl.Locale(locale, { hourCycle: hourCycles[clock] }).toString(), { timeStyle: "short" })
+
+/** The clock the panel shows: the chosen one, else that of the locale. */
+export const clock: Clock = ["h11", "h12"].includes(new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hourCycle ?? "")
+  ? "12h"
+  : "24h"
+
+/** Chooses 12 or 24 hour times, and reloads the panel if it shows the other. */
+export function chooseClock(choice: Clock) {
+  try {
+    localStorage.setItem(clockKey, choice)
+  } catch {
+    return // the panel would show the same after reloading
+  }
+  if (choice !== clock) location.reload()
+}
 
 /** Whether Intl takes a locale; some browsers report ones it doesn't, e.g. en-US@posix. */
 function valid(l: string) {

@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import type { Upload } from "./use-uploads"
 
+// Shows the first uploads of a long queue, e.g. of a dropped folder.
+const maxShown = 50
+
 export function UploadList({ uploads, onCancel }: { uploads: Upload[]; onCancel: (id: number) => void }) {
   if (uploads.length === 0) return null
   return (
     <ul className="surface mb-4 divide-y overflow-hidden rounded-xl" aria-label={t("Uploads")}>
-      {uploads.map((u) => (
+      {uploads.slice(0, maxShown).map((u) => (
         <li key={u.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
           {u.state === "done" ? (
             <CheckCircleIcon className="size-4 shrink-0 text-success" weight="fill" />
@@ -42,6 +45,9 @@ export function UploadList({ uploads, onCancel }: { uploads: Upload[]; onCancel:
           </Button>
         </li>
       ))}
+      {uploads.length > maxShown && (
+        <li className="px-4 py-2.5 text-xs text-muted-foreground">{t("and {{count}} more", { count: uploads.length - maxShown })}</li>
+      )}
     </ul>
   )
 }

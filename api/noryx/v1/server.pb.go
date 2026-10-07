@@ -314,7 +314,12 @@ type Server struct {
 	Overlay bool `protobuf:"varint,19,opt,name=overlay,proto3" json:"overlay,omitempty"`
 	// A running server whose health check fails, e.g. one that hangs. Actions treat it like any
 	// running server.
-	Unhealthy     bool `protobuf:"varint,20,opt,name=unhealthy,proto3" json:"unhealthy,omitempty"`
+	Unhealthy bool `protobuf:"varint,20,opt,name=unhealthy,proto3" json:"unhealthy,omitempty"`
+	// Seconds the server gets to stop gracefully, e.g. to save its worlds, before it is killed; 0
+	// for the default of 60, as older agents report it.
+	StopTimeoutSeconds uint32 `protobuf:"varint,21,opt,name=stop_timeout_seconds,json=stopTimeoutSeconds,proto3" json:"stop_timeout_seconds,omitempty"`
+	// IANA time zone of the server, e.g. "Europe/Berlin"; empty for UTC.
+	TimeZone      string `protobuf:"bytes,22,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -489,6 +494,20 @@ func (x *Server) GetUnhealthy() bool {
 	return false
 }
 
+func (x *Server) GetStopTimeoutSeconds() uint32 {
+	if x != nil {
+		return x.StopTimeoutSeconds
+	}
+	return 0
+}
+
+func (x *Server) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
+	}
+	return ""
+}
+
 type ListServersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -588,10 +607,12 @@ type CreateServerRequest struct {
 	JvmOptions    []string      `protobuf:"bytes,11,rep,name=jvm_options,json=jvmOptions,proto3" json:"jvm_options,omitempty"`
 	CpuMillis     uint32        `protobuf:"varint,12,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
 	// Properties of server.properties for a game server, written before its first start.
-	Properties    map[string]string `protobuf:"bytes,13,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	LoaderVersion string            `protobuf:"bytes,14,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Properties         map[string]string `protobuf:"bytes,13,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	LoaderVersion      string            `protobuf:"bytes,14,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
+	StopTimeoutSeconds uint32            `protobuf:"varint,15,opt,name=stop_timeout_seconds,json=stopTimeoutSeconds,proto3" json:"stop_timeout_seconds,omitempty"`
+	TimeZone           string            `protobuf:"bytes,16,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CreateServerRequest) Reset() {
@@ -718,6 +739,20 @@ func (x *CreateServerRequest) GetProperties() map[string]string {
 func (x *CreateServerRequest) GetLoaderVersion() string {
 	if x != nil {
 		return x.LoaderVersion
+	}
+	return ""
+}
+
+func (x *CreateServerRequest) GetStopTimeoutSeconds() uint32 {
+	if x != nil {
+		return x.StopTimeoutSeconds
+	}
+	return 0
+}
+
+func (x *CreateServerRequest) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
 	}
 	return ""
 }
@@ -1019,6 +1054,12 @@ type UpdateServerRequest struct {
 	JvmOptions    []string               `protobuf:"bytes,9,rep,name=jvm_options,json=jvmOptions,proto3" json:"jvm_options,omitempty"`
 	CpuMillis     uint32                 `protobuf:"varint,10,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
 	LoaderVersion string                 `protobuf:"bytes,11,opt,name=loader_version,json=loaderVersion,proto3" json:"loader_version,omitempty"`
+	// Seconds the server gets to stop gracefully, from 30 to 600; 0, as older masters send it,
+	// means 60.
+	StopTimeoutSeconds uint32 `protobuf:"varint,12,opt,name=stop_timeout_seconds,json=stopTimeoutSeconds,proto3" json:"stop_timeout_seconds,omitempty"`
+	// IANA time zone of the server, e.g. "Europe/Berlin", which its container gets as TZ; empty
+	// for UTC.
+	TimeZone      string `protobuf:"bytes,13,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1126,6 +1167,20 @@ func (x *UpdateServerRequest) GetCpuMillis() uint32 {
 func (x *UpdateServerRequest) GetLoaderVersion() string {
 	if x != nil {
 		return x.LoaderVersion
+	}
+	return ""
+}
+
+func (x *UpdateServerRequest) GetStopTimeoutSeconds() uint32 {
+	if x != nil {
+		return x.StopTimeoutSeconds
+	}
+	return 0
+}
+
+func (x *UpdateServerRequest) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
 	}
 	return ""
 }
@@ -1408,9 +1463,16 @@ func (x *StreamLogsRequest) GetAfterUnixNano() int64 {
 
 type StreamLogsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Line  string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	// The line as plain text, without colours.
+	Line string `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
 	// When the server wrote the line; 0 if unknown.
-	TimeUnixNano  int64 `protobuf:"varint,2,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
+	TimeUnixNano int64 `protobuf:"varint,2,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
+	// The line with its colours and formatting in Minecraft's codes, empty if it has none: §
+	// followed by 0-9 or a-f for a colour, l, m, n or o for bold, strikethrough, underlined or
+	// italic text, or r to reset them. A colour resets the formatting, as in Minecraft, and
+	// colours of terminals become the nearest of Minecraft's. Clients show them as styles of
+	// the text, never as markup.
+	Formatted     string `protobuf:"bytes,3,opt,name=formatted,proto3" json:"formatted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1457,6 +1519,13 @@ func (x *StreamLogsResponse) GetTimeUnixNano() int64 {
 		return x.TimeUnixNano
 	}
 	return 0
+}
+
+func (x *StreamLogsResponse) GetFormatted() string {
+	if x != nil {
+		return x.Formatted
+	}
+	return ""
 }
 
 type SendCommandRequest struct {
@@ -1523,8 +1592,11 @@ func (x *SendCommandRequest) GetNoWait() bool {
 }
 
 type SendCommandResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Output        string                 `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The output as plain text, without colours.
+	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	// The output with its colours and formatting, if it has any, like StreamLogsResponse's.
+	Formatted     string `protobuf:"bytes,2,opt,name=formatted,proto3" json:"formatted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1562,6 +1634,13 @@ func (*SendCommandResponse) Descriptor() ([]byte, []int) {
 func (x *SendCommandResponse) GetOutput() string {
 	if x != nil {
 		return x.Output
+	}
+	return ""
+}
+
+func (x *SendCommandResponse) GetFormatted() string {
+	if x != nil {
+		return x.Formatted
 	}
 	return ""
 }
@@ -2154,7 +2233,7 @@ var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\x86\x05\n" +
+	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xd5\x05\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
@@ -2179,10 +2258,12 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\x12.\n" +
 	"\x13refused_jvm_options\x18\x12 \x03(\tR\x11refusedJvmOptions\x12\x18\n" +
 	"\aoverlay\x18\x13 \x01(\bR\aoverlay\x12\x1c\n" +
-	"\tunhealthy\x18\x14 \x01(\bR\tunhealthy\"\x14\n" +
+	"\tunhealthy\x18\x14 \x01(\bR\tunhealthy\x120\n" +
+	"\x14stop_timeout_seconds\x18\x15 \x01(\rR\x12stopTimeoutSeconds\x12\x1b\n" +
+	"\ttime_zone\x18\x16 \x01(\tR\btimeZone\"\x14\n" +
 	"\x12ListServersRequest\"A\n" +
 	"\x13ListServersResponse\x12*\n" +
-	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\xc3\x04\n" +
+	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\x92\x05\n" +
 	"\x13CreateServerRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12(\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x14.noryx.v1.ServerTypeR\x04type\x12\x18\n" +
@@ -2204,7 +2285,9 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
 	"properties\x18\r \x03(\v2-.noryx.v1.CreateServerRequest.PropertiesEntryR\n" +
 	"properties\x12%\n" +
-	"\x0eloader_version\x18\x0e \x01(\tR\rloaderVersion\x1a=\n" +
+	"\x0eloader_version\x18\x0e \x01(\tR\rloaderVersion\x120\n" +
+	"\x14stop_timeout_seconds\x18\x0f \x01(\rR\x12stopTimeoutSeconds\x12\x1b\n" +
+	"\ttime_zone\x18\x10 \x01(\tR\btimeZone\x1a=\n" +
 	"\x0fPropertiesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"@\n" +
@@ -2218,7 +2301,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x12StopServerResponse\"&\n" +
 	"\x14RestartServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15RestartServerResponse\"\xe0\x02\n" +
+	"\x15RestartServerResponse\"\xaf\x03\n" +
 	"\x13UpdateServerRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -2234,7 +2317,9 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
 	"cpu_millis\x18\n" +
 	" \x01(\rR\tcpuMillis\x12%\n" +
-	"\x0eloader_version\x18\v \x01(\tR\rloaderVersion\"@\n" +
+	"\x0eloader_version\x18\v \x01(\tR\rloaderVersion\x120\n" +
+	"\x14stop_timeout_seconds\x18\f \x01(\rR\x12stopTimeoutSeconds\x12\x1b\n" +
+	"\ttime_zone\x18\r \x01(\tR\btimeZone\"@\n" +
 	"\x14UpdateServerResponse\x12(\n" +
 	"\x06server\x18\x01 \x01(\v2\x10.noryx.v1.ServerR\x06server\"$\n" +
 	"\x12UpdateImageRequest\x12\x0e\n" +
@@ -2247,16 +2332,18 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x11StreamLogsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04tail\x18\x02 \x01(\rR\x04tail\x12&\n" +
-	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"N\n" +
+	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"l\n" +
 	"\x12StreamLogsResponse\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\tR\x04line\x12$\n" +
-	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\"W\n" +
+	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\x12\x1c\n" +
+	"\tformatted\x18\x03 \x01(\tR\tformatted\"W\n" +
 	"\x12SendCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\x12\x17\n" +
-	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"-\n" +
+	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"K\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\"\xc4\x03\n" +
+	"\x06output\x18\x01 \x01(\tR\x06output\x12\x1c\n" +
+	"\tformatted\x18\x02 \x01(\tR\tformatted\"\xc4\x03\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x124\n" +

@@ -72,7 +72,15 @@ func (h *Handler) change(w http.ResponseWriter, r *http.Request) {
 	h.ops.Run(w, r, operation.Spec{
 		Kind: "players." + c.GetAction().Slug(), Subject: subject, Steps: []string{"servers"},
 		Status: http.StatusOK, Timeout: changeTimeout, Category: logging.Players,
-		Visible: func(g access.Grants) bool { return seesAll(g, req.Servers) },
+		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, req.Servers) },
+		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
+			for _, p := range need {
+				if !onAll(g, p, req.Servers) {
+					return p, false
+				}
+			}
+			return "", true
+		},
 	}, func(ctx context.Context) (any, error) {
 		if err := h.svc.identify(ctx, c); err != nil {
 			return nil, err
@@ -106,7 +114,10 @@ func (h *Handler) lists(w http.ResponseWriter, r *http.Request) {
 		}
 	case q.Has("server"):
 		ref := network.Ref{NodeID: q.Get("node"), ServerID: q.Get("server")}
-		if !visible(ref) {
+		switch {
+		case ref.NodeID == "" || ref.ServerID == "":
+			err = httpapi.Errorf(http.StatusBadRequest, "Choose a node and a server.")
+		case !visible(ref):
 			err = access.Denied(access.ServersView)
 		}
 		servers = []network.Ref{ref}
@@ -166,6 +177,7 @@ func check(r *http.Request, servers []network.Ref, need ...access.Permission) er
 	return nil
 }
 
-func seesAll(g access.Grants, servers []network.Ref) bool {
-	return !slices.ContainsFunc(servers, func(s network.Ref) bool { return !g.On(access.ServersView, s.NodeID, s.ServerID) })
+// onAll reports whether the grants allow p on all servers.
+func onAll(g access.Grants, p access.Permission, servers []network.Ref) bool {
+	return !slices.ContainsFunc(servers, func(s network.Ref) bool { return !g.On(p, s.NodeID, s.ServerID) })
 }

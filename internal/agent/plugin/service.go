@@ -98,8 +98,12 @@ func (s *Service) ListPlugins(ctx context.Context, req *noryxv1.ListPluginsReque
 		}
 		cached, ok := known[e.Name()]
 		if !ok || cached.size != info.Size() || !cached.modified.Equal(info.ModTime()) {
-			if cached, err = hashFile(dir, filepath.Join(folder, e.Name())); err != nil {
-				return nil, toStatus(err)
+			// A file larger than any plugin, e.g. a huge sparse file of the server, isn't read.
+			cached = sum{}
+			if info.Size() <= MaxSize {
+				if cached, err = hashFile(dir, filepath.Join(folder, e.Name())); err != nil {
+					return nil, toStatus(err)
+				}
 			}
 			cached.size, cached.modified = info.Size(), info.ModTime()
 		}

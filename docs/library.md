@@ -6,7 +6,7 @@ The **Library** of the panel: what new servers start with, and what many servers
 
 A template preconfigures new servers: software, Minecraft version, memory, the
 [settings](servers.md#settings-and-images) of a server, `server.properties` and a list of plugins or mods from Modrinth.
-When a server is created from a template, only the node, name, port and storage are chosen; `server.properties` is
+When a server is created from a template, only node, name, port, storage and world are chosen; `server.properties` is
 written before the first start and each plugin is installed in the newest release that suits the server, so templates
 don't go stale. Templates are created from scratch or from an existing server ("Save as template"), which takes its
 settings, its properties (except those the manager sets) and the plugins that come from Modrinth. Worlds and plugin
@@ -51,7 +51,9 @@ whether the server's copy changed. It names the servers that get the secrets for
 files atomically as the server's user, removes those the set no longer has unless they changed on the server, at most 8
 servers of a node at a time, and leaves moving servers alone. It can then restart the running servers whose files
 changed, the game servers of a network a few at a time like a rolling restart, as most plugins only read their
-configuration when they start.
+configuration when they start. The results tell how it went on each server, and **Retry the failed ones** applies the
+same version again to the servers where it failed. Applying can be cancelled while it writes the files, but not once it
+restarts servers.
 
 ### State
 
@@ -80,7 +82,10 @@ Where no release suits a server, it installs the newest beta or alpha and the pa
 suits the server, betas and alphas included, can be chosen instead, also to downgrade a project. Installed files are
 recognised by their hash, so the tab shows their project, version (marked as beta or alpha) and available updates, also
 for files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once.
-Own `.jar` files can be uploaded too. Servers load changes when they restart.
+Own `.jar` files can be uploaded too. Servers load changes when they restart. On the **Plugins** page, the game servers
+or the proxy of a network are chosen at once, and more than 100 servers are installed on in batches of 100, one after
+the other. Installing on many servers handles at most 8 of a node at a time and tells what it installed on each;
+**Retry the failed ones** installs the same again where it failed.
 
 ### Hangar
 

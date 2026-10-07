@@ -43,6 +43,11 @@ service DatastoreService {
   // BrowseTable returns rows of a table as text, with long values cut short. It only reads,
   // with statements the agent builds itself.
   rpc BrowseTable(BrowseTableRequest) returns (BrowseTableResponse);
+  // StreamDatastoreLogs sends the last lines of the log of a datastore's container, then
+  // follows it until the container stops or the client disconnects, like StreamLogs of
+  // servers. The agent hides passwords in the statements that the engines log, e.g. when
+  // they fail.
+  rpc StreamDatastoreLogs(StreamDatastoreLogsRequest) returns (stream StreamDatastoreLogsResponse);
 }
 
 enum DatastoreEngine {
@@ -280,4 +285,19 @@ message BrowseTableResponse {
   repeated TableRow rows = 2;
   // The table has more rows after these.
   bool more = 3;
+}
+
+message StreamDatastoreLogsRequest {
+  string id = 1;
+  // Number of past lines to send first, at most 1000.
+  uint32 tail = 2;
+  // Leaves out the past lines up to this time, e.g. those a client that connects again
+  // has already; 0 leaves out none.
+  int64 after_unix_nano = 3;
+}
+
+message StreamDatastoreLogsResponse {
+  string line = 1;
+  // When the container wrote the line; 0 if unknown.
+  int64 time_unix_nano = 2;
 }

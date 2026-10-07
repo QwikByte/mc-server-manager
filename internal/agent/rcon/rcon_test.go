@@ -153,4 +153,20 @@ func TestConsoles(t *testing.T) {
 		t.Fatalf("waiting command: %v", err)
 	}
 	<-con.turn
+
+	// Closing doesn't wait for a command that runs, e.g. on a server that crashed.
+	slow := make(chan error)
+	go func() {
+		_, err := c.Command(t.Context(), "server", "2", target, "slow")
+		slow <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	start := time.Now()
+	c.Close("server")
+	if waited := time.Since(start); waited > 100*time.Millisecond {
+		t.Errorf("closing waited %v for the command", waited)
+	}
+	if err := <-slow; err != nil {
+		t.Fatalf("slow command: %v", err)
+	}
 }

@@ -310,18 +310,50 @@ func (s *Service) UpdateAgents(ctx context.Context) error {
 	}
 	var wg sync.WaitGroup
 	for _, a := range agents {
-		s.mu.Lock()
-		p, ok := s.agents[a.NodeID]
-		s.mu.Unlock()
-		if !ok || p.Error != "" || time.Since(p.Since) > pending {
-			wg.Go(func() { s.updateAgent(ctx, a) })
+		if s.claim(a.NodeID) {
+			wg.Go(func() { _ = s.updateAgent(ctx, a) })
 		}
 	}
 	wg.Wait()
 	return nil
 }
 
-func (s *Service) updateAgent(ctx context.Context, a Agent) {
+// UpdateAgent updates the agent of one node to the master's version, e.g. to try a release on
+// one node first or to update a node that was offline. The agent must be online and older than
+// the master, and not updating already.
+func (s *Service) UpdateAgent(ctx context.Context, nodeID string) error {
+	n, err := s.nodes.Get(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	probe, cancel := context.WithTimeout(ctx, probeTimeout)
+	info, _, err := s.nodes.Status(probe, n.ID)
+	cancel()
+	switch {
+	case err != nil:
+		return err
+	case semver.Compare(info.GetAgentVersion(), buildinfo.Version) >= 0:
+		return httpapi.Errorf(http.StatusConflict, "The agent of %s isn't older than the master.", n.Name)
+	case !s.claim(n.ID):
+		return httpapi.Errorf(http.StatusConflict, "The agent of %s is updating already.", n.Name)
+	}
+	return s.updateAgent(ctx, Agent{NodeID: n.ID, Name: n.Name, Version: info.GetAgentVersion()})
+}
+
+// claim marks the agent of a node as updating, unless it already is.
+func (s *Service) claim(nodeID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p, ok := s.agents[nodeID]; ok && p.Error == "" && time.Since(p.Since) <= pending {
+		return false
+	}
+	s.agents[nodeID] = Progress{Since: time.Now()}
+	return true
+}
+
+// updateAgent asks a claimed agent to install the master's version. The agent installs only
+// releases newer than itself, from its package, which checks their signature.
+func (s *Service) updateAgent(ctx context.Context, a Agent) error {
 	p := Progress{Since: time.Now()}
 	conn, err := s.nodes.Conn(ctx, a.NodeID)
 	if err == nil {
@@ -337,6 +369,7 @@ func (s *Service) updateAgent(ctx context.Context, a Agent) {
 	s.mu.Lock()
 	s.agents[a.NodeID] = p
 	s.mu.Unlock()
+	return err
 }
 
 // outdated returns the online agents that are older than the master.

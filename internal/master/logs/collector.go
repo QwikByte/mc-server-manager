@@ -15,11 +15,22 @@ const (
 	watchEvery  = 10 * time.Second // how soon new and removed nodes are noticed
 	retryAfter  = 10 * time.Second
 	dropsReport = time.Minute
-	// An agent may add agentRate entries per second on average, so that a compromised one
-	// can't fill the database.
-	agentRate  = 50
-	agentBurst = 5000
+	// An agent may add agentRate entries of agentBytes in all per second on average, so that a
+	// compromised one can't fill the database.
+	agentRate       = 50
+	agentBurst      = 5000
+	agentBytes      = 16 << 10
+	agentBytesBurst = 4 << 20
 )
+
+// budget limits what an agent adds to the log.
+type budget struct{ entries, bytes *rate.Limiter }
+
+// allow reports whether e, cut to the limits of entries, fits the budget at now.
+func (b budget) allow(now time.Time, e *Entry) bool {
+	e.clamp()
+	return b.entries.AllowN(now, 1) && b.bytes.AllowN(now, e.size())
+}
 
 // Collect reads the logs of the enrolled nodes' agents into the store until ctx is done.
 // Each agent's log continues where it was last read, also after a restart of the master.
@@ -58,10 +69,10 @@ func (s *Store) Collect(ctx context.Context, nodes Nodes) {
 
 // follow reads the log of a node's agent, and connects again whenever it is lost.
 func (s *Store) follow(ctx context.Context, nodes Nodes, nodeID string) {
-	limiter := rate.NewLimiter(agentRate, agentBurst)
+	limits := budget{rate.NewLimiter(agentRate, agentBurst), rate.NewLimiter(agentBytes, agentBytesBurst)}
 	var reported time.Time
 	for {
-		err := s.read(ctx, nodes, nodeID, limiter, &reported)
+		err := s.read(ctx, nodes, nodeID, limits, &reported)
 		slog.Debug("Reading the log of an agent stopped", logging.Nodes, logging.KeyNode, nodeID, "err", err)
 		timer := time.NewTimer(retryAfter)
 		select {
@@ -73,7 +84,7 @@ func (s *Store) follow(ctx context.Context, nodes Nodes, nodeID string) {
 	}
 }
 
-func (s *Store) read(ctx context.Context, nodes Nodes, nodeID string, limiter *rate.Limiter, reported *time.Time) error {
+func (s *Store) read(ctx context.Context, nodes Nodes, nodeID string, limits budget, reported *time.Time) error {
 	boot, seq, err := s.position(ctx, nodeID)
 	if err != nil {
 		return err
@@ -97,20 +108,21 @@ func (s *Store) read(ctx context.Context, nodes Nodes, nodeID string, limiter *r
 		}
 		batch, now, dropped := make([]Entry, 0, len(entries)), time.Now(), 0
 		for _, e := range entries {
-			if !limiter.Allow() {
-				dropped++
-				continue
-			}
 			at := time.Unix(0, e.GetTimeUnixNano())
 			if at.After(now) { // an agent's clock can't put entries ahead of the others
 				at = now
 			}
 			// The agent decides what its entries say, but not whom they are about: only its
 			// node and the servers on it. Users are only known to the master.
-			batch = append(batch, Entry{
+			entry := Entry{
 				Time: at, Level: slog.Level(e.GetLevel()), Source: FromAgent, Category: e.GetCategory(), Message: e.GetMessage(),
 				NodeID: nodeID, ServerID: e.GetServerId(), Attrs: e.GetAttrs(),
-			})
+			}
+			if !limits.allow(now, &entry) {
+				dropped++
+				continue
+			}
+			batch = append(batch, entry)
 		}
 		if dropped > 0 && time.Since(*reported) >= dropsReport {
 			*reported = time.Now()

@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useSyncExternalStore } from "react"
 import { api, ApiError, read, type RequestInit, request } from "@/lib/api"
 
@@ -25,6 +25,10 @@ export interface Operation {
   result?: unknown
   startedAt: string
   finishedAt?: string
+  /** The user may cancel it now. */
+  cancellable?: boolean
+  /** It was cancelled: it stops, or it stopped before it was done. */
+  cancelled?: boolean
 }
 
 /** The operations the user may see, checked often while one is in progress. */
@@ -84,6 +88,24 @@ export async function operate<T>(path: string, init: RequestInit, onStart?: (op:
     }
     publish(op)
   }
-  if (op.error) throw new ApiError(0, op.error)
+  if (op.error) throw new ApiError(0, op.error, op.cancelled ? cancelledCode : undefined)
   return op.result as T
+}
+
+/** The code of the error of an operation that was cancelled. */
+export const cancelledCode = "cancelled"
+
+/** Whether an error tells that an operation was cancelled, which needs no warning. */
+export const isCancelled = (e: unknown) => e instanceof ApiError && e.code === cancelledCode
+
+/** Cancels an operation; it stops at its next step that can stop. */
+export function useCancelOperation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<Operation>(`/operations/${id}/cancel`, { method: "POST" }),
+    onSuccess: (op) => {
+      if (live.has(op.id)) publish(op)
+      return queryClient.invalidateQueries({ queryKey: operationsQuery.queryKey })
+    },
+  })
 }

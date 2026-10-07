@@ -5,6 +5,8 @@ package network
 
 import (
 	"cmp"
+	"errors"
+	"io/fs"
 	"net"
 	"slices"
 	"strconv"
@@ -108,10 +110,18 @@ func WriteProxy(dir *datadir.Dir, typ noryxv1.ServerType, n runtime.Network) (ch
 		p.render(settings, n)
 		return nil
 	})
-	if err != nil || p.File != velocity.File || n.Forwarding != runtime.ForwardingModern {
+	if err != nil || p.File != velocity.File || n.Forwarding == runtime.ForwardingLegacy {
 		return changed, removed, err
 	}
-	// Velocity reads the secret of modern forwarding from a file next to its configuration.
+	// Velocity reads the secret of modern forwarding from a file next to its configuration. A
+	// proxy that leaves its network loses it, as the network may keep it with another proxy;
+	// Velocity creates a new one if it needs one.
+	if n.Forwarding == runtime.ForwardingNone {
+		if err := dir.Remove(ForwardingSecretFile); !errors.Is(err, fs.ErrNotExist) {
+			return changed || err == nil, removed, err
+		}
+		return changed, removed, nil
+	}
 	secret, err := dir.ReadOptional(ForwardingSecretFile)
 	if err != nil || string(secret) == n.ForwardingSecret {
 		return changed, removed, err

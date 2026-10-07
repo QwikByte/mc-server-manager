@@ -1,8 +1,12 @@
 import { BroomIcon, PaperPlaneRightIcon, StopIcon, TerminalWindowIcon } from "@phosphor-icons/react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { Trans } from "react-i18next"
-import { runCommand } from "./api"
+import { useCommandHistory } from "@/lib/use-command-history"
+import { commandsQuery, runCommand } from "./api"
+import { type Choice, commonStart, complete, insert, lookup, matching } from "./complete"
 
 type EntryState = "running" | "done" | "failed" | "stopped"
 
@@ -14,6 +18,15 @@ interface Entry {
   output: string
   state: EntryState
   error?: string
+}
+
+/** The choices a second Tab lists, until the line changes. */
+interface Listed {
+  target: string
+  line: string
+  start: number
+  end: number
+  choices: Choice[]
 }
 
 const maxEntries = 100
@@ -31,8 +44,12 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
   const inputRef = useRef<HTMLInputElement>(null)
   const stickToBottom = useRef(true)
   const nextId = useRef(0)
-  const history = useRef<string[]>([])
-  const historyIndex = useRef(0)
+  const history = useCommandHistory(`terminal:${target}`)
+  const queryClient = useQueryClient()
+  const { data: commands } = useQuery(commandsQuery(target))
+  const [listed, setListed] = useState<Listed>()
+  const lastTab = useRef<string>(undefined)
+  const shown = listed?.target === target && listed.line === input ? listed : undefined
 
   // Leaving the page stops a command that is still running.
   useEffect(() => () => controller.current?.abort(), [])
@@ -86,27 +103,75 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
     event.preventDefault()
     const command = input.trim()
     if (!command || busy) return
-    history.current = [...history.current.filter((c) => c !== command), command].slice(-50)
-    historyIndex.current = history.current.length
+    history.add(command)
     setInput("")
     stickToBottom.current = true
     if (command === "clear") setEntries([])
     else void run(command)
   }
 
-  // Like in a terminal: arrow keys walk through earlier commands, Ctrl+C stops one, Ctrl+L clears.
+  // Like in a shell: Tab completes the word before the cursor as far as it is certain, and a second Tab lists the
+  // choices that are left.
+  async function completeWord(el: HTMLInputElement) {
+    const line = el.value
+    const cursor = el.selectionStart ?? line.length
+    const found = commands && complete(commands, line, cursor)
+    if (!found) return
+    let choices: Choice[]
+    try {
+      choices = matching(found, found.choices ?? (await lookup(queryClient, target, found)))
+    } catch {
+      return // e.g. the node is offline, so there is nothing to offer
+    }
+    if (el.value !== line) return // typed on meanwhile
+    const shared = commonStart(choices.map((c) => c.value))
+    const next =
+      choices.length === 1
+        ? insert(line, found.start, cursor, choices[0].value)
+        : shared.length > found.word.length && shared.startsWith(found.word)
+          ? insert(line, found.start, cursor, shared, true)
+          : undefined
+    if (next && next.line !== line) {
+      flushSync(() => setInput(next.line))
+      el.setSelectionRange(next.cursor, next.cursor)
+      lastTab.current = next.line
+    } else if (choices.length > 1 && lastTab.current === line) {
+      setListed({ target, line, start: found.start, end: cursor, choices })
+    } else {
+      lastTab.current = line
+    }
+  }
+
+  function choose(choice: Choice) {
+    const el = inputRef.current
+    if (!shown || !el) return
+    const next = insert(input, shown.start, shown.end, choice.value)
+    flushSync(() => setInput(next.line))
+    el.focus()
+    el.setSelectionRange(next.cursor, next.cursor)
+  }
+
+  // Like in a terminal: Tab completes, arrow keys walk through earlier commands, Ctrl+C stops one, Ctrl+L clears.
+  // Tab in an empty line moves the focus on, as Shift+Tab always does.
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     const el = event.currentTarget
+    const step = historySteps[event.key]
+    const modified = event.shiftKey || event.altKey || event.ctrlKey || event.metaKey
     if (event.ctrlKey && event.key === "c" && busy && el.selectionStart === el.selectionEnd) {
       event.preventDefault()
       controller.current?.abort()
     } else if (event.ctrlKey && event.key === "l") {
       event.preventDefault()
       setEntries([])
-    } else if (historySteps[event.key]) {
+    } else if (event.key === "Tab" && !modified && input.trim()) {
       event.preventDefault()
-      historyIndex.current = Math.min(Math.max(historyIndex.current + historySteps[event.key]!, 0), history.current.length)
-      setInput(history.current[historyIndex.current] ?? "")
+      void completeWord(el)
+    } else if (event.key === "Escape" && shown) {
+      event.preventDefault()
+      setListed(undefined)
+    } else if (step) {
+      event.preventDefault()
+      setInput(history.step(step))
     }
   }
 
@@ -146,7 +211,7 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
         {entries.length === 0 ? (
           <p className="text-console-muted">
             <Trans
-              i18nKey="Type <help/> to list the commands. ↑ and ↓ repeat earlier commands, Ctrl+C stops a running one, and <clear/> empties the terminal."
+              i18nKey="Type <help/> to list the commands. Tab completes them and a second Tab lists the choices, ↑ and ↓ repeat earlier commands, Ctrl+C stops a running one, and <clear/> empties the terminal."
               components={{
                 help: <span className="text-console-foreground">help</span>,
                 clear: <span className="text-console-foreground">clear</span>,
@@ -155,6 +220,27 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
           </p>
         ) : (
           entries.map((entry) => <EntryView key={entry.id} entry={entry} />)
+        )}
+      </div>
+      <div aria-live="polite">
+        {shown && (
+          <ul
+            aria-label={t("Choices")}
+            className="grid max-h-40 grid-cols-[max-content_minmax(0,1fr)] gap-x-4 overflow-y-auto border-t border-white/10 px-2 py-1.5 font-mono text-xs [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin]"
+          >
+            {shown.choices.map((choice) => (
+              <li key={choice.value} className="col-span-2 grid grid-cols-subgrid">
+                <button
+                  type="button"
+                  onClick={() => choose(choice)}
+                  className="col-span-2 grid grid-cols-subgrid rounded-md px-2 py-1 text-left transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <span>{choice.value}</span>
+                  <span className="truncate text-console-muted">{choice.hint}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
       <form

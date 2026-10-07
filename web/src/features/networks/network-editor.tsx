@@ -21,7 +21,7 @@ import { FirewallConfirmation, ForwardingChoice } from "./forwarding"
 import { exposed, isValid } from "./problems"
 import { Routing } from "./routing"
 import { Topology } from "./topology"
-import { findServer, hostOf, isBungee, key } from "./servers"
+import { findServer, hostOf, isBungee, joinAddress, key } from "./servers"
 import { useNetworkUsage } from "./usage"
 
 const same = (a: Draft, b: Draft) => JSON.stringify(a) === JSON.stringify(b)
@@ -56,8 +56,8 @@ export function NetworkEditor({ network }: { network: Network }) {
   const blocker = useBlocker({ shouldBlockFn: () => dirty, enableBeforeUnload: () => dirty, withResolver: true })
   const change = (c: Partial<Draft>) => setDraft((d) => ({ ...d, ...c }))
   const proxyHost = hostOf(proxyNode?.address)
-  const address = proxy && proxyHost ? `${proxyHost}:${proxy.port}` : undefined
-  const bedrockAddress = proxyHost && draft.bedrockPort ? `${proxyHost}:${draft.bedrockPort}` : undefined
+  const address = proxy && proxyHost ? joinAddress(proxyHost, proxy.port) : undefined
+  const bedrockAddress = proxyHost && draft.bedrockPort ? joinAddress(proxyHost, draft.bedrockPort) : undefined
 
   function save() {
     // Servers that leave keep the passwords of the databases in their configuration, which new passwords lock out.

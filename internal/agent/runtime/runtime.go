@@ -83,6 +83,10 @@ type Spec struct {
 	// LoaderVersion selects the version of the mod loader of a modded server, e.g. one a
 	// modpack needs; empty means the newest.
 	LoaderVersion string `json:"loaderVersion,omitempty"`
+	// StopTimeout is how many seconds the server gets to stop gracefully; 0 means the default.
+	StopTimeout uint32 `json:"stopTimeout,omitempty"`
+	// TimeZone is the IANA time zone of the server, e.g. Europe/Berlin; empty means UTC.
+	TimeZone string `json:"timeZone,omitempty"`
 	// BedrockPort is the UDP port of Geyser on a proxy whose network lets Bedrock players
 	// join; 0 for none. The network sets it.
 	BedrockPort uint32 `json:"bedrockPort,omitempty"`
@@ -179,7 +183,8 @@ type Usage struct {
 	NetTxBytes  uint64
 }
 
-// LogLine is a line of a server's console and when it was written; Time is zero if unknown.
+// LogLine is a line of a server's console or a datastore's log and when it was written; Time
+// is zero if unknown.
 type LogLine struct {
 	Time time.Time
 	Text string
@@ -201,6 +206,7 @@ type Runtime interface {
 	List(ctx context.Context) ([]Server, error)
 	Create(ctx context.Context, spec Spec) error
 	Start(ctx context.Context, id string) error
+	// Stop stops a server gracefully, and kills it once its stop timeout is over.
 	Stop(ctx context.Context, id string) error
 	Remove(ctx context.Context, id string) error
 	// Logs yields the last tail console lines written after the time after, if it isn't
@@ -254,13 +260,16 @@ func PauseSaving(ctx context.Context, rt Runtime, srv Server) (resume func(), er
 		return func() {}, nil
 	}
 	progress.Step(ctx, "save", 0)
-	if _, err := rt.SendCommand(ctx, srv.ID, "save-off"); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNotReady, err)
-	}
 	resume = func() {
 		if _, err := rt.SendCommand(context.WithoutCancel(ctx), srv.ID, "save-on"); err != nil {
 			slog.Warn("Can't turn saving on again", logging.Servers, logging.KeyServer, srv.ID, "err", err)
 		}
+	}
+	if _, err := rt.SendCommand(ctx, srv.ID, "save-off"); err != nil {
+		if ctx.Err() != nil {
+			resume() // the server may have got it before the call was cancelled
+		}
+		return nil, fmt.Errorf("%w: %w", ErrNotReady, err)
 	}
 	if _, err := rt.SendCommand(ctx, srv.ID, "save-all flush"); err != nil {
 		resume()

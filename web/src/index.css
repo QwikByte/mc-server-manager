@@ -62,8 +62,6 @@
   --card-foreground: #0f1524;
   --popover: #ffffff;
   --popover-foreground: #0f1524;
-  --primary: #047857;
-  --primary-foreground: #ffffff;
   --secondary: #eceff5;
   --secondary-foreground: #0f1524;
   --muted: #eef0f5;
@@ -73,13 +71,11 @@
   --destructive: #e11d48;
   --border: #e2e5ee;
   --input: #d6dbe6;
-  --ring: #10b981;
   --sidebar: #ffffff;
   --success: #047857;
   --warning: #b45309;
   --info: #0369a1;
   --violet: #6d28d9;
-  --glow-1: rgb(16 185 129 / 0.13);
   --glow-2: rgb(139 92 246 / 0.1);
 
   /* The console stays dark in both themes, like a terminal. */
@@ -108,8 +104,6 @@
   --card-foreground: #e9ecf3;
   --popover: #151a25;
   --popover-foreground: #e9ecf3;
-  --primary: #34d399;
-  --primary-foreground: #04241a;
   --secondary: #1b2130;
   --secondary-foreground: #e9ecf3;
   --muted: #171c28;
@@ -119,14 +113,78 @@
   --destructive: #fb7185;
   --border: #1f2533;
   --input: #2a3141;
-  --ring: #34d399;
   --sidebar: #0d1119;
   --success: #34d399;
   --warning: #fbbf24;
   --info: #38bdf8;
   --violet: #a78bfa;
-  --glow-1: rgb(52 211 153 / 0.1);
   --glow-2: rgb(167 139 250 / 0.09);
+}
+
+/*
+ * The accent is the colour of actions, links and focus, apart from the colours of states; emerald
+ * is the default. data-accent chooses one on <html>, and shows one on a swatch. Each meets WCAG AA
+ * (4.5:1) in both themes for text on it and for it on the background, cards and the sidebar.
+ * Emerald comes first, as the others replace it.
+ */
+:root,
+[data-accent="emerald"] {
+  --primary: #047857;
+  --primary-foreground: #ffffff;
+  --ring: #059669; /* 3.5:1 on the background, as focus needs 3:1 */
+  --glow-1: rgb(16 185 129 / 0.13);
+  &:is(.dark, .dark *) {
+    --primary: #34d399;
+    --primary-foreground: #04241a;
+    --ring: #34d399;
+    --glow-1: rgb(52 211 153 / 0.1);
+  }
+}
+
+[data-accent="blue"] {
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --ring: #3b82f6;
+  --glow-1: rgb(59 130 246 / 0.13);
+  &:is(.dark, .dark *) {
+    --primary: #60a5fa;
+    --primary-foreground: #081a33;
+    --ring: #60a5fa;
+    --glow-1: rgb(96 165 250 / 0.1);
+  }
+}
+
+[data-accent="violet"] {
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --ring: #8b5cf6;
+  --glow-1: rgb(139 92 246 / 0.13);
+  &:is(.dark, .dark *) {
+    --primary: #a78bfa;
+    --primary-foreground: #1a0b40;
+    --ring: #a78bfa;
+    --glow-1: rgb(167 139 250 / 0.1);
+  }
+}
+
+[data-accent="graphite"] {
+  --primary: #334155;
+  --primary-foreground: #ffffff;
+  --ring: #64748b;
+  --glow-1: rgb(100 116 139 / 0.12);
+  &:is(.dark, .dark *) {
+    --primary: #e2e8f0;
+    --primary-foreground: #0f1524;
+    --ring: #94a3b8;
+    --glow-1: rgb(148 163 184 / 0.08);
+  }
+}
+
+/* Compact tightens all spacing, e.g. for long lists of servers; touch screens keep room to tap. */
+@media (pointer: fine) {
+  [data-density="compact"] {
+    --spacing: 0.2rem;
+  }
 }
 
 @layer base {

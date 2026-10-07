@@ -17,6 +17,7 @@ import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
+import { usePageName } from "@/components/page-title"
 import { Section } from "@/components/section"
 import { Segmented } from "@/components/segmented"
 import { Pill } from "@/components/status"
@@ -94,6 +95,7 @@ export function ServerPluginsPage() {
   const { nodeId, serverId } = route.useParams()
   const manage = useAccess().can("plugins.manage", nodeId, serverId)
   const { server } = useServer(nodeId, serverId)
+  usePageName(server && (serverType(server.type).addons?.kind === "mods" ? t("Mods") : t("Plugins")))
   const ref = { nodeId, serverId }
   const { data, isPending, error } = useQuery(pluginsQuery(ref))
   const [input, setInput] = useState("")

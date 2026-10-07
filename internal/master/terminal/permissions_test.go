@@ -61,14 +61,14 @@ func TestMovingServers(t *testing.T) {
 		if slices.Contains(changes, name) {
 			want = errMoving
 		}
-		if err := c(t.Context(), access.Admin(), []string{"moving"}); !errors.Is(err, want) {
+		if err := c.run(t.Context(), access.Admin(), []string{"moving"}); !errors.Is(err, want) {
 			t.Errorf("%s while moving: %v, want %v", name, err, want)
 		}
-		if err := c(t.Context(), access.Admin(), []string{"other"}); err != nil {
+		if err := c.run(t.Context(), access.Admin(), []string{"other"}); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if err := checks["server start"](t.Context(), access.Grants{}, []string{"moving"}); errors.Is(err, errMoving) || err == nil {
+	if err := checks["server start"].run(t.Context(), access.Grants{}, []string{"moving"}); errors.Is(err, errMoving) || err == nil {
 		t.Errorf("without permission: %v", err)
 	}
 }

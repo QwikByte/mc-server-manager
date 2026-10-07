@@ -119,8 +119,21 @@ func Load(ctx context.Context, db *sql.DB, master Master, cert *pki.Holder) (*Se
 	return s, nil
 }
 
-// Get returns the current settings.
-func (s *Service) Get() Settings { return *s.current.Load() }
+// Get returns a copy of the current settings, also of the limits they point to, so that
+// changing it, e.g. by decoding a request into it, leaves the current settings as they are.
+func (s *Service) Get() Settings {
+	st := *s.current.Load()
+	l := &st.NodeDefaults
+	l.PortMin, l.PortMax, l.MemoryReserveMB = clone(l.PortMin), clone(l.PortMax), clone(l.MemoryReserveMB)
+	return st
+}
+
+func clone[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	return new(*p)
+}
 
 // Update validates and stores the settings. They apply right away, the panel's address and
 // HTTPS when the master starts again.

@@ -72,8 +72,11 @@ The master looks for a new release every 6 hours. Administrators then see a noti
 and install it with **Install now**: the master installs the release, restarts on it, and then updates every agent to
 its version, also the one on its own machine. Running services restart; Minecraft servers keep running. The panel of
 every signed-in user reloads once the master runs the new version, unless that would lose something, such as unsaved
-changes in an editor or running uploads; then it waits until they are done. Agents that were offline are listed with a
-button to update them later. The check can be turned off in the settings, e.g. for a master
+changes in an editor or running uploads; then it waits until they are done. Agents that are older than the master, e.g.
+as they were offline or their update failed, are listed in the notice and in the **Agents** tab of the settings:
+**Update** next to one updates it alone, **Update all** in the notice all of them. The master updates all agents by
+itself only after **Install now**, so after updating it on its host, a release can be tried on one node first. The check
+can be turned off in the settings, e.g. for a master
 without internet access. While GitHub's API limits the requests of the master's IP address (60 an hour, shared with
 everything behind the same address), the master reads only the version from the release page, and the panel links to the
 release notes on GitHub. On the command line, `… | sudo bash -s -- update` updates what is installed; update the master
@@ -98,7 +101,8 @@ the master](automation.md#backing-up-the-master)).
 
 ### On a node
 
-`sudo noryx-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the agent's own log.
+`sudo noryx-agent status` checks the node, `server logs <id>` follows a console, `datastore logs <id>` the log of a
+datastore and `logs -f` the agent's own log.
 `backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is unreachable too.
 `storage add ssd /mnt/ssd/noryx` allows another directory for server data, e.g. on a faster disk; new servers can then
 be created there from the panel, and backup jobs can keep their backups there. `overlay allow` lets the panel add the

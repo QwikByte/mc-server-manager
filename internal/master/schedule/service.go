@@ -255,13 +255,15 @@ func (s *Service) run(id string, at time.Time) bool {
 // execute runs the current version of a task and records the outcome.
 func (s *Service) execute(ctx context.Context, id string, at time.Time) {
 	t, err := s.Get(ctx, "", id)
-	if errors.Is(err, errNotFound) {
+	switch {
+	case errors.Is(err, errNotFound):
 		return // deleted meanwhile
+	case err != nil: // e.g. as the master stops; without the task, its kind is unknown
+		slog.Warn("Can't run a scheduled task", "task_id", id, "err", err)
+		return
 	}
 	run := &notes{}
-	if err == nil {
-		err = s.kinds[t.kind].Run(ctx, t, s.servers(t.Targets, run), at)
-	}
+	err = s.kinds[t.kind].Run(ctx, t, s.servers(t.Targets, run), at)
 	var msg string
 	category := s.kinds[t.kind].Category()
 	if err != nil {

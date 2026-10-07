@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/empty-state"
 import { Meter } from "@/components/meter"
 import { BackLink } from "@/components/back-link"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { StatCard } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -42,6 +43,7 @@ export function NodePage() {
   const search = route.useSearch()
   const navigate = route.useNavigate()
   const { data: node, isPending, error } = useQuery(nodeQuery(nodeId))
+  usePageName(node?.name)
 
   return (
     <>

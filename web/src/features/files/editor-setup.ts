@@ -9,20 +9,48 @@ import { msg } from "@/lib/i18n"
 const json = () => import("@codemirror/lang-json").then((m) => m.json())
 const yaml = () => import("@codemirror/lang-yaml").then((m) => m.yaml())
 const legacy = (mode: Promise<StreamParser<unknown>>) => mode.then((m) => StreamLanguage.define(m))
+// Also highlights INI files and the like, e.g. HOCON and Forge's .cfg files.
+const properties = () => legacy(import("@codemirror/legacy-modes/mode/properties").then((m) => m.properties))
+// Also highlights JSON5, which allows comments and keys without quotes.
+const javascript = () => legacy(import("@codemirror/legacy-modes/mode/javascript").then((m) => m.javascript))
 const languages: Record<string, () => Promise<Extension> | undefined> = {
   json,
   mcmeta: json,
+  json5: javascript,
   yml: yaml,
   yaml,
-  properties: () => legacy(import("@codemirror/legacy-modes/mode/properties").then((m) => m.properties)),
+  properties,
+  conf: properties,
+  cfg: properties,
+  ini: properties,
   toml: () => legacy(import("@codemirror/legacy-modes/mode/toml").then((m) => m.toml)),
   sh: () => legacy(import("@codemirror/legacy-modes/mode/shell").then((m) => m.shell)),
-  js: () => legacy(import("@codemirror/legacy-modes/mode/javascript").then((m) => m.javascript)),
+  js: javascript,
   xml: () => legacy(import("@codemirror/legacy-modes/mode/xml").then((m) => m.xml)),
 }
 
+/** Finds the syntax errors in the text of an editor, by their positions. */
+type Check = (view: EditorView) => { from: number; message: string }[]
+
+// Saving warns about syntax errors, which servers trip over; the checks load like languages.
+const jsonCheck = () => import("@codemirror/lang-json").then((m): Check => m.jsonParseLinter())
+const yamlCheck = () =>
+  import("yaml").then(
+    ({ parseAllDocuments }): Check =>
+      (view) =>
+        parseAllDocuments(view.state.doc.toString(), { prettyErrors: false }).flatMap((d) =>
+          d.errors.map((e) => ({ from: e.pos[0], message: e.message })),
+        ),
+  )
+const checks: Record<string, () => Promise<Check>> = { json: jsonCheck, mcmeta: jsonCheck, yml: yamlCheck, yaml: yamlCheck }
+
+const extension = (filename: string) => filename.split(".").pop()?.toLowerCase() ?? ""
+
 /** Loads the language of a file by its extension, if the editor knows it. */
-export const languageOf = (filename: string) => languages[filename.split(".").pop()?.toLowerCase() ?? ""]?.()
+export const languageOf = (filename: string) => languages[extension(filename)]?.()
+
+/** Loads the check of a file's syntax by its extension, if the editor has one. */
+export const checkOf = (filename: string) => checks[extension(filename)]?.()
 
 // The texts of CodeMirror, e.g. of its search panel, which it lets translate.
 const phrases = [

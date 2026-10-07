@@ -19,6 +19,7 @@ import { BackLink } from "@/components/back-link"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { StatCard } from "@/components/stat-card"
 import { Pill } from "@/components/status"
 import { TabLink } from "@/components/tab-link"
@@ -43,9 +44,10 @@ const route = getRouteApi("/_app/networks/$networkId")
 
 /** Header, key figures and tabs of a network; the tabs are child routes. */
 export function NetworkPage() {
-  const { can } = useAccess()
+  const { can, canSomewhere } = useAccess()
   const { networkId } = route.useParams()
   const { data: network, isPending, error } = useQuery(networkQuery(networkId))
+  usePageName(network?.name)
   const { data: servers } = useQuery(allServersQuery)
   const usage = useNetworkUsage(network ? [network] : [])
   const { data: maintenance } = useQuery(maintenanceQuery(networkId))
@@ -127,7 +129,14 @@ export function NetworkPage() {
         </Callout>
       )}
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
-        <StatCard icon={UsersThreeIcon} tone="info" label={t("Players online")} value={players ?? "–"} />
+        <StatCard
+          to={canSomewhere("servers.view") ? "/players" : undefined}
+          search={{ network: network.id }}
+          icon={UsersThreeIcon}
+          tone="info"
+          label={t("Players online")}
+          value={players ?? "–"}
+        />
         <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={`${running} / ${network.backends.length}`} />
         <StatCard icon={ArrowsSplitIcon} tone="violet" label={t("Proxy")} value={<ProxyLink network={network} />} />
       </div>

@@ -18,8 +18,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { formatDate } from "@/lib/format"
-import { type Release, type UpdateStatus, updateCommand, updateQuery, updating, useUpdateAction } from "./api"
+import { type Release, type UpdateStatus, updateCommand, updateQuery, updating, useUpdateAction, waitsForUpdate } from "./api"
 import { Markdown } from "./markdown"
+import { UpdateAgentButton } from "./update-agent-button"
 
 const onError = { onError: (e: Error) => toast.error(e.message) }
 
@@ -108,7 +109,7 @@ function MasterProgress({ status: { master, latest } }: { status: UpdateStatus }
 
 function OutdatedAgents({ status: { version, agents } }: { status: UpdateStatus }) {
   const update = useUpdateAction("agents")
-  const waiting = agents.some((a) => !a.update || a.update.error)
+  const waiting = agents.filter(waitsForUpdate).length
   return (
     <Callout
       tone="warning"
@@ -118,21 +119,24 @@ function OutdatedAgents({ status: { version, agents } }: { status: UpdateStatus 
         defaultValue_one: "An agent is older than the master",
       })}
     >
-      <ul className="space-y-1">
+      <ul className="space-y-2">
         {agents.map((a) => (
-          <li key={a.nodeId}>
-            <Link to="/nodes/$nodeId" params={{ nodeId: a.nodeId }} className="font-medium hover:underline">
-              {a.name}
-            </Link>{" "}
-            <span className="font-mono text-xs">{a.version}</span>
-            {a.update && (a.update.error ? <span className="text-destructive"> · {a.update.error}</span> : ` · ${t("updating…")}`)}
+          <li key={a.nodeId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <span className="min-w-0">
+              <Link to="/nodes/$nodeId" params={{ nodeId: a.nodeId }} className="font-medium hover:underline">
+                {a.name}
+              </Link>{" "}
+              <span className="font-mono text-xs">{a.version}</span>
+              {a.update && (a.update.error ? <span className="text-destructive"> · {a.update.error}</span> : ` · ${t("updating…")}`)}
+            </span>
+            {waitsForUpdate(a) && <UpdateAgentButton agent={a} version={version} />}
           </li>
         ))}
       </ul>
-      {waiting && (
+      {waiting > 1 && (
         <Button size="sm" className="mt-3" disabled={update.isPending} onClick={() => update.mutate(undefined, onError)}>
           <DownloadSimpleIcon />
-          {t("Update to {{version}}", { version })}
+          {t("Update all to {{version}}", { version })}
         </Button>
       )}
     </Callout>

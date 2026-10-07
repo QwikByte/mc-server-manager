@@ -3,11 +3,13 @@ import { t } from "i18next"
 import { Button } from "@/components/ui/button"
 import { DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { Operation } from "./api"
+import { CancelButton } from "./cancel-button"
 import { OperationProgress } from "./operation-progress"
 
 /**
  * What a dialog shows once its action runs as an operation: its progress, and that it can go
- * on in the background. If it failed, the form opens again with what was entered.
+ * on in the background or be cancelled, if it can stop safely. If it failed or was cancelled,
+ * the form opens again with what was entered.
  */
 export function OperationStatus({
   op,
@@ -26,7 +28,9 @@ export function OperationStatus({
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription>
           {op.error
-            ? t("It failed at the marked step.")
+            ? op.cancelled
+              ? t("It was cancelled at the marked step.")
+              : t("It failed at the marked step.")
             : t("This takes a moment. It keeps running in the background too, and a notification tells you how it went.")}
         </DialogDescription>
       </DialogHeader>
@@ -43,10 +47,13 @@ export function OperationStatus({
             </DialogClose>
           </>
         ) : (
-          <Button variant="outline" disabled={!!op.finishedAt} onClick={onBackground}>
-            <ArrowSquareOutIcon />
-            {t("Continue in the background")}
-          </Button>
+          <>
+            <CancelButton op={op} />
+            <Button variant="outline" disabled={!!op.finishedAt} onClick={onBackground}>
+              <ArrowSquareOutIcon />
+              {t("Continue in the background")}
+            </Button>
+          </>
         )}
       </DialogFooter>
     </div>

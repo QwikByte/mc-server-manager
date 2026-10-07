@@ -113,6 +113,27 @@ func TestDatastores(t *testing.T) {
 	api.do("GET", dbs+"/luckperms/tables/a%20b", nil, http.StatusBadRequest, nil)
 	api.do("GET", dbs+"/other/tables", nil, http.StatusNotFound, nil)
 
+	// The log of its container, without passwords, for those who manage datastores, in the
+	// panel and the terminal.
+	a1.runtime.Log(ds.ID, "LOG:  ready to accept connections", "STATEMENT:  ALTER ROLE luckperms PASSWORD '"+rotated+"';")
+	logs := "/api/datastores/" + ds.ID + "/logs"
+	hidden := "STATEMENT:  ALTER ROLE luckperms PASSWORD '<hidden>';"
+	for query, want := range map[string]string{
+		"":                  "id: 1000000001\ndata: LOG:  ready to accept connections\n\nid: 1000000002\ndata: " + hidden + "\n\nevent: end\ndata:\n\n",
+		"?after=1000000001": "id: 1000000002\ndata: " + hidden + "\n\nevent: end\ndata:\n\n",
+	} {
+		if body := api.do("GET", logs+query, nil, http.StatusOK, nil); body != want {
+			t.Errorf("log%s = %q, want %q", query, body, want)
+		}
+	}
+	viewer.do("GET", logs, nil, http.StatusForbidden, nil)
+	api.do("GET", "/api/datastores/unknown/logs", nil, http.StatusNotFound, nil)
+	for command, want := range map[string]string{"datastore logs -n 1 " + ds.ID: hidden + "\n", "datastore logs -n -1 " + ds.ID: "--lines can't be negative"} {
+		if out, errMsg := runTerminal(t, http.DefaultClient, m.panel(t).URL, a1.node.ID, command); out+errMsg != want {
+			t.Errorf("%s: output %q, error %q; want %q", command, out, errMsg, want)
+		}
+	}
+
 	// Dumps by hand and by a backup job, restored and downloaded.
 	backups := "/api/datastores/" + ds.ID + "/backups"
 	var dump datastore.Dump

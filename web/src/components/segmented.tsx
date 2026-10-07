@@ -1,5 +1,6 @@
 import { LayoutGroup, motion } from "motion/react"
 import { useId } from "react"
+import { radios } from "@/components/radios"
 import { cn } from "@/lib/utils"
 
 /** A choice among a few options in a row, e.g. the time range of charts; the highlight glides to the choice. */
@@ -16,16 +17,14 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void
   className?: string
 }) {
+  const radio = radios(options.map((o) => o.value), value, onChange)
   return (
     <div role="radiogroup" aria-label={label} className={cn("inline-flex rounded-lg bg-muted p-0.5", className)}>
       <LayoutGroup id={useId()}>
         {options.map((option) => (
           <button
             key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={value === option.value}
-            onClick={() => onChange(option.value)}
+            {...radio(option.value)}
             className="relative isolate h-7 rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:text-foreground"
           >
             {value === option.value && <Highlight className="rounded-md" />}

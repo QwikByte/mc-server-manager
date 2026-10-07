@@ -32,6 +32,8 @@ const (
 	maxName    = 128
 	maxAttrs   = 32
 	maxValue   = 2000
+	// maxAttrsSize limits the names and values of all attributes together.
+	maxAttrsSize = 8000
 )
 
 var categoryPattern = regexp.MustCompile(`^[a-z][a-z-]{0,31}$`)
@@ -78,11 +80,23 @@ func (e *Entry) clamp() {
 	for _, s := range []*string{&e.User, &e.NodeID, &e.NodeName, &e.ServerID, &e.ServerName} {
 		*s = truncate(*s, maxName)
 	}
-	attrs := map[string]string{}
+	attrs, left := map[string]string{}, maxAttrsSize
 	for _, k := range slices.Sorted(maps.Keys(e.Attrs))[:min(len(e.Attrs), maxAttrs)] {
-		attrs[truncate(k, maxName)] = truncate(e.Attrs[k], maxValue)
+		name := truncate(k, maxName)
+		if left -= len(name); left <= 0 {
+			break
+		}
+		v := truncate(e.Attrs[k], min(maxValue, left))
+		attrs[name] = v
+		left -= len(v)
 	}
 	e.Attrs = attrs
+}
+
+// size is about the space an entry takes in the database, with its attributes encoded.
+func (e *Entry) size() int {
+	attrs, _ := json.Marshal(e.Attrs) // can't fail for strings
+	return len(e.Message) + len(attrs)
 }
 
 // truncate cuts s to at most n bytes of valid UTF-8.

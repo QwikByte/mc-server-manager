@@ -8,7 +8,7 @@ const kinds: Record<string, typeof FileIcon> = {
   png: FileImageIcon,
   jpg: FileImageIcon,
 }
-for (const ext of ["txt", "log", "yml", "yaml", "json", "toml", "properties", "cfg", "conf", "sh", "js", "xml", "mcmeta", "secret"]) {
+for (const ext of ["txt", "log", "yml", "yaml", "json", "json5", "toml", "properties", "cfg", "conf", "ini", "sh", "js", "xml", "mcmeta", "secret"]) {
   kinds[ext] = FileTextIcon
 }
 

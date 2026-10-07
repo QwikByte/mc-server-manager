@@ -3,6 +3,7 @@ package e2e
 import (
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"reflect"
 	"slices"
@@ -11,6 +12,9 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	agentoverlay "github.com/QwikByte/noryx/internal/agent/overlay"
+	"github.com/QwikByte/noryx/internal/master/access"
+	masterapp "github.com/QwikByte/noryx/internal/master/app"
+	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/overlay"
 )
@@ -76,6 +80,23 @@ func TestOverlay(t *testing.T) {
 	api.do("GET", path(a1), nil, http.StatusOK, &status)
 	if status.Member == nil || len(status.Peers) != 1 || status.Peers[0].NodeID != a2.node.ID || status.Peers[0].LatestHandshake == nil {
 		t.Fatalf("status = %+v", status)
+	}
+	// Like the overview, the status names only the peers on the nodes a user may see.
+	var group access.Group
+	api.do("POST", "/api/groups", map[string]any{"name": "Node 1", "permissions": []string{"nodes.view"}, "targets": []access.Target{{NodeID: a1.node.ID}}}, http.StatusCreated, &group)
+	var invited struct{ User auth.User }
+	api.do("POST", "/api/users", map[string]any{"username": "viewer", "groups": []string{group.ID}}, http.StatusCreated, &invited)
+	grants, err := access.NewService(m.db).Grants(t.Context(), invited.User.ID)
+	check(t, err)
+	viewerAPI := masterapp.API(m.services(t))
+	viewer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		viewerAPI.ServeHTTP(w, r.WithContext(access.WithGrants(r.Context(), grants)))
+	}))
+	t.Cleanup(viewer.Close)
+	var seen overlay.Status
+	apiClient{t: t, url: viewer.URL}.do("GET", path(a1), nil, http.StatusOK, &seen)
+	if seen.Member == nil || len(seen.Peers) != 0 {
+		t.Fatalf("status for a user who sees node-1 only = %+v", seen)
 	}
 	// A new key of node-2 reaches node-1.
 	before := a1.kernel.applied().Peers[0].PublicKey

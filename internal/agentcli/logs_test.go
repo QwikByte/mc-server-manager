@@ -20,3 +20,16 @@ func TestLogsRefusesNegativeLines(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestDatastoreLogsRefusesNegativeLines(t *testing.T) {
+	cmd := cli{func(context.Context, func(grpc.ClientConnInterface) error) error {
+		t.Fatal("connected to the agent")
+		return nil
+	}}.datastore()
+	cmd.SetArgs([]string{"logs", "-n", "-5", "abcdefghijklmnopqrstuvwxyz"})
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	if err := cmd.Execute(); err == nil || err.Error() != "--lines can't be negative" {
+		t.Fatalf("err = %v", err)
+	}
+}

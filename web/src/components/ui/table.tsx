@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { CaretDownIcon, CaretUpDownIcon, CaretUpIcon } from "@phosphor-icons/react"
 import { cn } from "cn"
+import type { Sorting } from "@/lib/sort"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
@@ -77,6 +79,35 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
+/**
+ * The header of a column that sorts the table: a click sorts by the column, or the other way
+ * around if the table is sorted by it already.
+ */
+function SortableHead<K extends string>({
+  sorting,
+  column,
+  children,
+  ...props
+}: React.ComponentProps<"th"> & { sorting: Sorting<K>; column: K }) {
+  const order = sorting.by === column ? sorting.order : undefined
+  const Icon = order === "asc" ? CaretUpIcon : order === "desc" ? CaretDownIcon : CaretUpDownIcon
+  return (
+    <TableHead aria-sort={order && (order === "asc" ? "ascending" : "descending")} {...props}>
+      <button
+        type="button"
+        onClick={() => sorting.sort(column, order && (order === "asc" ? "desc" : "asc"))}
+        className={cn(
+          "-mx-1.5 inline-flex h-8 items-center gap-1 rounded-md px-1.5 [text-transform:inherit] outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+          order && "text-foreground"
+        )}
+      >
+        {children}
+        <Icon aria-hidden weight="bold" className={cn("size-3 shrink-0", !order && "opacity-50")} />
+      </button>
+    </TableHead>
+  )
+}
+
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
@@ -109,6 +140,7 @@ export {
   TableBody,
   TableFooter,
   TableHead,
+  SortableHead,
   TableRow,
   TableCell,
   TableCaption,

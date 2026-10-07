@@ -134,6 +134,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spec := h.spec(r, "backup.create", []string{"save", "archive"}, http.StatusCreated)
+	spec.Cancel = access.OnServer(access.BackupsCreate) // the agent discards the unfinished archive
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
 		var res *noryxv1.CreateBackupResponse
 		err := h.agent(ctx, r, func(ctx context.Context, c noryxv1.BackupServiceClient) (err error) {
@@ -149,8 +150,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// restore replaces the data of a server with a backup. It finishes if the browser goes away,
-// so the server isn't left stopped.
+// restore replaces the data of a server with a backup. It finishes if the browser goes away
+// and can't be cancelled, so the server isn't left stopped or half restored.
 func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
 	spec := h.spec(r, "backup.restore", []string{"restore"}, http.StatusNoContent)
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {

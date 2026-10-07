@@ -7,16 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
 // Datastores runs datastores in memory. A database's dump is its content, which tests set
-// with Write; a load needs the database's user, like the runtime's.
+// with Write; a load needs the database's user, like the runtime's. Tests write the log of a
+// datastore with Log.
 type Datastores struct {
 	mu     sync.Mutex
 	stores map[string]*datastore
@@ -25,6 +28,7 @@ type Datastores struct {
 type datastore struct {
 	runtime.Datastore
 	databases map[string]*database
+	log       []runtime.LogLine
 }
 
 type database struct{ password, content string }
@@ -55,7 +59,7 @@ func (f *Datastores) CreateDatastore(_ context.Context, spec runtime.DatastoreSp
 	if f.stores[spec.ID] != nil {
 		return errors.New("exists")
 	}
-	f.stores[spec.ID] = &datastore{runtime.Datastore{DatastoreSpec: spec, State: noryxv1.DatastoreState_DATASTORE_STATE_STOPPED}, map[string]*database{}}
+	f.stores[spec.ID] = &datastore{Datastore: runtime.Datastore{DatastoreSpec: spec, State: noryxv1.DatastoreState_DATASTORE_STATE_STOPPED}, databases: map[string]*database{}}
 	return nil
 }
 
@@ -182,6 +186,37 @@ func (f *Datastores) Browse(ctx context.Context, id, name, _, table string, offs
 		res.Rows = []*noryxv1.TableRow{{Values: []*noryxv1.TableValue{{Text: content}}}}
 	}
 	return res, nil
+}
+
+// DatastoreLogs yields the last tail lines of a datastore's log written after the time after,
+// and ends, like the log of a stopped container.
+func (f *Datastores) DatastoreLogs(_ context.Context, id string, tail int, after time.Time) iter.Seq2[runtime.LogLine, error] {
+	return func(yield func(runtime.LogLine, error) bool) {
+		var lines []runtime.LogLine
+		if err := f.with(id, false, func(ds *datastore) error {
+			lines = slices.Clone(ds.log[max(0, len(ds.log)-tail):])
+			return nil
+		}); err != nil {
+			yield(runtime.LogLine{}, err)
+			return
+		}
+		for _, line := range lines {
+			if line.Time.After(after) && !yield(line, nil) {
+				return
+			}
+		}
+	}
+}
+
+// Log adds lines to the log of a datastore, as its engine would write them, a nanosecond
+// apart from the first second of 1970 on.
+func (f *Datastores) Log(id string, lines ...string) {
+	_ = f.with(id, false, func(ds *datastore) error {
+		for _, text := range lines {
+			ds.log = append(ds.log, runtime.LogLine{Time: time.Unix(1, int64(len(ds.log)+1)), Text: text})
+		}
+		return nil
+	})
 }
 
 // Write sets the content of a database, as its user would.

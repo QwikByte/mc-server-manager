@@ -1,6 +1,17 @@
-import { FunnelSimpleIcon, ListIcon, MagnifyingGlassIcon, RowsIcon, SortAscendingIcon, SquaresFourIcon } from "@phosphor-icons/react"
+import {
+  FunnelSimpleIcon,
+  ListIcon,
+  MagnifyingGlassIcon,
+  RowsIcon,
+  SortAscendingIcon,
+  SortDescendingIcon,
+  SquaresFourIcon,
+} from "@phosphor-icons/react"
 import { t } from "i18next"
+import type { ReactNode } from "react"
+import { CsvButton } from "@/components/csv-button"
 import { FilterChip } from "@/components/filter-chip"
+import { radios } from "@/components/radios"
 import { StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,12 +20,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import type { Cell } from "@/lib/csv"
+import type { Order, Sorting } from "@/lib/sort"
 import { cn } from "@/lib/utils"
 import type { NodeServer, ServerState } from "./api"
 import {
@@ -63,6 +77,8 @@ export function ServerToolbar({
   facts,
   hidden,
   view,
+  sorting,
+  rows,
 }: {
   servers: NodeServer[]
   search: ServerSearch
@@ -73,6 +89,9 @@ export function ServerToolbar({
   /** Properties the list doesn't offer, e.g. the node on a node's page. */
   hidden: Property[]
   view: View
+  sorting: Sorting<Sort>
+  /** The servers listed, as CSV. */
+  rows: () => Cell[][]
 }) {
   const filters = properties
     .filter((p) => !hidden.includes(p))
@@ -81,6 +100,8 @@ export function ServerToolbar({
     .filter(({ property, options }) => search[property] || options.length > (property === "tag" ? 0 : 1))
   const active = filters.filter(({ property }) => search[property])
   const filtered = active.length > 0 || search.q || search.state
+  const layoutRadio = radios<View>(["grid", "table"], view, (v) => onSearch({ view: v }))
+  const stateRadio = radios([undefined, ...states], search.state, (state) => onSearch({ state }))
 
   return (
     <div className="mb-5 space-y-3">
@@ -133,18 +154,24 @@ export function ServerToolbar({
         )}
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           <Choice
-            icon={SortAscendingIcon}
+            icon={sorting.order === "asc" ? SortAscendingIcon : SortDescendingIcon}
             label={t("Sort")}
-            value={search.sort ?? "name"}
+            value={sorting.by}
             options={Object.entries(sorts).map(([value, label]) => ({ value: value as Sort, label: t(label) }))}
-            onChange={(sort) => onSearch({ sort: sort === "name" ? undefined : sort })}
-          />
+            onChange={(sort) => sorting.sort(sort)}
+          >
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={sorting.order} onValueChange={(order) => sorting.sort(sorting.by, order as Order)}>
+              <DropdownMenuRadioItem value="asc">{t("Ascending")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="desc">{t("Descending")}</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </Choice>
           <Choice
             icon={RowsIcon}
             label={t("Group by")}
             value={search.group ?? "none"}
             options={(Object.keys(groupings) as Grouping[])
-              .filter((g) => g === "none" || filters.some((f) => f.property === g))
+              .filter((g) => g === "none" || g === search.group || filters.some((f) => f.property === g))
               .map((value) => ({ value, label: t(groupings[value]) }))}
             onChange={(group) => onSearch({ group: group === "none" ? undefined : group })}
           />
@@ -157,18 +184,16 @@ export function ServerToolbar({
             ).map(([value, Icon, label]) => (
               <button
                 key={value}
-                type="button"
-                role="radio"
-                aria-checked={view === value}
+                {...layoutRadio(value)}
                 aria-label={label}
                 title={label}
-                onClick={() => onSearch({ view: value })}
                 className="grid h-8 w-9 place-items-center rounded-md text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-card aria-checked:text-foreground aria-checked:shadow-sm"
               >
                 <Icon className="size-4" weight="bold" />
               </button>
             ))}
           </div>
+          <CsvButton name="servers" rows={rows} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -176,10 +201,7 @@ export function ServerToolbar({
           {[undefined, ...states].map((state) => (
             <button
               key={state ?? "all"}
-              type="button"
-              role="radio"
-              aria-checked={search.state === state}
-              onClick={() => onSearch({ state })}
+              {...stateRadio(state)}
               className={cn(
                 "flex h-7 items-center gap-2 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-card aria-checked:text-foreground aria-checked:shadow-sm",
                 state && counts[state] === 0 && search.state !== state && "opacity-50",
@@ -187,7 +209,7 @@ export function ServerToolbar({
             >
               {state && <StatusDot status={serverStates[state]} />}
               {state ? t(serverStates[state].label) : t("All")}
-              <span className="tabular-nums opacity-70">{state ? counts[state] : total}</span>
+              <span className="font-normal tabular-nums">{state ? counts[state] : total}</span>
             </button>
           ))}
         </div>
@@ -220,12 +242,15 @@ function Choice<T extends string>({
   value,
   options,
   onChange,
+  children,
 }: {
   icon: typeof SortAscendingIcon
   label: string
   value: T
   options: { value: T; label: string }[]
   onChange: (value: T) => void
+  /** More choices, after the options. */
+  children?: ReactNode
 }) {
   return (
     <DropdownMenu>
@@ -244,6 +269,7 @@ function Choice<T extends string>({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        {children}
       </DropdownMenuContent>
     </DropdownMenu>
   )

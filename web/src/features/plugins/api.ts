@@ -2,7 +2,7 @@ import { infiniteQueryOptions, keepPreviousData, queryOptions, useMutation, useQ
 import { t } from "i18next"
 import type { ServerRef } from "@/features/networks/api"
 import { serverType } from "@/features/servers/server-types"
-import { type Operation, operate } from "@/features/operations/api"
+import { isCancelled, type Operation, operate } from "@/features/operations/api"
 import { api, responseError } from "@/lib/api"
 
 /** A plugin or mod on Modrinth, or a plugin on Hangar. */
@@ -158,15 +158,18 @@ export const pluginsQuery = (ref: ServerRef) =>
     refetchInterval: 30_000, // e.g. other users or file sets change them
   })
 
+/** The most servers the master installs on in one request. */
+export const maxServers = 100
+
 /**
  * Installs or updates projects, with the projects they require, on servers: the newest release that suits each
- * server, or the version chosen for a project.
+ * server, or the version chosen for a project. On many, it takes a while, and more than maxServers are installed on
+ * in batches, one after the other, each an operation of its own.
  */
-/** Installs projects of Modrinth and Hangar on servers; on many, it takes a while. */
 export function useInstallPlugins() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       projects,
       servers,
       versions,
@@ -175,8 +178,30 @@ export function useInstallPlugins() {
       projects: string[]
       servers: ServerRef[]
       versions?: Record<string, string>
-      onStart?: (op: Operation) => void
-    }) => operate<{ results: InstallResult[] }>("/plugins/install", { body: { projects, servers, versions } }, onStart).then((res) => res.results),
+      /** Learns of the operation of each batch, counted from 0, that the master runs as one. */
+      onStart?: (op: Operation, batch: number) => void
+    }) => {
+      const results: InstallResult[] = []
+      for (let i = 0; i < servers.length; i += maxServers) {
+        const batch = servers.slice(i, i + maxServers)
+        try {
+          const res = await operate<{ results: InstallResult[] }>(
+            "/plugins/install",
+            { body: { projects, servers: batch, versions } },
+            (op) => onStart?.(op, i / maxServers),
+          )
+          results.push(...res.results)
+        } catch (e) {
+          // Once a batch went through, a failed one is told with the results, as an error on each of its servers;
+          // a cancelled one also ends the batches after it.
+          if (i === 0) throw e
+          const failed = isCancelled(e) ? servers.slice(i) : batch
+          results.push(...failed.map((s) => ({ ...s, installed: [], error: (e as Error).message })))
+          if (isCancelled(e)) break
+        }
+      }
+      return results
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
   })
 }

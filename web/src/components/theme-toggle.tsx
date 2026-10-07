@@ -2,6 +2,7 @@ import { DesktopIcon, MoonIcon, SunIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { LayoutGroup } from "motion/react"
 import { useId } from "react"
+import { radios } from "@/components/radios"
 import { Highlight } from "@/components/segmented"
 import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu"
 import { msg } from "@/lib/i18n"
@@ -16,18 +17,16 @@ const options = [
 
 export function ThemeToggle({ className }: { className?: string }) {
   const theme = useTheme()
+  const radio = radios(options.map((o) => o.value), theme, setTheme)
   return (
     <div role="radiogroup" aria-label={t("Colour theme")} className={cn("flex rounded-full bg-muted p-0.5", className)}>
       <LayoutGroup id={useId()}>
         {options.map(({ value, label, icon: Icon }) => (
           <button
             key={value}
-            type="button"
-            role="radio"
-            aria-checked={theme === value}
+            {...radio(value)}
             aria-label={t(label)}
             title={t(label)}
-            onClick={() => setTheme(value)}
             className="relative isolate grid h-7 flex-1 place-items-center rounded-full px-2 text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:text-foreground"
           >
             {theme === value && <Highlight className="rounded-full" />}
@@ -39,11 +38,11 @@ export function ThemeToggle({ className }: { className?: string }) {
   )
 }
 
-/** The colour themes as items of a menu. */
-export function ThemeChoices() {
+/** The colour themes as items of a menu. onChoose stores the choice, e.g. for the signed-in user. */
+export function ThemeChoices({ onChoose = setTheme }: { onChoose?: (theme: Theme) => void }) {
   const theme = useTheme()
   return (
-    <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as Theme)}>
+    <DropdownMenuRadioGroup value={theme} onValueChange={(value) => onChoose(value as Theme)}>
       {options.map(({ value, label, icon: Icon }) => (
         <DropdownMenuRadioItem key={value} value={value}>
           <Icon weight="duotone" />

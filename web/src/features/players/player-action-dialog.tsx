@@ -9,15 +9,28 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import type { ServerRef } from "@/features/networks/api"
 import { findServer } from "@/features/networks/servers"
 import { OperationStatus } from "@/features/operations/operation-status"
+import { retryAction } from "@/features/operations/retry"
 import { type Done, guard, useOperation } from "@/features/operations/use-operation"
 import { allServersQuery } from "@/features/servers/api"
 import { playerActions } from "./actions"
-import { type PlayerAction, type PlayerResult, useChangePlayer } from "./api"
+import { type PlayerAction, type PlayerLists, type PlayerResult, playerListsQuery, useChangePlayer } from "./api"
 
 /** Servers a change can go to, e.g. the server of a player, or a whole network. */
 export interface Scope {
   label: string
   servers: ServerRef[]
+}
+
+const maxReason = 256
+
+/** The reasons of the bans in the lists, the most frequent first, to ban others for them too; only those a ban may have. */
+function banReasons(lists: PlayerLists) {
+  const counts = new Map<string, number>()
+  for (const { reason = "" } of lists.banned) {
+    const r = reason.trim()
+    if (r && [...r].length <= maxReason && !/\p{Cc}/u.test(r)) counts.set(r, (counts.get(r) ?? 0) + 1)
+  }
+  return [...counts.keys()].sort((a, b) => counts.get(b)! - counts.get(a)!)
 }
 
 /** Kicks, bans, pardons, whitelists or makes operator a player on the servers of a scope. */
@@ -41,6 +54,7 @@ export function PlayerActionDialog({
   const change = useChangePlayer()
   const operation = useOperation()
   const { data: servers } = useQuery(allServersQuery)
+  const { data: reasons = [] } = useQuery({ ...playerListsQuery(), enabled: action === "ban", select: banReasons })
   const player = name.trim()
   const title = info.title(player || "…")
   const nameOf = (ref: ServerRef) => findServer(servers, ref)?.name ?? ref.serverId
@@ -62,21 +76,22 @@ export function PlayerActionDialog({
     return {
       message: failed.length === results.length ? t("Nothing changed") : info.done(player),
       description: lines.filter(Boolean).join(" "),
+      // The dialog is closed by then, so a notification follows the retry.
+      action: retryAction(results, (servers) => run(servers, true)),
       warning: failed.length > 0,
     }
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    const servers = scopes[scope].servers
+  function run(servers: ServerRef[], notify = false) {
     operation.run(
       (onStart) => change.mutateAsync({ action, name: global ? undefined : player, reason: reason.trim() || undefined, servers, onStart }),
-      {
-        title,
-        done,
-        then: onClose,
-      },
+      { title, done, then: onClose, notify },
     )
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    run(scopes[scope].servers)
   }
 
   return (
@@ -124,12 +139,18 @@ export function PlayerActionDialog({
                   <FieldLabel htmlFor="player-reason">{t("Reason")}</FieldLabel>
                   <Input
                     id="player-reason"
+                    list="player-reasons"
                     autoFocus={!!fixed}
-                    maxLength={256}
+                    maxLength={maxReason}
                     placeholder={t("Optional, the player sees it")}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                   />
+                  <datalist id="player-reasons">
+                    {reasons.map((r) => (
+                      <option key={r} value={r} />
+                    ))}
+                  </datalist>
                 </Field>
               )}
               {scopes.length > 1 ? (

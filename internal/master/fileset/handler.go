@@ -114,15 +114,23 @@ func (h *Handler) Register(mux access.Mux) {
 			return
 		}
 		logging.Note(r.Context(), slog.String("name", set.Name), slog.Int64("version", req.Version), slog.Bool("restart", req.Restart))
+		if len(req.Servers) > 0 {
+			logging.Note(r.Context(), slog.Int("servers", len(req.Servers)))
+		}
 		check := allowed(r, req.Restart)
 		steps := []string{"files"}
+		// Others may cancel it if they may do the same on all servers, as the servers of the
+		// set are only known as it runs.
+		cancel := []access.Need{access.Everywhere(access.FileSetsManage), access.Everywhere(access.FilesWrite)}
 		if req.Restart {
 			steps = append(steps, "restart")
+			cancel = append(cancel, access.Everywhere(access.ServersRestart))
 		}
 		h.ops.Run(w, r, operation.Spec{
 			Kind: "fileset.apply", Subject: set.Name, Steps: steps, Status: http.StatusOK, Timeout: applyOperationTimeout, Category: logging.Files,
 			// Its results name the servers of the set, which not everyone who sees sets may see.
 			Visible: func(g access.Grants) bool { return g.Has(access.FileSetsView) && g.Has(access.ServersView) },
+			Cancel:  access.All(cancel...),
 		}, func(ctx context.Context) (any, error) {
 			results, err := h.svc.Apply(ctx, set.ID, req, check)
 			return map[string]any{"results": results}, err

@@ -7,6 +7,7 @@ import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
 import { FormSection } from "@/components/form-section"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -24,6 +25,7 @@ export function BackupJobPage() {
   const manage = useAccess().can("backupjobs.manage")
   const { jobId } = route.useParams()
   const { data: job, isPending, error } = useQuery(jobs.taskQuery(jobId))
+  usePageName(job?.name)
   const save = jobs.useSaveTask(jobId)
   return (
     <>
@@ -54,6 +56,7 @@ export function BackupJobPage() {
 
 export function NewBackupJobPage() {
   const save = jobs.useSaveTask()
+  usePageName(t("New backup job"))
   const navigate = useNavigate()
   return (
     <>
