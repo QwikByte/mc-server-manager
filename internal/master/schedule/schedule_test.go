@@ -145,6 +145,16 @@ func TestService(t *testing.T) {
 		t.Fatal("created a task for a node that doesn't exist")
 	}
 
+	// A run whose task can't be read, e.g. as the master stops, is left out.
+	stopped, stop := context.WithCancel(t.Context())
+	stop()
+	s.execute(stopped, task.ID, time.Now())
+	select {
+	case <-kind.runs:
+		t.Fatal("a task ran that couldn't be read")
+	default:
+	}
+
 	// A task that is due runs, and its outcome is recorded.
 	s.mu.Lock()
 	s.slots[task.ID].at = time.Now()
