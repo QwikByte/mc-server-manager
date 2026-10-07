@@ -126,7 +126,8 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
     {
       heading: t("Servers"),
       entries: servers.map((s) => ({
-        value: `server/${serverKey(s)}`,
+        // cmdk only takes new keywords with a new value, so a match in the notes changes it.
+        value: `server/${serverKey(s)}${inNotes(s).length > 0 ? "/notes" : ""}`,
         path: at("nodes", s.nodeId, "servers", s.id),
         label: s.name,
         keywords: [serverType(s.type).label, s.nodeName, String(s.port), ...s.tags, ...inNotes(s)],
