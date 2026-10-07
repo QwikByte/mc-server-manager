@@ -27,7 +27,7 @@ func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) { return f
 // fakeOverlay admits the clients it knows.
 type fakeOverlay struct{ clients map[string][]string }
 
-func (o *fakeOverlay) Admit(id string, _ uint32, clients ...string) (string, error) {
+func (o *fakeOverlay) Admit(id string, _ uint32, clients, _ []string) (string, error) {
 	o.clients[id] = clients
 	return "10.213.0.3", nil
 }

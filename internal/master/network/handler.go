@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/QwikByte/noryx/internal/logging"
@@ -29,7 +30,9 @@ func NewHandler(svc *Service, ops *operation.Operations, sets FileSets) *Handler
 	return &Handler{svc: svc, ops: ops, sets: sets}
 }
 
-// networkTimeout covers configuring all servers of a large network one after the other.
+// networkTimeout covers configuring all servers of a large network one after the other. The
+// actions on all servers of a network can't be cancelled and give each server its own time,
+// and a rolling restart as long as its servers need; see RollingRestart.
 const networkTimeout = time.Hour
 
 // run runs an action on a network as an operation, which those see who may see networks.
@@ -70,8 +73,11 @@ func (h *Handler) Register(mux access.Mux) {
 			})
 		}
 	})
-	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusNoContent, func(ctx context.Context, n Network) (any, error) {
-		return h.leaving(ctx, n.ID, func() (any, error) { return nil, h.svc.Delete(ctx, n.ID) })
+	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusOK, func(ctx context.Context, n Network) (any, error) {
+		return h.leaving(ctx, n.ID, func() (any, error) {
+			warning, err := h.svc.Delete(ctx, n.ID)
+			return deleted{warning}, err
+		})
 	}))
 	mux.Handle("POST /api/networks/{id}/proxy", manage, func(w http.ResponseWriter, r *http.Request) {
 		var sw Swap
@@ -117,20 +123,28 @@ func (h *Handler) Register(mux access.Mux) {
 		}
 		write(w, r, http.StatusNoContent, nil, err)
 	})
+	// Restarting some servers safely needs the permission to restart these and the proxy, which
+	// sends their players elsewhere, like restarting all of them server by server.
 	mux.Handle("POST /api/networks/{id}/rolling-restart", view, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Batch int `json:"batch"`
+			// Servers are the game servers to restart; none means all.
+			Servers []Ref `json:"servers"`
 		}
-		n, err := h.allowed(r, access.ServersRestart)
-		if err == nil {
-			err = httpapi.ReadJSON(w, r, &req)
+		if !read(w, r, &req) {
+			return
 		}
+		n, err := h.allowed(r, access.ServersRestart, req.Servers...)
 		if err != nil {
 			httpapi.WriteError(w, r, err)
 			return
 		}
-		h.run(w, r, "network.rolling-restart", n.Name, n.ID, http.StatusNoContent, func(ctx context.Context) (any, error) {
-			return nil, h.svc.RollingRestart(ctx, n, req.Batch)
+		kind, subject := "network.rolling-restart", n.Name
+		if len(req.Servers) > 0 {
+			kind, subject = "network.safe-restart", strings.Join(n.names(req.Servers), ", ")
+		}
+		h.run(w, r, kind, subject, n.ID, http.StatusNoContent, func(ctx context.Context) (any, error) {
+			return nil, h.svc.RollingRestart(ctx, n, req.Batch, req.Servers...)
 		}, "servers")
 	})
 	mux.Handle("GET /api/networks/{id}/maintenance", view, func(w http.ResponseWriter, r *http.Request) {
@@ -189,6 +203,11 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.updateProxySettings)
 }
 
+// deleted tells what deleting a network left as it was, e.g. a proxy whose node was offline.
+type deleted struct {
+	Warning string `json:"warning,omitempty"`
+}
+
 // leaving runs an action that may take servers out of a network. Then those that left lose
 // the files with secrets of the file sets of the network.
 func (h *Handler) leaving(ctx context.Context, id string, action func() (any, error)) (any, error) {
@@ -217,15 +236,24 @@ func (h *Handler) onNetwork(kind string, status int, action func(context.Context
 	}
 }
 
-// allowed returns the network of a request if the user has p on each of its servers.
-func (h *Handler) allowed(r *http.Request, p access.Permission) (Network, error) {
+// allowed returns the network of a request if the user has p on its proxy and on each of its
+// game servers, or only on those of only, which must be different game servers of it.
+func (h *Handler) allowed(r *http.Request, p access.Permission, only ...Ref) (Network, error) {
 	n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+	if err == nil {
+		err = n.checkBackends(only)
+	}
 	if err != nil {
 		return n, err
 	}
 	logging.Note(r.Context(), slog.String("name", n.Name))
+	servers := refs(n.Backends)
+	if len(only) > 0 {
+		servers = only
+		logging.Note(r.Context(), slog.Any("servers", n.names(only)))
+	}
 	grants := access.From(r.Context())
-	for _, ref := range append([]Ref{n.Proxy}, refs(n.Backends)...) {
+	for _, ref := range append([]Ref{n.Proxy}, servers...) {
 		if !grants.On(p, ref.NodeID, ref.ServerID) {
 			return n, access.Denied(p)
 		}

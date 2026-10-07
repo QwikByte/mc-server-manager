@@ -25,9 +25,11 @@ reads the same `config.yml`, and a Waterfall network can [change its proxy](#cha
 
 Vanilla servers can't tell forwarded players apart and can't join. Game servers in a network run with
 `online-mode=false`, as the proxy authenticates the players, and turn away anyone who doesn't come through the proxy. A
-server that leaves its network, and a copy of one, get `online-mode=true` again. The overview warns about a server
-outside of networks that runs in offline mode, as anyone who reaches it can join under any name. The panel installs the
-forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and removes it when it leaves.
+server that leaves its network, and a copy of one, get `online-mode=true` again, and restoring a backup from before
+brings back neither offline mode nor the forwarding secret (see [Backups](automation.md#backups)). The overview warns
+about a server outside of networks that runs in offline mode, as anyone who reaches it can join under any name. The
+panel installs the forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and removes
+it when it leaves.
 
 New Minecraft servers start with a whitelist: add players on the [Players](players.md) page, for one server or the
 network.
@@ -50,8 +52,9 @@ restart, all of them when the forwarding changes. The proxy reloads its configur
 (`velocity reload`, `greload`), which disconnects nobody; BungeeCord can't reload without a server it had, so removing
 or renaming a server restarts it. If a node is offline, the change is saved and **Apply again** configures its servers
 later; until then, the network's page and the overview tell that its proxy may be out of date. The proxy reaches servers
-on other nodes at the host of their node's address and their port, so changing either configures the network again.
-Proxies created by earlier versions are created again once, to read console commands.
+on other nodes at the host of their node's address and their port, so changing either configures the network again, as
+does restoring a backup of one of its servers. Proxies created by earlier versions are created again once, to read
+console commands.
 
 ## Changing the proxy
 
@@ -61,6 +64,22 @@ BungeeCord reads Waterfall's `config.yml`, and the Maintenance plugin with its s
 the old proxy. Changing to Velocity can switch to modern forwarding, which restarts the servers once, as does a proxy
 that comes to or leaves the node of a server. The dialog tells all this beforehand and where players join from then on.
 The old proxy leaves the network without its forwarding secret and stops; the new one starts if either ran.
+
+## Deleting and removed nodes
+
+Deleting a network makes its game servers standalone again, in online mode and without the forwarding secret; the
+proxy keeps running without forwarding. A network with datastores can't be deleted. If the proxy's node can't be
+reached, e.g. as it is lost, the network is deleted anyway: its servers on other nodes become standalone, and a warning
+tells that the proxy and the network's servers on its node keep their settings until they are deleted or put into a
+network again. While the node answers, a server that can't be configured keeps the network.
+
+Removing a node whose servers are part of networks first takes them out, once confirmed (`DELETE /api/nodes/{id}`
+with `?release=true`, which also needs the permission to manage networks). A network whose proxy runs on the node, or
+all of whose game servers do, is deleted: its game servers on other nodes become standalone, and a proxy on another
+node stops forwarding. The other networks lose the node's servers, which players then neither join nor reach through
+host names; their proxies forget them first. The node itself isn't contacted, so a lost node can be removed too, but if
+a server of another node can't be configured, the node stays. A network that would be deleted can't take datastores on
+other nodes along, so delete them first; datastores on the node are forgotten with it, like its servers.
 
 ## Proxy configuration
 
@@ -80,7 +99,15 @@ The running game servers restart a few at a time (1, 2, 5 or 10) while the netwo
 their players to another running server with `send`, and the next servers restart once these run again. The servers
 players join first restart last and one at a time; the proxy keeps running, and a server that doesn't start again stops
 the restart. It also stops before servers whose players the proxy can't send, e.g. a BungeeCord or Waterfall proxy
-without its module `cmd_send`.
+without its module `cmd_send`. A rolling restart may take as long as its servers need: for each batch the longest
+[stop timeout](servers.md#settings-and-images) among them and 8 minutes to start and run again, an hour at least.
+
+The menu of a running server in the network's list of servers restarts that one alone the same way, **Restart safely**:
+its players move to the server players join first, or another running one, and the proxy keeps running. **Send players
+elsewhere** only moves its players, e.g. before working on the server. Restarting server by server, all servers or one,
+needs the permission to restart the proxy and each server that restarts; sending players elsewhere needs the permission
+to manage the players of the proxy, like [sending one player](players.md#actions). [Schedules](automation.md#schedules)
+restart the servers of networks server by server too, if chosen.
 
 ## Maintenance
 
@@ -137,8 +164,12 @@ WireGuard (it is part of Linux since 5.6; RHEL 9 has it only as an unsupported T
 master configures the members every 5 minutes, so those that were offline catch up, and right away after a change, e.g.
 when a node is removed or its address changes. Each node's page shows its address, endpoint, key and peers with their
 latest handshake and traffic, and rotates its key; the overview names members that had no handshake with another one for
-5 minutes, e.g. as the UDP port is closed. The kernel keeps the interface `noryx0` while the agent restarts or updates,
-and `noryx-overlay.service` restores it at boot, before Docker starts the servers.
+5 minutes, e.g. as the UDP port is closed. The ports a node publishes there only let in the keys that the other nodes
+had when the network was applied, so that a node that later gets the address of a removed one reaches nothing: rotating
+a key therefore applies the networks with servers on the node and on other nodes again. Apply them again yourself if one
+of their nodes was offline meanwhile, or if a node's key changed otherwise, e.g. as it lost its data. The kernel keeps
+the interface `noryx0` while the agent restarts or updates, and `noryx-overlay.service` restores it at boot, before
+Docker starts the servers.
 
 ## Legacy forwarding
 

@@ -27,6 +27,15 @@ export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })
 }
 
+/** Formats seconds in the viewer's locale, as minutes if they are whole ones, e.g. "30 seconds" or "2 minutes". */
+export function formatSeconds(seconds: number): string {
+  const [unit, value] = seconds % 60 === 0 ? ["minute", seconds / 60] : ["second", seconds]
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long" }).format(value)
+}
+
+/** Formats an IANA time zone as people read it, e.g. "America/New York"; empty is UTC. */
+export const formatTimeZone = (zone: string) => (zone || "UTC").replaceAll("_", " ")
+
 /** Formats a duration in its largest whole unit in the viewer's locale, e.g. "3 days" or "5 minutes". */
 export function formatDuration(ms: number): string {
   const units = [

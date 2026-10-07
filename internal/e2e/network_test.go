@@ -163,7 +163,7 @@ func TestNetwork(t *testing.T) {
 		t.Fatalf("proxy after stopping the network: %s", state)
 	}
 
-	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusNoContent, nil)
+	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusOK, nil)
 	for _, ref := range []network.Ref{lobby, {NodeID: a1.node.ID, ServerID: survival.ServerID}, proxy} {
 		if got := a1.runtime.network(ref.ServerID); got.Forwarding != runtime.ForwardingNone {
 			t.Fatalf("%s still forwards after the network was deleted: %+v", ref.ServerID, got)

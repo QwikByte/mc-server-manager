@@ -103,8 +103,9 @@ export function useBackups(nodeId: string, serverId: string) {
       onSettled,
     }),
     restore: useMutation({
+      /** The warning tells that the network of the server couldn't be configured again. */
       mutationFn: ({ id, onStart }: { id: string; onStart?: (op: Operation) => void }) =>
-        operate(`${base(nodeId, serverId)}/${id}/restore`, { method: "POST" }, onStart),
+        operate<{ warning?: string }>(`${base(nodeId, serverId)}/${id}/restore`, { method: "POST" }, onStart),
       onSettled: () => queryClient.invalidateQueries({ queryKey: ["nodes", nodeId, "servers"] }),
     }),
     remove: useMutation({ mutationFn: (id: string) => api(`${base(nodeId, serverId)}/${id}`, { method: "DELETE" }), onSettled }),

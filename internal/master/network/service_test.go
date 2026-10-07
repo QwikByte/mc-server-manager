@@ -3,6 +3,9 @@ package network
 import (
 	"slices"
 	"testing"
+	"time"
+
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
 func TestBackendName(t *testing.T) {
@@ -91,10 +94,10 @@ func TestExposed(t *testing.T) {
 		moved := n
 		moved.Backends = slices.Clone(n.Backends)
 		moved.moved(move, "n1", "n2")
-		if !moved.exposed(nil) || !moved.exposed(members{"n1": "10.213.0.1"}) {
+		if !moved.exposed(nil) || !moved.exposed(members{"n1": {Address: "10.213.0.1"}}) {
 			t.Errorf("moving %s didn't expose the server", move)
 		}
-		if moved.exposed(members{"n1": "10.213.0.1", "n2": "10.213.0.2"}) {
+		if moved.exposed(members{"n1": {Address: "10.213.0.1"}, "n2": {Address: "10.213.0.2"}}) {
 			t.Errorf("moving %s exposed the server in the private network", move)
 		}
 		if moved.Firewalled = true; moved.exposed(nil) {
@@ -107,21 +110,21 @@ func TestExposed(t *testing.T) {
 }
 
 // A backend that its proxy reaches over the private network publishes its port there for the
-// proxy's node; one on the proxy's node, or outside the network, doesn't.
+// proxy's node with its key; one on the proxy's node, or outside the network, doesn't.
 func TestRequest(t *testing.T) {
 	n := Network{Proxy: Ref{"n1", "proxy"}, Forwarding: Modern, secret: "s3cret"}
-	m := members{"n1": "10.213.0.1", "n2": "10.213.0.2"}
+	m := members{"n1": {Address: "10.213.0.1", PublicKey: "key-1"}, "n2": {Address: "10.213.0.2", PublicKey: "key-2"}}
 	for _, tc := range []struct {
-		ref  Ref
-		want string
+		ref       Ref
+		want, key string
 	}{
-		{Ref{"n2", "survival"}, "10.213.0.1"},
-		{Ref{"n3", "skyblock"}, ""},
-		{Ref{"n1", "lobby"}, ""},
-		{n.Proxy, ""},
+		{Ref{"n2", "survival"}, "10.213.0.1", "key-1"},
+		{Ref{"n3", "skyblock"}, "", ""},
+		{Ref{"n1", "lobby"}, "", ""},
+		{n.Proxy, "", ""},
 	} {
-		if got := n.request(tc.ref, m).GetOverlayClient(); got != tc.want {
-			t.Errorf("%s: overlay client %q, want %q", tc.ref.ServerID, got, tc.want)
+		if req := n.request(tc.ref, m); req.GetOverlayClient() != tc.want || req.GetOverlayClientKey() != tc.key {
+			t.Errorf("%s: overlay client %q with key %q, want %q with %q", tc.ref.ServerID, req.GetOverlayClient(), req.GetOverlayClientKey(), tc.want, tc.key)
 		}
 	}
 }
@@ -143,5 +146,34 @@ func TestSendCommand(t *testing.T) {
 		if command, alone := n.SendCommand(tt.player, "survival-2"); command != "send "+tt.player+" survival-2" || alone != tt.alone {
 			t.Errorf("%s: SendCommand(%q) = %q, %v", tt.proxy, tt.player, command, alone)
 		}
+	}
+}
+
+// Restarting some servers safely and moving their players only takes different game servers of
+// the network, which the panel names by their names in it.
+func TestCheckBackends(t *testing.T) {
+	lobby, game := Ref{"n1", "lobby"}, Ref{"n2", "game"}
+	n := Network{Proxy: Ref{"n1", "proxy"}, Backends: []Backend{{Ref: lobby, Name: "lobby"}, {Ref: game, Name: "game"}}}
+	if err := n.checkBackends([]Ref{game, lobby}); err != nil || !slices.Equal(n.names([]Ref{game, lobby}), []string{"lobby", "game"}) {
+		t.Fatalf("servers of the network: %v, names %q", err, n.names([]Ref{game, lobby}))
+	}
+	for _, bad := range [][]Ref{{n.Proxy}, {Ref{"n3", "other"}}, {Ref{"n2", "lobby"}}, {lobby, lobby}, {{}}} {
+		if n.checkBackends(bad) == nil {
+			t.Errorf("accepted %v", bad)
+		}
+	}
+}
+
+// A rolling restart gets for each group the longest stop timeout among its servers and the
+// time to start again, and an hour at least.
+func TestRollingTimeout(t *testing.T) {
+	a, b, c := Backend{Ref: Ref{"n1", "a"}}, Backend{Ref: Ref{"n1", "b"}}, Backend{Ref: Ref{"n2", "c"}}
+	listed := map[Ref]*noryxv1.Server{a.Ref: {StopTimeoutSeconds: 600}, b.Ref: {StopTimeoutSeconds: 30}} // c of an older agent
+	if got := rollingTimeout([][]Backend{{a, b}, {c}}, listed); got != time.Hour {
+		t.Errorf("a few servers: %s", got)
+	}
+	groups := slices.Repeat([][]Backend{{b, a}, {c}}, 5)
+	if got, want := rollingTimeout(groups, listed), 5*(10*time.Minute+time.Minute+2*groupAllowance); got != want {
+		t.Errorf("many servers: %s, want %s", got, want)
 	}
 }

@@ -47,7 +47,7 @@ panel.example.com {
 
 Then add `--trusted-proxy 127.0.0.1` to `NORYX_MASTER_OPTS` in `/etc/noryx/master.env`, so that the master takes the
 address of each client from the proxy's `X-Forwarded-For` header. Otherwise all clients share the proxy's address, and
-with it the budget of the sign-in rate limit, and the log shows only the proxy's address.
+with it the budget of the sign-in rate limit, and the log and the sessions of users show only the proxy's address.
 
 ## Nodes
 
@@ -60,6 +60,10 @@ curl -fsSLO https://github.com/QwikByte/noryx/releases/download/<version>/instal
 
 Allow port 7443 only from the master's IP address. For the [private network](networks.md#private-network) of the nodes,
 open UDP port 51820 (or the one in its settings) between the nodes.
+
+**Remove node…** in a node's menu stops managing it, also while it is offline or lost. Its servers and datastores keep
+running until they are stopped on the node or the agent is uninstalled. Servers of networks
+[leave their networks](networks.md#deleting-and-removed-nodes) first, once confirmed.
 
 ## Everything on one machine
 

@@ -15,6 +15,10 @@ export interface TemplateSettings {
   aikarFlags: boolean
   jvmOptions: string[]
   cpuLimit: number
+  /** Seconds the servers get to stop, e.g. to save their worlds, before they are killed. */
+  stopTimeout: number
+  /** IANA time zone such as Europe/Berlin; empty for UTC. */
+  timeZone: string
   /** Written to server.properties before the first start. */
   properties: Record<string, string>
 }
@@ -49,13 +53,16 @@ export const emptyTemplate: TemplateDraft = {
   aikarFlags: false,
   jvmOptions: [],
   cpuLimit: 0,
+  stopTimeout: 60,
+  timeZone: "",
   properties: {},
   plugins: [],
 }
 
 export function draftOf(t: Template): TemplateDraft {
   const { name, description, type, version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties, plugins } = t
-  return { name, description, type, version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties, plugins }
+  const settings = { type, version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties }
+  return { name, description, ...settings, stopTimeout: t.stopTimeout, timeZone: t.timeZone, plugins }
 }
 
 export const templatesQuery = queryOptions({

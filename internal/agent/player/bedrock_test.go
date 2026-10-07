@@ -65,6 +65,7 @@ func TestWhitelistBedrock(t *testing.T) {
 	}
 	rt.servers[1].State = running
 	s.applyWaiting(ctx)
+	s.wg.Wait()
 	if w := whitelist(down); len(w) != 1 || w[0].GetUuid() != id || len(lists(down).GetPending()) != 0 {
 		t.Fatalf("whitelist = %v", w)
 	}

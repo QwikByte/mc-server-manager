@@ -110,7 +110,7 @@ func serve(ctx context.Context, cfg config) error {
 	users := auth.NewService(db)
 	nodes := node.NewService(db, ca, masterCert, conf)
 	defer nodes.Close()
-	logStore := logs.NewStore(db, logs.NewNames(nodes), conf.LogRetention)
+	logStore := logs.NewStore(db, logs.NewNames(nodes), conf)
 	logFile, err := logging.Setup(cfg.log, logStore.Handler(cfg.log.Level))
 	if err != nil {
 		return err
@@ -144,16 +144,17 @@ func serve(ctx context.Context, cfg config) error {
 	ops := operation.New(time.Second)
 	overlays := overlay.NewService(db, nodes)
 	datastores := datastore.NewStore(db, nodes, overlays)
-	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes)}, moves.Busy)
+	networks := network.NewService(db, nodes, plugins, overlays, datastores)
+	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
 	updates := update.New(nodes, conf, update.Options{DataDir: cfg.dataDir})
 	go updates.Run(ctx)
-	usageStore := usage.NewStore(db, nodes)
+	usageStore := usage.NewStore(db, nodes, conf)
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
-	networks, tags := network.NewService(db, nodes, plugins, overlays, datastores), tag.NewStore(db)
+	tags := tag.NewStore(db)
 	fileSets := fileset.NewService(db, nodes, networks, tags, moves)
 	go fileSets.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
@@ -266,7 +267,13 @@ type Services struct {
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
 // API, which needs a session and loads the user's permissions for every request.
 func Handler(s Services) http.Handler {
-	authHandler := auth.NewHandler(s.Users, s.Settings.SessionTTL)
+	authHandler := auth.NewHandler(s.Users, s.Settings.SessionTTL, func(ctx context.Context, userID int64) (bool, error) {
+		required := s.Settings.Get().RequireMFA
+		if required.All || len(required.Groups) == 0 {
+			return required.All, nil
+		}
+		return s.Access.InGroups(ctx, userID, required.Groups)
+	})
 	api := API(s)
 	// The routes of the user's own account and preferences need no permission.
 	authHandler.Register(api)
@@ -288,7 +295,7 @@ func API(s Services) *http.ServeMux {
 	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
-	node.NewHandler(s.Nodes, s.Networks, s.Overlay).Register(m)
+	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
 	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
@@ -301,7 +308,7 @@ func API(s Services) *http.ServeMux {
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
 	datastore.NewHandler(s.Datastores, s.Operations).Register(m)
-	backup.NewHandler(s.Nodes, s.Operations).Register(m)
+	backup.NewHandler(s.Nodes, s.Networks, s.Operations).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
 	update.NewHandler(s.Updates).Register(m)

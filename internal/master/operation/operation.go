@@ -41,7 +41,8 @@ type Operation struct {
 	// Steps are the steps it takes, and Step the index of the one it is at, or failed at.
 	Steps []string `json:"steps"`
 	Step  int      `json:"step"`
-	// Done and Total measure the current step in Unit, bytes or servers; Total is 0 if unknown.
+	// Done and Total measure the current step in Unit, e.g. bytes, servers or the minutes of a
+	// warning; Total is 0 if unknown.
 	Done       int64      `json:"done"`
 	Total      int64      `json:"total"`
 	Unit       string     `json:"unit,omitempty"`

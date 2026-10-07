@@ -69,7 +69,8 @@ func TestOverlay(t *testing.T) {
 	if got := a1.runtime.network(proxy.ServerID).Backends[0].Address; got != "10.213.0.2:25570" {
 		t.Fatalf("the proxy reaches survival at %s", got)
 	}
-	client := agentoverlay.Client{Port: 25570, Address: netip.MustParseAddr("10.213.0.1")}
+	// The port is bound to node-1's key, so that no other node that gets its address reaches it.
+	client := agentoverlay.Client{Port: 25570, Address: netip.MustParseAddr("10.213.0.1"), Keys: []string{a1.kernel.key.PublicKey().String()}}
 	if got := a2.runtime.network(survival.ServerID).Overlay; got != "10.213.0.2" || !reflect.DeepEqual(a2.kernel.applied().Clients[survival.ServerID], client) {
 		t.Fatalf("survival publishes its port at %q, clients %+v", got, a2.kernel.applied().Clients)
 	}
@@ -103,6 +104,13 @@ func TestOverlay(t *testing.T) {
 	api.do("POST", path(a2)+"/rotate", nil, http.StatusOK, nil)
 	if after := a1.kernel.applied().Peers[0].PublicKey; after == before || after != a2.kernel.key.PublicKey().String() {
 		t.Fatalf("node-1 has the key %s of node-2, before %s", after, before)
+	}
+	// A new key of node-1, the proxy's, is let in again, as its network is applied again.
+	old := client.Keys[0]
+	api.do("POST", path(a1)+"/rotate", nil, http.StatusOK, nil)
+	client.Keys = []string{a1.kernel.key.PublicKey().String()}
+	if got := a2.kernel.applied().Clients[survival.ServerID]; client.Keys[0] == old || !reflect.DeepEqual(got, client) {
+		t.Fatalf("survival's client after node-1's new key: %+v, want %+v, before %s", got, client, old)
 	}
 	// The range only changes without members, the port right away.
 	api.do("PUT", "/api/overlay", overlay.Settings{Subnet: "10.214.0.0/24", Port: 51820, MTU: 1420}, http.StatusConflict, nil)

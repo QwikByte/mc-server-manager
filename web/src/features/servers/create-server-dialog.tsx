@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type FormEvent, type ReactElement, useCallback, useState } from "react"
 import { Trans } from "react-i18next"
+import { Fold } from "@/components/fold"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -35,16 +36,25 @@ import { nodeQuery, nodesQuery } from "@/features/nodes/api"
 import { OperationStatus } from "@/features/operations/operation-status"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Template, templatesQuery } from "@/features/templates/api"
-import { formatBytes } from "@/lib/format"
+import { formatBytes, formatSeconds, formatTimeZone } from "@/lib/format"
 import { freeMemoryMb, type NewServer, serversQuery, useCreateServer } from "./api"
 import { defaults, modpack, serverType, suggestPort, usedPorts } from "./server-types"
-import { MemoryField, VersionField } from "./settings-fields"
+import { MemoryField, StopTimeoutField, TimeZoneField, VersionField } from "./settings-fields"
 import { EndOfLifeNotice, SoftwareOptions } from "./software"
 import { type World, worldChanges, worldOf } from "./world"
 import { WorldFields } from "./world-fields"
 
 // Node, port and storage stay unset until chosen, so that the suggestions apply.
-type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string; nodeId?: string; templateId?: string; modpack?: ModpackChoice; world: World }
+type Form = Omit<NewServer, "port" | "storage"> & {
+  port?: number
+  storage?: string
+  nodeId?: string
+  templateId?: string
+  modpack?: ModpackChoice
+  world: World
+  stopTimeout: number
+  timeZone: string
+}
 
 const none = "none"
 
@@ -52,7 +62,8 @@ function blank(template?: Template): Form {
   const basics = template
     ? { type: template.type, version: template.version === "LATEST" ? "" : template.version, memoryMb: template.memoryMb }
     : { type: "paper", version: "", memoryMb: defaults("paper").memoryMb }
-  return { name: "", acceptEula: false, templateId: template?.id, world: worldOf(template?.properties), ...basics }
+  const { stopTimeout = 60, timeZone = "" } = template ?? {}
+  return { name: "", acceptEula: false, templateId: template?.id, world: worldOf(template?.properties), stopTimeout, timeZone, ...basics }
 }
 
 /** What a template adds to a new server, e.g. "Java 21 · 3 properties · LuckPerms". */
@@ -135,8 +146,9 @@ export function CreateServerDialog({
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!nodeId) return
-    const { name, type, memoryMb, acceptEula } = form
-    const server: NewServer = { name, type, memoryMb, acceptEula, port, storage, version: proxy ? "" : form.version.trim() }
+    const { name, type, memoryMb, acceptEula, stopTimeout, timeZone } = form
+    const version = proxy ? "" : form.version.trim()
+    const server: NewServer = { name, type, memoryMb, acceptEula, port, storage, version, stopTimeout, timeZone }
     if (fromModpack) Object.assign(server, { type: "", version: "", modpack: form.modpack })
     if (template) {
       const { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties } = template
@@ -150,7 +162,8 @@ export function CreateServerDialog({
         message: created.pluginError
           ? t("Created {{name}}, but its plugins couldn't be installed: {{error}}", { name: created.name, error: created.pluginError })
           : t("Created {{name}}", { name: created.name }),
-        warning: !!created.pluginError,
+        description: created.warning,
+        warning: !!created.pluginError || !!created.warning,
         action: { label: t("Open"), onClick: () => void open(created.id) },
       }),
       then: (created) => {
@@ -323,6 +336,17 @@ export function CreateServerDialog({
                 </Field>
               )}
               {!proxy && <WorldFields value={form.world} onChange={(world) => setForm({ ...form, world })} />}
+              <Fold
+                title={t("Stop timeout and time zone")}
+                summary={`${formatSeconds(form.stopTimeout)} · ${formatTimeZone(form.timeZone)}`}
+              >
+                <StopTimeoutField
+                  id="server-stop-timeout"
+                  value={form.stopTimeout}
+                  onChange={(stopTimeout) => setForm({ ...form, stopTimeout })}
+                />
+                <TimeZoneField id="server-time-zone" value={form.timeZone} onChange={(timeZone) => setForm({ ...form, timeZone })} />
+              </Fold>
               {!proxy && (
                 <Field orientation="horizontal">
                   <Checkbox

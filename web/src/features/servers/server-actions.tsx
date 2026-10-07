@@ -1,6 +1,7 @@
 import {
   ArrowClockwiseIcon,
   ArrowsLeftRightIcon,
+  BellRingingIcon,
   CircleNotchIcon,
   CopyIcon,
   DotsThreeIcon,
@@ -13,20 +14,21 @@ import {
 } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { useState } from "react"
-import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
+import { useOperation } from "@/features/operations/use-operation"
 import { PinButton } from "@/features/preferences/pin-button"
 import { SaveTemplateDialog } from "@/features/templates/save-template-dialog"
 import { cn } from "@/lib/utils"
-import { type Server, type ServerAction, useMove, useServerAction } from "./api"
+import { type Server, type ServerAction, useMove, useServerAction, type Warning } from "./api"
 import { DuplicateServerDialog } from "./duplicate-server-dialog"
 import { MoveServerDialog } from "./move-server-dialog"
 import { NotesDialog } from "./notes"
+import { PowerDialog } from "./power-dialog"
 import { serverType } from "./server-types"
 import { TagsDialog } from "./tags"
 
@@ -39,9 +41,9 @@ const pendingLabels: Record<ServerAction, (name: string) => string> = {
 }
 
 /**
- * Start or stop a server, copy it, move it, tag it, change its notes, save it as a template and delete it after
- * confirmation. While it moves, it can't be changed. Compact actions only have icons, e.g. in a table.
- * With pin, they also pin it to the sidebar and the overview.
+ * Start or stop a server, also after warning its players, copy it, move it, tag it, change its notes, save it as a
+ * template and delete it after confirmation. While it moves, it can't be changed. Compact actions only have icons,
+ * e.g. in a table. With pin, they also pin it to the sidebar and the overview.
  */
 export function ServerActions({
   nodeId,
@@ -57,21 +59,20 @@ export function ServerActions({
   pin?: boolean
 }) {
   const mutation = useServerAction(nodeId)
+  const operation = useOperation()
   const move = useMove(server.id)
-  const [dialog, setDialog] = useState<"duplicate" | "move" | "template" | "tags" | "notes">()
+  const [dialog, setDialog] = useState<"duplicate" | "move" | "template" | "tags" | "notes" | "restart" | "stop">()
   const running = server.state !== "stopped"
   const dialogProps = { nodeId, server, open: true, onOpenChange: (open: boolean) => !open && setDialog(undefined) }
 
-  // The notification follows the action also if this component goes away meanwhile.
-  function run(action: ServerAction, done: string, then?: () => void) {
-    const id = toast.loading(pendingLabels[action](server.name))
-    mutation.mutateAsync({ id: server.id, action }).then(
-      () => {
-        toast.success(done, { id })
-        then?.()
-      },
-      (e: Error) => toast.error(e.message, { id }),
-    )
+  // The notification follows the action, e.g. a stop that takes minutes, also if this component goes away meanwhile.
+  function run(action: ServerAction, done: string, then?: () => void, warning?: Warning) {
+    operation.run((onStart) => mutation.mutateAsync({ id: server.id, action, warning, onStart }), {
+      title: pendingLabels[action](server.name),
+      notify: true,
+      done: () => ({ message: done }),
+      then,
+    })
   }
 
   const { can } = useAccess()
@@ -89,6 +90,8 @@ export function ServerActions({
         ]
       : [{ action: "start", icon: PlayIcon, label: t("Start"), done: t("Started {{name}}", { name: server.name }) }]
   ).filter((p) => may(`servers.${p.action}` as Permission))
+  // Only the players of running game servers can be warned.
+  const warnable = server.state === "running" && !serverType(server.type).proxy ? powers : []
   if (move && !move.finishedAt) {
     return (
       <Pill tone="info">
@@ -99,6 +102,7 @@ export function ServerActions({
   }
   const pinButton = pin && <PinButton nodeId={nodeId} server={server} />
   if (powers.length === 0 && !duplicate && !saveTemplate && !tags && !may("servers.delete")) return pinButton || null
+  const menu = warnable.length > 0 || duplicate || movable || saveTemplate || tags
 
   return (
     <div className={cn("flex items-center", compact ? "justify-end gap-0.5" : "flex-wrap gap-2")}>
@@ -119,7 +123,7 @@ export function ServerActions({
       ))}
       <div className={cn("flex items-center gap-1", !compact && "ml-auto")}>
         {pinButton}
-        {(duplicate || movable || saveTemplate || tags) && (
+        {menu && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -132,7 +136,14 @@ export function ServerActions({
                 <DotsThreeIcon weight="bold" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-56">
+              {warnable.map(({ action }) => (
+                <DropdownMenuItem key={action} onSelect={() => setDialog(action as "restart" | "stop")}>
+                  <BellRingingIcon />
+                  {action === "stop" ? t("Stop with a warning…") : t("Restart with a warning…")}
+                </DropdownMenuItem>
+              ))}
+              {warnable.length > 0 && (duplicate || movable || saveTemplate || tags) && <DropdownMenuSeparator />}
               {tags && (
                 <DropdownMenuItem onSelect={() => setDialog("tags")}>
                   <TagIcon />
@@ -194,6 +205,18 @@ export function ServerActions({
       {dialog === "template" && <SaveTemplateDialog {...dialogProps} />}
       {dialog === "tags" && <TagsDialog servers={[{ ...server, nodeId }]} onOpenChange={dialogProps.onOpenChange} />}
       {dialog === "notes" && <NotesDialog nodeId={nodeId} server={server} onOpenChange={dialogProps.onOpenChange} />}
+      {(dialog === "restart" || dialog === "stop") && (
+        <PowerDialog
+          action={dialog}
+          title={dialog === "stop" ? t("Stop {{name}}?", { name: server.name }) : t("Restart {{name}}?", { name: server.name })}
+          description={t("Its players are disconnected.")}
+          warnable
+          warnFirst
+          canMessage={may("console.commands")}
+          onConfirm={(warning) => run(dialog, powers.find((p) => p.action === dialog)?.done ?? "", undefined, warning)}
+          onOpenChange={dialogProps.onOpenChange}
+        />
+      )}
     </div>
   )
 }

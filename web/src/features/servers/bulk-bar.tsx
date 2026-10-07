@@ -1,7 +1,6 @@
 import { ArrowClockwiseIcon, PlayIcon, StopIcon, TagIcon, TerminalIcon, XIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { type FormEvent, useState } from "react"
-import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -12,6 +11,8 @@ import { key } from "@/features/networks/servers"
 import { retryAction } from "@/features/operations/retry"
 import { useOperation } from "@/features/operations/use-operation"
 import { type BulkAction, type NodeServer, serverKey, useBulkAction } from "./api"
+import { PowerDialog } from "./power-dialog"
+import { serverType } from "./server-types"
 import { TagsDialog } from "./tags"
 
 type Kind = BulkAction["action"]
@@ -24,7 +25,10 @@ const actions: Record<Kind, { permission: Permission; running: boolean; icon: ty
   command: { permission: "console.commands", running: true, icon: TerminalIcon, label: () => t("Command…") },
 }
 
-/** Acts on the selected servers at once: starts, restarts or stops them, sends a command, or changes their tags. */
+/**
+ * Acts on the selected servers at once: starts, restarts or stops them, also after warning their players, sends a
+ * command, or changes their tags.
+ */
 export function BulkBar({ selected, onClear }: { selected: NodeServer[]; onClear: () => void }) {
   const { can } = useAccess()
   const bulk = useBulkAction()
@@ -88,18 +92,19 @@ export function BulkBar({ selected, onClear }: { selected: NodeServer[]; onClear
         {t("Tags…")}
       </Button>
       {(dialog === "restart" || dialog === "stop") && (
-        <ConfirmDialog
-          open
-          onOpenChange={close}
+        <PowerDialog
+          action={dialog}
           title={
             dialog === "stop"
               ? t("Stop {{count}} servers?", { count: targets("stop").length, defaultValue_one: "Stop {{count}} server?" })
               : t("Restart {{count}} servers?", { count: targets("restart").length, defaultValue_one: "Restart {{count}} server?" })
           }
           description={t("Their players are disconnected: {{names}}.", { names: listNames(targets(dialog)) })}
-          action={dialog === "stop" ? t("Stop") : t("Restart")}
-          destructive={dialog === "stop"}
-          onConfirm={() => run({ action: dialog })}
+          // Only the players of running game servers can be warned.
+          warnable={targets(dialog).some((s) => s.state === "running" && !serverType(s.type).proxy)}
+          canMessage={targets(dialog).every((s) => can("console.commands", s.nodeId, s.id))}
+          onConfirm={(warning) => run({ action: dialog, warning })}
+          onOpenChange={close}
         />
       )}
       {dialog === "command" && (

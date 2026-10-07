@@ -32,6 +32,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/overlay"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 )
 
@@ -159,8 +160,8 @@ type Mods interface {
 // Overlay is the private network of the nodes, over which a proxy reaches the servers of
 // another node if both nodes are members.
 type Overlay interface {
-	// Addresses returns the addresses of the members in it, by node.
-	Addresses(ctx context.Context) (map[string]string, error)
+	// ByNode returns its members, by node.
+	ByNode(ctx context.Context) (map[string]overlay.Member, error)
 }
 
 // Datastores are the MariaDB and PostgreSQL servers of networks, which their servers reach.
@@ -169,15 +170,15 @@ type Datastores interface {
 	Placed(ctx context.Context, networkID string) (map[string][]string, error)
 	// Publish publishes the datastores of a network in the private network of the nodes for
 	// those of nodes that reach them over it, and for no others.
-	Publish(ctx context.Context, networkID string, nodes []string, members map[string]string) error
+	Publish(ctx context.Context, networkID string, nodes []string, members map[string]overlay.Member) error
 }
 
-// members are the addresses of the nodes in the private network, by node.
-type members map[string]string
+// members are the nodes in the private network, by node.
+type members map[string]overlay.Member
 
 // private reports whether a proxy on node a reaches the servers of node b over the private
 // network: their ports are only published there, and only for it.
-func (m members) private(a, b string) bool { return a != b && m[a] != "" && m[b] != "" }
+func (m members) private(a, b string) bool { return a != b && m[a].Address != "" && m[b].Address != "" }
 
 type Service struct {
 	db         *sql.DB
@@ -309,33 +310,65 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 
 // Delete makes all servers standalone again and removes the network. The proxy keeps
 // running without forwarding. A network with datastores stays, as its data would be lost.
-func (s *Service) Delete(ctx context.Context, id string) error {
+// If the proxy's node doesn't answer, e.g. as it is lost, the proxy and the servers on its
+// node are skipped, which the warning tells: they only trust each other then.
+func (s *Service) Delete(ctx context.Context, id string) (warning string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n, err := s.Get(ctx, id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	placed, err := s.datastores.Placed(ctx, id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(placed) > 0 {
-		return httpapi.Errorf(http.StatusConflict, "The network %q has databases. Delete its datastores first.", n.Name)
+		return "", httpapi.Errorf(http.StatusConflict, "The network %q has databases. Delete its datastores first.", n.Name)
 	}
 	ctx = context.WithoutCancel(ctx)
+	// offline tells, once a call to the proxy's node failed, that the node doesn't answer either.
+	offline := false
+	skipped := func(ref Ref) bool {
+		offline = ref.NodeID == n.Proxy.NodeID && !s.reachable(ctx, ref.NodeID)
+		return offline
+	}
 	operation.Step(ctx, "servers")
 	for i, b := range n.Backends {
 		operation.Count(ctx, int64(i), int64(len(n.Backends)), "servers")
-		if err := s.leave(ctx, b); err != nil {
-			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
+		if offline && b.NodeID == n.Proxy.NodeID {
+			continue
+		}
+		if err := s.leave(ctx, b); err != nil && !skipped(b.Ref) {
+			return "", httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
 		}
 	}
-	if err := s.release(ctx, n, "proxy"); err != nil {
-		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted: %s", message(err))
+	if !offline {
+		if err := s.release(ctx, n, "proxy"); err != nil && !skipped(n.Proxy) {
+			return "", httpapi.Errorf(http.StatusBadGateway, "The network was not deleted: %s", message(err))
+		}
 	}
-	_, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID)
-	return err
+	if _, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID); err != nil || !offline {
+		return "", err
+	}
+	name := "the proxy's node"
+	if nd, err := s.nodes.Get(ctx, n.Proxy.NodeID); err == nil {
+		name = nd.Name
+	}
+	slog.Warn("A network was deleted without its proxy, whose node can't be reached", logging.Networks, "network", n.ID, logging.KeyNode, n.Proxy.NodeID)
+	return fmt.Sprintf("%s can't be reached, so the proxy and the network's servers on it keep their settings and still trust each other. Once it is back, delete them or put them into a network again.", name), nil
+}
+
+// reachable reports whether the agent of a node answers, which tells a node that is offline,
+// or removed, from one where a call failed.
+func (s *Service) reachable(ctx context.Context, nodeID string) bool {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	conn, err := s.nodes.Conn(ctx, nodeID)
+	if err == nil {
+		_, err = noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
+	}
+	return err == nil
 }
 
 // release takes the proxy out of a network, in the step of an operation: it loses Geyser and
@@ -516,9 +549,9 @@ func (s *Service) ApplyAcross(ctx context.Context, nodeID string) error {
 	return nil
 }
 
-// members returns the addresses of the nodes in the private network, by node.
+// members returns the nodes in the private network, by node.
 func (s *Service) members(ctx context.Context) (members, error) {
-	return s.overlay.Addresses(ctx)
+	return s.overlay.ByNode(ctx)
 }
 
 // Configure configures all servers of a network again, e.g. as a datastore joined it.
@@ -653,6 +686,27 @@ func (n *Network) has(ref Ref) bool {
 	return n.Proxy == ref || slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.Ref == ref })
 }
 
+// checkBackends checks that servers are different game servers of the network.
+func (n *Network) checkBackends(servers []Ref) error {
+	for i, ref := range servers {
+		if slices.Contains(servers[:i], ref) || !slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.Ref == ref }) {
+			return httpapi.Errorf(http.StatusBadRequest, "Choose different game servers of the network.")
+		}
+	}
+	return nil
+}
+
+// names returns the names of game servers of the network.
+func (n *Network) names(servers []Ref) []string {
+	var names []string
+	for _, b := range n.Backends {
+		if slices.Contains(servers, b.Ref) {
+			names = append(names, b.Name)
+		}
+	}
+	return names
+}
+
 // moved changes the node of a server of the network.
 func (n *Network) moved(serverID, from, to string) {
 	if n.Proxy == (Ref{from, serverID}) {
@@ -672,6 +726,9 @@ func (n *Network) moved(serverID, from, to string) {
 func (s *Service) apply(ctx context.Context, n Network, refresh bool) error {
 	ctx = context.WithoutCancel(ctx) // finish even if the client goes away
 	err := s.configureAll(ctx, n, refresh)
+	if f := (*failed)(nil); errors.As(err, &f) {
+		err = httpapi.Errorf(http.StatusBadGateway, "The change was saved, but %s Apply the network again once all nodes are online.", f)
+	}
 	var applyError any // NULL once applied
 	if err != nil {
 		applyError = httpapi.Message(err)
@@ -756,7 +813,8 @@ func (s *Service) configureServers(ctx context.Context, n Network, m members, re
 }
 
 // request returns the configuration of a server of the network. A backend that its proxy
-// reaches over the private network publishes its port there, only for the proxy's node.
+// reaches over the private network publishes its port there, only for the proxy's node with
+// its current key.
 func (n *Network) request(ref Ref, m members) *noryxv1.ConfigureNetworkRequest {
 	req := &noryxv1.ConfigureNetworkRequest{Id: ref.ServerID, Forwarding: noryxv1.Forwarding_FORWARDING_MODERN, ForwardingSecret: n.secret}
 	if n.Forwarding == Legacy {
@@ -765,7 +823,7 @@ func (n *Network) request(ref Ref, m members) *noryxv1.ConfigureNetworkRequest {
 	req.ProxyOnNode = ref != n.Proxy && ref.NodeID == n.Proxy.NodeID
 	req.BedrockPlayers = ref != n.Proxy && n.BedrockPort != 0
 	if ref != n.Proxy && m.private(n.Proxy.NodeID, ref.NodeID) {
-		req.OverlayClient = m[n.Proxy.NodeID]
+		req.OverlayClient, req.OverlayClientKey = m[n.Proxy.NodeID].Address, m[n.Proxy.NodeID].PublicKey
 	}
 	req.Datastores = n.placed[ref.NodeID]
 	return req
@@ -819,7 +877,7 @@ func (s *Service) target(ctx context.Context, proxy Ref, b Backend, m members) (
 	if err != nil {
 		return nil, err
 	}
-	host := m[b.NodeID]
+	host := m[b.NodeID].Address
 	if !m.private(proxy.NodeID, b.NodeID) {
 		n, err := s.nodes.Get(ctx, b.NodeID)
 		if err != nil {
@@ -1016,10 +1074,17 @@ func conflict(err error, name string) error {
 	return err
 }
 
-func applyFailed(what string, err error) error {
-	return httpapi.Errorf(http.StatusBadGateway, "The change was saved, but %s could not be configured: %s Apply the network again once all nodes are online.",
-		what, strings.TrimSuffix(message(err), ".")+".")
+// failed tells which part of a network could not be configured, and why.
+type failed struct {
+	what string
+	err  error
 }
+
+func (f *failed) Error() string {
+	return fmt.Sprintf("%s could not be configured: %s", f.what, strings.TrimSuffix(message(f.err), ".")+".")
+}
+
+func applyFailed(what string, err error) error { return &failed{what, err} }
 
 // message returns the message of an error of an agent or of the master.
 func message(err error) string {

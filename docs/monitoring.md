@@ -26,10 +26,54 @@ hours (averages of 5 minutes) or 7 days (averages of 30 minutes), with the most 
 of each step, and a table shows the same values. Gaps are times in which a server didn't run or its node couldn't be
 reached. The history of a server moves and goes away with it.
 
+### Warnings
+
+When the master records a measurement, it checks it against thresholds, each with a value and how many minutes it has
+to last (0 warns at once):
+
+| Of      | Measure          | Relative to                                                     | Default             |
+| ------- | ---------------- | --------------------------------------------------------------- | ------------------- |
+| Servers | CPU              | the server's CPU limit, or all cores of its node if it has none | 90 % for 10 minutes |
+| Servers | Memory           | the server's memory limit, which includes Java's overhead       | 95 % for 5 minutes  |
+| Servers | Ticks per second | 20 at best, over the last minute; warns below the threshold     | 15 for 5 minutes    |
+| Nodes   | CPU              | all cores of the node                                           | 90 % for 10 minutes |
+| Nodes   | Memory           | the node's memory, without the page cache                       | 90 % for 5 minutes  |
+| Nodes   | Storage          | each storage location: the space in use of its file system      | 90 % for 1 minute   |
+
+The defaults are in the **Usage warnings** of the master's settings. A server has its own on its **Settings** tab and a
+node on its page, measure by measure: **Use default** follows the settings, otherwise the threshold is the server's or
+node's own, and each can be turned off. Changing them needs the permission to change the server's settings or the node;
+whoever sees a server or node sees its thresholds. They move with a server to another node and go away with it; a copy
+of a server starts with the defaults.
+
+A measure that has been beyond its threshold in every measurement for its minutes is logged once as a warning (category
+**Usage**, with the node and server), and once as an information entry when it is back within its threshold, e.g. "A
+server uses too much CPU" and "A server uses less CPU again"; nothing in between. A value the agent can't tell, e.g. the
+ticks per second while the console doesn't answer, changes nothing, but a measure that went unmeasured for more than 5
+minutes, e.g. while its node was offline, starts counting its minutes again. A server that stops, a threshold that is
+turned off and a node that is removed end their warnings without an entry. The master keeps this in memory: after it
+restarts, a measure that is still beyond its threshold warns again once its minutes have passed. Agents older than the
+master don't tell the CPU limit of a server, so until they are updated, its CPU counts against all cores of its node.
+
+Warnings show up in the bell like every warning of the log, and **Needs attention** on the overview lists the servers
+and nodes that are beyond a threshold now, with the latest value and how long it has lasted, to the users who may see
+them. Sending warnings to Discord, Slack or by mail is planned.
+
 ## Logs
 
 The master keeps a log of what happens on it and on its agents, so that it's clear who did what and what went wrong.
-Entries are kept for 30 days unless the settings say otherwise, and at most the newest million.
+Entries are kept for 30 days unless the settings say otherwise, but at most the newest million and 2 GiB (the
+settings allow 100 MiB to 100 GiB), so that agents that log too much can't fill the master's disk. Every minute, the
+master deletes the expired entries, then the oldest beyond these limits. When this deletes entries before their time,
+it logs a warning, and warns again only after entries were kept for their whole time again. Then raise the limit, or
+find out on the **Logs** page what logs so much.
+
+The size of an entry counts its texts and its part of the indexes. SQLite reuses the space of deleted entries, so
+`master.db` stops growing once the log reached its limit: the log takes about as much space as its limit with usual
+entries, and at most about twice as much with entries of unfavourable sizes, as SQLite stores them in pages of 4 KiB.
+The file doesn't shrink by itself, e.g. after lowering the limit; a
+[backup of the master](automation.md#backing-up-the-master) holds a compact copy of the database, and restoring it
+gives the space back.
 
 ### Actions
 
@@ -56,9 +100,10 @@ and narrows the list to its user, server or category. Key figures and a chart sh
 ### Everywhere else
 
 A bell in the sidebar counts the new warnings and errors, and new ones show up as notifications, except those of the
-user's own actions. Among them are every crash of a server, servers that become unhealthy, and nodes that go offline:
-the master checks the connections to the agents every 30 seconds and logs a node that fails two checks in a row once,
-and once more when it is back. Servers have an **Activity** tab and nodes an **Activity** section.
+user's own actions. Among them are every crash of a server, servers that become unhealthy, servers and nodes that use
+too much for a while ([Warnings](#warnings)), and nodes that go offline: the master checks the connections to the agents
+every 30 seconds and logs a node that fails two checks in a row once, and once more when it is back. Servers have an
+**Activity** tab and nodes an **Activity** section.
 
 ### Command line
 

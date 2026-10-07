@@ -828,7 +828,11 @@ type PublishDatastoreRequest struct {
 	// A port of the node, published at its address in the private network; 0 for none.
 	Port uint32 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
 	// Addresses of the nodes in the private network that may reach it; none for no port.
-	Clients       []string `protobuf:"bytes,3,rep,name=clients,proto3" json:"clients,omitempty"`
+	Clients []string `protobuf:"bytes,3,rep,name=clients,proto3" json:"clients,omitempty"`
+	// The public keys of these nodes in the private network, in the order of clients. The node
+	// publishes the port only for its peers with these keys, and closes it to an address once
+	// it has another key. Older masters send none: then the keys the peers have now.
+	ClientKeys    []string `protobuf:"bytes,4,rep,name=client_keys,json=clientKeys,proto3" json:"client_keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -880,6 +884,13 @@ func (x *PublishDatastoreRequest) GetPort() uint32 {
 func (x *PublishDatastoreRequest) GetClients() []string {
 	if x != nil {
 		return x.Clients
+	}
+	return nil
+}
+
+func (x *PublishDatastoreRequest) GetClientKeys() []string {
+	if x != nil {
+		return x.ClientKeys
 	}
 	return nil
 }
@@ -2353,11 +2364,13 @@ const file_noryx_v1_datastore_proto_rawDesc = "" +
 	"\aversion\x18\x05 \x01(\tR\aversion\x12'\n" +
 	"\x0fremove_previous\x18\x06 \x01(\bR\x0eremovePrevious\"L\n" +
 	"\x17UpdateDatastoreResponse\x121\n" +
-	"\tdatastore\x18\x01 \x01(\v2\x13.noryx.v1.DatastoreR\tdatastore\"W\n" +
+	"\tdatastore\x18\x01 \x01(\v2\x13.noryx.v1.DatastoreR\tdatastore\"x\n" +
 	"\x17PublishDatastoreRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x18\n" +
-	"\aclients\x18\x03 \x03(\tR\aclients\"4\n" +
+	"\aclients\x18\x03 \x03(\tR\aclients\x12\x1f\n" +
+	"\vclient_keys\x18\x04 \x03(\tR\n" +
+	"clientKeys\"4\n" +
 	"\x18PublishDatastoreResponse\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\"(\n" +
 	"\x16DeleteDatastoreRequest\x12\x0e\n" +

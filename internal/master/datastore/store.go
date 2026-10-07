@@ -17,6 +17,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/overlay"
 )
 
 // publishTimeout covers creating the container of a datastore again with another port.
@@ -32,8 +33,8 @@ type Nodes interface {
 // Overlay is the private network of the nodes, over which the servers of other nodes reach
 // a datastore.
 type Overlay interface {
-	// Addresses returns the addresses of the members in it, by node.
-	Addresses(ctx context.Context) (map[string]string, error)
+	// ByNode returns its members, by node.
+	ByNode(ctx context.Context) (map[string]overlay.Member, error)
 }
 
 // Store keeps the datastores and the passwords of their databases. It tells the networks
@@ -159,26 +160,26 @@ func (s *Store) Placed(ctx context.Context, networkID string) (map[string][]stri
 
 // reaches reports whether the servers of node from reach a datastore of node to over the
 // private network of the nodes, whose members are m.
-func reaches(m map[string]string, from, to string) bool {
-	return from != to && m[from] != "" && m[to] != ""
+func reaches(m map[string]overlay.Member, from, to string) bool {
+	return from != to && m[from].Address != "" && m[to].Address != ""
 }
 
 // Publish publishes the datastores of a network at the address of their nodes in the private
 // network, for the other nodes of its servers that are members, and closes them for others.
 // A datastore gets a port of its node the first time it is published, and keeps it.
-func (s *Store) Publish(ctx context.Context, networkID string, nodes []string, m map[string]string) error {
+func (s *Store) Publish(ctx context.Context, networkID string, nodes []string, m map[string]overlay.Member) error {
 	list, err := s.list(ctx, networkID)
 	if err != nil {
 		return err
 	}
 	for _, ds := range list {
-		var clients []string
+		var clients []overlay.Member
 		for _, nodeID := range nodes {
-			if reaches(m, nodeID, ds.NodeID) && !slices.Contains(clients, m[nodeID]) {
+			if reaches(m, nodeID, ds.NodeID) && !slices.ContainsFunc(clients, func(c overlay.Member) bool { return c.Address == m[nodeID].Address }) {
 				clients = append(clients, m[nodeID])
 			}
 		}
-		slices.Sort(clients)
+		slices.SortFunc(clients, func(a, b overlay.Member) int { return strings.Compare(a.Address, b.Address) })
 		if err := s.publishFor(ctx, ds, clients); err != nil {
 			return fmt.Errorf("%s: %w", ds.Name, err)
 		}
@@ -190,10 +191,14 @@ func (s *Store) Publish(ctx context.Context, networkID string, nodes []string, m
 // something else on the node.
 const tries = 3
 
-// publishFor publishes a datastore for clients, or for none. One without a port yet gets a
-// free one of its node, which it keeps once the agent published it.
-func (s *Store) publishFor(ctx context.Context, ds Datastore, clients []string) error {
-	req := &noryxv1.PublishDatastoreRequest{Id: ds.ID, Clients: clients, Port: ds.Port}
+// publishFor publishes a datastore for clients, the members with their current keys, or for
+// none. One without a port yet gets a free one of its node, which it keeps once the agent
+// published it.
+func (s *Store) publishFor(ctx context.Context, ds Datastore, clients []overlay.Member) error {
+	req := &noryxv1.PublishDatastoreRequest{Id: ds.ID, Port: ds.Port}
+	for _, c := range clients {
+		req.Clients, req.ClientKeys = append(req.Clients, c.Address), append(req.ClientKeys, c.PublicKey)
+	}
 	if len(clients) == 0 || ds.Port != 0 {
 		if len(clients) == 0 {
 			req.Port = 0

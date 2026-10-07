@@ -97,7 +97,7 @@ func TestBedrock(t *testing.T) {
 	}
 	// Deleting a network with Bedrock players removes them too.
 	update(19140, http.StatusOK)
-	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusNoContent, nil)
+	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusOK, nil)
 	if file("Geyser-Velocity.jar") != "" || file("floodgate-velocity.jar") != "" || a.runtime.spec(proxy.ServerID).BedrockPort != 0 {
 		t.Fatalf("plugins = %q, proxy = %+v", files(t, plugins), a.runtime.spec(proxy.ServerID))
 	}
@@ -107,5 +107,5 @@ func TestBedrock(t *testing.T) {
 	change.Backends, change.Try = n.Backends, n.Try
 	update(19132, http.StatusOK)
 	check(t, a.runtime.Remove(t.Context(), proxy.ServerID))
-	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusNoContent, nil)
+	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusOK, nil)
 }

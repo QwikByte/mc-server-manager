@@ -1,4 +1,14 @@
-import { ArrowClockwiseIcon, CertificateIcon, ClockIcon, CubeIcon, LockIcon, LockOpenIcon, ShieldCheckIcon } from "@phosphor-icons/react"
+import {
+  ArrowClockwiseIcon,
+  CertificateIcon,
+  ClockIcon,
+  CubeIcon,
+  LockIcon,
+  LockOpenIcon,
+  ShieldCheckIcon,
+  ShieldIcon,
+  UsersThreeIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -10,15 +20,19 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
 import { StatCard } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
-import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { groupsQuery } from "@/features/access/api"
+import { GroupPicker } from "@/features/access/group-picker"
 import { useAccess } from "@/features/access/use-access"
+import { mfaQuery } from "@/features/auth/api"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
 import { UpdateCheck } from "@/features/updates/update-check"
+import { ThresholdFields, ThresholdsHelp } from "@/features/usage/thresholds"
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import {
@@ -174,7 +188,7 @@ function PanelCertificateFacts({ master }: { master: Master }) {
 }
 
 function formOf(s: MasterSettings) {
-  const { panelAddr, panelHttps, panelDomain, enrollAddr, sessionHours, joinTokenMinutes, logDays, checkUpdates } = s
+  const { panelAddr, panelHttps, panelDomain, enrollAddr, sessionHours, joinTokenMinutes, logDays, logSizeMb, checkUpdates, requireMfa } = s
   return {
     panelAddr,
     panelHttps,
@@ -183,7 +197,10 @@ function formOf(s: MasterSettings) {
     sessionHours,
     joinTokenMinutes,
     logDays,
+    logSizeMb,
     checkUpdates,
+    requireMfa,
+    thresholds: s.thresholds,
     nodeDefaults: limitsForm(s.nodeDefaults),
   }
 }
@@ -283,6 +300,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
             />
             <FieldDescription>{t("Up to a week. Applies from the next sign-in; shorter sessions are safer.")}</FieldDescription>
           </Field>
+          <MfaRequirementFields value={form.requireMfa} onChange={(requireMfa) => set({ requireMfa })} />
         </FormSection>
 
         <FormSection title={t("Log")}>
@@ -296,12 +314,47 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               value={form.logDays}
               onChange={(logDays) => set({ logDays })}
             />
+            <FieldDescription>{t("Up to a year. Export entries to keep them longer.")}</FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="settings-log-size">{t("Maximum size")}</FieldLabel>
+            <NumberInput
+              id="settings-log-size"
+              min={100}
+              max={102400}
+              unit="MiB"
+              value={form.logSizeMb}
+              onChange={(logSizeMb) => set({ logSizeMb })}
+            />
             <FieldDescription>
               {t(
-                "Up to a year. Older entries are deleted every hour; the newest million are kept at most. Export entries to keep them longer.",
+                "From 100 MiB to 100 GiB, so that the log can't fill the disk. Beyond this size or a million entries, the oldest entries are deleted before their time, and a warning is logged.",
               )}
             </FieldDescription>
           </Field>
+        </FormSection>
+
+        <FormSection title={t("Usage warnings")}>
+          <ThresholdsHelp />
+          <p className="text-sm text-muted-foreground">{t("Servers and nodes can have their own thresholds in their settings.")}</p>
+          <FieldSet>
+            <FieldLegend variant="label">{t("Servers")}</FieldLegend>
+            <ThresholdFields
+              id="settings-servers"
+              kind="servers"
+              value={form.thresholds.servers}
+              onChange={(servers) => set({ thresholds: { ...form.thresholds, servers } })}
+            />
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend variant="label">{t("Nodes")}</FieldLegend>
+            <ThresholdFields
+              id="settings-nodes"
+              kind="nodes"
+              value={form.thresholds.nodes}
+              onChange={(nodes) => set({ thresholds: { ...form.thresholds, nodes } })}
+            />
+          </FieldSet>
         </FormSection>
 
         <FormSection title={t("Updates")}>
@@ -431,6 +484,91 @@ function PanelHTTPSFields({
         </Field>
       )}
     </>
+  )
+}
+
+type MfaRequirement = MasterSettings["requireMfa"]
+
+/** Who has to use two-factor authentication. */
+const mfaChoices = {
+  none: {
+    label: msg("Optional"),
+    description: msg("Each user decides on their account page."),
+    icon: ShieldIcon,
+  },
+  all: {
+    label: msg("Required for everyone"),
+    description: msg("All users have to use it, also those invited later."),
+    icon: ShieldCheckIcon,
+  },
+  groups: {
+    label: msg("Required for groups"),
+    description: msg("The members of the groups chosen here have to use it, e.g. the administrators."),
+    icon: UsersThreeIcon,
+  },
+} satisfies Record<string, { label: string; description: string; icon: typeof LockIcon }>
+
+/** Chooses who has to use two-factor authentication: nobody, all users, or the members of groups. */
+function MfaRequirementFields({ value, onChange }: { value: MfaRequirement; onChange: (value: MfaRequirement) => void }) {
+  // Choosing groups shows them before any is chosen, which would otherwise mean nobody.
+  const [choice, setChoice] = useState<keyof typeof mfaChoices>(value.all ? "all" : value.groups.length ? "groups" : "none")
+  const canSeeGroups = useAccess().can("users.view")
+  const groups = useQuery({ ...groupsQuery, enabled: canSeeGroups && choice === "groups" })
+  const own = useQuery(mfaQuery)
+
+  function choose(next: keyof typeof mfaChoices) {
+    setChoice(next)
+    onChange({ all: next === "all", groups: next === "groups" ? value.groups : [] })
+  }
+
+  return (
+    <Field>
+      <FieldLabel id="settings-require-mfa">{t("Two-factor authentication")}</FieldLabel>
+      <RadioGroup
+        value={choice}
+        onValueChange={(next) => choose(next as keyof typeof mfaChoices)}
+        aria-labelledby="settings-require-mfa"
+        className="gap-3"
+      >
+        {Object.entries(mfaChoices).map(([key, { label, description, icon: Icon }]) => (
+          <FieldLabel key={key} htmlFor={`settings-require-mfa-${key}`}>
+            <Field orientation="horizontal" className="items-start">
+              <Icon className="mt-0.5 size-5 shrink-0 text-primary" weight="duotone" />
+              <FieldContent>
+                <FieldTitle>{t(label)}</FieldTitle>
+                <FieldDescription>{t(description)}</FieldDescription>
+              </FieldContent>
+              <RadioGroupItem id={`settings-require-mfa-${key}`} value={key} />
+            </Field>
+          </FieldLabel>
+        ))}
+      </RadioGroup>
+      {choice === "groups" &&
+        (!canSeeGroups ? (
+          <FieldDescription>
+            {t("{{count}} groups chosen. Choosing others needs the permission to see users and groups.", {
+              count: value.groups.length,
+              defaultValue_one: "{{count}} group chosen. Choosing others needs the permission to see users and groups.",
+            })}
+          </FieldDescription>
+        ) : groups.error ? (
+          <ErrorCallout error={groups.error} />
+        ) : groups.data ? (
+          <GroupPicker groups={groups.data} value={value.groups} onChange={(chosen) => onChange({ all: false, groups: chosen })} />
+        ) : (
+          <Skeleton className="h-24 rounded-xl" />
+        ))}
+      <FieldDescription>
+        {t(
+          "Users it applies to who haven't set it up are asked to as soon as they use the panel, and can do nothing else until they did. Setting it up always works, so nobody is locked out.",
+        )}
+      </FieldDescription>
+      {choice !== "none" && own.data && !own.data.enabled && (
+        <Callout tone="warning" icon={ShieldIcon} role="status" title={t("You haven't set it up yourself")}>
+          {t("If the requirement applies to you, the panel asks you to set up two-factor authentication as soon as you save.")}
+        </Callout>
+      )}
+    </Field>
   )
 }
 

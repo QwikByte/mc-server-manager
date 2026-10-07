@@ -209,6 +209,25 @@ func TestOperations(t *testing.T) {
 		t.Fatalf("operations = %+v", listed)
 	}
 
+	// Restarting and stopping a server, which may take its stop timeout, are operations that
+	// can't be cancelled.
+	path := "/api/nodes/" + a.node.ID + "/servers"
+	for _, action := range []string{"restart", "stop"} {
+		var started operation.Operation
+		api.do("POST", path+"/"+got.ServerID+"/"+action, nil, http.StatusAccepted, &started)
+		if started.Kind != "server."+action || started.ServerID != got.ServerID || started.Cancellable {
+			t.Fatalf("%s: %+v", action, started)
+		}
+		if ended := waitForOperation(t, api, started.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); ended.Error != "" {
+			t.Fatalf("%s: %+v", action, ended)
+		}
+	}
+	var servers []struct{ State string }
+	api.do("GET", path, nil, http.StatusOK, &servers)
+	if len(servers) != 1 || servers[0].State != "stopped" || !slices.Contains(a.runtime.restarted(), got.ServerID) {
+		t.Fatalf("servers = %+v, restarted %q", servers, a.runtime.restarted())
+	}
+
 	// A failed operation tells why.
 	a.runtime.mu.Lock()
 	a.runtime.createErr = errors.New("no space left on device")
@@ -272,6 +291,21 @@ func TestCancelOperations(t *testing.T) {
 	}
 	if got := waitForOperation(t, api, restoring.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); got.Error != "" {
 		t.Fatalf("restoring: %+v", got)
+	}
+
+	// A restart that warns the players first can be cancelled while it warns them.
+	check(t, a.runtime.Start(t.Context(), lobby.ServerID))
+	var restarting operation.Operation
+	api.do("POST", path+"/"+lobby.ServerID+"/restart", map[string]any{"warning": map[string]any{"minutes": 2}}, http.StatusAccepted, &restarting)
+	if !restarting.Cancellable || !slices.Equal(restarting.Steps, []string{"warn", "restart"}) {
+		t.Fatalf("restarting: %+v", restarting)
+	}
+	waitForOperation(t, api, restarting.ID, func(op operation.Operation) bool { return op.Unit == "minutes" })
+	api.do("POST", "/api/operations/"+restarting.ID+"/cancel", nil, http.StatusAccepted, nil)
+	got = waitForOperation(t, api, restarting.ID, func(op operation.Operation) bool { return op.FinishedAt != nil })
+	if !got.Cancelled || got.Steps[got.Step] != "warn" || slices.Contains(a.runtime.restarted(), lobby.ServerID) ||
+		!slices.Contains(a.runtime.commandsTo(lobby.ServerID), "say The server restarts in 2 min.") {
+		t.Fatalf("restarting: %+v, commands %q", got, a.runtime.commandsTo(lobby.ServerID))
 	}
 }
 

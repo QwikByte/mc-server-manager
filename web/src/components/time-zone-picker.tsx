@@ -4,11 +4,9 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { formatTimeZone } from "@/lib/format"
 import { locale } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-
-/** A time zone as people read it, e.g. America/New York. */
-const zoneLabel = (zone: string) => zone.replaceAll("_", " ")
 
 /** How far a time zone is from UTC right now, e.g. GMT+2; empty for a zone the browser doesn't know. */
 function offset(zone: string, now: Date) {
@@ -49,7 +47,7 @@ export function TimeZonePicker({
     <Popover open={open} onOpenChange={toggle}>
       <PopoverTrigger asChild>
         <Button id={id} type="button" variant="outline" role="combobox" className={cn("justify-between font-normal", className)}>
-          <span className="truncate">{zoneLabel(current)}</span>
+          <span className="truncate">{formatTimeZone(current)}</span>
           <CaretUpDownIcon className="text-muted-foreground" />
         </Button>
       </PopoverTrigger>
@@ -62,14 +60,14 @@ export function TimeZonePicker({
               <CommandItem
                 key={zone}
                 value={zone}
-                keywords={[zoneLabel(zone), offset]}
+                keywords={[formatTimeZone(zone), offset]}
                 data-checked={zone === current}
                 onSelect={() => {
                   onChange(zone === "UTC" ? "" : zone)
                   setOpen(false)
                 }}
               >
-                <span className="min-w-0 flex-1 truncate">{zoneLabel(zone)}</span>
+                <span className="min-w-0 flex-1 truncate">{formatTimeZone(zone)}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">{offset}</span>
               </CommandItem>
             ))}

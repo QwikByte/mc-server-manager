@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
+import { useOperation } from "@/features/operations/use-operation"
 import { type Server, useServer, useServerAction } from "@/features/servers/api"
 import { propertiesQuery, type ServerProperties, useUpdateProperties } from "./api"
 import { PropertyField } from "./property-field"
@@ -46,6 +47,7 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
   const [search, setSearch] = useState("")
   const update = useUpdateProperties(nodeId, server.id)
   const restart = useServerAction(nodeId)
+  const operation = useOperation()
   const locked = new Map(data.locked.map((l) => [l.key, l.reason]))
   const count = Object.keys(changes).length
   const errors = Object.fromEntries(
@@ -72,10 +74,10 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
       onSuccess: () => {
         setChanges({})
         if (!andRestart) return toast.success(t("Saved. The changes apply when the server restarts."))
-        toast.promise(restart.mutateAsync({ id: server.id, action: "restart" }), {
-          loading: t("Restarting {{name}}…", { name: server.name }),
-          success: t("Saved and restarted {{name}}", { name: server.name }),
-          error: (e: Error) => e.message,
+        operation.run((onStart) => restart.mutateAsync({ id: server.id, action: "restart", onStart }), {
+          title: t("Restarting {{name}}…", { name: server.name }),
+          notify: true,
+          done: () => ({ message: t("Saved and restarted {{name}}", { name: server.name }) }),
         })
       },
       onError: (e) => toast.error(e.message),

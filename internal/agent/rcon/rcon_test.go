@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,14 +18,21 @@ import (
 var long = strings.Repeat("x", chunk+100)
 
 // serve runs a console like Minecraft's with the password "secret" on a new port, and
-// returns its address and how many connections it accepted.
-func serve(t *testing.T) (string, *atomic.Int32) {
+// returns its address, how many connections it accepted and the commands it ran in order.
+func serve(t *testing.T) (string, *atomic.Int32, func() []string) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { ln.Close() })
 	var accepted atomic.Int32
+	var mu sync.Mutex
+	var commands []string
+	ran := func(command string) {
+		mu.Lock()
+		defer mu.Unlock()
+		commands = append(commands, command)
+	}
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -32,13 +40,17 @@ func serve(t *testing.T) (string, *atomic.Int32) {
 				return
 			}
 			accepted.Add(1)
-			go answer(conn)
+			go answer(conn, ran)
 		}
 	}()
-	return ln.Addr().String(), &accepted
+	return ln.Addr().String(), &accepted, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(commands)
+	}
 }
 
-func answer(conn net.Conn) {
+func answer(conn net.Conn, ran func(command string)) {
 	defer conn.Close()
 	for {
 		var header [12]byte
@@ -51,7 +63,11 @@ func answer(conn net.Conn) {
 		}
 		body := string(data[:len(data)-2])
 		id, answers := header[4:8], []string{"ran " + body}
-		switch typ := binary.LittleEndian.Uint32(header[8:12]); {
+		typ := binary.LittleEndian.Uint32(header[8:12])
+		if typ == typeCommand {
+			ran(body)
+		}
+		switch {
 		case typ == typeResponse:
 			answers = []string{"Unknown request 0"}
 		case typ == typeAuth && body != "secret":
@@ -72,7 +88,7 @@ func answer(conn net.Conn) {
 }
 
 func TestConn(t *testing.T) {
-	addr, _ := serve(t)
+	addr, _, _ := serve(t)
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	if _, err := dial(ctx, addr, "wrong"); !errors.Is(err, errAuth) {
@@ -92,7 +108,7 @@ func TestConn(t *testing.T) {
 }
 
 func TestConsoles(t *testing.T) {
-	addr, accepted := serve(t)
+	addr, accepted, ran := serve(t)
 	c := NewConsoles()
 	targets := 0
 	target := func(context.Context) (string, string, error) {
@@ -112,21 +128,18 @@ func TestConsoles(t *testing.T) {
 	if out := run("1", "list"); out != "ran list" {
 		t.Fatalf("answer = %q", out)
 	}
-	var mu sync.Mutex
-	var order []string
 	var wg sync.WaitGroup
 	for _, command := range []string{"slow", "a", "b", "c", "d"} {
 		wg.Go(func() {
-			out := run("1", command)
-			mu.Lock()
-			order = append(order, out)
-			mu.Unlock()
+			if out := run("1", command); out != "ran "+command {
+				t.Errorf("answer to %s = %q", command, out)
+			}
 		})
 		time.Sleep(20 * time.Millisecond) // so that they come in order, while the slow one runs
 	}
 	wg.Wait()
-	if want := "ran slow,ran a,ran b,ran c,ran d"; strings.Join(order, ",") != want {
-		t.Errorf("answers in order %q, want %q", order, want)
+	if order, want := strings.Join(ran(), ","), "list,slow,a,b,c,d"; order != want {
+		t.Errorf("commands ran in order %q, want %q", order, want)
 	}
 	if accepted.Load() != 1 || targets != 1 {
 		t.Fatalf("%d connections, %d targets after the first run, want 1", accepted.Load(), targets)

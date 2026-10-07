@@ -13,7 +13,10 @@ change their address without re-enrolling.
 Master and node certificates are valid for 90 days and renewed automatically once a third of their lifetime is left. For
 a node, the agent creates the new key and only sends a signing request; it installs the signed certificate after
 checking it, without a restart. The panel can renew a node on demand. A node that stays offline until its certificate
-expires has to be enrolled again with a new join token.
+expires has to be enrolled again with a new join token. So that the panel warns about such a node in time, also after
+the master restarted, the master stores when each node's certificate expires: from the certificates it issues and those
+a node presents when it connects, which the CA signed for that node, and only when it is later than the stored expiry.
+A compromised node can't make its certificate seem to expire sooner or later than the latest one issued.
 
 ## Enrollment
 
@@ -34,7 +37,11 @@ Argon2id password hashes, session tokens stored as SHA-256 hashes, `__Host-` coo
 `SameSite=Strict`), cross-origin request protection, a strict Content Security Policy and self-hosted fonts. Sign-in
 attempts are rate limited per client address (IPv6 per /64 network) and per username, changes that need the password per
 user. A username has a larger budget than a client, so that a single client can't keep a user out. Client addresses come
-from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`. The CSV
+from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`, also those
+that sessions show. The panel names a session by a random ID of its own, never by its token or the token's hash, and
+users only see and end their own sessions, which needs no password, as it only takes rights away. A session notes the
+address, browser and time of its last use at most once a minute; the browser and operating system are only names from
+fixed lists that the master recognises in the User-Agent, which are shown but never trusted. The CSV
 files of servers and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
 reasons as the export of the log does. Notes of servers are plain text, which the panel shows as text only.
 
@@ -42,7 +49,12 @@ reasons as the export of the log does. Notes of servers are plain text, which th
 
 Codes of the app (RFC 6238) work only once, and from the fifth wrong code in a row on, codes aren't checked for a minute
 that doubles with every further wrong one, up to a day; parallel guesses count too. Recovery codes have 50 random bits
-and are stored as SHA-256 hashes. The secret of the app is stored in the master's database, which needs the same
+and are stored as SHA-256 hashes. Those who may change the master's settings can require two-factor authentication for
+all users or for groups; the change is logged. Until a user it applies to has set it up, the master refuses every route
+but those of the user's own account (setting it up, signing out, the password, sessions, language and preferences) with
+403, the terminal, streams and the permissions the panel loads included. Setting it up is never refused, so the
+requirement locks nobody out, and `noryx-master user add` stays the way back for administrators who lost their app and
+recovery codes. The secret of the app is stored in the master's database, which needs the same
 protection as the CA key next to it. The panel must be served over HTTPS (its settings, a reverse proxy or
 `--tls-cert`/`--tls-key`), otherwise browsers drop the secure session cookie (`localhost` is exempt). With a certificate
 of Let's Encrypt or `--tls-cert`, the master tells browsers to use HTTPS only (HSTS, one year), but not with a
@@ -55,9 +67,19 @@ Velocity's modern forwarding signs the forwarded player data with a random secre
 master's database and on the network's servers; the API never returns it, and the file manager hides it in every file
 that holds it. Legacy forwarding (BungeeCord's) can be spoofed by anyone who reaches a server, so the servers of such a
 network are only reachable by the proxy on its node, and those on other nodes need the operator's confirmation that a
-firewall protects them. The forwarding mods come from Modrinth like other mods, checked against their SHA-512 hashes.
-Proxies read console commands from their standard input, which only the agent writes to through Docker; no RCON plugin
-is added.
+firewall protects them. Servers that leave a network, also as it is deleted, run in online mode again without the
+secret. Restoring a backup keeps what decides how a server takes part in a network as it is: a proxy's forwarding secret
+and the files with secrets of Geyser and Floodgate, the forwarding settings, including the secret Velocity 1 kept in
+its configuration, and a game server's online mode. The agent puts them into the extracted backup before it replaces
+anything, so an old backup brings back neither the secret of a network the server left nor the trust in its proxy, nor
+a former secret of its network; the master then configures the server's network again. A removed node may be
+compromised, and its proxy's data holds the secret, so a node with servers of networks is
+only removed once they left their networks: game servers of other nodes no longer trust its proxy, and proxies no
+longer send players to its servers. The node itself isn't contacted, and if a server of another node can't be
+configured, the node stays. Only deleting a network whose proxy's node doesn't answer skips the proxy and the servers
+on that node, which then only trust each other, and says so. The forwarding mods come from Modrinth like other mods,
+checked against their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent
+writes to through Docker; no RCON plugin is added.
 
 ## Containers
 
@@ -165,7 +187,8 @@ The agent keeps backups outside of the servers' folders, accessible to itself on
 server can't read or tamper with them. The master can only choose among the storage locations the node's administrator
 allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry to the server's folder, and
 backups never contain symbolic links. Downloads are attachments like those of the file manager and hide the secrets the
-same way; the backups on the node keep them, so restoring works.
+same way; the backups on the node keep them, so restoring works. Restoring keeps the secrets of file sets and networks
+as they are, see [File sets](#file-sets) and [Networks](#networks).
 
 ## Permissions
 
@@ -179,7 +202,14 @@ do, so no one can raise their own permissions.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
 change with the user who made it, also denied attempts. An operation in progress can only be cancelled by the user who
 started it, or by one who has the permissions it needed on what it is about, and only while it is at steps that stop
-safely: restoring a backup, moving a server and restarting servers one after the other always finish.
+safely: restoring a backup, moving a server, stopping or restarting one once it no longer warns its players, and
+restarting servers one after the other always finish.
+A warning before a stop or restart by hand is the console command `say`, so a message of one's own needs the permission
+to send console commands on each server; others get the default message and can't put text of their own in the chat.
+Restarting servers of a network one after the other, also a single one, needs the permission to restart the proxy, which
+sends their players elsewhere, and each server that restarts; sending the players of a server elsewhere needs the
+permission to manage the players of the proxy, like sending one player. Schedules, which may restart any server, also
+server by server, need the permission to manage schedules everywhere, checked when they are saved.
 
 ## Terminal
 
@@ -194,11 +224,22 @@ still checks its permission with its arguments when it runs.
 ## Log
 
 An agent can only add entries about its own node and its servers, at a limited rate of entries and of bytes, and entries
-are cut to a maximum size, so a compromised agent can't fill the database or write entries about other nodes. Request fields that may hold
+are cut to a maximum size. Besides its retention, the log is kept under a size limit (2 GiB by default) that the master
+checks every minute, so that agents can only exceed it by what they add in a minute, a few MiB each. SQLite reuses the
+space of deleted entries, so the log takes at most about twice its limit on disk, however long the retention. So a
+compromised agent can't fill the database, also over weeks, or write entries about other nodes. Request fields that may hold
 secrets, such as the forwarding secret of a network, are never logged. Exports protect spreadsheets from formulas in
 entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the browser connects
 again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP address is that of the
 proxy, unless `--trusted-proxy` names it.
+
+## Usage
+
+Agents report what their node and its servers use, so a compromised agent can make up or hide the usage and the warnings
+of its own node and servers, but of no others. The master records at most 500 servers of a node, with valid IDs only,
+and checks at most 32 storage locations with valid names, so that an agent can't fill its database or memory. Changing
+the thresholds of a server needs the permission to change its settings, of a node the permission to change the node,
+and warnings only show to those who may see the server or node.
 
 ## Moving servers
 
@@ -211,7 +252,9 @@ files, and to create servers on the new node.
 
 To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console password from the
 server's `server.properties` and connects to the server's console port inside Docker's network; the password never
-leaves the node.
+leaves the node. A server that doesn't answer its console, e.g. a compromised one, holds up only its own commands: the
+agent applies the waiting changes of players to each server on its own, and gives each change 15 seconds before it waits
+for the next try.
 
 Servers and their plugins write the output, so the panel shows it only as text: the agent turns its colours into
 Minecraft's colour codes, which the panel only maps to class names of a fixed set, never to markup. The plain output,
@@ -230,9 +273,14 @@ pull other traffic of the node into the tunnel. An nftables table of its own (`i
 Docker's iptables and nftables rules, drops packets for the node's address that don't arrive through the tunnel, new
 connections from the tunnel to the node itself, e.g. to SSH or the agent, and forwarded connections from the tunnel
 except those of a proxy's node to the ports of its servers. WireGuard accepts from a peer only its own address and
-doesn't answer unauthenticated packets. A compromised node reaches only the ports of its own servers on other nodes;
-removing it removes it everywhere. A compromised master could add a peer of its own, but it can already reconfigure
-every server. If the interface is missing, e.g. after a failed boot, the ports of these servers are reachable nowhere.
+doesn't answer unauthenticated packets. The agent binds each address it lets reach a port to the public key the peer at
+that address had then, which the master sends along, and drops the address once a peer has it with another key: a node
+that gets the address of a removed one, even while a member was offline and never saw the removal, reaches none of the
+ports published for the removed one. A compromised node reaches only the ports of its own servers on other nodes;
+removing it removes it everywhere. A rotated key is let in again as the master applies the node's networks again; a key
+that changes otherwise, e.g. as a node lost its data, needs its networks applied again in the panel. A compromised
+master could add a peer of its own, but it can already reconfigure every server. If the interface is missing, e.g.
+after a failed boot, the ports of these servers are reachable nowhere.
 
 ## Storage locations
 

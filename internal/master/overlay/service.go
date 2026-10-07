@@ -151,14 +151,15 @@ func (s *Service) Members(ctx context.Context) ([]Member, error) {
 	return members, rows.Err()
 }
 
-// Addresses returns the addresses of the members in the network, by node.
-func (s *Service) Addresses(ctx context.Context) (map[string]string, error) {
+// ByNode returns the members, by node: with their addresses in the network and their public
+// keys, which the others bind the access they give a member to.
+func (s *Service) ByNode(ctx context.Context) (map[string]Member, error) {
 	members, err := s.Members(ctx)
-	addresses := make(map[string]string, len(members))
+	byNode := make(map[string]Member, len(members))
 	for _, m := range members {
-		addresses[m.NodeID] = m.Address
+		byNode[m.NodeID] = m
 	}
-	return addresses, err
+	return byNode, err
 }
 
 func (s *Service) member(ctx context.Context, nodeID string) (Member, error) {

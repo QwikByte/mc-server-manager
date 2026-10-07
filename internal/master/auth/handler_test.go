@@ -22,11 +22,11 @@ func TestRequireTellsVersion(t *testing.T) {
 	if _, err := svc.CreateUser(ctx, "admin", "a-long-enough-password"); err != nil {
 		t.Fatal(err)
 	}
-	_, token, err := svc.Login(ctx, "admin", "a-long-enough-password", "", time.Hour)
+	_, token, err := svc.Login(ctx, "admin", "a-long-enough-password", "", time.Hour, Client{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewHandler(svc, func() time.Duration { return time.Hour }).Require(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	handler := NewHandler(svc, func() time.Duration { return time.Hour }, notRequired).Require(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	for cookie, want := range map[string]string{token: buildinfo.Version, "wrong": "", "": ""} {
 		req := httptest.NewRequest(http.MethodGet, "/api/servers", nil)

@@ -22,9 +22,12 @@ these settings don't apply. **Restart master**, for administrators, stops the ma
 (also reading `master.env` again), unless servers are moving to another node; Minecraft servers keep running. The other
 settings apply right away: the enrollment address join tokens contain (it replaces `--public-enroll-addr`; empty uses
 the flag again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel
-last (1 hour to a week, 12 hours by default), how long log entries are kept (1 day to a year, 30 days by default), the
-port range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can also look
-for an update right away.
+last (1 hour to a week, 12 hours by default), who has to use
+[two-factor authentication](#two-factor-authentication), how long log entries are kept (1 day to a year, 30 days by
+default) and how much space the log may take ([100 MiB to 100 GiB, 2 GiB by default](monitoring.md#logs)), the
+thresholds at which the usage of servers and nodes warns ([Warnings](monitoring.md#warnings)), the port range and memory
+reserve that new nodes get, and whether the master looks for updates. Administrators can also look for an update right
+away.
 
 ### Agents
 
@@ -35,7 +38,9 @@ Administrators update an agent that is older than the master there with **Update
 
 The **Terminal** runs the commands of `noryx-agent` (`status`, `server …`, `backup …`, `datastore …`) on any node, and
 the master's own commands: `status`, `node list`, `node renew <node>` and `logs`. `help` lists them; output streams in
-as it happens, e.g. for `server logs <id>`, and Ctrl+C stops a command. A node's page opens its terminal directly.
+as it happens, e.g. for `server logs <id>`, and Ctrl+C stops a command. Commands that write nothing for a while, e.g.
+`server stop <id>` with a long stop timeout, keep the connection alive, so that a reverse proxy in front of the master
+doesn't cut them off. A node's page opens its terminal directly.
 Besides the permission to use the terminal, every command needs its own, e.g. `server restart <id>` the one to restart
 this server.
 
@@ -88,6 +93,17 @@ forgotten password. The token is in the link's fragment, which browsers don't se
 from the address bar once it was read. Users change their own password on their account page (in the menu of their name
 in the sidebar), which signs them out everywhere else.
 
+### Sessions
+
+The account page lists where the user is signed in: each session with its browser and operating system, as far as the
+master recognises them in the browser's User-Agent, the address it was last used from and when, and when it started;
+sessions that started before Noryx noted this show it from their next use on. **Sign out** ends one of them, e.g. in a
+lost or shared browser, and **Sign out everywhere else** all but the current one. Neither needs the password, as they
+only take rights away. Users only see and end their own sessions. Behind a reverse proxy, the addresses are those of the
+clients only if `--trusted-proxy` names the proxy (see [Installation](installation.md)). The API lists the sessions with
+`GET /api/auth/sessions`, ends one with `DELETE /api/auth/sessions/<id>` and all others with
+`DELETE /api/auth/sessions`.
+
 ### Two-factor authentication
 
 Two-factor authentication is off until users set it up on their account page: they scan a QR code with an authenticator
@@ -97,3 +113,12 @@ sessions end. A setup link then only sets the password; signing in still needs a
 codes need the password. Users who may manage a user turn it off for them, e.g. after they lost their phone and recovery
 codes, but not for themselves; without any administrator who can still sign in, `noryx-master user add` creates a new
 one.
+
+Under **Settings → General**, those who may change the master's settings require it for all users, also those invited
+later, or for the members of chosen groups, e.g. the Administrators. Users it applies to who haven't set it up are sent
+to set it up after signing in, or with their next click if they are signed in already, and can do nothing else in the
+panel or its terminal until they did; they can still sign out, change their password and end their sessions. The API
+answers their other requests with 403 and the code `mfa-setup-required`. Setting it up always works, so the requirement
+locks nobody out: users whose two-factor authentication was turned off, e.g. after losing their phone, set it up again
+when they sign in next, and so does an administrator created with `noryx-master user add`. Turning it off while it is
+required leads straight to setting it up again, e.g. with a new phone. A group that is deleted no longer counts.

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,10 +18,12 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
 
-// fakeRuntime has servers with data directories and records console commands.
+// fakeRuntime has servers with data directories and records console commands. The console
+// of the server stalled never answers: its commands wait until their context ends.
 type fakeRuntime struct {
 	runtime.Runtime
 	dir      string
+	stalled  string
 	mu       sync.Mutex
 	servers  []runtime.Server
 	commands []string
@@ -35,10 +39,14 @@ func (f *fakeRuntime) Data(_ context.Context, id string) (*datadir.Dir, error) {
 	return datadir.Open(filepath.Join(f.dir, id))
 }
 
-func (f *fakeRuntime) SendCommand(_ context.Context, id, command string) (string, error) {
+func (f *fakeRuntime) SendCommand(ctx context.Context, id, command string) (string, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.commands = append(f.commands, id[:1]+" "+command)
+	f.mu.Unlock()
+	if id == f.stalled {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
 	return "§aBanned Alex: Cheating\n", nil
 }
 
@@ -113,11 +121,13 @@ func TestChangePlayer(t *testing.T) {
 		t.Fatalf("waiting changes = %v, %v", lists, err)
 	}
 	s.applyWaiting(ctx)
+	s.wg.Wait()
 	if got := rt.sent(); len(got) != 1 {
 		t.Fatalf("commands before the server runs: %q", got)
 	}
 	rt.servers[1].State = running
 	s.applyWaiting(ctx)
+	s.wg.Wait()
 	want := []string{"a minecraft:ban Alex Cheating", "b minecraft:ban Alex Cheating", "b minecraft:whitelist on"}
 	if got := rt.sent(); !slices.Equal(got, want) {
 		t.Fatalf("commands = %q, want %q", got, want)
@@ -126,6 +136,7 @@ func TestChangePlayer(t *testing.T) {
 		t.Fatalf("the waiting changes stay: %v", err)
 	}
 	s.applyWaiting(ctx)
+	s.wg.Wait()
 	if got := rt.sent(); len(got) != 3 {
 		t.Fatalf("changes ran again: %q", got)
 	}
@@ -165,4 +176,70 @@ func TestGetPlayerLists(t *testing.T) {
 	if len(lists.GetWhitelisted()) != 2 || lists.GetOperators()[0].GetName() != "Steve" || !lists.GetWhitelistEnabled() {
 		t.Errorf("lists = %v", lists)
 	}
+}
+
+func TestServerThatDoesNotAnswer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const stuck = "ssssssssssssssssssssssssss"
+		ctx, cancel := context.WithCancel(t.Context())
+		rt := &fakeRuntime{dir: t.TempDir(), stalled: stuck}
+		rt.add(t, up, paper, stopped)
+		rt.add(t, stuck, paper, stopped)
+		rt.add(t, down, paper, stopped)
+		s := NewService(rt)
+		change := func(id string, c *noryxv1.PlayerChange, pending bool) {
+			t.Helper()
+			if res, err := s.ChangePlayer(ctx, &noryxv1.ChangePlayerRequest{ServerId: id, Change: c}); err != nil || res.GetPending() != pending {
+				t.Errorf("change on %s = %v, %v", id[:1], res, err)
+			}
+		}
+		attempts := func() int {
+			return len(slices.DeleteFunc(rt.sent(), func(c string) bool { return c[:1] != stuck[:1] }))
+		}
+		ban := newChange(noryxv1.PlayerAction_PLAYER_ACTION_BAN, "Alex", "Cheating")
+		change(up, ban, true)
+		change(stuck, ban, true)
+		rt.servers[0].State, rt.servers[1].State = running, running
+
+		// The server whose console doesn't answer holds up neither the waiting changes of the
+		// other servers nor their lists and changes, nor its own lists: no time passes for them.
+		start := time.Now()
+		s.applyWaiting(ctx)
+		synctest.Wait()
+		if got := rt.sent(); !slices.Contains(got, "a minecraft:ban Alex Cheating") || attempts() != 1 {
+			t.Fatalf("commands = %q", got)
+		}
+		for _, id := range []string{up, stuck} {
+			if _, err := s.GetPlayerLists(ctx, &noryxv1.GetPlayerListsRequest{ServerId: id}); err != nil {
+				t.Errorf("lists of %s: %v", id[:1], err)
+			}
+		}
+		change(up, newChange(noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_ADD, "Steve", ""), false)
+		change(down, ban, true)
+		s.applyWaiting(ctx) // doesn't attempt the server again while its attempt runs
+		synctest.Wait()
+		if waited := time.Since(start); waited != 0 || attempts() != 1 {
+			t.Fatalf("waited %v for the server, %d attempts", waited, attempts())
+		}
+
+		// Its change runs into its deadline and waits for the next attempt.
+		time.Sleep(changeTimeout)
+		synctest.Wait()
+		lists, err := s.GetPlayerLists(ctx, &noryxv1.GetPlayerListsRequest{ServerId: stuck})
+		if err != nil || len(lists.GetPending()) != 1 {
+			t.Fatalf("waiting changes = %v, %v", lists, err)
+		}
+		s.applyWaiting(ctx)
+		synctest.Wait()
+		if attempts() != 2 {
+			t.Fatalf("%d attempts, want 2", attempts())
+		}
+
+		// No lock of a server stays behind.
+		cancel()
+		s.wg.Wait()
+		if len(s.locks.byID) != 0 {
+			t.Errorf("locks of %d servers stay", len(s.locks.byID))
+		}
+	})
 }

@@ -6,11 +6,12 @@ The **Library** of the panel: what new servers start with, and what many servers
 
 A template preconfigures new servers: software, Minecraft version, memory, the
 [settings](servers.md#settings-and-images) of a server, `server.properties` and a list of plugins or mods from Modrinth.
-When a server is created from a template, only node, name, port, storage and world are chosen; `server.properties` is
-written before the first start and each plugin is installed in the newest release that suits the server, so templates
-don't go stale. Templates are created from scratch or from an existing server ("Save as template"), which takes its
-settings, its properties (except those the manager sets) and the plugins that come from Modrinth. Worlds and plugin
-configurations are not part of templates; [file sets](#file-sets) share the configurations of plugins among servers.
+When a server is created from a template, only node, name, port, storage and world are chosen, and its stop timeout and
+time zone can differ from the template's; `server.properties` is written before the first start and each plugin is
+installed in the newest release that suits the server, so templates don't go stale. Templates are created from scratch
+or from an existing server ("Save as template"), which takes its settings, its properties (except those the manager
+sets) and the plugins that come from Modrinth. Worlds and plugin configurations are not part of templates;
+[file sets](#file-sets) share the configurations of plugins among servers.
 
 ## File sets
 

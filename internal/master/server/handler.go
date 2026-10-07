@@ -123,21 +123,10 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/servers/actions", access.SignedIn, h.bulk)
 	mux.Handle("POST /api/servers/tags", access.SignedIn, h.changeTags)
 	mux.Handle("POST /api/nodes/{node}/servers", createNeed, h.create)
-	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart),
-		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
-			_, err := c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
-			return err
-		}))
-	mux.Handle("POST /api/nodes/{node}/servers/{id}/stop", access.OnServer(access.ServersStop),
-		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
-			_, err := c.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
-			return err
-		}))
-	mux.Handle("POST /api/nodes/{node}/servers/{id}/restart", access.OnServer(access.ServersRestart),
-		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
-			_, err := c.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
-			return err
-		}))
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart), h.startServer)
+	for _, action := range []string{"stop", "restart"} {
+		mux.Handle("POST /api/nodes/{node}/servers/{id}/"+action, access.OnServer(serverActions[action].need), h.power(action))
+	}
 	mux.Handle("DELETE /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersDelete), h.delete)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersSettings), h.update)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/update-image", access.OnServer(access.ServersSettings), h.updateImage)
@@ -427,7 +416,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			view
 			// PluginError tells why the plugins couldn't be installed.
 			PluginError string `json:"pluginError,omitempty"`
-		}{view: toView(res.GetServer())}
+			// Warning tells what the server didn't get, e.g. from an older agent.
+			Warning string `json:"warning,omitempty"`
+		}{view: toView(res.GetServer()), Warning: olderAgentWarning(req.StopTimeout, req.TimeZone, res.GetServer())}
 		if len(req.Plugins) > 0 {
 			operation.Step(ctx, "plugins")
 			if err := h.plugins.InstallOn(ctx, req.Plugins, nodeID, id); err != nil {
@@ -561,10 +552,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 				updated.Warning = httpapi.Message(err)
 			}
 		}
-		// Older agents answer without the settings they don't know.
-		if updated.StopTimeout != stopSeconds(req.StopTimeout) || updated.TimeZone != req.TimeZone {
-			updated.Warning = strings.TrimSpace(updated.Warning + " The agent of the node is too old for a stop timeout and a time zone, so the server keeps 60 seconds and UTC. Update the agent first.")
-		}
+		updated.Warning = strings.TrimSpace(updated.Warning + " " + olderAgentWarning(req.StopTimeout, req.TimeZone, res.GetServer()))
 		return updated, nil
 	})
 }
@@ -643,21 +631,77 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// lifecycle wraps an operation on a single server that returns no data.
-func (h *Handler) lifecycle(op func(context.Context, noryxv1.ServerServiceClient, string) error) http.HandlerFunc {
+// startServer starts a server, which only takes a moment, so it answers once the server starts.
+func (h *Handler) startServer(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), actionTimeout)
+	defer cancel()
+	c, err := h.client(ctx, r)
+	if err == nil {
+		err = serverActions["start"].call(ctx, c, r.PathValue("id"), "")
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// power stops or restarts a server as an operation, server.stop or server.restart with the
+// step of the same name: a graceful stop may take the server's stop timeout, longer than a
+// proxy in front of the master waits for an answer. A request with a warning warns the players
+// first, in the step warn, until which it can be cancelled; then it can't, as a restart cut
+// short would leave the server stopped.
+func (h *Handler) power(action string) http.HandlerFunc {
+	act := serverActions[action]
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), actionTimeout)
-		defer cancel()
-		c, err := h.client(ctx, r)
+		nodeID, id := r.PathValue("node"), r.PathValue("id")
+		servers := []tag.Server{{NodeID: nodeID, ServerID: id}}
+		var req struct {
+			Warning *warning `json:"warning"`
+		}
+		var err error
+		if r.ContentLength != 0 { // the body is optional
+			err = httpapi.ReadJSON(w, r, &req)
+		}
 		if err == nil {
-			err = op(ctx, c, r.PathValue("id"))
+			err = req.Warning.check(r, action, servers)
 		}
 		if err != nil {
 			httpapi.WriteError(w, r, err)
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		spec := operation.Spec{
+			Kind: "server." + action, NodeID: nodeID, ServerID: id, Steps: []string{action}, Status: http.StatusNoContent,
+			Timeout: actionTimeout + req.Warning.duration(), Category: logging.Servers, Visible: viewable(nodeID, id),
+		}
+		if req.Warning != nil {
+			spec.Steps, spec.Cancel = []string{"warn", action}, access.OnServer(act.need)
+		}
+		h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+			if req.Warning != nil {
+				err := h.countdown(ctx, req.Warning, servers)
+				if err == nil {
+					err = operation.Keep(ctx)
+				}
+				if err != nil {
+					return nil, err
+				}
+				operation.Step(ctx, action)
+			}
+			return nil, h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
+				return act.call(ctx, c, id, "")
+			})
+		})
 	}
+}
+
+// olderAgentWarning returns a warning if a node's agent answered without the stop timeout or
+// time zone it was asked to give a server, as agents of earlier versions don't know them.
+func olderAgentWarning(stopTimeout uint32, timeZone string, got *noryxv1.Server) string {
+	if stopSeconds(got.GetStopTimeoutSeconds()) == stopSeconds(stopTimeout) && got.GetTimeZone() == timeZone {
+		return ""
+	}
+	return "The agent of the node is too old for a stop timeout and a time zone, so the server keeps 60 seconds and UTC. Update the agent first, then set them in the server's settings."
 }
 
 // agent calls the agent of a node within an operation, which follows the call's progress.

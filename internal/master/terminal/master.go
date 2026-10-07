@@ -133,6 +133,9 @@ func (h *Handler) probe(ctx context.Context) ([]nodeProbe, error) {
 	var wg sync.WaitGroup
 	for i, n := range nodes {
 		probes[i] = nodeProbe{node: n, state: "pending", version: "-", certificate: "-"}
+		if n.CertificateExpiresAt != nil { // stored, also while the node is offline
+			probes[i].certificate = n.CertificateExpiresAt.Local().Format(time.DateOnly)
+		}
 		if n.EnrolledAt == nil {
 			continue
 		}

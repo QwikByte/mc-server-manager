@@ -217,5 +217,5 @@ func TestDatastores(t *testing.T) {
 		t.Error("the port stayed open")
 	}
 	api.do("GET", backups, nil, http.StatusNotFound, nil)
-	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusNoContent, nil)
+	api.do("DELETE", "/api/networks/"+n.ID, nil, http.StatusOK, nil)
 }

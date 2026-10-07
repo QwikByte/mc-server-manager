@@ -182,7 +182,7 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 		stats.NetworkSentBytesPerSecond = perSecond(u.NetTxBytes-prev.NetTxBytes, elapsed)
 	}
 	st.usage, st.at = u, now
-	stats.Running, stats.MemoryBytes, stats.MemoryLimitBytes = true, u.MemoryBytes, u.MemoryLimit
+	stats.Running, stats.MemoryBytes, stats.MemoryLimitBytes, stats.CpuLimitMillis = true, u.MemoryBytes, u.MemoryLimit, srv.CPUMillis
 	if srv.State != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		return stats // starting servers don't answer yet
 	}

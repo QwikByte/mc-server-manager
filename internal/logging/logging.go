@@ -48,6 +48,7 @@ var (
 	Policies  = Category("policies")
 	Terminal  = Category("terminal")
 	Databases = Category("databases")
+	Usage     = Category("usage")
 )
 
 // Category returns the attribute of a category, e.g. for slog.Info("…", logging.Nodes).

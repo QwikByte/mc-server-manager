@@ -68,10 +68,7 @@ func (h *Handler) Register(mux access.Mux) {
 	})
 	mux.Handle("POST /api/nodes/{id}/overlay", manage, h.withEndpoint(h.svc.Join))
 	mux.Handle("PUT /api/nodes/{id}/overlay", manage, h.withEndpoint(h.svc.SetEndpoint))
-	mux.Handle("POST /api/nodes/{id}/overlay/rotate", manage, func(w http.ResponseWriter, r *http.Request) {
-		m, err := h.svc.Rotate(r.Context(), r.PathValue("id"))
-		write(w, r, m, err)
-	})
+	mux.Handle("POST /api/nodes/{id}/overlay/rotate", manage, h.rotate)
 	mux.Handle("DELETE /api/nodes/{id}/overlay", manage, h.leave)
 }
 
@@ -90,29 +87,45 @@ func (h *Handler) withEndpoint(fn func(ctx context.Context, nodeID, endpoint str
 	}
 }
 
+// rotate replaces the key of a member and then configures the networks again that reach its
+// servers, or servers from it, over the network: the others let into the ports of their
+// servers only the key a node had when it got access, so that a node that later gets the
+// address of a removed one has none.
+func (h *Handler) rotate(w http.ResponseWriter, r *http.Request) {
+	h.change(w, r, "overlay.rotate", "key", http.StatusOK, func(ctx context.Context, id string) (any, error) { return h.svc.Rotate(ctx, id) })
+}
+
 // leave removes a node from the network and then configures the networks that reached its
 // servers, or servers from it, over the network: they reach them at public ports again,
 // which restarts these servers.
 func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
+	if err := h.networks.CheckLeave(r.Context(), r.PathValue("id")); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	h.change(w, r, "overlay.leave", "overlay", http.StatusNoContent, func(ctx context.Context, id string) (any, error) { return nil, h.svc.Leave(ctx, id) })
+}
+
+// change changes a member in an operation, in the step it names, and then configures the
+// networks again that reach servers across it.
+func (h *Handler) change(w http.ResponseWriter, r *http.Request, kind, step string, status int, fn func(ctx context.Context, nodeID string) (any, error)) {
 	id := r.PathValue("id")
 	n, err := h.svc.nodes.Get(r.Context(), id)
-	if err == nil {
-		err = h.networks.CheckLeave(r.Context(), id)
-	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
 	h.ops.Run(w, r, operation.Spec{
-		Kind: "overlay.leave", Subject: n.Name, NodeID: id, Status: http.StatusNoContent, Timeout: time.Hour, Category: logging.Nodes,
+		Kind: kind, Subject: n.Name, NodeID: id, Status: status, Timeout: time.Hour, Category: logging.Nodes,
 		Visible: func(g access.Grants) bool { return g.On(access.NodesView, id, "") },
 	}, func(ctx context.Context) (any, error) {
-		operation.Step(ctx, "overlay")
-		if err := h.svc.Leave(ctx, id); err != nil {
+		operation.Step(ctx, step)
+		result, err := fn(ctx, id)
+		if err != nil {
 			return nil, err
 		}
 		operation.Step(ctx, "networks")
-		return nil, h.networks.ApplyAcross(ctx, id)
+		return result, h.networks.ApplyAcross(ctx, id)
 	})
 }
 

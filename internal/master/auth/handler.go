@@ -24,19 +24,40 @@ type userKey struct{}
 // for signed-in users, per user, each on its own: anonymous requests can't use up the
 // budget of signed-in users.
 type Handler struct {
-	svc        *Service
-	sessionTTL func() time.Duration
-	clients    *ratelimit.Limiter
-	usernames  *ratelimit.Limiter
-	users      *ratelimit.Limiter
+	svc         *Service
+	sessionTTL  func() time.Duration
+	mfaRequired MFARequired
+	clients     *ratelimit.Limiter
+	usernames   *ratelimit.Limiter
+	users       *ratelimit.Limiter
+}
+
+// MFARequired tells whether the settings require a user to use two-factor authentication.
+type MFARequired func(ctx context.Context, userID int64) (bool, error)
+
+// ErrSetUpMFA answers the requests of users who have to set up two-factor authentication
+// before anything else. Its code tells the panel to send them to the setup.
+var ErrSetUpMFA error = &httpapi.Error{
+	Status: http.StatusForbidden, Code: "mfa-setup-required",
+	Message: "Set up two-factor authentication first: it is required for your account.",
 }
 
 // NewHandler returns the handler of the sign-in. sessionTTL tells how long new sessions last.
-func NewHandler(svc *Service, sessionTTL func() time.Duration) *Handler {
+func NewHandler(svc *Service, sessionTTL func() time.Duration, mfaRequired MFARequired) *Handler {
 	return &Handler{
-		svc: svc, sessionTTL: sessionTTL, clients: ratelimit.New(clientBurst, clientEvery),
+		svc: svc, sessionTTL: sessionTTL, mfaRequired: mfaRequired, clients: ratelimit.New(clientBurst, clientEvery),
 		usernames: ratelimit.New(usernameBurst, usernameEvery), users: ratelimit.New(clientBurst, clientEvery),
 	}
+}
+
+// checkMFA notes whether the user has to set up two-factor authentication before anything else.
+func (h *Handler) checkMFA(ctx context.Context, user User) (User, error) {
+	if user.MFA {
+		return user, nil
+	}
+	required, err := h.mfaRequired(ctx, user.ID)
+	user.MustSetUpMFA = required
+	return user, err
 }
 
 // UserFrom returns the signed in user of a request that passed Require.
@@ -46,7 +67,8 @@ func UserFrom(ctx context.Context) (User, bool) {
 }
 
 // Register adds the routes for the signed-in user's own account. They need a session but
-// no permission. Those that check the password are rate limited per user.
+// no permission, and work for users who have to set up two-factor authentication first, so
+// that they can. Those that check the password are rate limited per user.
 func (h *Handler) Register(mux *http.ServeMux) {
 	perUser := limitedBy(h.users, func(r *http.Request) string {
 		user, _ := UserFrom(r.Context())
@@ -61,6 +83,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/mfa", perUser(h.enableMFA))
 	mux.HandleFunc("DELETE /api/auth/mfa", perUser(h.disableMFA))
 	mux.HandleFunc("POST /api/auth/mfa/recovery-codes", perUser(h.newRecoveryCodes))
+	// Ending sessions needs no password, as it only takes rights away.
+	mux.HandleFunc("GET /api/auth/sessions", h.sessions)
+	mux.HandleFunc("DELETE /api/auth/sessions", h.endOtherSessions)
+	mux.HandleFunc("DELETE /api/auth/sessions/{id}", h.endSession)
 }
 
 // RegisterPublic adds the routes that work without a session: signing in and setting a
@@ -109,13 +135,15 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ttl := h.sessionTTL()
-	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, req.Code, ttl)
+	user, token, err := h.svc.Login(r.Context(), req.Username, req.Password, req.Code, ttl, clientOf(r))
 	switch {
 	case errors.Is(err, ErrCodeRequired):
 		httpapi.WriteJSON(w, http.StatusOK, map[string]bool{"mfaRequired": true})
 		return
 	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, errWrongCode), errors.Is(err, errCodeLocked):
 		slog.Warn("Sign in failed", logging.Auth, logging.KeyUser, req.Username, "ip", ClientIP(r), "reason", err)
+	case err == nil:
+		user, err = h.checkMFA(r.Context(), user)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -155,9 +183,12 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ttl := h.sessionTTL()
-	user, token, err := h.svc.Setup(r.Context(), req.Token, req.Password, ttl)
+	user, token, err := h.svc.Setup(r.Context(), req.Token, req.Password, ttl, clientOf(r))
 	if errors.Is(err, errInvalidSetup) {
 		slog.Warn("Set password with setup link failed", logging.Auth, "ip", ClientIP(r), "err", err)
+	}
+	if err == nil && token != "" {
+		user, err = h.checkMFA(r.Context(), user)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -187,10 +218,14 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	reply(w, r, "Change password", nil, err)
 }
 
-// mfa tells whether two-factor authentication is on for the signed-in user.
+// mfa tells whether two-factor authentication is on for the signed-in user, and whether the
+// settings require it.
 func (h *Handler) mfa(w http.ResponseWriter, r *http.Request) {
 	user, _ := UserFrom(r.Context())
 	m, err := h.svc.MFA(r.Context(), user.ID)
+	if err == nil {
+		m.Required, err = h.mfaRequired(r.Context(), user.ID)
+	}
 	reply(w, r, "", m, err)
 }
 
@@ -238,6 +273,25 @@ func (h *Handler) newRecoveryCodes(w http.ResponseWriter, r *http.Request) {
 
 type recoveryCodes struct {
 	Codes []string `json:"recoveryCodes"`
+}
+
+// sessions lists where the signed-in user is signed in.
+func (h *Handler) sessions(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	sessions, err := h.svc.Sessions(r.Context(), user.ID, sessionToken(r))
+	reply(w, r, "", sessions, err)
+}
+
+// endSession ends a session of the signed-in user, e.g. in a lost browser.
+func (h *Handler) endSession(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	reply(w, r, "Sign out other session", nil, h.svc.EndSession(r.Context(), user.ID, r.PathValue("id")))
+}
+
+// endOtherSessions ends all sessions of the signed-in user but the one of the request.
+func (h *Handler) endOtherSessions(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	reply(w, r, "Sign out everywhere else", nil, h.svc.EndOtherSessions(r.Context(), user.ID, sessionToken(r)))
 }
 
 // readPassword reads a request that confirms a change with the user's password.
@@ -312,7 +366,8 @@ func (h *Handler) setLanguage(w http.ResponseWriter, r *http.Request) {
 const VersionHeader = "Noryx-Version"
 
 // Require rejects requests without a valid session. Answers to the others tell the master's
-// version in VersionHeader.
+// version in VersionHeader. The user of the request tells whether two-factor authentication
+// has to be set up first, which access.Mux enforces.
 func (h *Handler) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(cookieName)
@@ -320,9 +375,12 @@ func (h *Handler) Require(next http.Handler) http.Handler {
 			httpapi.WriteError(w, r, httpapi.Errorf(http.StatusUnauthorized, "Sign in to continue."))
 			return
 		}
-		user, err := h.svc.Authenticate(r.Context(), c.Value)
+		user, err := h.svc.Authenticate(r.Context(), c.Value, clientOf(r))
 		if errors.Is(err, ErrNoSession) {
 			err = httpapi.Errorf(http.StatusUnauthorized, "Your session has expired. Sign in again.")
+		}
+		if err == nil {
+			user, err = h.checkMFA(r.Context(), user)
 		}
 		if err != nil {
 			httpapi.WriteError(w, r, err)

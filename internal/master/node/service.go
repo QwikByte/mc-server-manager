@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -44,6 +45,9 @@ type Node struct {
 	Address    string     `json:"address,omitempty"`
 	EnrolledAt *time.Time `json:"enrolledAt,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
+	// CertificateExpiresAt is when the latest certificate of the node that the master issued or
+	// saw expires, also while the node is offline.
+	CertificateExpiresAt *time.Time `json:"certificateExpiresAt,omitempty"`
 	Settings
 }
 
@@ -84,9 +88,10 @@ type Config interface {
 	NodeDefaults() Limits
 }
 
-const nodeColumns = `id, name, address, enrolled_at, created_at, default_storage, port_min, port_max, memory_reserve_mb`
+const nodeColumns = `id, name, address, enrolled_at, created_at, certificate_expires_at, default_storage, port_min, port_max, memory_reserve_mb`
 
-var storageName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+// StorageName matches the names of storage locations, which agents allow.
+var StorageName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 type Service struct {
 	noryxv1.UnimplementedEnrollmentServiceServer
@@ -101,8 +106,8 @@ type Service struct {
 	// gen counts the changes and removals of connections, so that Conn doesn't store a
 	// connection to a node that changed while it was loaded.
 	gen uint64
-	// expiries are when the certificates the nodes last presented expire, so that they are
-	// known while a node is offline. The master forgets them when it restarts.
+	// expiries are expiries of node certificates that are stored already, so that checking a
+	// node writes to the database only once it presents a newer certificate.
 	expiries map[string]time.Time
 	renewMu  sync.Mutex // one certificate renewal at a time
 	// enrolls throttles enrollments per client, as anyone who reaches the endpoint may try.
@@ -183,7 +188,7 @@ func validate(n Node) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
 	case !validAddress(n.Address):
 		return httpapi.Errorf(http.StatusBadRequest, "Enter the agent address as host:port, for example 203.0.113.10:7443.")
-	case n.DefaultStorage != "" && !storageName.MatchString(n.DefaultStorage):
+	case n.DefaultStorage != "" && !StorageName.MatchString(n.DefaultStorage):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose a storage location of the node.")
 	}
 	return n.Validate()
@@ -250,6 +255,9 @@ func (s *Service) Enroll(ctx context.Context, req *noryxv1.EnrollRequest) (*nory
 		return nil, err
 	}
 	slog.Info("Enroll node", attrs...)
+	if c, err := x509.ParseCertificate(cert); err == nil {
+		s.seen(ctx, req.GetNodeId(), c.NotAfter)
+	}
 	return &noryxv1.EnrollResponse{CertificateDer: cert, CaCertificateDer: s.ca.Cert.Raw}, nil
 }
 
@@ -365,18 +373,23 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanNode(row scanner) (Node, error) {
 	var n Node
-	var enrolledAt sql.NullInt64
+	var enrolledAt, certExpiresAt sql.NullInt64
 	var createdAt int64
 	var portMin, portMax, reserve sql.Null[uint32]
-	if err := row.Scan(&n.ID, &n.Name, &n.Address, &enrolledAt, &createdAt, &n.DefaultStorage, &portMin, &portMax, &reserve); err != nil {
+	if err := row.Scan(&n.ID, &n.Name, &n.Address, &enrolledAt, &createdAt, &certExpiresAt, &n.DefaultStorage, &portMin, &portMax, &reserve); err != nil {
 		return n, err
 	}
 	n.CreatedAt = time.Unix(createdAt, 0)
+	n.EnrolledAt, n.CertificateExpiresAt = unixTime(enrolledAt), unixTime(certExpiresAt)
 	n.PortMin, n.PortMax, n.MemoryReserveMB = nullable(portMin), nullable(portMax), nullable(reserve)
-	if enrolledAt.Valid {
-		n.EnrolledAt = new(time.Unix(enrolledAt.Int64, 0))
-	}
 	return n, nil
+}
+
+func unixTime(v sql.NullInt64) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	return new(time.Unix(v.Int64, 0))
 }
 
 func nullable[T any](v sql.Null[T]) *T {

@@ -95,7 +95,9 @@ export const runningCount = (servers: Server[]) => servers.filter((s) => s.state
 export const serverKey = (s: { nodeId: string; id: string }) => `${s.nodeId}/${s.id}`
 
 export interface NewServer
-  extends Partial<Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit" | "loaderVersion">> {
+  extends Partial<
+    Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit" | "loaderVersion" | "stopTimeout" | "timeZone">
+  > {
   name: string
   type: string
   version: string
@@ -139,13 +141,14 @@ export interface Followed {
 
 /**
  * Creates a server, with the projects of Modrinth or Hangar to install on it, e.g. the plugins of a
- * template. pluginError tells why they couldn't be installed; the server exists anyway.
+ * template. pluginError tells why they couldn't be installed, and warning what else the server didn't
+ * get, e.g. a stop timeout from an older agent; the server exists anyway.
  */
 export function useCreateServer() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ nodeId, server, plugins, onStart }: { nodeId: string; server: NewServer; plugins?: string[] } & Followed) =>
-      operate<Server & { pluginError?: string }>(`/nodes/${nodeId}/servers`, { body: { ...server, plugins } }, onStart),
+      operate<Server & { pluginError?: string; warning?: string }>(`/nodes/${nodeId}/servers`, { body: { ...server, plugins } }, onStart),
     onSettled: (_data, _error, { nodeId }) => refreshServers(queryClient, nodeId),
   })
 }
@@ -214,7 +217,18 @@ export function useMoveServer(nodeId: string, serverId: string) {
 
 export type ServerAction = "start" | "stop" | "restart" | "delete"
 
-export type BulkAction = { action: "start" | "stop" | "restart" } | { action: "command"; command: string }
+/** Warns the players in the chat before servers stop or restart, and again 5 minutes and 1 minute before. */
+export interface Warning {
+  /** 1 to 10. */
+  minutes: number
+  /** {minutes} becomes the minutes left; empty is the default. A message of one's own needs the permission to send console commands. */
+  message?: string
+}
+
+export type BulkAction =
+  | { action: "start" }
+  | { action: "stop" | "restart"; warning?: Warning }
+  | { action: "command"; command: string }
 
 /** How an action ended on each server; failed ones have an error. */
 export interface BulkResult {
@@ -274,14 +288,18 @@ export function usePendingAction(nodeId: string, serverId: string): BulkAction["
   return undefined
 }
 
+/**
+ * Starts, stops, restarts or deletes a server; stopping and restarting may become operations, as a server may take
+ * minutes to stop, and may warn the players first.
+ */
 export function useServerAction(nodeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: ["server-action", nodeId],
-    mutationFn: ({ id, action }: { id: string; action: ServerAction }) =>
+    mutationFn: ({ id, action, warning, onStart }: { id: string; action: ServerAction; warning?: Warning } & Followed) =>
       action === "delete"
         ? api(`/nodes/${nodeId}/servers/${id}`, { method: "DELETE" })
-        : api(`/nodes/${nodeId}/servers/${id}/${action}`, { method: "POST" }),
+        : operate(`/nodes/${nodeId}/servers/${id}/${action}`, warning ? { body: { warning } } : { method: "POST" }, onStart),
     onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
   })
 }

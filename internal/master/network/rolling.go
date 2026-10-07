@@ -25,7 +25,14 @@ const (
 	pollInterval = 2 * time.Second
 	// moveWait gives players a moment to move to another server before theirs restarts.
 	moveWait = 3 * time.Second
-	maxBatch = 50
+	// MaxBatch is the most servers that restart at a time in a rolling restart.
+	MaxBatch = 50
+	// groupAllowance is what a group of servers needs in a rolling restart besides the longest
+	// stop timeout among them: a minute to move the players and ask the nodes, two to start, as
+	// configureTimeout allows, and readyTimeout to run again.
+	groupAllowance = time.Minute + 2*time.Minute + readyTimeout
+	// minRollingTimeout is the least a rolling restart gets as a whole.
+	minRollingTimeout = time.Hour
 )
 
 var running = noryxv1.ServerState_SERVER_STATE_RUNNING
@@ -34,21 +41,22 @@ var running = noryxv1.ServerState_SERVER_STATE_RUNNING
 // network stays open: the players of a server move to another one first, and the next
 // servers restart once these run again. The servers that players join first restart last
 // and one at a time, so that players always find one. If only names servers, only these
-// restart, e.g. those whose files changed.
+// restart, e.g. those whose files changed. Once it began, it can't be cancelled, and it takes
+// as long as its servers need, also beyond the deadline of ctx; see rollingTimeout.
 func (s *Service) RollingRestart(ctx context.Context, n Network, batch int, only ...Ref) error {
-	if batch < 1 || batch > maxBatch {
-		return httpapi.Errorf(http.StatusBadRequest, "Restart from 1 to %d servers at a time.", maxBatch)
+	if batch < 1 || batch > MaxBatch {
+		return httpapi.Errorf(http.StatusBadRequest, "Restart from 1 to %d servers at a time.", MaxBatch)
 	}
 	ctx = context.WithoutCancel(ctx)
 	operation.Step(ctx, "servers")
-	states, err := s.states(ctx, append(refs(n.Backends), n.Proxy))
+	listed, err := s.listed(ctx, append(refs(n.Backends), n.Proxy))
 	if err != nil {
 		return err
 	}
 	var first, last, others []Backend
 	for _, b := range n.Backends {
 		switch {
-		case states[b.Ref] != running:
+		case listed[b.Ref].GetState() != running:
 		case len(only) > 0 && !slices.Contains(only, b.Ref):
 			others = append(others, b) // players can move there
 		case slices.Contains(n.Try, b.Name):
@@ -67,11 +75,13 @@ func (s *Service) RollingRestart(ctx context.Context, n Network, batch int, only
 	for _, b := range last {
 		groups = append(groups, []Backend{b})
 	}
+	ctx, cancel := context.WithTimeout(ctx, rollingTimeout(groups, listed))
+	defer cancel()
 	total, done := int64(len(restarting)), int64(0)
 	operation.Count(ctx, 0, total, "servers")
 	for _, group := range groups {
-		if states[n.Proxy] == running {
-			if err := s.moveOff(ctx, n, group, slices.Concat(restarting, others)); err != nil {
+		if listed[n.Proxy].GetState() == running {
+			if _, err := s.moveOff(ctx, n, group, slices.Concat(restarting, others)); err != nil {
 				return err
 			}
 		}
@@ -84,14 +94,60 @@ func (s *Service) RollingRestart(ctx context.Context, n Network, batch int, only
 	return nil
 }
 
+// rollingTimeout is how long a rolling restart of groups of servers, one group after the
+// other, may take: for each group the longest stop timeout among its servers and
+// groupAllowance, and minRollingTimeout at least.
+func rollingTimeout(groups [][]Backend, listed map[Ref]*noryxv1.Server) time.Duration {
+	total := time.Duration(0)
+	for _, group := range groups {
+		longest := time.Duration(0)
+		for _, b := range group {
+			longest = max(longest, noryxv1.StopTimeout(listed[b.Ref].GetStopTimeoutSeconds()))
+		}
+		total += longest + groupAllowance
+	}
+	return max(total, minRollingTimeout)
+}
+
+// MovePlayers sends the players of a running game server of a network to another running
+// server of it through the proxy, as before a restart, and returns how many it sent.
+func (s *Service) MovePlayers(ctx context.Context, n Network, from Ref) (int, error) {
+	if err := n.checkBackends([]Ref{from}); err != nil {
+		return 0, err
+	}
+	listed, err := s.listed(ctx, append(refs(n.Backends), n.Proxy))
+	if err != nil {
+		return 0, err
+	}
+	var group, up []Backend
+	for _, b := range n.Backends {
+		switch {
+		case listed[b.Ref].GetState() != running:
+		case b.Ref == from:
+			group = []Backend{b}
+		default:
+			up = append(up, b)
+		}
+	}
+	switch {
+	case listed[n.Proxy].GetState() != running:
+		return 0, httpapi.Errorf(http.StatusConflict, "The proxy doesn't run.")
+	case len(group) == 0:
+		return 0, httpapi.Errorf(http.StatusConflict, "The server doesn't run.")
+	case len(up) == 0:
+		return 0, httpapi.Errorf(http.StatusConflict, "No other server of the network runs, so the players have nowhere to go.")
+	}
+	return s.moveOff(ctx, n, group, up)
+}
+
 // moveOff sends the players of servers to another running server through the proxy: to the
 // first that players join, if it can, and gives them a moment to move. It fails if the proxy
 // can't send anyone, e.g. without a send command or while its node can't be reached, so that
-// the servers don't restart.
-func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) error {
+// the servers don't restart. It returns how many players it sent.
+func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) (int, error) {
 	others := slices.DeleteFunc(slices.Clone(up), func(b Backend) bool { return slices.ContainsFunc(group, b.same) })
 	if len(others) == 0 {
-		return nil // the players have nowhere to go
+		return 0, nil // the players have nowhere to go
 	}
 	target := others[0].Name
 	for _, name := range n.Try {
@@ -102,13 +158,14 @@ func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) e
 	}
 	players := s.players(ctx, group)
 	if len(players) == 0 {
-		return nil
+		return 0, nil
 	}
 	conn, err := s.nodes.Conn(ctx, n.Proxy.NodeID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	proxy := noryxv1.NewServerServiceClient(conn)
+	sent := 0
 	for _, name := range players {
 		command, ok := n.SendCommand(name, target)
 		if !ok {
@@ -118,16 +175,18 @@ func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) e
 		_, err := proxy.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: command, NoWait: true})
 		switch {
 		case status.Code(err) == codes.FailedPrecondition:
-			return httpapi.Errorf(http.StatusConflict, "The restart stopped, as the players can't move to another server. %s", status.Convert(err).Message())
+			return sent, httpapi.Errorf(http.StatusConflict, "The players can't move to another server. %s", status.Convert(err).Message())
 		case err != nil:
-			slog.Debug("Can't move a player before a restart", "player", name, "err", err)
+			slog.Debug("Can't move a player to another server", "player", name, "err", err)
+		default:
+			sent++
 		}
 	}
 	select {
 	case <-ctx.Done():
 	case <-time.After(moveWait):
 	}
-	return nil
+	return sent, nil
 }
 
 // players returns the names of the players on servers, as their agents measured them last.
@@ -173,12 +232,12 @@ func (s *Service) restart(ctx context.Context, servers []Backend) error {
 		return httpapi.Errorf(http.StatusBadGateway, "%s", err)
 	}
 	err := waitFor(ctx, readyTimeout, func(ctx context.Context) (bool, error) {
-		states, err := s.states(ctx, refs(servers))
+		listed, err := s.listed(ctx, refs(servers))
 		if err != nil {
 			return false, err
 		}
 		for _, b := range servers {
-			switch states[b.Ref] {
+			switch listed[b.Ref].GetState() {
 			case running:
 			case noryxv1.ServerState_SERVER_STATE_STARTING:
 				return false, nil
@@ -191,9 +250,10 @@ func (s *Service) restart(ctx context.Context, servers []Backend) error {
 	return timedOut(err, "The servers didn't start again within 5 minutes.")
 }
 
-// states returns the states of servers, with one listing per node.
-func (s *Service) states(ctx context.Context, servers []Ref) (map[Ref]noryxv1.ServerState, error) {
-	states := map[Ref]noryxv1.ServerState{}
+// listed returns servers as their nodes list them, e.g. with their states, with one listing
+// per node.
+func (s *Service) listed(ctx context.Context, servers []Ref) (map[Ref]*noryxv1.Server, error) {
+	listed := map[Ref]*noryxv1.Server{}
 	for _, nodeID := range nodesOf(servers) {
 		ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 		conn, err := s.nodes.Conn(ctx, nodeID)
@@ -206,10 +266,10 @@ func (s *Service) states(ctx context.Context, servers []Ref) (map[Ref]noryxv1.Se
 			return nil, err
 		}
 		for _, srv := range res.GetServers() {
-			states[Ref{nodeID, srv.GetId()}] = srv.GetState()
+			listed[Ref{nodeID, srv.GetId()}] = srv
 		}
 	}
-	return states, nil
+	return listed, nil
 }
 
 // waitFor asks done every few seconds until it is done, fails, or the time is up.

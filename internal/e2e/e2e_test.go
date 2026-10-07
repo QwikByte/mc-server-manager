@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"iter"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -191,6 +193,9 @@ func TestEnrollAndControlNode(t *testing.T) {
 	if renewed.Equal(enrolled) || !presented.Equal(renewed) || !stored.Leaf.Equal(renewed) {
 		t.Fatal("the renewed certificate is not in use")
 	}
+	if n, err := m.nodes.Get(ctx, a.node.ID); err != nil || n.CertificateExpiresAt == nil || !n.CertificateExpiresAt.Equal(renewed.NotAfter) {
+		t.Fatalf("stored expiry = %v, %v, want %v", n.CertificateExpiresAt, err, renewed.NotAfter)
+	}
 
 	// A certificate for a key the agent did not create is rejected.
 	nodeClient := noryxv1.NewNodeServiceClient(conn)
@@ -238,7 +243,7 @@ func startMaster(t *testing.T) *master {
 	check(t, err)
 	nodes := node.NewService(db, ca, masterCert, conf)
 	t.Cleanup(nodes.Close)
-	logStore := logs.NewStore(db, logs.NewNames(nodes), conf.LogRetention)
+	logStore := logs.NewStore(db, logs.NewNames(nodes), conf)
 	logStore.Start(t.Context())
 	t.Cleanup(logStore.Close)
 	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))
@@ -259,15 +264,16 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	moves := server.NewMoves()
 	overlays := overlay.NewService(m.db, nodes)
 	datastores := datastore.NewStore(m.db, nodes, overlays)
-	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes)}, moves.Busy)
+	networks := network.NewService(m.db, nodes, plugins, overlays, datastores)
+	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
-	networks, tags := network.NewService(m.db, nodes, plugins, overlays, datastores), tag.NewStore(m.db)
+	tags := tag.NewStore(m.db)
 	fileSets := fileset.NewService(m.db, nodes, networks, tags, moves)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes, Overlay: overlays,
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
-		Usage: usage.NewStore(m.db, nodes), Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
+		Usage: usage.NewStore(m.db, nodes, m.settings), Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
 	}
 }
 
@@ -392,6 +398,8 @@ type fakeRuntime struct {
 	networks map[string]runtime.Network
 	commands []string
 	sent     map[string][]string // the console commands of each server
+	// online are the players of servers that their consoles list.
+	online map[string][]string
 	// on, if set, acts on console commands and on restarts ("restart"), e.g. like a plugin.
 	on       func(id, what string)
 	restarts []string
@@ -530,6 +538,9 @@ func (f *fakeRuntime) SendCommand(_ context.Context, id, command string) (string
 	f.sent[id] = append(f.sent[id], command)
 	if f.on != nil {
 		f.on(id, command)
+	}
+	if names, ok := f.online[id]; ok && command == "minecraft:list" {
+		return fmt.Sprintf("There are %d of a max of 20 players online: %s", len(names), strings.Join(names, ", ")), nil
 	}
 	return "§6ran " + command, nil
 }

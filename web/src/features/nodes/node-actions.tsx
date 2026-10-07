@@ -1,16 +1,15 @@
 import { DotsThreeIcon, KeyIcon, ShieldCheckIcon, TrashIcon } from "@phosphor-icons/react"
-import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
-import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAccess } from "@/features/access/use-access"
 import { formatDate } from "@/lib/format"
-import { type Node, useDeleteNode, useNewJoinToken, useRenewCertificate } from "./api"
+import { type Node, useNewJoinToken, useRenewCertificate } from "./api"
 import { EnrollSteps } from "./enroll-steps"
+import { RemoveNodeDialog } from "./remove-node-dialog"
 
 /** Issues a new join token, e.g. for a node whose agent was reinstalled, and shows how to connect with it. */
 function useJoinToken(node: Node) {
@@ -54,8 +53,6 @@ export function NodeMenu({ node }: { node: Node }) {
   const { can } = useAccess()
   const token = useJoinToken(node)
   const renew = useRenewCertificate(node.id)
-  const remove = useDeleteNode()
-  const navigate = useNavigate()
   const [removing, setRemoving] = useState(false)
   // Renewing the certificate right away helps e.g. when its key may have leaked.
   const renewable = node.status === "online" && can("nodes.certificates", node.id)
@@ -69,16 +66,6 @@ export function NodeMenu({ node }: { node: Node }) {
         toast.success(t("Renewed the certificate of {{name}}", { name: node.name }), {
           description: t("Valid until {{date}}", { date: formatDate(certificateExpiresAt) }),
         }),
-      onError: (e) => toast.error(e.message),
-    })
-  }
-
-  function confirmRemove() {
-    remove.mutate(node.id, {
-      onSuccess: () => {
-        toast.success(t("Removed {{name}}", { name: node.name }))
-        navigate({ to: "/nodes" })
-      },
       onError: (e) => toast.error(e.message),
     })
   }
@@ -116,15 +103,7 @@ export function NodeMenu({ node }: { node: Node }) {
         </DropdownMenuContent>
       </DropdownMenu>
       {token.dialog}
-      <ConfirmDialog
-        open={removing}
-        onOpenChange={setRemoving}
-        title={t("Remove {{name}}?", { name: node.name })}
-        description={t("The panel stops managing this node. Its servers keep running until you stop them on the node or uninstall the agent.")}
-        action={t("Remove node")}
-        destructive
-        onConfirm={confirmRemove}
-      />
+      {removing && <RemoveNodeDialog node={node} onClose={() => setRemoving(false)} />}
     </>
   )
 }

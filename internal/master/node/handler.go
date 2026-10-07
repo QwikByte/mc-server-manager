@@ -12,6 +12,8 @@ import (
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/operation"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 const probeTimeout = 3 * time.Second
@@ -20,6 +22,19 @@ const probeTimeout = 3 * time.Second
 type Networks interface {
 	// ReapplyNode configures the networks again that reach servers of the node from another node.
 	ReapplyNode(ctx context.Context, nodeID string) error
+	// CheckRemoveNode fails while servers of networks run on the node, with a conflict that
+	// release confirms, or while it can't be removed even then.
+	CheckRemoveNode(ctx context.Context, nodeID string, release bool) error
+	// RemoveNode takes the node's servers out of their networks, if release confirms it, and
+	// then removes the node with remove. It returns the servers of other nodes that left a
+	// network.
+	RemoveNode(ctx context.Context, nodeID string, release bool, remove func() error) ([]tag.Server, error)
+}
+
+// FileSets put shared files on servers. Servers that leave a network lose the files with
+// secrets of its sets.
+type FileSets interface {
+	Left(ctx context.Context, servers []tag.Server)
 }
 
 // Overlay is the private network of the nodes, whose members reach each other at the
@@ -33,10 +48,12 @@ type Handler struct {
 	svc      *Service
 	networks Networks
 	overlay  Overlay
+	ops      *operation.Operations
+	sets     FileSets
 }
 
-func NewHandler(svc *Service, networks Networks, overlay Overlay) *Handler {
-	return &Handler{svc: svc, networks: networks, overlay: overlay}
+func NewHandler(svc *Service, networks Networks, overlay Overlay, ops *operation.Operations, sets FileSets) *Handler {
+	return &Handler{svc: svc, networks: networks, overlay: overlay, ops: ops, sets: sets}
 }
 
 // Register adds the routes. Users see the nodes on which they may see the node or servers,
@@ -46,16 +63,19 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/nodes", access.Everywhere(access.NodesEnroll), h.create)
 	mux.Handle("GET /api/nodes/{id}", access.SignedIn, h.get)
 	mux.Handle("PUT /api/nodes/{id}", access.OnNode(access.NodesEdit, "id"), h.update)
-	mux.Handle("DELETE /api/nodes/{id}", access.OnNode(access.NodesDelete, "id"), h.delete)
+	// Taking the servers of a node out of their networks needs the permission to manage them.
+	releasing := func(r *http.Request, g access.Grants) (access.Permission, bool) {
+		return access.NetworksManage, !releases(r) || g.Has(access.NetworksManage)
+	}
+	mux.Handle("DELETE /api/nodes/{id}", access.All(access.OnNode(access.NodesDelete, "id"), releasing), h.delete)
 	mux.Handle("POST /api/nodes/{id}/join-token", access.Everywhere(access.NodesEnroll), h.joinToken)
 	mux.Handle("POST /api/nodes/{id}/certificate", access.OnNode(access.NodesCertificates, "id"), h.renewCertificate)
 }
 
 type view struct {
 	Node
-	Status               string     `json:"status"` // pending, online or offline
-	Info                 *info      `json:"info,omitempty"`
-	CertificateExpiresAt *time.Time `json:"certificateExpiresAt,omitempty"`
+	Status string `json:"status"` // pending, online or offline
+	Info   *info  `json:"info,omitempty"`
 	// Warning tells what didn't follow a change, e.g. the networks of a changed address.
 	Warning string `json:"warning,omitempty"`
 }
@@ -99,7 +119,9 @@ func (h *Handler) probeFor(ctx context.Context, n Node) view {
 	return v
 }
 
-// probe asks the agent for its machine info, which also tells whether it is reachable.
+// probe asks the agent for its machine info, which also tells whether it is reachable. The
+// expiry of its certificate is the stored one, as an offline node has to be enrolled again
+// once its certificate expired.
 func (h *Handler) probe(ctx context.Context, n Node) view {
 	v := view{Node: n, Status: "pending"}
 	if n.EnrolledAt == nil {
@@ -109,11 +131,6 @@ func (h *Handler) probe(ctx context.Context, n Node) view {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	res, _, err := h.svc.Status(ctx, n.ID)
-	// An offline node has to be enrolled again once its certificate expires, so its expiry
-	// stays known.
-	if expiry, ok := h.svc.CertificateExpiry(n.ID); ok {
-		v.CertificateExpiresAt = &expiry
-	}
 	if err != nil {
 		return v
 	}
@@ -223,14 +240,38 @@ func (h *Handler) joinToken(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, tokenJSON(token))
 }
 
+// releases tells whether a request to remove a node confirms that its servers leave their
+// networks first.
+func releases(r *http.Request) bool { return r.URL.Query().Get("release") == "true" }
+
+// delete removes a node, once its servers left their networks, so that no server of another
+// node keeps trusting a proxy of the node and no proxy keeps sending players to its servers.
+// Unless the request confirms it, a node with servers of networks stays.
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.Delete(r.Context(), r.PathValue("id")); err != nil {
+	id, release := r.PathValue("id"), releases(r)
+	n, err := h.svc.Get(r.Context(), id)
+	if err == nil {
+		err = h.networks.CheckRemoveNode(r.Context(), id, release)
+	}
+	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	// The other members of the private network drop it right away.
-	go h.overlay.Reconcile(context.WithoutCancel(r.Context()))
-	w.WriteHeader(http.StatusNoContent)
+	logging.Note(r.Context(), slog.String(logging.KeyNodeName, n.Name), slog.Bool("release", release))
+	h.ops.Run(w, r, operation.Spec{
+		Kind: "node.delete", Subject: n.Name, NodeID: id, Status: http.StatusNoContent, Timeout: time.Hour, Category: logging.Nodes,
+		Visible: func(g access.Grants) bool { return g.On(access.NodesView, id, "") },
+	}, func(ctx context.Context) (any, error) {
+		left, err := h.networks.RemoveNode(ctx, id, release, func() error { return h.svc.Delete(ctx, id) })
+		if len(left) > 0 {
+			h.sets.Left(ctx, left)
+		}
+		if err == nil {
+			// The other members of the private network drop it right away.
+			go h.overlay.Reconcile(context.WithoutCancel(ctx))
+		}
+		return nil, err
+	})
 }
 
 func (h *Handler) renewCertificate(w http.ResponseWriter, r *http.Request) {

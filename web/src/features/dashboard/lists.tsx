@@ -17,6 +17,7 @@ import { usePinned } from "@/features/preferences/api"
 import { ServerActions } from "@/features/servers/server-actions"
 import { StateBar } from "@/features/servers/server-state"
 import { serverLook, statusOf } from "@/features/servers/server-types"
+import { warningsQuery } from "@/features/usage/api"
 import { formatCores, formatNumber } from "@/features/usage/format"
 import { formatBytes } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -35,7 +36,8 @@ export function Attention({ title }: { title: string }) {
   const { data: overlay } = useQuery(overlayQuery)
   const { data: datastores } = useQuery({ ...datastoresQuery, enabled: access.can("datastores.view") })
   const tasks = useAutomationTasks()
-  const problems = problemsOf(nodes, servers, networks, usages, overlay, datastores, tasks)
+  const { data: warnings } = useQuery(warningsQuery)
+  const problems = problemsOf(nodes, servers, networks, usages, overlay, datastores, tasks, warnings)
   return (
     <Panel title={title} count={problems.length}>
       {problems.length === 0 ? (

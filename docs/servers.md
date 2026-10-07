@@ -16,7 +16,8 @@ Container labels are the agent's only state, so servers keep running while an ag
 the Minecraft version suggests the releases that Modrinth lists, as do the settings and templates; empty means the
 latest. A game server can get a seed, a game mode, a difficulty and a world type under **World**, which start as its
 template has them, or as Minecraft's defaults. They are written to `server.properties` before the first start, and the
-agent checks them like other properties. Deleting a server with all its worlds asks for its name first.
+agent checks them like other properties. The [stop timeout and the time zone](#settings-and-images) fold away the same
+way, as the template has them, or 1 minute and UTC. Deleting a server with all its worlds asks for its name first.
 
 The page of a server shows the address players join at, with a button to copy it: the host of its node's address with
 the server's port, or its proxy's for a server of a network. Without the permissions to see that node and the networks,
@@ -91,7 +92,27 @@ The **stop timeout** is how long a server may take to save its worlds when it st
 from 30 seconds to 10 minutes, 1 minute unless changed, e.g. longer for a large modded world. The **time zone**, one of
 the IANA time zones such as `Europe/Berlin` chosen from a searchable list, sets the time of the server's log and of
 plugins that work with times; servers run in UTC unless one is chosen. Agents of earlier versions keep 1 minute and UTC,
-which saving the settings tells.
+which saving the settings, creating a server and moving one to their node tell.
+
+Stopping and restarting a server run as [operations](panel.md#operations), as they may take as long as its stop
+timeout: the panel follows them in a notification, and a reverse proxy in front of the master, e.g. nginx, which gives
+up after 60 seconds by default, doesn't cut them off. Starting a server only takes a moment and answers right away.
+
+**Restart with a warning…** and **Stop with a warning…** in the menu of a running game server warn its players in the
+chat first, 1, 2, 5 or 10 minutes before, and again 5 minutes and 1 minute before, like
+[schedules](automation.md#schedules) do. Until then, the operation shows the time left and can be cancelled, which
+leaves the server running. The warning has the default message of schedules; one's own message needs the permission to
+send console commands, as the warning is the console command `say`. Proxies get no warning.
+
+When a node shuts down or reboots, systemd gives Docker 90 seconds to stop (its `DefaultTimeoutStopSec`), which cuts
+longer stop timeouts short: servers that haven't saved their worlds by then are killed. To give them their full stop
+timeout, raise `TimeoutStopSec` of `docker.service` beyond the longest one, e.g. to 11 minutes:
+
+```sh
+sudo mkdir -p /etc/systemd/system/docker.service.d
+printf '[Service]\nTimeoutStopSec=11min\n' | sudo tee /etc/systemd/system/docker.service.d/stop-timeout.conf
+sudo systemctl daemon-reload
+```
 
 ## Crashes and health
 
@@ -114,12 +135,12 @@ players stay connected. The copy doesn't take over the original's place in a net
 A server can move to another node with its ID, files, settings and, if chosen, its backups; otherwise the backups are
 deleted with it. Port, storage location, memory and CPU limits are checked on the new node first. The server then stops,
 its data is copied through the master, and it starts on the new node if it ran before. Its backup jobs, schedules, the
-scopes of groups and its usage history follow it, and its network is configured again, which restarts the proxy. The
-original is deleted only once the server is complete on the new node; if anything fails before, the copy goes away and
-the server runs where it was. While it moves, the panel shows the progress, refuses changes to the server and continues
-on the new node once it is done; scheduled tasks leave it out meanwhile. The new node needs free space for the archive
-of the data besides the data itself, until it is extracted. If the master stops during a move, the server stays on its
-old node, stopped.
+scopes of groups, its usage history and thresholds follow it, and its network is configured again, which restarts the
+proxy. The original is deleted only once the server is complete on the new node; if anything fails before, the copy goes
+away and the server runs where it was. While it moves, the panel shows the progress, refuses changes to the server and
+continues on the new node once it is done; scheduled tasks leave it out meanwhile. The new node needs free space for the
+archive of the data besides the data itself, until it is extracted. If the master stops during a move, the server stays
+on its old node, stopped.
 
 ## Lists, tags and bulk actions
 
@@ -132,6 +153,7 @@ lists and all their browsers. **Export CSV** downloads the servers as listed, wi
 port, state, tags and what running servers use, for spreadsheets. Selected servers start, restart or stop together, run
 a console command such as `save-all`, or get and lose tags; an action applies to the selected servers in a fitting state
 on which the user may do it, at most 8 at a time on each node, and the panel tells which failed and offers to try those again.
+Restarting and stopping them can warn the players of the game servers first, like a single server.
 
 Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
 keeps them; they follow a server that moves, copies get them, and they go with a deleted server. Changing them needs the

@@ -96,8 +96,9 @@ export const useJoinOverlay = (nodeId: string) =>
 export const useSetOverlayEndpoint = (nodeId: string) =>
   useOverlayChange((endpoint: string) => api<OverlayMember>(`/nodes/${nodeId}/overlay`, { method: "PUT", body: { endpoint } }))
 
+/** Replaces a member's key; the networks with servers on it and on other nodes are applied again, as the others only let in the key a node had when it got access. */
 export const useRotateOverlayKey = (nodeId: string) =>
-  useOverlayChange(() => api<OverlayMember>(`/nodes/${nodeId}/overlay/rotate`, { method: "POST" }))
+  useOverlayChange(({ onStart }: Followed) => operate<OverlayMember>(`/nodes/${nodeId}/overlay/rotate`, { method: "POST" }, onStart))
 
 /** Removes a node from the private network; the networks that reached its servers over it are applied again. */
 export const useLeaveOverlay = (nodeId: string) =>

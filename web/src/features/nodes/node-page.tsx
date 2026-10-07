@@ -27,6 +27,7 @@ import { assignedMemoryMb, serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
 import { usageQuery } from "@/features/usage/api"
 import { formatCores } from "@/features/usage/format"
+import { UsageWarnings } from "@/features/usage/thresholds"
 import { UsageHistory } from "@/features/usage/usage-history"
 import { formatBytes, formatDate, formatMegabytes } from "@/lib/format"
 import { memoryCapacityMb, memoryLimitMb, type Node, type NodeInfo, nodeQuery } from "./api"
@@ -104,6 +105,9 @@ export function NodePage() {
                 />
               )}
               {node.info.storage && can("nodes.view", node.id) && <StorageList locations={node.info.storage} />}
+              {can("nodes.view", node.id) && (
+                <UsageWarnings nodeId={node.id} editable={can("nodes.edit", node.id)} className="mt-10" />
+              )}
               {can("nodes.view", node.id) && <OverlaySection node={node} />}
             </>
           ) : node.status === "pending" ? (

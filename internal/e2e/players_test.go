@@ -11,6 +11,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/player"
+	"github.com/QwikByte/noryx/internal/master/schedule"
 )
 
 func TestPlayers(t *testing.T) {
@@ -170,14 +171,18 @@ func TestRollingRestart(t *testing.T) {
 		m.createServer(t, a, "Game 2", noryxv1.ServerType_SERVER_TYPE_PAPER, 25567),
 		m.createServer(t, a, "Game 3", noryxv1.ServerType_SERVER_TYPE_PAPER, 25568),
 	}
+	solo := m.createServer(t, a, "Solo", noryxv1.ServerType_SERVER_TYPE_PAPER, 25569)
 	api := apiClient{t: t, url: m.panel(t).URL}
 	var n network.Network
 	api.do("POST", "/api/networks", map[string]any{"name": "Main", "proxy": proxy, "servers": append([]network.Ref{lobby}, games...)}, http.StatusCreated, &n)
 	path := "/api/networks/" + n.ID + "/rolling-restart"
 	api.do("POST", path, map[string]int{"batch": 1}, http.StatusConflict, nil) // nothing runs
-	for _, s := range []network.Ref{proxy, lobby, games[0], games[1]} {
+	for _, s := range []network.Ref{proxy, lobby, games[0], games[1], solo} {
 		check(t, a.runtime.Start(t.Context(), s.ServerID))
 	}
+	a.runtime.mu.Lock()
+	a.runtime.online = map[string][]string{lobby.ServerID: {}, games[0].ServerID: {"Alex"}, games[1].ServerID: {}, solo.ServerID: {}}
+	a.runtime.mu.Unlock()
 
 	// The running game servers restart two at a time, the lobby players join last; the
 	// stopped one stays stopped, and the proxy keeps running.
@@ -186,5 +191,46 @@ func TestRollingRestart(t *testing.T) {
 	got := a.runtime.restarted()
 	if len(got) != 3 || got[2] != lobby.ServerID || !slices.Contains(got, games[0].ServerID) || !slices.Contains(got, games[1].ServerID) {
 		t.Fatalf("restarts = %q", got)
+	}
+
+	// One server restarts safely: its players move to the lobby first. Only game servers of the
+	// network restart so.
+	api.do("POST", path, map[string]any{"batch": 1, "servers": []network.Ref{games[0]}}, http.StatusNoContent, nil)
+	if got := a.runtime.restarted()[3:]; !slices.Equal(got, []string{games[0].ServerID}) {
+		t.Fatalf("restarts = %q", got)
+	}
+	if got := a.runtime.commandsTo(proxy.ServerID); got[len(got)-1] != "send Alex lobby" {
+		t.Fatalf("proxy commands = %q", got)
+	}
+	for _, bad := range [][]network.Ref{{proxy}, {solo}, {games[1], games[1]}} {
+		api.do("POST", path, map[string]any{"batch": 1, "servers": bad}, http.StatusBadRequest, nil)
+	}
+
+	// The players of a server move to another one without a restart.
+	move := "/api/networks/" + n.ID + "/players/move"
+	var moved struct{ Players int }
+	api.do("POST", move, map[string]any{"server": games[0]}, http.StatusOK, &moved)
+	if got := a.runtime.commandsTo(proxy.ServerID); moved.Players != 1 || got[len(got)-1] != "send Alex lobby" || len(a.runtime.restarted()) != 4 {
+		t.Fatalf("moved %d players, proxy commands %q", moved.Players, got)
+	}
+	api.do("POST", move, map[string]any{"server": games[2]}, http.StatusConflict, nil) // it doesn't run
+	api.do("POST", move, map[string]any{"server": proxy}, http.StatusBadRequest, nil)
+
+	// A schedule restarts the game servers of the network server by server, the lobby last,
+	// then the proxy; the server outside of networks restarts at once.
+	var task schedule.Task
+	api.do("POST", "/api/policies", map[string]any{
+		"name": "Nightly", "enabled": true, "settings": map[string]any{"action": "restart", "rolling": 1},
+		"schedule": map[string]any{"times": []string{"04:00"}, "timeZone": "UTC"}, "targets": []map[string]string{{"nodeId": a.node.ID}},
+	}, http.StatusCreated, &task)
+	commands := len(a.runtime.commandsTo(proxy.ServerID))
+	run(t, api, "/api/policies/"+task.ID)
+	got = a.runtime.restarted()[4:]
+	inNetwork := slices.DeleteFunc(slices.Clone(got), func(id string) bool { return id == solo.ServerID })
+	if want := []string{games[0].ServerID, games[1].ServerID, lobby.ServerID, proxy.ServerID}; len(got) != 5 || !slices.Equal(inNetwork, want) {
+		t.Fatalf("restarts = %q", got)
+	}
+	if got := a.runtime.commandsTo(proxy.ServerID)[commands:]; !slices.Equal(got, []string{"send Alex lobby"}) {
+		t.Fatalf("proxy commands = %q", got)
 	}
 }

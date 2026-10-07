@@ -4,6 +4,7 @@
 package template
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -57,6 +58,10 @@ type Settings struct {
 	JVMOptions    []string          `json:"jvmOptions"`
 	CPULimit      float64           `json:"cpuLimit"` // in cores, 0 means no limit
 	Properties    map[string]string `json:"properties"`
+	// StopTimeout is how many seconds the servers get to stop gracefully; 0 means the default.
+	StopTimeout uint32 `json:"stopTimeout"`
+	// TimeZone is an IANA time zone such as Europe/Berlin; empty means UTC.
+	TimeZone string `json:"timeZone"`
 }
 
 // Input is a new or changed template; plugins are Modrinth project IDs.
@@ -160,6 +165,7 @@ func (s *Service) build(ctx context.Context, in Input) (Template, error) {
 		t.Version = "LATEST"
 	}
 	t.RestartPolicy = noryxv1.ParseRestartPolicy(t.RestartPolicy).Slug()
+	t.StopTimeout = stopSeconds(t.StopTimeout)
 	t.JVMOptions = append([]string{}, t.JVMOptions...)
 	if t.Properties == nil {
 		t.Properties = map[string]string{}
@@ -205,6 +211,10 @@ func check(t Template, typ noryxv1.ServerType, in Input) string {
 		return "Choose when the servers start on their own."
 	case t.CPULimit < 0 || t.CPULimit > 1024:
 		return "Enter a CPU limit in cores, or 0 for no limit."
+	case !noryxv1.ValidStopTimeout(t.StopTimeout):
+		return "Give the servers 30 seconds to 10 minutes to stop."
+	case !noryxv1.ValidTimeZone(t.TimeZone):
+		return "Choose a time zone such as Europe/Berlin, or none for UTC."
 	case len(t.JVMOptions) > maxJVMOptions:
 		return "Use at most 32 JVM options."
 	case typ.Proxy() && len(t.Properties) > 0:
@@ -253,7 +263,13 @@ func scan(row scanner) (Template, error) {
 		return t, err
 	}
 	t.Settings, t.Plugins, t.CreatedAt = s.Settings, s.Plugins, time.Unix(createdAt, 0)
+	t.StopTimeout = stopSeconds(t.StopTimeout) // templates saved before they had one
 	return t, nil
+}
+
+// stopSeconds is a stop timeout in seconds; 0 means the default.
+func stopSeconds(seconds uint32) uint32 {
+	return cmp.Or(seconds, uint32(noryxv1.DefaultStopTimeout/time.Second))
 }
 
 func uniqueName(err error, name string) error {

@@ -15,7 +15,8 @@ import (
 	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
-// applyOperationTimeout covers applying a set to many servers and restarting them.
+// applyOperationTimeout covers writing the files of a set on many servers. Restarting them
+// afterwards takes as long as the servers need.
 const applyOperationTimeout = time.Hour
 
 type Handler struct {

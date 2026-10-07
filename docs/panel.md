@@ -6,14 +6,16 @@ How the admin panel is organised, and what works the same on all of its pages.
 
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use, the
 networks, the servers with the most players, and what needs attention: crashing and unhealthy servers, offline nodes,
-nodes with more memory assigned than they can give or almost full storage, nodes whose certificate expires within two
-weeks, proxies that are stopped while their servers run, and backup jobs and schedules whose last run failed. It counts
-like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned against what the
-online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
+nodes with more memory assigned than they can give, servers and nodes beyond a threshold of their usage, e.g. almost
+full storage ([Warnings](monitoring.md#warnings)), nodes whose certificate expires within two weeks, proxies that are
+stopped while their servers run, and backup jobs and schedules whose last run failed. It counts like the **Nodes** page:
+servers that run, not those that start or crash, and the memory assigned against what the online nodes can give their
+servers, after the reserve. Sizes are in binary units (MiB, GiB).
 
 A node's certificate is renewed a month before it expires while the node is online; one that stays offline until then
-has to be connected again with a new join token. The master remembers the expiry of an offline node's certificate as
-long as it runs; after a restart it learns it again once the node is online.
+has to be connected again with a new join token. The master stores when a node's certificate expires as it issues or
+renews it and when the node presents a newer one, so it warns about an offline node also after the master restarted.
+Of a node that was offline when the master was updated to store it, it learns it once the node is online again.
 
 The Overview is made of widgets: key figures, what needs attention, the nodes with their CPU of the last 24 hours, the
 load of all nodes over the last 24 hours, pinned servers, networks, the servers with the most players, the latest
@@ -76,16 +78,16 @@ They do nothing while the focus is in a field or the editor, or while a dialog i
 
 ## Operations
 
-Long actions run as **operations**: creating, copying and changing servers, updating their image, installing plugins on
-many servers, backing up and restoring, and the actions on networks and on many servers at once. The panel shows their
-steps as they go, e.g. how much of a server image is downloaded or how many servers of a network are configured. A
-dialog can't be closed by mistake meanwhile; **Continue in the background** hands the operation to a notification, which
-follows it to its end and links to its result. The operations of the last hour, also those of other users, are in the
-list behind the button next to the warnings. The master runs them in the background: an answer comes right away if the
-action ends within a second, otherwise `202 Accepted` with the operation, which `GET /api/operations/{id}` follows, so
-that neither a closed browser nor a proxy in front of the master cuts it off. The master can't restart while one runs.
-Agents tell the progress of their part, e.g. the bytes of a download, through `ProgressService`; agents of older
-versions only let the panel show the steps.
+Long actions run as **operations**: creating, copying and changing servers, stopping and restarting them, updating their
+image, installing plugins on many servers, backing up and restoring, and the actions on networks and on many servers at
+once. The panel shows their steps as they go, e.g. how much of a server image is downloaded or how many servers of a
+network are configured. A dialog can't be closed by mistake meanwhile; **Continue in the background** hands the
+operation to a notification, which follows it to its end and links to its result. The operations of the last hour, also
+those of other users, are in the list behind the button next to the warnings. The master runs them in the background:
+an answer comes right away if the action ends within a second, otherwise `202 Accepted` with the operation, which
+`GET /api/operations/{id}` follows, so that neither a closed browser nor a proxy in front of the master cuts it off. The
+master can't restart while one runs. Agents tell the progress of their part, e.g. the bytes of a download, through
+`ProgressService`; agents of older versions only let the panel show the steps.
 
 Operations whose steps can stop safely show **Cancel** in their dialog, notification and list: creating and copying
 servers, backing up, installing plugins, applying file sets and the actions on players and on many servers at once
@@ -94,9 +96,11 @@ it, and it ends as **cancelled**; one that was done before it noticed ends as do
 server leaves no server; once a new server has its modpack, it stays, as installing its plugins can't be cancelled. An
 action on many servers begins no more servers, but finishes on those it began, so that e.g. no restart is cut short and
 leaves a server stopped. Applying a file set can be cancelled while it writes the files, but not once it restarts
-servers. Restoring backups, moving servers, changing their settings or image, and the actions on networks and
-datastores can't be cancelled, as they must finish once they began. Whoever started an operation may cancel it, and so
-may others who may do the same, e.g. back up the server; for a file set, those who may change the files of all servers.
+servers. Restoring backups, moving servers, stopping and restarting them, changing their settings or image, and the
+actions on networks and datastores can't be cancelled, as they must finish once they began; only while a stop or
+restart still [warns the players](servers.md#settings-and-images) can it be cancelled, which stops nothing. Whoever started an
+operation may cancel it, and so may others who may do the same, e.g. back up the server; for a file set, those who may
+change the files of all servers.
 
 Actions on many servers tell how they ended on each: installing plugins, applying a file set, and the actions on players
 and on many servers at once. **Retry the failed ones** tries the same again on the servers where it failed.

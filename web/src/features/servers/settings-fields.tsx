@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { gameVersionsQuery } from "@/features/plugins/api"
-import { formatMegabytes } from "@/lib/format"
-import { locale, msg } from "@/lib/i18n"
+import { formatMegabytes, formatSeconds } from "@/lib/format"
+import { msg } from "@/lib/i18n"
 import type { RestartPolicy } from "./api"
 import { containerMemoryMb, memoryOptionsMb } from "./server-types"
 
@@ -182,19 +182,21 @@ export function JvmOptionsField({ value, onChange }: { value: string; onChange: 
 
 const stopTimeouts = [30, 60, 120, 180, 300, 600]
 
-/** Formats a stop timeout in seconds, e.g. "30 seconds" or "2 minutes". */
-function formatStopTimeout(seconds: number) {
-  const [unit, value] = seconds % 60 === 0 ? ["minute", seconds / 60] : ["second", seconds]
-  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long" }).format(value)
-}
-
 /** How long a server may take to stop, from 30 seconds to 10 minutes. */
-export function StopTimeoutField({ value, onChange }: { value: number; onChange: (seconds: number) => void }) {
+export function StopTimeoutField({
+  id = "settings-stop-timeout",
+  value,
+  onChange,
+}: {
+  id?: string
+  value: number
+  onChange: (seconds: number) => void
+}) {
   return (
     <Field>
-      <FieldLabel htmlFor="settings-stop-timeout">{t("Stop timeout")}</FieldLabel>
+      <FieldLabel htmlFor={id}>{t("Stop timeout")}</FieldLabel>
       <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
-        <SelectTrigger id="settings-stop-timeout" className="w-full sm:w-64">
+        <SelectTrigger id={id} className="w-full sm:w-64">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -202,7 +204,7 @@ export function StopTimeoutField({ value, onChange }: { value: number; onChange:
             .sort((a, b) => a - b)
             .map((seconds) => (
               <SelectItem key={seconds} value={String(seconds)}>
-                {formatStopTimeout(seconds)}
+                {formatSeconds(seconds)}
                 {seconds === 60 && <span className="text-muted-foreground">{t("Default")}</span>}
               </SelectItem>
             ))}
@@ -215,11 +217,19 @@ export function StopTimeoutField({ value, onChange }: { value: number; onChange:
   )
 }
 
-export function TimeZoneField({ value, onChange }: { value: string; onChange: (zone: string) => void }) {
+export function TimeZoneField({
+  id = "settings-time-zone",
+  value,
+  onChange,
+}: {
+  id?: string
+  value: string
+  onChange: (zone: string) => void
+}) {
   return (
     <Field>
-      <FieldLabel htmlFor="settings-time-zone">{t("Time zone")}</FieldLabel>
-      <TimeZonePicker id="settings-time-zone" value={value} onChange={onChange} className="w-full sm:w-72" />
+      <FieldLabel htmlFor={id}>{t("Time zone")}</FieldLabel>
+      <TimeZonePicker id={id} value={value} onChange={onChange} className="w-full sm:w-72" />
       <FieldDescription>{t("The time of the server's log and of plugins that work with times, e.g. for daily rewards.")}</FieldDescription>
     </Field>
   )

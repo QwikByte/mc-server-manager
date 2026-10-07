@@ -27,7 +27,7 @@ func TestHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s, ctx := NewStore(db, nil), t.Context()
+	s, ctx := NewStore(db, nil, nil), t.Context()
 	step := 5 * time.Minute
 	start := time.Now().Truncate(step).Add(-step)
 	for i, players := range []uint32{3, 7} {
@@ -91,7 +91,7 @@ func TestAddLimits(t *testing.T) {
 		id := strings.Map(func(r rune) rune { return 'a' + r - '0' }, fmt.Sprintf("%026d", i)) // digits as letters
 		stats.Servers = append(stats.Servers, &noryxv1.ServerStats{Id: id, Running: true})
 	}
-	if err := NewStore(db, nil).add(t.Context(), "n1", time.Now(), stats); err != nil {
+	if err := NewStore(db, nil, nil).add(t.Context(), "n1", time.Now(), stats); err != nil {
 		t.Fatal(err)
 	}
 	var servers, lobbies int

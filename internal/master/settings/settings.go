@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/https"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/usage"
 	"github.com/QwikByte/noryx/internal/pki"
 )
 
@@ -31,9 +33,15 @@ const (
 	minJoinTokenMinutes = 5
 	maxJoinTokenMinutes = 24 * 60
 	maxLogDays          = 365
+	minLogSizeMB        = 100
+	maxLogSizeMB        = 100 << 10 // 100 GiB
+	maxMFAGroups        = 100
 )
 
-var hostname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
+var (
+	hostname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
+	groupID  = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
+)
 
 // Settings are the settings of the master.
 type Settings struct {
@@ -58,13 +66,30 @@ type Settings struct {
 	NodeDefaults node.Limits `json:"nodeDefaults"`
 	// LogDays is how long log entries are kept.
 	LogDays int `json:"logDays"`
+	// LogSizeMB is how many MiB the log may take at most; the oldest entries beyond it are
+	// deleted before their time, so that agents can't fill the disk.
+	LogSizeMB int `json:"logSizeMb"`
 	// CheckUpdates makes the master look for new releases, which administrators can install.
 	CheckUpdates bool `json:"checkUpdates"`
+	// RequireMFA tells who has to use two-factor authentication.
+	RequireMFA MFARequirement `json:"requireMfa"`
+	// Thresholds tell when the usage of nodes and servers warns, unless they have their own.
+	Thresholds usage.Defaults `json:"thresholds"`
+}
+
+// MFARequirement tells who has to use two-factor authentication: all users, or the members
+// of the groups it names by their IDs. Groups that don't exist (any more) have no members.
+type MFARequirement struct {
+	All    bool     `json:"all"`
+	Groups []string `json:"groups"`
 }
 
 // defaults apply until the settings are changed, and to settings added later.
 func defaults() Settings {
-	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, CheckUpdates: true}
+	return Settings{
+		SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true,
+		RequireMFA: MFARequirement{Groups: []string{}}, Thresholds: usage.DefaultThresholds(),
+	}
 }
 
 // Master describes the running master. Apart from its certificates, it only changes with a restart.
@@ -119,12 +144,14 @@ func Load(ctx context.Context, db *sql.DB, master Master, cert *pki.Holder) (*Se
 	return s, nil
 }
 
-// Get returns a copy of the current settings, also of the limits they point to, so that
-// changing it, e.g. by decoding a request into it, leaves the current settings as they are.
+// Get returns a copy of the current settings, also of the limits and thresholds they point to,
+// so that changing it, e.g. by decoding a request into it, leaves the current settings as they are.
 func (s *Service) Get() Settings {
 	st := *s.current.Load()
 	l := &st.NodeDefaults
 	l.PortMin, l.PortMax, l.MemoryReserveMB = clone(l.PortMin), clone(l.PortMax), clone(l.MemoryReserveMB)
+	st.RequireMFA.Groups = slices.Clone(st.RequireMFA.Groups)
+	st.Thresholds = st.Thresholds.Clone()
 	return st
 }
 
@@ -140,6 +167,11 @@ func clone[T any](p *T) *T {
 func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
 	next.EnrollAddr, next.PanelAddr = strings.TrimSpace(next.EnrollAddr), strings.TrimSpace(next.PanelAddr)
 	next.PanelDomain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(next.PanelDomain), "."))
+	if next.RequireMFA.All || next.RequireMFA.Groups == nil {
+		next.RequireMFA.Groups = []string{}
+	}
+	slices.Sort(next.RequireMFA.Groups)
+	next.RequireMFA.Groups = slices.Compact(next.RequireMFA.Groups)
 	err := validate(next, cmp.Or(next.PanelAddr, s.master.PanelDefaultAddr))
 	if err == nil && next.PanelAddr != "" && next.PanelAddr != s.Get().PanelAddr {
 		err = s.checkPanelAddr(next.PanelAddr)
@@ -232,13 +264,19 @@ func (s *Service) JoinTokenTTL() time.Duration {
 // NodeDefaults implements node.Config.
 func (s *Service) NodeDefaults() node.Limits { return s.Get().NodeDefaults }
 
-// LogRetention is how long log entries are kept.
+// LogRetention implements logs.Config.
 func (s *Service) LogRetention() time.Duration {
 	return time.Duration(s.Get().LogDays) * 24 * time.Hour
 }
 
+// LogMaxSize implements logs.Config.
+func (s *Service) LogMaxSize() int64 { return int64(s.Get().LogSizeMB) << 20 }
+
 // CheckUpdates implements update.Config.
 func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
+
+// Thresholds implements usage.Config.
+func (s *Service) Thresholds() usage.Defaults { return s.Get().Thresholds }
 
 // SessionTTL is how long new sign-ins to the panel last.
 func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().SessionHours) * time.Hour }
@@ -267,8 +305,12 @@ func validate(s Settings, panelAddr string) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a join token validity from %d to %d minutes.", minJoinTokenMinutes, maxJoinTokenMinutes)
 	case s.LogDays < 1 || s.LogDays > maxLogDays:
 		return httpapi.Errorf(http.StatusBadRequest, "Enter how long log entries are kept, from 1 to %d days.", maxLogDays)
+	case s.LogSizeMB < minLogSizeMB || s.LogSizeMB > maxLogSizeMB:
+		return httpapi.Errorf(http.StatusBadRequest, "Enter how large the log may grow, from %d to %d MiB.", minLogSizeMB, maxLogSizeMB)
+	case len(s.RequireMFA.Groups) > maxMFAGroups || slices.ContainsFunc(s.RequireMFA.Groups, func(id string) bool { return !groupID.MatchString(id) }):
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d groups that have to use two-factor authentication.", maxMFAGroups)
 	}
-	return s.NodeDefaults.Validate()
+	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate())
 }
 
 // validAddr accepts host:port with a port from 1 to 65535 and a host that validHost accepts.

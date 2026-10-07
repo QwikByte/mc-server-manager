@@ -2,9 +2,13 @@ package e2e
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/network"
+	"github.com/QwikByte/noryx/internal/master/settings"
+	"github.com/QwikByte/noryx/internal/master/usage"
 )
 
 func TestUsage(t *testing.T) {
@@ -32,4 +36,61 @@ func TestUsage(t *testing.T) {
 	}
 	api.do("GET", "/api/nodes/"+lobby.NodeID+"/servers/"+lobby.ServerID+"/usage/history?range=week", nil, http.StatusOK, nil)
 	api.do("GET", "/api/nodes/"+lobby.NodeID+"/usage/history?range=year", nil, http.StatusBadRequest, nil)
+}
+
+// Servers and nodes have the thresholds of the settings unless they have their own, which only
+// those who may change their settings or the node change.
+func TestUsageThresholds(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	api := apiClient{t: t, url: m.panel(t).URL}
+	server := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID + "/usage/thresholds"
+	node := "/api/nodes/" + lobby.NodeID + "/usage/thresholds"
+	type view struct{ Own, Defaults usage.Thresholds }
+	thresholds := func(c apiClient, method, path string, in any) (v view) {
+		c.do(method, path, in, http.StatusOK, &v)
+		return v
+	}
+
+	v := thresholds(api, "GET", server, nil)
+	if len(v.Own) != 0 || v.Defaults[usage.CPU].Value != 90 || v.Defaults[usage.TPS].Value != 15 {
+		t.Fatalf("thresholds of the lobby = %+v", v)
+	}
+	thresholds(api, "PUT", server, usage.Thresholds{usage.CPU: {Value: 95, Minutes: 15}})
+	if v := thresholds(api, "GET", server, nil); v.Own[usage.CPU].Value != 95 || v.Own[usage.CPU].Minutes != 15 || len(v.Own) != 1 {
+		t.Fatalf("own thresholds of the lobby = %+v", v.Own)
+	}
+	api.do("PUT", server, usage.Thresholds{usage.Storage: {Value: 90}}, http.StatusBadRequest, nil)
+	api.do("PUT", "/api/nodes/"+lobby.NodeID+"/servers/"+strings.Repeat("a", 26)+"/usage/thresholds", usage.Thresholds{}, http.StatusNotFound, nil)
+	if v := thresholds(api, "PUT", node, usage.Thresholds{usage.Storage: {Value: 80}}); len(v.Own) != 1 || v.Own[usage.Storage].Value != 80 || v.Defaults[usage.Storage].Value != 90 {
+		t.Fatalf("thresholds of the node = %+v", v)
+	}
+	api.do("PUT", "/api/nodes/unknown/usage/thresholds", usage.Thresholds{}, http.StatusNotFound, nil)
+
+	// The defaults are settings of the master.
+	var s struct{ Settings settings.Settings }
+	api.do("GET", "/api/settings", nil, http.StatusOK, &s)
+	s.Settings.Thresholds.Servers[usage.TPS] = usage.Threshold{Value: 25, Minutes: 5}
+	api.do("PUT", "/api/settings", s.Settings, http.StatusBadRequest, nil)
+	s.Settings.Thresholds.Servers[usage.TPS] = usage.Threshold{Value: 18, Minutes: 5}
+	api.do("PUT", "/api/settings", s.Settings, http.StatusOK, nil)
+	if v := thresholds(api, "GET", server, nil); v.Defaults[usage.TPS].Value != 18 {
+		t.Fatalf("defaults of servers = %+v", v.Defaults)
+	}
+
+	viewer := m.withGrants(t, map[string]any{"name": "Viewers", "permissions": []string{"servers.view", "nodes.view"}, "allServers": true})
+	viewer.do("GET", server, nil, http.StatusOK, nil)
+	viewer.do("GET", node, nil, http.StatusOK, nil)
+	viewer.do("PUT", server, usage.Thresholds{}, http.StatusForbidden, nil)
+	viewer.do("PUT", node, usage.Thresholds{}, http.StatusForbidden, nil)
+	if body := viewer.do("GET", "/api/usage/warnings", nil, http.StatusOK, nil); body != "[]\n" {
+		t.Errorf("warnings = %s", body)
+	}
+	editor := m.withGrants(t, map[string]any{"name": "Lobby", "permissions": []string{"servers.view", "servers.settings"}, "targets": []network.Ref{lobby}})
+	if v := thresholds(editor, "PUT", server, usage.Thresholds{}); len(v.Own) != 0 {
+		t.Fatalf("own thresholds of the lobby = %+v", v.Own)
+	}
+	editor.do("GET", node, nil, http.StatusForbidden, nil)
+	editor.do("PUT", node, usage.Thresholds{}, http.StatusForbidden, nil)
 }

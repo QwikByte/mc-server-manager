@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { ApiError, api } from "@/lib/api"
 import { chooseLanguage } from "@/lib/i18n"
 import { forgetCommandHistories, ownCommandHistories } from "@/lib/use-command-history"
 
@@ -8,7 +8,14 @@ export interface User {
   username: string
   /** The language of the panel the user chose, e.g. de; missing follows the browser. */
   language?: string
+  /** Whether signing in needs a code of an authenticator app too. */
+  mfa: boolean
+  /** Set while the settings require two-factor authentication of the user, who hasn't set it up yet. */
+  mustSetUpMfa?: boolean
 }
+
+/** Whether the master refused a request because the user has to set up two-factor authentication first. */
+export const mustSetUpMfa = (error: unknown) => error instanceof ApiError && error.code === "mfa-setup-required"
 
 export const meQuery = queryOptions({
   queryKey: ["me"],
@@ -81,13 +88,19 @@ export function useSetup() {
 
 /** Changes the signed-in user's password; the user's other sessions end. */
 export function useChangePassword() {
-  return useMutation({ mutationFn: (input: { current: string; new: string }) => api("/auth/password", { method: "PUT", body: input }) })
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { current: string; new: string }) => api("/auth/password", { method: "PUT", body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sessionsQuery.queryKey }),
+  })
 }
 
 export interface MfaStatus {
   enabled: boolean
   /** How many unused recovery codes are left. */
   recoveryCodes: number
+  /** Whether the settings require two-factor authentication of the user. */
+  required: boolean
 }
 
 /** A new secret for an authenticator app; uri is what its QR code contains. */
@@ -102,10 +115,19 @@ export function useSetUpMfa() {
   return useMutation({ mutationFn: () => api<MfaSetup>("/auth/mfa/setup", { method: "POST" }) })
 }
 
-/** The changes of two-factor authentication need the password; some return new recovery codes. */
+/**
+ * The changes of two-factor authentication need the password; some return new recovery codes. Turning it on
+ * or off changes the user, e.g. whether it has to be set up, and turning it on ends the other sessions.
+ */
 function useMfaChange<T, R>(mutationFn: (input: T) => Promise<R>) {
   const queryClient = useQueryClient()
-  return useMutation({ mutationFn, onSuccess: () => queryClient.invalidateQueries({ queryKey: mfaQuery.queryKey }) })
+  return useMutation({
+    mutationFn,
+    onSuccess: () =>
+      Promise.all(
+        [mfaQuery.queryKey, meQuery.queryKey, sessionsQuery.queryKey].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      ),
+  })
 }
 
 /** Turns on two-factor authentication with a code of the app set up; the user's other sessions end. */
@@ -116,3 +138,31 @@ export const useDisableMfa = () => useMfaChange((password: string) => api("/auth
 
 export const useNewRecoveryCodes = () =>
   useMfaChange((password: string) => api<{ recoveryCodes: string[] }>("/auth/mfa/recovery-codes", { body: { password } }))
+
+/** A session of the signed-in user, i.e. a browser where they are signed in. */
+export interface Session {
+  /** Names the session; it can't sign in. */
+  id: string
+  /** Missing for sessions that started before the master noted it. */
+  createdAt?: string
+  /** Missing for such sessions that weren't used since. */
+  lastUsedAt?: string
+  expiresAt: string
+  /** The address, browser and operating system it was used from last, as far as the master recognised them. */
+  ip?: string
+  browser?: string
+  os?: string
+  /** The session of this browser. */
+  current: boolean
+}
+
+export const sessionsQuery = queryOptions({ queryKey: ["sessions"], queryFn: () => api<Session[]>("/auth/sessions") })
+
+/** Ends one session of the user, or without an ID all but the current one. Ending sessions needs no password. */
+export function useEndSessions() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id?: string) => api(id ? `/auth/sessions/${encodeURIComponent(id)}` : "/auth/sessions", { method: "DELETE" }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: sessionsQuery.queryKey }),
+  })
+}

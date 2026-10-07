@@ -44,29 +44,60 @@ func TestDeleteForgetsEverything(t *testing.T) {
 }
 
 // An agent that doesn't know the stop timeout and the time zone yet leaves them out of its
-// answer, which the panel then shows as a warning.
-func TestUpdateWarnsOfOlderAgents(t *testing.T) {
+// answer when a server is created or changed, which the panel then shows as a warning.
+func TestWarnsOfOlderAgents(t *testing.T) {
 	h := NewHandler(fakeNodes{conn: olderAgent{}}, fakeNetworks{}, nil, nil, nil, operation.New(time.Second), NewMoves(), nil)
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/nodes/{node}/servers", h.create)
 	mux.HandleFunc("PUT /api/nodes/{node}/servers/{id}", h.update)
-	for body, warns := range map[string]bool{
-		`{"name": "Lobby", "memoryMb": 1024, "port": 25565}`:                           false,
-		`{"name": "Lobby", "memoryMb": 1024, "port": 25565, "stopTimeout": 60}`:        false,
-		`{"name": "Lobby", "memoryMb": 1024, "port": 25565, "stopTimeout": 300}`:       true,
-		`{"name": "Lobby", "memoryMb": 1024, "port": 25565, "timeZone": "Asia/Tokyo"}`: true,
+	for _, req := range []struct{ method, path, body string }{
+		{http.MethodPost, "/api/nodes/n1/servers", `"type": "paper", "acceptEula": true, `},
+		{http.MethodPut, "/api/nodes/n1/servers/s1", ""},
 	} {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/nodes/n1/servers/s1", strings.NewReader(body)))
-		var res struct {
-			StopTimeout uint32
-			TimeZone    string
-			Warning     string
+		for settings, warns := range map[string]bool{
+			``:                           false,
+			`, "stopTimeout": 60`:        false,
+			`, "stopTimeout": 300`:       true,
+			`, "timeZone": "Asia/Tokyo"`: true,
+		} {
+			body := `{` + req.body + `"name": "Lobby", "memoryMb": 1024, "port": 25565` + settings + `}`
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(req.method, req.path, strings.NewReader(body)))
+			var res struct {
+				StopTimeout uint32
+				TimeZone    string
+				Warning     string
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil || rec.Code >= 300 {
+				t.Fatalf("%s %s: status %d: %s", req.method, body, rec.Code, rec.Body)
+			}
+			if res.StopTimeout != 60 || res.TimeZone != "" || (res.Warning != "") != warns {
+				t.Errorf("%s %s: %+v", req.method, body, res)
+			}
 		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil || rec.Code != http.StatusOK {
-			t.Fatalf("%s: status %d: %s", body, rec.Code, rec.Body)
-		}
-		if res.StopTimeout != 60 || res.TimeZone != "" || (res.Warning != "") != warns {
-			t.Errorf("%s: %+v", body, res)
+	}
+}
+
+// Stopping and restarting a server are operations, which answer like a request when they end
+// quickly, and otherwise right away; the operation follows the stop.
+func TestStopAndRestartAreOperations(t *testing.T) {
+	for _, quick := range []time.Duration{time.Minute, 0} {
+		ops := operation.New(quick)
+		h := NewHandler(fakeNodes{}, fakeNetworks{}, nil, nil, nil, ops, NewMoves(), nil)
+		mux := http.NewServeMux()
+		for _, action := range []string{"stop", "restart"} {
+			mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/"+action, h.power(action))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/nodes/n1/servers/s1/"+action, nil))
+			var op operation.Operation
+			switch {
+			case quick > 0 && rec.Code != http.StatusNoContent:
+				t.Errorf("%s: status %d: %s", action, rec.Code, rec.Body)
+			case quick == 0 && (rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &op) != nil):
+				t.Errorf("%s: status %d: %s", action, rec.Code, rec.Body)
+			case quick == 0 && (op.Kind != "server."+action || op.ServerID != "s1" || len(op.Steps) != 1 || op.Steps[0] != action || op.Cancellable):
+				t.Errorf("%s: %+v", action, op)
+			}
 		}
 	}
 }
@@ -140,6 +171,8 @@ func (olderAgent) Invoke(_ context.Context, _ string, _, reply any, _ ...grpc.Ca
 	switch reply := reply.(type) {
 	case *noryxv1.ListServersResponse:
 		reply.Servers = []*noryxv1.Server{srv}
+	case *noryxv1.CreateServerResponse:
+		reply.Server = srv
 	case *noryxv1.UpdateServerResponse:
 		reply.Server = srv
 	}

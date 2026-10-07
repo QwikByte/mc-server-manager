@@ -23,7 +23,7 @@ const (
 )
 
 // Status asks the agent for its machine info. It also returns the certificate the
-// agent presented, whose expiry drives the automatic renewal, and remembers its expiry.
+// agent presented, whose expiry drives the automatic renewal, and stores its expiry.
 func (s *Service) Status(ctx context.Context, id string) (*noryxv1.GetInfoResponse, *x509.Certificate, error) {
 	conn, err := s.Conn(ctx, id)
 	if err != nil {
@@ -39,26 +39,32 @@ func (s *Service) Status(ctx context.Context, id string) (*noryxv1.GetInfoRespon
 		return nil, nil, errors.New("the agent presented no certificate")
 	}
 	cert := tlsInfo.State.PeerCertificates[0]
-	s.seen(id, cert)
+	s.seen(ctx, id, cert.NotAfter)
 	return info, cert, nil
 }
 
-// CertificateExpiry returns when the certificate a node last presented expires, also while
-// the node is offline, unless the master didn't reach it since it started.
-func (s *Service) CertificateExpiry(id string) (time.Time, bool) {
+// seen stores when a certificate of a node expires, so that it is known while the node is
+// offline, also after a restart. Newer certificates expire later, so the stored expiry only
+// moves forward: neither a call that started before a renewal nor a node that presents an
+// older certificate brings back an earlier one.
+func (s *Service) seen(ctx context.Context, id string, notAfter time.Time) {
+	s.mu.Lock()
+	stored := s.expiries[id]
+	s.mu.Unlock()
+	if !notAfter.After(stored) {
+		return
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE nodes SET certificate_expires_at = max(coalesce(certificate_expires_at, 0), ?) WHERE id = ?`,
+		notAfter.Unix(), id)
+	if err != nil {
+		slog.Warn("Can't store when the certificate of a node expires", logging.Nodes, logging.KeyNode, id, "err", err)
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	expiry, ok := s.expiries[id]
-	return expiry, ok
-}
-
-// seen remembers when a certificate of a node expires. Newer certificates expire later, so
-// a call that started before a renewal can't bring back the old expiry.
-func (s *Service) seen(id string, cert *x509.Certificate) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if cert.NotAfter.After(s.expiries[id]) {
-		s.expiries[id] = cert.NotAfter
+	if rowsAffected(res) == 1 && notAfter.After(s.expiries[id]) { // not for a node removed meanwhile
+		s.expiries[id] = notAfter
 	}
 }
 
@@ -88,7 +94,7 @@ func (s *Service) RenewCertificate(ctx context.Context, id string) (*x509.Certif
 	s.retire(id)
 	cert, err := x509.ParseCertificate(der)
 	if err == nil {
-		s.seen(id, cert)
+		s.seen(ctx, id, cert.NotAfter)
 	}
 	return cert, err
 }

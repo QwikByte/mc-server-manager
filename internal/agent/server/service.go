@@ -19,7 +19,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	_ "time/tzdata" // so that time zones are known on nodes without a database of them
 	"unicode"
 
 	"google.golang.org/grpc/codes"
@@ -83,8 +82,6 @@ var (
 	codeProperty   = regexp.MustCompile(`(?i)^(log4j|(java|javax|jdk|sun|com\.sun|jvmci|jna|logback|org\.apache\.logging)\.)`)
 	safeProperties = []string{"java.awt.headless", "java.net.preferIPv4Stack", "java.net.preferIPv6Addresses", "sun.stdout.encoding", "sun.stderr.encoding", "log4j2.formatMsgNoLookups"}
 	javaVersions   = []string{"", "8", "11", "17", "21", "25"}
-	// Names of IANA time zones, e.g. Europe/Berlin, America/Port-au-Prince or Etc/GMT+5.
-	timeZonePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_+/-]{0,63}$`)
 )
 
 type Service struct {
@@ -104,9 +101,10 @@ type Backups interface {
 
 // Overlay publishes the ports of backends in the private network of the nodes.
 type Overlay interface {
-	// Admit lets client, the address in the network of the node of a server's proxy, reach
-	// the server's port there, and returns the node's address in the network.
-	Admit(id string, port uint32, clients ...string) (string, error)
+	// Admit lets clients, the address in the network of the node of a server's proxy, reach
+	// the server's port there as long as its peer has its key, the one the master sent or
+	// else the one it has now, and returns the node's address in the network.
+	Admit(id string, port uint32, clients, keys []string) (string, error)
 	// Dismiss closes the port of a server in the network.
 	Dismiss(id string) error
 }
@@ -476,7 +474,7 @@ func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNe
 		return nil, err
 	}
 	defer release()
-	if network.Overlay, err = s.publish(ctx, req.GetId(), req.GetOverlayClient()); err != nil {
+	if network.Overlay, err = s.publish(ctx, req.GetId(), req.GetOverlayClient(), req.GetOverlayClientKey()); err != nil {
 		return nil, err
 	}
 	restarted, err := s.rt.Configure(ctx, req.GetId(), network)
@@ -514,9 +512,10 @@ func (s *Service) checkBedrock(ctx context.Context, id string, port uint32) (rel
 }
 
 // networkOf validates a network configuration, which ends up in configuration files.
-// publish lets the client of a backend reach its port in the private network of the nodes,
-// and returns the node's address there; without a client, it closes the port there.
-func (s *Service) publish(ctx context.Context, id, client string) (string, error) {
+// publish lets the client of a backend, the peer with key if one is given, reach its port in
+// the private network of the nodes, and returns the node's address there; without a client,
+// it closes the port there.
+func (s *Service) publish(ctx context.Context, id, client, key string) (string, error) {
 	if client == "" {
 		return "", toStatus(s.overlay.Dismiss(id))
 	}
@@ -527,7 +526,11 @@ func (s *Service) publish(ctx context.Context, id, client string) (string, error
 	if srv.Type.Proxy() {
 		return "", status.Error(codes.InvalidArgument, "Players reach a proxy at all of the node's addresses.")
 	}
-	addr, err := s.overlay.Admit(id, srv.Port, client)
+	var keys []string
+	if key != "" {
+		keys = []string{key}
+	}
+	addr, err := s.overlay.Admit(id, srv.Port, []string{client}, keys)
 	if status.Code(err) == codes.Unknown {
 		err = status.Error(codes.FailedPrecondition, err.Error())
 	}
@@ -637,7 +640,6 @@ func (s *Service) apply(ctx context.Context, id string, op func(context.Context,
 // the number of CPU cores of the node, or 0 if unknown.
 func checkSettings(spec runtime.Spec, cpus uint32) string {
 	_, knownPolicy := noryxv1.RestartPolicy_name[int32(spec.RestartPolicy)]
-	stop := noryxv1.StopTimeout(spec.StopTimeout)
 	switch {
 	case !namePattern.MatchString(spec.Name):
 		return "Use 1-32 letters, digits, spaces, '.', '_' or '-' for the name."
@@ -663,9 +665,9 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 		return "Give the server at least 0.1 CPU cores, or no limit."
 	case cpus > 0 && spec.CPUMillis > cpus*1000:
 		return fmt.Sprintf("The node has %d CPU cores.", cpus)
-	case stop < noryxv1.MinStopTimeout || stop > noryxv1.MaxStopTimeout:
+	case !noryxv1.ValidStopTimeout(spec.StopTimeout):
 		return fmt.Sprintf("Give the server %.0f seconds to %.0f minutes to stop.", noryxv1.MinStopTimeout.Seconds(), noryxv1.MaxStopTimeout.Minutes())
-	case !validTimeZone(spec.TimeZone):
+	case !noryxv1.ValidTimeZone(spec.TimeZone):
 		return "Choose a time zone such as Europe/Berlin, or none for UTC."
 	}
 	for _, option := range spec.JVMOptions {
@@ -687,16 +689,6 @@ func checkJVMOption(option string) string {
 		return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
 	}
 	return ""
-}
-
-// validTimeZone reports whether tz is empty, for UTC, or names an IANA time zone. It ends up
-// in a variable of the image, so it has no other characters than the names of zones.
-func validTimeZone(tz string) bool {
-	if tz == "" {
-		return true
-	}
-	_, err := time.LoadLocation(tz)
-	return err == nil && tz != "Local" && timeZonePattern.MatchString(tz)
 }
 
 // refusedOptions returns the JVM options of a server that are refused now, as they were set

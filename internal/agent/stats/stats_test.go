@@ -87,12 +87,16 @@ func TestListed(t *testing.T) {
 // its console tells its players.
 func TestPlayersBehindProxy(t *testing.T) {
 	rt := consoleRuntime{out: "There are 2 of a max of 50 players online: Alex, Steve"}
-	srv := runtime.Server{Spec: runtime.Spec{ID: "game", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, Port: unusedPort(t), BehindProxy: true},
+	srv := runtime.Server{Spec: runtime.Spec{ID: "game", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, Port: unusedPort(t), BehindProxy: true, CPUMillis: 1500},
 		State: noryxv1.ServerState_SERVER_STATE_RUNNING}
 	var st serverState
-	players := st.measure(t.Context(), rt, srv, time.Now()).GetPlayers()
+	stats := st.measure(t.Context(), rt, srv, time.Now())
+	players := stats.GetPlayers()
 	if players.GetOnline() != 2 || players.GetMax() != 50 || strings.Join(players.GetNames(), ",") != "Alex,Steve" {
 		t.Fatalf("players = %v", players)
+	}
+	if stats.GetCpuLimitMillis() != 1500 {
+		t.Errorf("CPU limit = %d", stats.GetCpuLimitMillis())
 	}
 }
 

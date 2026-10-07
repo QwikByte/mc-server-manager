@@ -1,9 +1,12 @@
 package settings
 
 import (
+	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
+	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
@@ -52,6 +55,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
+	}
+	if m := updated.RequireMFA; m.All != cur.RequireMFA.All || !slices.Equal(m.Groups, cur.RequireMFA.Groups) {
+		logging.Note(r.Context(), slog.Bool("mfa_required_all", m.All), slog.Any("mfa_required_groups", m.Groups))
 	}
 	httpapi.WriteJSON(w, http.StatusOK, view{updated, h.svc.Master()})
 }
