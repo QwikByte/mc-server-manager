@@ -56,7 +56,7 @@ export function CrashNotice({ server, nodeId, canReadFiles }: { server: Server; 
   // Game servers write a report of each crash of Minecraft itself.
   const reports = canReadFiles && !serverType(server.type).proxy && (
     <Trans
-      i18nKey="Their <link>crash reports</link> may tell more."
+      i18nKey="Its <link>crash reports</link> may tell more."
       components={{
         link: (
           <Link
@@ -73,8 +73,8 @@ export function CrashNotice({ server, nodeId, canReadFiles }: { server: Server; 
     return (
       <Callout tone="warning" icon={WarningIcon} role="alert" className="mb-6" title={t("{{name}} is unhealthy", { name: server.name })}>
         <p>
-          {t("It runs, but its health check fails, e.g. as it hangs or doesn't answer players. The console shows what it does.")}{" "}
-          {t("If it doesn't recover, restart it.")} {reports}
+          {t("It runs, but its health check fails, e.g. as it hangs or doesn't answer players. The console shows what it does; if it doesn't recover, restart it.")}{" "}
+          {reports}
         </p>
       </Callout>
     )

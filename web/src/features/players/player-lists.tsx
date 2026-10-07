@@ -13,6 +13,7 @@ import { findServer } from "@/features/networks/servers"
 import { allServersQuery } from "@/features/servers/api"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { msg } from "@/lib/i18n"
+import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 import { needs, playerActions } from "./actions"
 import { type Listed, type PlayerAction, type PlayerLists, playerListsQuery } from "./api"
@@ -176,7 +177,8 @@ function ListRow({
   remove: (typeof playerActions)[PlayerAction]
 }) {
   // A temporary ban that ended stays in the list until the server lets the player join again.
-  const ended = entry.until !== undefined && Date.parse(entry.until) <= Date.now()
+  const now = useNow(entry.until !== undefined, 60_000)
+  const ended = entry.until !== undefined && Date.parse(entry.until) <= now
   return (
     <TableRow className={cn(ended && "text-muted-foreground")}>
       <TableCell className="pl-4 font-mono font-medium">
