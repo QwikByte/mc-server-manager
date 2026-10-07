@@ -195,7 +195,7 @@ func (s *Service) Install(ctx context.Context, projects []string, chosen map[str
 	for i, ref := range servers {
 		wg.Go(func() {
 			installed, err := run.install(ctx, ref, projects)
-			results[i] = Result{Ref: ref, Installed: installed}
+			results[i] = Result{Ref: ref, Installed: append([]Installed{}, installed...)} // a list also if nothing was
 			if err != nil {
 				results[i].Error = httpapi.Message(err)
 			}
