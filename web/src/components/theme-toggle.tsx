@@ -39,11 +39,11 @@ export function ThemeToggle({ className }: { className?: string }) {
   )
 }
 
-/** The colour themes as items of a menu. */
-export function ThemeChoices() {
+/** The colour themes as items of a menu. onChoose stores the choice, e.g. for the signed-in user. */
+export function ThemeChoices({ onChoose = setTheme }: { onChoose?: (theme: Theme) => void }) {
   const theme = useTheme()
   return (
-    <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as Theme)}>
+    <DropdownMenuRadioGroup value={theme} onValueChange={(value) => onChoose(value as Theme)}>
       {options.map(({ value, label, icon: Icon }) => (
         <DropdownMenuRadioItem key={value} value={value}>
           <Icon weight="duotone" />

@@ -34,6 +34,17 @@ jobs and schedules), each with its parts as tabs, and the log and settings at it
 holds their account, the colour theme, the language and signing out. The sidebar folds to its icons, which each browser
 remembers. Lists, figures, charts, tabs and pages are animated, unless the operating system asks for less motion.
 
+## Settings of each user
+
+Each user chooses on their account page, in the menu of their name, the colour theme, whether times have 24 or 12 hours
+and the language of the panel; the menu itself offers the colour theme and the language too. The master keeps these
+choices for each user, as well as the view, sort and grouping of server lists chosen last, so that they apply in all
+their browsers. Each browser remembers the colour theme and the clock it showed last and uses them until someone signs
+in; what a user never chose follows the browser. `GET /api/preferences` returns a user's settings with the layout of
+their overview and their pinned servers, and `PATCH /api/preferences/settings` changes some of them, e.g.
+`{"theme": "dark"}`, or takes one back to the browser's with `null`. The master refuses settings and values it doesn't
+know.
+
 ## Search
 
 **Ctrl+K** (⌘K) or `/` searches servers, also by tag, players online, networks, nodes and pages from anywhere in the
@@ -73,7 +84,8 @@ versions only let the panel show the steps.
 
 ## Languages
 
-The panel speaks English and German. It follows the browser until someone chooses a language in the menu of their name,
-which the panel stores for the signed-in user, so that it applies in all their browsers; on the sign-in page, the button
-next to the colour theme chooses it for the browser. Dates, times and numbers follow the language too. What the master
-and the agents send, such as errors, the log and the descriptions of permissions, stays English.
+The panel speaks English and German. It follows the browser until someone chooses a language in the menu of their name
+or on their account page, which the panel stores for the signed-in user, so that it applies in all their browsers; on
+the sign-in page, the button next to the colour theme chooses it for the browser. Dates, times and numbers follow the
+language too. What the master and the agents send, such as errors, the log and the descriptions of permissions, stays
+English.

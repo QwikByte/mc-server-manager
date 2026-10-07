@@ -107,10 +107,11 @@ The **Servers** page and the page of each node list servers as cards or as a com
 until one is chosen. They are searched, filtered by state, type, node, network and tag, sorted by name, state, players,
 CPU, memory or node, either way round, and grouped by network, node, type or tag, in groups that fold away. A click on a
 header of the table sorts by its column, and another click turns the order around. The address keeps all of it, so that
-a view can be shared or bookmarked. **Export CSV** downloads the servers as listed, with their node, network, type,
-version, port, state, tags and what running servers use, for spreadsheets. Selected servers start, restart or stop
-together, run a console command such as `save-all`, or get and lose tags; an action applies to the selected servers in a
-fitting state on which the user may do it, at most 8 at a time on each node, and the panel tells which failed.
+a view can be shared or bookmarked; where it doesn't say, the view, sort and grouping a user chose last apply, in all
+lists and all their browsers. **Export CSV** downloads the servers as listed, with their node, network, type, version,
+port, state, tags and what running servers use, for spreadsheets. Selected servers start, restart or stop together, run
+a console command such as `save-all`, or get and lose tags; an action applies to the selected servers in a fitting state
+on which the user may do it, at most 8 at a time on each node, and the panel tells which failed.
 
 Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
 keeps them; they follow a server that moves, copies get them, and they go with a deleted server. Changing them needs the

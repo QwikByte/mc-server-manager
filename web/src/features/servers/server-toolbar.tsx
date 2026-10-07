@@ -168,7 +168,7 @@ export function ServerToolbar({
             label={t("Group by")}
             value={search.group ?? "none"}
             options={(Object.keys(groupings) as Grouping[])
-              .filter((g) => g === "none" || filters.some((f) => f.property === g))
+              .filter((g) => g === "none" || g === search.group || filters.some((f) => f.property === g))
               .map((value) => ({ value, label: t(groupings[value]) }))}
             onChange={(group) => onSearch({ group: group === "none" ? undefined : group })}
           />

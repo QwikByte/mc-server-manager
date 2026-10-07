@@ -252,7 +252,7 @@ type Services struct {
 	Updates    *update.Service
 	Usage      *usage.Store
 	Tags       *tag.Store
-	// Preferences are what each user chose for the panel: the layout of the overview and pinned servers.
+	// Preferences are what each user chose for the panel: the layout of the overview, pinned servers and settings.
 	Preferences *preference.Store
 	// Operations are the long actions in progress.
 	Operations *operation.Operations

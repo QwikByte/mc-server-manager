@@ -1,4 +1,4 @@
-import { type Icon, KeyIcon, ShieldCheckIcon, ShieldIcon, UserCircleIcon } from "@phosphor-icons/react"
+import { ClockIcon, type Icon, KeyIcon, PaletteIcon, ShieldCheckIcon, ShieldIcon, TranslateIcon, UserCircleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { type ReactNode, useState } from "react"
@@ -7,16 +7,20 @@ import { ErrorCallout } from "@/components/callout"
 import { FormSection } from "@/components/form-section"
 import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
+import { Segmented } from "@/components/segmented"
 import { StatusBadge } from "@/components/status"
 import type { Tone } from "@/components/tone"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { msg } from "@/lib/i18n"
-import { meQuery, mfaQuery, useDisableMfa, useEnableMfa, useNewRecoveryCodes } from "./api"
+import { useSettings } from "@/features/preferences/api"
+import { type Clock, clock, languageName, languages, msg, timeWith } from "@/lib/i18n"
+import { type Theme, useTheme } from "@/lib/theme"
+import { meQuery, mfaQuery, useDisableMfa, useEnableMfa, useNewRecoveryCodes, useSetLanguage, type User } from "./api"
 import { ConfirmPasswordDialog, MfaSetupDialog, RecoveryCodesDialog } from "./mfa-dialogs"
 import { PasswordDialog } from "./password-dialog"
 
-/** The signed-in user's own account: how they sign in. */
+/** The signed-in user's own account: how they sign in, and how the panel looks for them. */
 export function AccountPage() {
   const { data: user } = useQuery(meQuery)
   if (!user) return null
@@ -37,7 +41,87 @@ export function AccountPage() {
         <FormSection title={t("Two-factor authentication")}>
           <MfaSettings username={user.username} />
         </FormSection>
+        <FormSection title={t("Panel")}>
+          <PanelSettings user={user} />
+        </FormSection>
       </div>
+    </>
+  )
+}
+
+const themes = [
+  { value: "light", label: msg("Light") },
+  { value: "dark", label: msg("Dark") },
+  { value: "system", label: msg("System") },
+] satisfies { value: Theme; label: string }[]
+
+// A time in the afternoon shows what each clock means, e.g. 14:30 and 2:30 PM.
+const afternoon = new Date(2000, 0, 1, 14, 30)
+
+/** How the panel looks for the user, in all their browsers. */
+function PanelSettings({ user }: { user: User }) {
+  const { settings, change } = useSettings()
+  const theme = useTheme()
+  const setLanguage = useSetLanguage()
+  return (
+    <>
+      <AccountRow
+        icon={PaletteIcon}
+        tone="violet"
+        title={t("Colour theme")}
+        actions={
+          <Segmented
+            label={t("Colour theme")}
+            value={theme}
+            options={themes.map((o) => ({ value: o.value, label: t(o.label) }))}
+            onChange={(value) => change({ theme: value })}
+          />
+        }
+      >
+        {t("System follows your operating system.")}
+      </AccountRow>
+      <AccountRow
+        icon={ClockIcon}
+        tone="info"
+        title={t("Time format")}
+        actions={
+          <Segmented<Clock>
+            label={t("Time format")}
+            value={settings.clock ?? clock}
+            options={(["24h", "12h"] as const).map((value) => ({ value, label: timeWith(value, afternoon) }))}
+            onChange={(value) => change({ clock: value })}
+          />
+        }
+      >
+        {t("Times show 24 hours, or 12 hours with AM and PM.")}
+      </AccountRow>
+      <AccountRow
+        icon={TranslateIcon}
+        tone="info"
+        title={t("Language")}
+        actions={
+          <Select
+            value={user.language || "browser"}
+            onValueChange={(language) =>
+              setLanguage.mutate(language === "browser" ? "" : language, { onError: (error) => toast.error(error.message) })
+            }
+          >
+            <SelectTrigger aria-label={t("Language")} className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="browser">{t("Browser language")}</SelectItem>
+              {languages.map((code) => (
+                <SelectItem key={code} value={code} lang={code}>
+                  {languageName(code)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      >
+        {t("Dates, times and numbers follow it too.")}
+      </AccountRow>
     </>
   )
 }

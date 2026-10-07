@@ -17,7 +17,7 @@ import { meQuery } from "@/features/auth/api"
 import { LogAlerts } from "@/features/logs/log-alerts"
 import { Activity } from "@/features/operations/activity"
 import { PaletteButton } from "@/features/palette/command-palette"
-import { usePinned } from "@/features/preferences/api"
+import { useApplySettings, usePinned } from "@/features/preferences/api"
 import { allServersQuery } from "@/features/servers/api"
 import { serverLook, statusOf } from "@/features/servers/server-types"
 import { UpdateBanner } from "@/features/updates/update-banner"
@@ -51,10 +51,11 @@ export function AppShell() {
   const access = useAccess()
   const [menu, setMenu] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
-  // The language the user chose applies in every browser, once signed in.
+  // The language and settings the user chose apply in every browser, once signed in.
   useEffect(() => {
     if (user?.language) chooseLanguage(user.language)
   }, [user?.language])
+  useApplySettings()
 
   const toggleLabel = collapsed ? t("Expand the sidebar") : t("Collapse the sidebar")
 

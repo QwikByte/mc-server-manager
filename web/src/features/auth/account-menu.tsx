@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAccess } from "@/features/access/use-access"
+import { useSettings } from "@/features/preferences/api"
 import { chosenLanguage } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { meQuery, useLogout, useSetLanguage } from "./api"
@@ -30,6 +31,7 @@ export function AccountMenu({ folded, className }: { folded?: boolean; className
   const logout = useLogout()
   const navigate = useNavigate()
   const setLanguage = useSetLanguage()
+  const { change } = useSettings()
   const name = user?.username ?? ""
   const role = admin ? t("Administrator") : t("Your account")
 
@@ -75,7 +77,7 @@ export function AccountMenu({ folded, className }: { folded?: boolean; className
             {t("Colour theme")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-40">
-            <ThemeChoices />
+            <ThemeChoices onChoose={(theme) => change({ theme })} />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
