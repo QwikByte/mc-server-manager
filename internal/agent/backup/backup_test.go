@@ -2,6 +2,7 @@ package backup
 
 import (
 	"archive/zip"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,8 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
+	"github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 )
 
@@ -185,7 +188,7 @@ func TestRestoreKeepsMarkedFiles(t *testing.T) {
 	staged, err := stage(t.Context(), dir, b)
 	defer dir.RemoveAll(staged) //nolint:errcheck // a temporary folder
 	check(t, err)
-	check(t, keepMarked(dir, b, staged, marked))
+	check(t, keepFiles(dir, b, staged, marked))
 	check(t, swap(dir, b, staged))
 	if _, err := os.Stat(filepath.Join(path, "plugins/LuckPerms/config.yml")); !os.IsNotExist(err) {
 		t.Error("restoring brought back a file with secrets the server lost")
@@ -195,6 +198,79 @@ func TestRestoreKeepsMarkedFiles(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(filepath.Join(path, "bukkit.yml")); string(data) != "a: 1\n" {
 		t.Error("the other files weren't restored")
+	}
+}
+
+// Restoring a backup of a server brings back neither the secrets of a network it left since,
+// nor the trust in its proxy or offline mode, and keeps the newer secret of its network.
+func TestRestoreKeepsNetwork(t *testing.T) {
+	velocity, paper := noryxv1.ServerType_SERVER_TYPE_VELOCITY, noryxv1.ServerType_SERVER_TYPE_PAPER
+	joined := func(secret string) runtime.Network {
+		return runtime.Network{Forwarding: runtime.ForwardingModern, ForwardingSecret: secret, Backends: []runtime.NetworkBackend{{Name: "lobby", Address: "lobby:25565"}}, Try: []string{"lobby"}}
+	}
+	proxy := func(n runtime.Network, key string) func(*datadir.Dir) error {
+		return func(dir *datadir.Dir) error {
+			_, _, err := network.WriteProxy(dir, velocity, n)
+			if key == "" {
+				return errors.Join(err, dir.RemoveAll(network.FloodgateKeyFile))
+			}
+			return errors.Join(err, dir.WriteFile(network.FloodgateKeyFile, []byte(key)))
+		}
+	}
+	for _, tc := range []struct {
+		name          string
+		typ           noryxv1.ServerType
+		before, after func(*datadir.Dir) error // the server as it is backed up, and as it is restored
+		kept          []string                 // files that stay as they are then, or missing
+	}{
+		{"proxy that left", velocity, proxy(joined("old"), "old key"), proxy(runtime.Network{}, ""), network.SecretFiles(velocity)},
+		{"proxy with a newer secret", velocity, proxy(joined("old"), "old key"), proxy(joined("new"), "new key"), network.SecretFiles(velocity)},
+		{
+			"game server that left", paper,
+			func(dir *datadir.Dir) error {
+				_, err := network.WriteBackend(dir, paper, runtime.ForwardingModern, "old")
+				return errors.Join(err, dir.WriteFile("server.properties", []byte("online-mode=false\n")))
+			},
+			func(dir *datadir.Dir) error {
+				_, err := network.WriteBackend(dir, paper, runtime.ForwardingNone, "")
+				return errors.Join(err, network.Leave(dir, true, false))
+			},
+			[]string{network.PaperGlobalFile, "spigot.yml", "server.properties"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := t.TempDir()
+			dir, err := datadir.Open(path)
+			check(t, err)
+			defer dir.Close()
+			check(t, dir.MkdirAll("plugins/floodgate"))
+			check(t, dir.WriteFile("motd.txt", []byte("then")))
+			check(t, tc.before(dir))
+			s := Store{storage.New(t.TempDir())}
+			b, err := s.create(t.Context(), dir, serverID, storage.Default, Details{Created: time.Now(), Paths: []string{"."}})
+			check(t, err)
+			check(t, dir.WriteFile("motd.txt", []byte("now")))
+			check(t, tc.after(dir))
+			now := map[string]string{}
+			for _, name := range tc.kept {
+				data, _ := os.ReadFile(filepath.Join(path, name))
+				now[name] = string(data)
+			}
+
+			staged, err := stage(t.Context(), dir, b)
+			defer dir.RemoveAll(staged) //nolint:errcheck // a temporary folder
+			check(t, err)
+			check(t, keep(dir, tc.typ, b, staged))
+			check(t, swap(dir, b, staged))
+			for name, want := range now {
+				if got, _ := os.ReadFile(filepath.Join(path, name)); string(got) != want {
+					t.Errorf("%s was restored as %q, want %q", name, got, want)
+				}
+			}
+			if got, _ := os.ReadFile(filepath.Join(path, "motd.txt")); string(got) != "then" {
+				t.Error("the other files weren't restored")
+			}
+		})
 	}
 }
 

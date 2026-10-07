@@ -117,7 +117,8 @@ func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupReq
 }
 
 // RestoreBackup extracts the backup before it stops the server, so the server is only
-// down while the files are swapped.
+// down while the files are swapped. The restored data keeps the secrets of file sets and of
+// the server's network, and its forwarding settings, as they are now.
 func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupRequest) (*noryxv1.RestoreBackupResponse, error) {
 	srv, release, err := s.lock(ctx, req.GetServerId())
 	if err != nil {
@@ -147,7 +148,7 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 			return nil, toStatus(err)
 		}
 	}
-	err = keepMarked(data, b, staged, fileset.Read(data).Marked())
+	err = keep(data, srv.Type, b, staged)
 	if err == nil {
 		err = swap(data, b, staged)
 	}

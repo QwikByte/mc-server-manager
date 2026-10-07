@@ -25,9 +25,11 @@ reads the same `config.yml`, and a Waterfall network can [change its proxy](#cha
 
 Vanilla servers can't tell forwarded players apart and can't join. Game servers in a network run with
 `online-mode=false`, as the proxy authenticates the players, and turn away anyone who doesn't come through the proxy. A
-server that leaves its network, and a copy of one, get `online-mode=true` again. The overview warns about a server
-outside of networks that runs in offline mode, as anyone who reaches it can join under any name. The panel installs the
-forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and removes it when it leaves.
+server that leaves its network, and a copy of one, get `online-mode=true` again, and restoring a backup from before
+brings back neither offline mode nor the forwarding secret (see [Backups](automation.md#backups)). The overview warns
+about a server outside of networks that runs in offline mode, as anyone who reaches it can join under any name. The
+panel installs the forwarding mod of a Fabric, Quilt, Forge or NeoForge server from Modrinth when it joins, and removes
+it when it leaves.
 
 New Minecraft servers start with a whitelist: add players on the [Players](players.md) page, for one server or the
 network.
@@ -50,8 +52,9 @@ restart, all of them when the forwarding changes. The proxy reloads its configur
 (`velocity reload`, `greload`), which disconnects nobody; BungeeCord can't reload without a server it had, so removing
 or renaming a server restarts it. If a node is offline, the change is saved and **Apply again** configures its servers
 later; until then, the network's page and the overview tell that its proxy may be out of date. The proxy reaches servers
-on other nodes at the host of their node's address and their port, so changing either configures the network again.
-Proxies created by earlier versions are created again once, to read console commands.
+on other nodes at the host of their node's address and their port, so changing either configures the network again, as
+does restoring a backup of one of its servers. Proxies created by earlier versions are created again once, to read
+console commands.
 
 ## Changing the proxy
 

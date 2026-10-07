@@ -81,13 +81,19 @@ func toView(b *noryxv1.Backup) view {
 	return view{b.GetId(), b.GetLabel(), time.Unix(b.GetCreatedUnix(), 0), b.GetSize(), b.GetLocation(), append([]string{}, b.GetPaths()...), b.GetJobId()}
 }
 
-type Handler struct {
-	nodes Nodes
-	ops   *operation.Operations
+// Networks configure the network of a server again, if it is part of one.
+type Networks interface {
+	Reapply(ctx context.Context, serverID string) error
 }
 
-func NewHandler(nodes Nodes, ops *operation.Operations) *Handler {
-	return &Handler{nodes: nodes, ops: ops}
+type Handler struct {
+	nodes    Nodes
+	networks Networks
+	ops      *operation.Operations
+}
+
+func NewHandler(nodes Nodes, networks Networks, ops *operation.Operations) *Handler {
+	return &Handler{nodes: nodes, networks: networks, ops: ops}
 }
 
 func (h *Handler) Register(mux access.Mux) {
@@ -151,14 +157,28 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 // restore replaces the data of a server with a backup. It finishes if the browser goes away
-// and can't be cancelled, so the server isn't left stopped or half restored.
+// and can't be cancelled, so the server isn't left stopped or half restored. The agent keeps
+// the server's forwarding as it is, and the server's network is configured again, as the
+// backup may have the proxy's servers or Geyser's port of another time; a failure of that is
+// a warning, as the backup was restored.
 func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
-	spec := h.spec(r, "backup.restore", []string{"restore"}, http.StatusNoContent)
+	spec := h.spec(r, "backup.restore", []string{"restore"}, http.StatusOK)
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
-		return nil, h.agent(ctx, r, func(ctx context.Context, c noryxv1.BackupServiceClient) error {
+		err := h.agent(ctx, r, func(ctx context.Context, c noryxv1.BackupServiceClient) error {
 			_, err := c.RestoreBackup(ctx, &noryxv1.RestoreBackupRequest{ServerId: spec.ServerID, BackupId: r.PathValue("backup")})
 			return err
 		})
+		if err != nil {
+			return nil, err
+		}
+		var restored struct {
+			// Warning tells that the server's network couldn't be configured again.
+			Warning string `json:"warning,omitempty"`
+		}
+		if err := h.networks.Reapply(ctx, spec.ServerID); err != nil {
+			restored.Warning = httpapi.Message(err)
+		}
+		return restored, nil
 	})
 }
 

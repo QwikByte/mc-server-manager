@@ -86,6 +86,16 @@ func Open(path string) (*Dir, error) {
 	return d, nil
 }
 
+// Sub opens a folder of the directory as a directory of its own, whose new entries belong to
+// the same owner, e.g. a backup extracted next to the data.
+func (d *Dir) Sub(name string) (*Dir, error) {
+	root, err := d.OpenRoot(name)
+	if err != nil {
+		return nil, err
+	}
+	return &Dir{Root: root, uid: d.uid, gid: d.gid}, nil
+}
+
 // WriteFile replaces a file atomically, so the server never reads a partial file.
 func (d *Dir) WriteFile(name string, data []byte) error {
 	return d.Replace(name, true, func(w io.Writer) error {

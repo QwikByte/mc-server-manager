@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 )
 
@@ -74,7 +77,7 @@ func TestBackups(t *testing.T) {
 	write("world/region/r.0.0.mca", "griefed")
 	write("server.properties", "motd=changed\n")
 	write("plugins/Other.jar", "jar")
-	api.do("POST", base+"/backups/"+b.ID+"/restore", nil, http.StatusNoContent, nil)
+	api.do("POST", base+"/backups/"+b.ID+"/restore", nil, http.StatusOK, nil)
 	if read("world/region/r.0.0.mca") != "chunks" || read("server.properties") != "motd=hi\nrcon.password=s3cret\n" || read("plugins/Other.jar") != "jar" {
 		t.Fatal("the backup was not restored as selected")
 	}
@@ -140,6 +143,47 @@ func TestBackups(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(a.dir, "backups", srv.ServerID)); !os.IsNotExist(err) {
 		t.Fatalf("the backups of the deleted server remain: %v", err)
+	}
+}
+
+// Restoring a backup of a proxy keeps the network's forwarding secret as it is, and the
+// network is configured again; if that fails, the restore warns.
+func TestRestoreInNetwork(t *testing.T) {
+	m := startMaster(t)
+	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
+	proxy := m.createServer(t, a1, "Proxy", noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
+	lobby := m.createServer(t, a1, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	survival := m.createServer(t, a2, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	api := apiClient{t: t, url: m.panel(t).URL}
+	api.do("POST", "/api/networks", map[string]any{"name": "Main", "proxy": proxy, "servers": []network.Ref{lobby, survival}}, http.StatusCreated, nil)
+	secret := a1.runtime.network(proxy.ServerID).ForwardingSecret
+
+	// The backup has the secret of an earlier network.
+	base := "/api/nodes/" + proxy.NodeID + "/servers/" + proxy.ServerID + "/backups"
+	file := filepath.Join(a1.runtime.dir, proxy.ServerID, "forwarding.secret")
+	check(t, os.WriteFile(file, []byte("old"), 0o600))
+	var b backupView
+	api.do("POST", base, map[string]any{"selection": map[string]any{"everything": true}}, http.StatusCreated, &b)
+	check(t, os.WriteFile(file, []byte(secret), 0o600))
+	a1.runtime.mu.Lock()
+	delete(a1.runtime.networks, proxy.ServerID)
+	a1.runtime.mu.Unlock()
+
+	var restored struct{ Warning string }
+	api.do("POST", base+"/"+b.ID+"/restore", nil, http.StatusOK, &restored)
+	if got, _ := os.ReadFile(file); string(got) != secret || restored.Warning != "" {
+		t.Fatalf("secret after restoring = %q, warning = %q", got, restored.Warning)
+	}
+	if got := a1.runtime.network(proxy.ServerID); got.Forwarding != runtime.ForwardingModern || len(got.Backends) != 2 {
+		t.Fatalf("the network was not configured again: %+v", got)
+	}
+
+	a2.runtime.mu.Lock()
+	a2.runtime.down = true
+	a2.runtime.mu.Unlock()
+	api.do("POST", base+"/"+b.ID+"/restore", nil, http.StatusOK, &restored)
+	if !strings.Contains(restored.Warning, "survival could not be configured") {
+		t.Fatalf("warning = %q", restored.Warning)
 	}
 }
 

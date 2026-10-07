@@ -68,7 +68,12 @@ master's database and on the network's servers; the API never returns it, and th
 that holds it. Legacy forwarding (BungeeCord's) can be spoofed by anyone who reaches a server, so the servers of such a
 network are only reachable by the proxy on its node, and those on other nodes need the operator's confirmation that a
 firewall protects them. Servers that leave a network, also as it is deleted, run in online mode again without the
-secret. A removed node may be compromised, and its proxy's data holds the secret, so a node with servers of networks is
+secret. Restoring a backup keeps what decides how a server takes part in a network as it is: a proxy's forwarding secret
+and the files with secrets of Geyser and Floodgate, the forwarding settings, including the secret Velocity 1 kept in
+its configuration, and a game server's online mode. The agent puts them into the extracted backup before it replaces
+anything, so an old backup brings back neither the secret of a network the server left nor the trust in its proxy, nor
+a former secret of its network; the master then configures the server's network again. A removed node may be
+compromised, and its proxy's data holds the secret, so a node with servers of networks is
 only removed once they left their networks: game servers of other nodes no longer trust its proxy, and proxies no
 longer send players to its servers. The node itself isn't contacted, and if a server of another node can't be
 configured, the node stays. Only deleting a network whose proxy's node doesn't answer skips the proxy and the servers
@@ -182,7 +187,8 @@ The agent keeps backups outside of the servers' folders, accessible to itself on
 server can't read or tamper with them. The master can only choose among the storage locations the node's administrator
 allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry to the server's folder, and
 backups never contain symbolic links. Downloads are attachments like those of the file manager and hide the secrets the
-same way; the backups on the node keep them, so restoring works.
+same way; the backups on the node keep them, so restoring works. Restoring keeps the secrets of file sets and networks
+as they are, see [File sets](#file-sets) and [Networks](#networks).
 
 ## Permissions
 

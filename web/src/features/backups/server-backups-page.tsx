@@ -169,7 +169,11 @@ function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server;
               operation.run((onStart) => restore.mutateAsync({ id: backup.id, onStart }), {
                 title: t("Restoring {{name}}…", { name: server.name }),
                 notify: true,
-                done: () => ({ message: t("Restored the backup of {{time}}", { time: created }) }),
+                done: ({ warning }) => ({
+                  message: t("Restored the backup of {{time}}", { time: created }),
+                  description: warning,
+                  warning: !!warning,
+                }),
               })
             }
           />
