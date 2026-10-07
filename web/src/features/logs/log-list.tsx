@@ -28,6 +28,8 @@ const attrLabels: Record<string, string> = {
   task: msg("Task"),
   account: msg("Account"),
   group: msg("Group"),
+  token: msg("API token"),
+  token_id: msg("ID of the API token"),
 }
 
 /** Entries of the log, newest first and grouped by day. Each opens to show its details. */
@@ -107,7 +109,9 @@ function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogF
   const id = useId()
   const level = levels[entry.level]
   const about = [entry.nodeName ?? entry.nodeId, entry.serverName ?? entry.serverId].filter(Boolean).join(" › ")
-  const meta = [categoryLabel(entry.category), entry.user, about, entry.source === "agent" && t("from the agent")].filter(Boolean)
+  const user =
+    entry.user && entry.attrs.token ? t("{{user}} with the token {{token}}", { user: entry.user, token: entry.attrs.token }) : entry.user
+  const meta = [categoryLabel(entry.category), user, about, entry.source === "agent" && t("from the agent")].filter(Boolean)
 
   return (
     <li>
