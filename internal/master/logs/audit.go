@@ -44,6 +44,7 @@ var actions = map[string]action{
 	"POST /api/update/check":                                   {logging.System, "Check for updates"},
 	"POST /api/update/master":                                  {logging.System, "Update master"},
 	"POST /api/update/agents":                                  {logging.Nodes, "Update agents"},
+	"POST /api/update/agents/{node}":                           {logging.Nodes, "Update agent"},
 	"POST /api/terminal":                                       {logging.Terminal, "Run terminal command"},
 	"GET /api/logs/export":                                     {logging.System, "Export log"},
 	"POST /api/nodes":                                          {logging.Nodes, "Add node"},

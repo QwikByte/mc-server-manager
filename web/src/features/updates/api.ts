@@ -50,11 +50,24 @@ export const updateQuery = queryOptions({
 export const updating = (s?: UpdateStatus) =>
   !!s && ((!!s.master && !s.master.error) || s.agents.some((a) => a.update && !a.update.error))
 
+/** Whether an agent waits for an update: it never started, or it failed. */
+export const waitsForUpdate = (a: OutdatedAgent) => !a.update || !!a.update.error
+
 /** Checks for a new release, or updates the master or the agents. */
 export function useUpdateAction(action: "check" | "master" | "agents") {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api<UpdateStatus>(`/update/${action}`, { method: "POST" }),
     onSuccess: (status) => queryClient.setQueryData(updateQuery.queryKey, status),
+  })
+}
+
+/** Updates the agent of one node; a failure also shows in the status. */
+export function useUpdateAgent() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (nodeId: string) => api<UpdateStatus>(`/update/agents/${nodeId}`, { method: "POST" }),
+    onSuccess: (status) => queryClient.setQueryData(updateQuery.queryKey, status),
+    onError: () => queryClient.invalidateQueries({ queryKey: updateQuery.queryKey }),
   })
 }

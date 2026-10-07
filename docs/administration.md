@@ -29,6 +29,7 @@ for an update right away.
 ### Agents
 
 The **Agents** tab lists all nodes with their agent version, certificate and settings, which can be changed there too.
+Administrators update an agent that is older than the master there with **Update** (see [Updates](installation.md#updates)).
 
 ### Terminal
 

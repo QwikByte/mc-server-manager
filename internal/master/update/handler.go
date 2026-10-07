@@ -24,6 +24,9 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/update/agents", access.AdminsOnly, func(w http.ResponseWriter, r *http.Request) {
 		h.respond(w, r, h.svc.UpdateAgents(r.Context()))
 	})
+	mux.Handle("POST /api/update/agents/{node}", access.AdminsOnly, func(w http.ResponseWriter, r *http.Request) {
+		h.respond(w, r, h.svc.UpdateAgent(r.Context(), r.PathValue("node")))
+	})
 }
 
 // respond writes the status, or err.
