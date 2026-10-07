@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { useEffect, useRef, useState } from "react"
+import { useBlocker } from "@tanstack/react-router"
+import { useRef, useState } from "react"
 import { join, type ServerFiles, upload } from "./api"
 
 export interface Upload {
@@ -32,13 +33,8 @@ export function useUploads(s: ServerFiles) {
   const update = (id: number, patch: Partial<Upload>) => setUploads((list) => list.map((u) => (u.id === id ? { ...u, ...patch } : u)))
   const remove = (id: number) => setUploads((list) => list.filter((u) => u.id !== id))
 
-  // Leaving the panel would cancel running uploads.
-  useEffect(() => {
-    if (!busy) return
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
-    window.addEventListener("beforeunload", warn)
-    return () => window.removeEventListener("beforeunload", warn)
-  }, [busy])
+  // Leaving the panel would cancel running uploads; other pages of it don't.
+  useBlocker({ shouldBlockFn: () => false, enableBeforeUnload: () => busy })
 
   async function run() {
     if (running.current) return

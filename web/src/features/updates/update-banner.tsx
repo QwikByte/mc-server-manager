@@ -2,7 +2,6 @@ import { ArrowsClockwiseIcon, DownloadSimpleIcon, HardDrivesIcon, SparkleIcon, W
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
-import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { Callout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
@@ -26,7 +25,8 @@ const onError = { onError: (e: Error) => toast.error(e.message) }
 
 /**
  * Tells administrators about a new release and installs it, and about agents that are older
- * than the master. The panel reloads once the master runs another version.
+ * than the master. While the master updates, it asks often, so that the panel reloads soon after
+ * the master runs the new version.
  */
 export function UpdateBanner() {
   const { data } = useQuery({
@@ -34,12 +34,6 @@ export function UpdateBanner() {
     retry: false, // the master is away while it restarts
     refetchInterval: (query) => (updating(query.state.data) ? 3_000 : 60_000),
   })
-  const loaded = useRef<string>(undefined)
-  useEffect(() => {
-    if (!data) return
-    loaded.current ??= data.version
-    if (data.version !== loaded.current) window.location.reload()
-  }, [data])
 
   if (!data || !(data.master || data.latest || data.agents.length > 0)) return null
   return (

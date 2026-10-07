@@ -7,7 +7,7 @@ import { Section } from "@/components/section"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { exportUrl, type LogFilter } from "./api"
+import { exportUrl, type LogFilter, useLiveLogs } from "./api"
 import { LogOverview } from "./log-chart"
 import { LogFilters } from "./log-filters"
 import { LogList } from "./log-list"
@@ -26,6 +26,7 @@ export function LogsPage() {
   const update = (change: Partial<typeof search>) => void navigate({ search: (prev) => ({ ...prev, ...change }), replace: true })
   // An hour in the past gets no new entries.
   const streaming = live && !hour
+  const down = useLiveLogs(filter, streaming)
 
   return (
     <>
@@ -36,8 +37,11 @@ export function LogsPage() {
         actions={
           <>
             <Button variant="outline" aria-pressed={live} onClick={() => setLive(!live)} disabled={!!hour}>
-              <span aria-hidden className={cn("size-2 rounded-full", streaming ? "animate-pulse bg-success" : "bg-muted-foreground/50")} />
-              {streaming ? t("Live") : t("Paused")}
+              <span
+                aria-hidden
+                className={cn("size-2 rounded-full", !streaming ? "bg-muted-foreground/50" : down ? "animate-pulse bg-warning" : "animate-pulse bg-success")}
+              />
+              {!streaming ? t("Paused") : down ? t("Reconnecting…") : t("Live")}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

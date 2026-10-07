@@ -74,7 +74,7 @@ export function MfaSetupDialog({
           <ol className="grid gap-6">
             <Step n={1} title={t("Scan this QR code with the app")}>
               {setup.error ? (
-                <ErrorCallout error={setup.error} />
+                <ErrorCallout error={setup.error} retry={false} />
               ) : setup.data ? (
                 <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
                   <QrCode value={setup.data.uri} label={t("QR code for your authenticator app")} className="size-40 shrink-0" />

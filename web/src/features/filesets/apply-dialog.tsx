@@ -79,7 +79,7 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl" {...guard(apply.isPending)}>
+      <DialogContent className="sm:max-w-4xl" {...guard(apply.isPending)}>
         {results ? (
           <Results title={title} results={results} />
         ) : operation.live ? (
@@ -110,7 +110,7 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
                 <Skeleton className="h-32 rounded-xl" />
               </div>
             ) : preview.error ? (
-              <ErrorCallout error={preview.error} />
+              <ErrorCallout error={preview.error} retry={false} />
             ) : (
               <>
                 {first.length > 0 && (
@@ -160,7 +160,7 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
                 )}
               </>
             )}
-            {apply.error && <ErrorCallout error={apply.error} />}
+            {apply.error && <ErrorCallout error={apply.error} retry={false} />}
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline">{t("Cancel")}</Button>

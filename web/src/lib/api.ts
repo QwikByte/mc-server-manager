@@ -17,14 +17,55 @@ export interface RequestInit {
   body?: unknown
 }
 
+// The master's version, which its answers to signed-in users tell: first the one the panel came
+// with, then another one, e.g. after an update.
+let version: string | undefined
+let outdated = () => {}
+
+/** Calls back on each answer once the master runs another version than the panel came with. */
+export function onOutdated(callback: () => void) {
+  outdated = callback
+}
+
+// Whether the master answered the last request. While it restarts, there is no answer, or one
+// from a proxy in front of it: 502 to 504, without the version that the master's answers to
+// signed-in users tell.
+let reachable = true
+const reachableListeners = new Set<() => void>()
+
+/** Whether the master answers, for useSyncExternalStore. */
+export const masterReachable = {
+  subscribe(listener: () => void) {
+    reachableListeners.add(listener)
+    return () => void reachableListeners.delete(listener)
+  },
+  get: () => reachable,
+}
+
+function setReachable(value: boolean) {
+  if (value === reachable) return
+  reachable = value
+  reachableListeners.forEach((listener) => listener())
+}
+
 /** Sends a request to the master's REST API, with JSON as body. The session cookie is sent automatically. */
-export function request(path: string, init: RequestInit = {}): Promise<Response> {
+export async function request(path: string, init: RequestInit = {}): Promise<Response> {
   const hasBody = init.body !== undefined
-  return fetch(`/api${path}`, {
-    method: init.method ?? (hasBody ? "POST" : "GET"),
-    headers: hasBody ? { "Content-Type": "application/json" } : undefined,
-    body: hasBody ? JSON.stringify(init.body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(`/api${path}`, {
+      method: init.method ?? (hasBody ? "POST" : "GET"),
+      headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+      body: hasBody ? JSON.stringify(init.body) : undefined,
+    })
+  } catch (e) {
+    setReachable(false)
+    throw e
+  }
+  const answered = res.headers.get("Noryx-Version")
+  setReachable(!!answered || res.status < 502 || res.status > 504)
+  if (answered && answered !== (version ??= answered)) outdated()
+  return res
 }
 
 /** Reads the JSON of a response, or throws the error the master sent. */
