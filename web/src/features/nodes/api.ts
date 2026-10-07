@@ -1,4 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { operate } from "@/features/operations/api"
+import type { Followed } from "@/features/servers/api"
 import { api } from "@/lib/api"
 
 export type NodeStatus = "pending" | "online" | "offline"
@@ -109,11 +111,24 @@ export function useNewJoinToken(id: string) {
   })
 }
 
+/** The code of the master's refusal to remove a node with servers of networks, which it names. */
+export const networksOnNode = "networks-on-node"
+
+/**
+ * Removes a node. With release, its servers leave their networks first: a network left without its proxy or game
+ * servers is deleted, and the others forget the servers of the node.
+ */
 export function useDeleteNode() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => api(`/nodes/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey }),
+    mutationFn: ({ id, release, onStart }: { id: string; release: boolean } & Followed) =>
+      operate(`/nodes/${id}${release ? "?release=true" : ""}`, { method: "DELETE" }, onStart),
+    onSettled: (_data, _error, { release }) => {
+      void queryClient.invalidateQueries({ queryKey: nodesQuery.queryKey })
+      if (!release) return
+      void queryClient.invalidateQueries({ queryKey: ["networks"] })
+      void queryClient.invalidateQueries({ queryKey: ["servers"] })
+    },
   })
 }
 

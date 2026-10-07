@@ -55,9 +55,14 @@ Velocity's modern forwarding signs the forwarded player data with a random secre
 master's database and on the network's servers; the API never returns it, and the file manager hides it in every file
 that holds it. Legacy forwarding (BungeeCord's) can be spoofed by anyone who reaches a server, so the servers of such a
 network are only reachable by the proxy on its node, and those on other nodes need the operator's confirmation that a
-firewall protects them. The forwarding mods come from Modrinth like other mods, checked against their SHA-512 hashes.
-Proxies read console commands from their standard input, which only the agent writes to through Docker; no RCON plugin
-is added.
+firewall protects them. Servers that leave a network, also as it is deleted, run in online mode again without the
+secret. A removed node may be compromised, and its proxy's data holds the secret, so a node with servers of networks is
+only removed once they left their networks: game servers of other nodes no longer trust its proxy, and proxies no
+longer send players to its servers. The node itself isn't contacted, and if a server of another node can't be
+configured, the node stays. Only deleting a network whose proxy's node doesn't answer skips the proxy and the servers
+on that node, which then only trust each other, and says so. The forwarding mods come from Modrinth like other mods,
+checked against their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent
+writes to through Docker; no RCON plugin is added.
 
 ## Containers
 

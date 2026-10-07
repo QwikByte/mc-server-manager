@@ -113,6 +113,11 @@ export function useSwapProxy(id: string) {
   })
 }
 
+/** What deleting a network had to leave as it was, e.g. the proxy and servers of a node that is offline. */
+export interface Deleted {
+  warning?: string
+}
+
 export type NetworkAction =
   | { action: "apply" | "delete" | "start" | "stop" | "restart" }
   | { action: "broadcast"; message: string }
@@ -126,7 +131,7 @@ export function useNetworkAction(id: string) {
       const path = `/networks/${id}`
       switch (a.action) {
         case "delete":
-          return operate(path, { method: "DELETE" }, a.onStart)
+          return operate<Deleted>(path, { method: "DELETE" }, a.onStart)
         case "broadcast":
           return api(`${path}/broadcast`, { body: { message: a.message } })
         case "rolling-restart":

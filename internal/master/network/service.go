@@ -310,33 +310,65 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 
 // Delete makes all servers standalone again and removes the network. The proxy keeps
 // running without forwarding. A network with datastores stays, as its data would be lost.
-func (s *Service) Delete(ctx context.Context, id string) error {
+// If the proxy's node doesn't answer, e.g. as it is lost, the proxy and the servers on its
+// node are skipped, which the warning tells: they only trust each other then.
+func (s *Service) Delete(ctx context.Context, id string) (warning string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n, err := s.Get(ctx, id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	placed, err := s.datastores.Placed(ctx, id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(placed) > 0 {
-		return httpapi.Errorf(http.StatusConflict, "The network %q has databases. Delete its datastores first.", n.Name)
+		return "", httpapi.Errorf(http.StatusConflict, "The network %q has databases. Delete its datastores first.", n.Name)
 	}
 	ctx = context.WithoutCancel(ctx)
+	// offline tells, once a call to the proxy's node failed, that the node doesn't answer either.
+	offline := false
+	skipped := func(ref Ref) bool {
+		offline = ref.NodeID == n.Proxy.NodeID && !s.reachable(ctx, ref.NodeID)
+		return offline
+	}
 	operation.Step(ctx, "servers")
 	for i, b := range n.Backends {
 		operation.Count(ctx, int64(i), int64(len(n.Backends)), "servers")
-		if err := s.leave(ctx, b); err != nil {
-			return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
+		if offline && b.NodeID == n.Proxy.NodeID {
+			continue
+		}
+		if err := s.leave(ctx, b); err != nil && !skipped(b.Ref) {
+			return "", httpapi.Errorf(http.StatusBadGateway, "The network was not deleted, because %s could not be made standalone again: %s", b.Name, message(err))
 		}
 	}
-	if err := s.release(ctx, n, "proxy"); err != nil {
-		return httpapi.Errorf(http.StatusBadGateway, "The network was not deleted: %s", message(err))
+	if !offline {
+		if err := s.release(ctx, n, "proxy"); err != nil && !skipped(n.Proxy) {
+			return "", httpapi.Errorf(http.StatusBadGateway, "The network was not deleted: %s", message(err))
+		}
 	}
-	_, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID)
-	return err
+	if _, err = s.db.ExecContext(ctx, `DELETE FROM networks WHERE id = ?`, n.ID); err != nil || !offline {
+		return "", err
+	}
+	name := "the proxy's node"
+	if nd, err := s.nodes.Get(ctx, n.Proxy.NodeID); err == nil {
+		name = nd.Name
+	}
+	slog.Warn("A network was deleted without its proxy, whose node can't be reached", logging.Networks, "network", n.ID, logging.KeyNode, n.Proxy.NodeID)
+	return fmt.Sprintf("%s can't be reached, so the proxy and the network's servers on it keep their settings and still trust each other. Once it is back, delete them or put them into a network again.", name), nil
+}
+
+// reachable reports whether the agent of a node answers, which tells a node that is offline,
+// or removed, from one where a call failed.
+func (s *Service) reachable(ctx context.Context, nodeID string) bool {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	conn, err := s.nodes.Conn(ctx, nodeID)
+	if err == nil {
+		_, err = noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
+	}
+	return err == nil
 }
 
 // release takes the proxy out of a network, in the step of an operation: it loses Geyser and
@@ -673,6 +705,9 @@ func (n *Network) moved(serverID, from, to string) {
 func (s *Service) apply(ctx context.Context, n Network, refresh bool) error {
 	ctx = context.WithoutCancel(ctx) // finish even if the client goes away
 	err := s.configureAll(ctx, n, refresh)
+	if f := (*failed)(nil); errors.As(err, &f) {
+		err = httpapi.Errorf(http.StatusBadGateway, "The change was saved, but %s Apply the network again once all nodes are online.", f)
+	}
 	var applyError any // NULL once applied
 	if err != nil {
 		applyError = httpapi.Message(err)
@@ -1018,10 +1053,17 @@ func conflict(err error, name string) error {
 	return err
 }
 
-func applyFailed(what string, err error) error {
-	return httpapi.Errorf(http.StatusBadGateway, "The change was saved, but %s could not be configured: %s Apply the network again once all nodes are online.",
-		what, strings.TrimSuffix(message(err), ".")+".")
+// failed tells which part of a network could not be configured, and why.
+type failed struct {
+	what string
+	err  error
 }
+
+func (f *failed) Error() string {
+	return fmt.Sprintf("%s could not be configured: %s", f.what, strings.TrimSuffix(message(f.err), ".")+".")
+}
+
+func applyFailed(what string, err error) error { return &failed{what, err} }
 
 // message returns the message of an error of an agent or of the master.
 func message(err error) string {

@@ -52,6 +52,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Remove {{name}} from the private network", { name: subject })
     case "overlay.rotate":
       return t("Rotate the key of {{name}}", { name: subject })
+    case "node.delete":
+      return t("Remove {{name}}", { name: subject })
     case "players.kick":
       return t("Kick {{name}}", { name: subject })
     case "players.ban":
@@ -166,6 +168,8 @@ export function stepOf(op: Operation, step: string): string {
       return t("Create a new key and give it to the other nodes")
     case "networks":
       return t("Configure the networks again")
+    case "node":
+      return t("Remove the node")
     case "files":
       return t("Write the files on the servers")
     case "restart":
@@ -177,7 +181,7 @@ export function stepOf(op: Operation, step: string): string {
       if (verb === "stop") return t("Stop the servers")
       if (verb === "restart") return t("Restart the servers")
       if (verb === "command") return t("Send the command")
-      if (verb === "delete") return t("Make the servers standalone")
+      if (op.kind === "network.delete") return t("Make the servers standalone")
       return t("Configure the servers")
   }
   return step

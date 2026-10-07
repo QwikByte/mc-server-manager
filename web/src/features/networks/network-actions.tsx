@@ -33,7 +33,7 @@ import { Input } from "@/components/ui/input"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
 import { useOperation } from "@/features/operations/use-operation"
-import { type Network, type NetworkAction, useNetworkAction } from "./api"
+import { type Deleted, type Network, type NetworkAction, useNetworkAction } from "./api"
 import { SwapProxyDialog } from "./swap-proxy-dialog"
 
 type Power = "start" | "stop" | "restart" | "rolling"
@@ -50,7 +50,16 @@ export function NetworkActions({ network }: { network: Network }) {
   const powers = (["start", "restart", "rolling", "stop"] as const).filter((p) => onAll(`servers.${p === "rolling" ? "restart" : p}`))
 
   function run(a: NetworkAction, loading: string, success: string, then?: () => void) {
-    operation.run((onStart) => action.mutateAsync({ ...a, onStart }), { title: loading, notify: true, done: () => ({ message: success }), then })
+    operation.run((onStart) => action.mutateAsync({ ...a, onStart }), {
+      title: loading,
+      notify: true,
+      // Deleting tells what it had to leave as it was, e.g. the proxy of a node that is offline.
+      done: (result) => {
+        const warning = (result as Deleted | undefined)?.warning
+        return { message: success, description: warning, warning: !!warning }
+      },
+      then,
+    })
   }
 
   const power: Record<Power, { icon: typeof PlayIcon; label: string; run: () => void; confirm?: string }> = {

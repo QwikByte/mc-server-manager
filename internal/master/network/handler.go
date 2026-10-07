@@ -70,8 +70,11 @@ func (h *Handler) Register(mux access.Mux) {
 			})
 		}
 	})
-	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusNoContent, func(ctx context.Context, n Network) (any, error) {
-		return h.leaving(ctx, n.ID, func() (any, error) { return nil, h.svc.Delete(ctx, n.ID) })
+	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusOK, func(ctx context.Context, n Network) (any, error) {
+		return h.leaving(ctx, n.ID, func() (any, error) {
+			warning, err := h.svc.Delete(ctx, n.ID)
+			return deleted{warning}, err
+		})
 	}))
 	mux.Handle("POST /api/networks/{id}/proxy", manage, func(w http.ResponseWriter, r *http.Request) {
 		var sw Swap
@@ -187,6 +190,11 @@ func (h *Handler) Register(mux access.Mux) {
 	})
 	mux.Handle("GET /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.proxySettings)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}/proxy", access.OnServer(access.Properties), h.updateProxySettings)
+}
+
+// deleted tells what deleting a network left as it was, e.g. a proxy whose node was offline.
+type deleted struct {
+	Warning string `json:"warning,omitempty"`
 }
 
 // leaving runs an action that may take servers out of a network. Then those that left lose

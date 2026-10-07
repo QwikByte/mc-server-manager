@@ -62,6 +62,22 @@ the old proxy. Changing to Velocity can switch to modern forwarding, which resta
 that comes to or leaves the node of a server. The dialog tells all this beforehand and where players join from then on.
 The old proxy leaves the network without its forwarding secret and stops; the new one starts if either ran.
 
+## Deleting and removed nodes
+
+Deleting a network makes its game servers standalone again, in online mode and without the forwarding secret; the
+proxy keeps running without forwarding. A network with datastores can't be deleted. If the proxy's node can't be
+reached, e.g. as it is lost, the network is deleted anyway: its servers on other nodes become standalone, and a warning
+tells that the proxy and the network's servers on its node keep their settings until they are deleted or put into a
+network again. While the node answers, a server that can't be configured keeps the network.
+
+Removing a node whose servers are part of networks first takes them out, once confirmed (`DELETE /api/nodes/{id}`
+with `?release=true`, which also needs the permission to manage networks). A network whose proxy runs on the node, or
+all of whose game servers do, is deleted: its game servers on other nodes become standalone, and a proxy on another
+node stops forwarding. The other networks lose the node's servers, which players then neither join nor reach through
+host names; their proxies forget them first. The node itself isn't contacted, so a lost node can be removed too, but if
+a server of another node can't be configured, the node stays. A network that would be deleted can't take datastores on
+other nodes along, so delete them first; datastores on the node are forgotten with it, like its servers.
+
 ## Proxy configuration
 
 The proxy's tab of the network, and the **Configuration** tab of every proxy, edit the other settings of its file as a

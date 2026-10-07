@@ -61,6 +61,10 @@ curl -fsSLO https://github.com/QwikByte/noryx/releases/download/<version>/instal
 Allow port 7443 only from the master's IP address. For the [private network](networks.md#private-network) of the nodes,
 open UDP port 51820 (or the one in its settings) between the nodes.
 
+**Remove node…** in a node's menu stops managing it, also while it is offline or lost. Its servers and datastores keep
+running until they are stopped on the node or the agent is uninstalled. Servers of networks
+[leave their networks](networks.md#deleting-and-removed-nodes) first, once confirmed.
+
 ## Everything on one machine
 
 `sudo bash install.sh all` installs master and agent, registers the machine as node and connects its agent, which then
