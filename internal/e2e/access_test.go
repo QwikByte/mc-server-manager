@@ -84,6 +84,7 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 		mod.do(denied.method, denied.path, map[string]any{}, http.StatusForbidden, nil)
 	}
 	mod.do("POST", "/api/terminal", map[string]string{"target": a.node.ID, "command": "status"}, http.StatusForbidden, nil)
+	mod.do("GET", "/api/terminal/commands?target="+a.node.ID, nil, http.StatusForbidden, nil)
 	// Bulk requests need the permission on every server they name.
 	mod.do("POST", "/api/servers/actions", map[string]any{"action": "restart", "servers": []network.Ref{lobby}}, http.StatusOK, nil)
 	mod.do("POST", "/api/servers/actions", map[string]any{"action": "restart", "servers": []network.Ref{lobby, survival}}, http.StatusForbidden, nil)
@@ -144,6 +145,17 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	}
 	if _, err := runTerminal(t, mod.client, srv.URL, "master", "status"); !strings.Contains(err, "See the master's settings") {
 		t.Errorf("master status: error %q", err)
+	}
+	// It only offers the commands the user may run, here on the lobby.
+	for target, want := range map[string]string{
+		a.node.ID: "help, server, server command, server logs, server restart",
+		"master":  "help, node, node list",
+	} {
+		var commands []terminalCommand
+		mod.do("GET", "/api/terminal/commands?target="+target, nil, http.StatusOK, &commands)
+		if got := strings.Join(commandPaths(commands, ""), ", "); got != want {
+			t.Errorf("commands of %s: %s, want %s", target, got, want)
+		}
 	}
 
 	// There is always an enabled administrator.

@@ -39,6 +39,10 @@ as it happens, e.g. for `server logs <id>`, and Ctrl+C stops a command. A node's
 Besides the permission to use the terminal, every command needs its own, e.g. `server restart <id>` the one to restart
 this server.
 
+Tab completes the commands the user may run, their flags and their arguments: IDs of servers, also from the first
+letters of their names, and of nodes, datastores, databases and backups. When several choices are left, a second Tab
+lists them, e.g. servers with their names, and a click takes one. Tab in an empty line moves on to the next control.
+
 ↑ and ↓ repeat earlier commands, which the browser tab keeps for each node and the master until it is closed or the
 user signs out.
 

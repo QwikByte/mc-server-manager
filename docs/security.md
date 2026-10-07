@@ -174,7 +174,9 @@ The panel's terminal is not a shell. The agent's commands are the same code as i
 reach the agent through the existing mutually authenticated connection, so the agent offers nothing new to the master.
 Commands that only the node's administrator may run (`storage`, `enroll`, `overlay allow`, `deny` and `up`) don't exist
 there. Command lines are split like a shell would, but nothing is expanded or executed by one, and the master logs every
-command with the user who ran it.
+command with the user who ran it. Completion offers only the commands that the user's permissions allow on some server
+or node of the target, and only the servers, nodes, datastores and backups the panel shows the user anyway; each command
+still checks its permission with its arguments when it runs.
 
 ## Log
 

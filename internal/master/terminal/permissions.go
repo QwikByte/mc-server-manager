@@ -10,9 +10,15 @@ import (
 	"github.com/QwikByte/noryx/internal/master/access"
 )
 
-// check returns why a command with its arguments may not run, e.g. the permission the
-// grants lack, or nil.
-type check func(ctx context.Context, g access.Grants, args []string) error
+// check decides who may run a command.
+type check struct {
+	// run returns why the command may not run with its arguments, e.g. the permission the
+	// grants lack, or nil.
+	run func(ctx context.Context, g access.Grants, args []string) error
+	// offer reports whether the grants allow the command with some arguments, so that the
+	// panel offers it; nil for commands it never offers.
+	offer func(g access.Grants) bool
+}
 
 var (
 	errUnchecked        = errors.New("this command can't be run in the panel")
@@ -25,6 +31,15 @@ func need(p access.Permission, ok bool) error {
 		return access.Denied(p)
 	}
 	return nil
+}
+
+// grantsOnly is the check of a command that needs p whatever its arguments are; ok reports
+// whether the grants allow it.
+func grantsOnly(p access.Permission, ok func(access.Grants) bool) check {
+	return check{
+		run:   func(_ context.Context, g access.Grants, _ []string) error { return need(p, ok(g)) },
+		offer: ok,
+	}
 }
 
 // guarded returns a root command whose commands only run if their check allows it.
@@ -41,7 +56,7 @@ func guarded(use, short string, checks map[string]check) *cobra.Command {
 		if !ok {
 			return errUnchecked
 		}
-		if err := c(cmd.Context(), access.From(cmd.Context()), args); err != nil {
+		if err := c.run(cmd.Context(), access.From(cmd.Context()), args); err != nil {
 			return err
 		}
 		if follows(cmd, path) {
@@ -59,25 +74,29 @@ func guarded(use, short string, checks map[string]check) *cobra.Command {
 // moves to another node, as the changes would be lost.
 func agentChecks(nodeID string, moving func(serverID string) error) map[string]check {
 	node := func(p access.Permission) check {
-		return func(_ context.Context, g access.Grants, _ []string) error {
-			return need(p, g.On(p, nodeID, ""))
-		}
+		return grantsOnly(p, func(g access.Grants) bool { return g.On(p, nodeID, "") })
 	}
 	server := func(p access.Permission) check {
-		return func(_ context.Context, g access.Grants, args []string) error {
-			return need(p, len(args) > 0 && g.On(p, nodeID, args[0]))
+		return check{
+			run: func(_ context.Context, g access.Grants, args []string) error {
+				return need(p, len(args) > 0 && g.On(p, nodeID, args[0]))
+			},
+			offer: func(g access.Grants) bool { return g.Somewhere(p, nodeID) },
 		}
 	}
 	change := func(p access.Permission) check {
-		return func(ctx context.Context, g access.Grants, args []string) error {
-			if err := server(p)(ctx, g, args); err != nil {
+		c := server(p)
+		run := c.run
+		c.run = func(ctx context.Context, g access.Grants, args []string) error {
+			if err := run(ctx, g, args); err != nil {
 				return err
 			}
 			return moving(args[0])
 		}
+		return c
 	}
 	global := func(p access.Permission) check {
-		return func(_ context.Context, g access.Grants, _ []string) error { return need(p, g.Has(p)) }
+		return grantsOnly(p, func(g access.Grants) bool { return g.Has(p) })
 	}
 	return map[string]check{
 		"datastore list":    global(access.DatastoresView),
@@ -85,7 +104,7 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 		"datastore backup":  global(access.DatastoresManage),
 		// Only the panel's Databases tab restores, as it gives the users of the databases their
 		// passwords first; the local CLI is for emergencies.
-		"datastore restore": func(context.Context, access.Grants, []string) error { return errDatastoreRestore },
+		"datastore restore": {run: func(context.Context, access.Grants, []string) error { return errDatastoreRestore }},
 		"status":            node(access.ServersView),
 		"server list":       node(access.ServersView),
 		"server start":      change(access.ServersStart),
@@ -105,17 +124,19 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 // may see.
 func (h *Handler) masterChecks() map[string]check {
 	return map[string]check{
-		"status": func(_ context.Context, g access.Grants, _ []string) error {
-			return need(access.SettingsView, g.Has(access.SettingsView))
-		},
-		"node list": func(context.Context, access.Grants, []string) error { return nil },
+		"status":    grantsOnly(access.SettingsView, func(g access.Grants) bool { return g.Has(access.SettingsView) }),
+		"node list": grantsOnly("", func(access.Grants) bool { return true }),
 		// The entries are limited to the scope of the permission.
-		"logs": func(_ context.Context, g access.Grants, _ []string) error {
-			return need(access.LogsView, g.Somewhere(access.LogsView, ""))
-		},
-		"node renew": func(ctx context.Context, g access.Grants, args []string) error {
-			n, err := h.findNode(ctx, args[0])
-			return need(access.NodesCertificates, err != nil || g.On(access.NodesCertificates, n.ID, "")) // unknown: renew reports it
+		"logs": grantsOnly(access.LogsView, func(g access.Grants) bool { return g.Somewhere(access.LogsView, "") }),
+		"node renew": {
+			run: func(ctx context.Context, g access.Grants, args []string) error {
+				n, err := h.findNode(ctx, args[0])
+				return need(access.NodesCertificates, err != nil || g.On(access.NodesCertificates, n.ID, "")) // unknown: renew reports it
+			},
+			offer: func(g access.Grants) bool {
+				all, nodes, _ := g.Scope(access.NodesCertificates)
+				return all || len(nodes) > 0
+			},
 		},
 	}
 }
