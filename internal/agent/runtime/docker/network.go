@@ -274,6 +274,9 @@ func (d *Docker) recreate(ctx context.Context, c container.InspectResponse, spec
 		return err
 	}
 	if err := d.createContainer(ctx, spec, placement(c, spec), datastoreNetworks(c)...); err != nil {
+		// Also when ctx ended, e.g. with the timeout of the master's call, the old container
+		// comes back, or the server would have none.
+		ctx := context.WithoutCancel(ctx)
 		_, renameErr := d.cli.ContainerRename(ctx, old, client.ContainerRenameOptions{NewName: name})
 		if renameErr == nil && running {
 			renameErr = d.Start(ctx, spec.ID)
