@@ -145,6 +145,19 @@ itself or that hold secrets of the server, so a set can't change forwarding or R
 file through a link or into a file where a folder should be. A compromised server can change its own manifest, which
 only changes its own state or the hiding of secrets it can read anyway.
 
+## Templates
+
+An imported template file is untrusted: the master reads at most 1 MiB, refuses other formats and unknown versions of
+its format as well as unknown fields, and then saves it exactly like a template from the panel. So neither can set the
+properties Noryx sets itself (port, address, RCON) or secret ones, plugins and kept versions are looked up again on
+Modrinth and Hangar rather than taken from the file, and the agent checks the settings again when a server is created
+from it. Exported files hold no IDs of the master, nodes or servers and no secrets, as templates have none. Creating a
+server with the tags of a template needs the permission to change the settings of the node's servers, like tags of an
+existing server; the tags make it a target of their file sets, which still have to be applied, so a template puts no
+secrets on a server by itself. A version a template keeps is installed only if it runs on the new server, from the same
+sources and with the same hash checks as any other; otherwise its plugin is left out rather than replaced by another
+version.
+
 ## Databases
 
 A datastore runs as the image's user without capabilities, with `no-new-privileges`, memory, CPU and PID limits and a

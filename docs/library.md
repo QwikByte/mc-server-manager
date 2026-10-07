@@ -5,13 +5,40 @@ The **Library** of the panel: what new servers start with, and what many servers
 ## Templates
 
 A template preconfigures new servers: software, Minecraft version, memory, the
-[settings](servers.md#settings-and-images) of a server, `server.properties` and a list of plugins or mods from Modrinth.
-When a server is created from a template, only node, name, port, storage and world are chosen, and its stop timeout and
-time zone can differ from the template's; `server.properties` is written before the first start and each plugin is
-installed in the newest release that suits the server, so templates don't go stale. Templates are created from scratch
-or from an existing server ("Save as template"), which takes its settings, its properties (except those the manager
-sets) and the plugins that come from Modrinth. Worlds and plugin configurations are not part of templates;
-[file sets](#file-sets) share the configurations of plugins among servers.
+[settings](servers.md#settings-and-images) of a server, `server.properties`,
+[tags](servers.md#lists-tags-and-bulk-actions) and a list of plugins or mods from Modrinth or Hangar. When a server is
+created from a template, only node, name, port, storage and world are chosen, and its stop timeout and time zone can
+differ from the template's; `server.properties` is written before the first start and each plugin is installed in the
+newest release that suits the server, unless the template [keeps a version](#plugin-versions) of it, so templates don't
+go stale. Templates are created from scratch or from an existing server ("Save as template"), which takes its settings,
+its properties (except those the manager sets), its tags and the plugins that come from Modrinth or Hangar. Worlds and
+plugin configurations are not part of templates; [file sets](#file-sets) share the configurations of plugins among
+servers. The properties Noryx sets itself (the port, address and RCON) and secret ones can't be part of a template.
+
+### Tags
+
+Servers created from a template get its tags, e.g. `bedwars`, so they are targets of the file sets of these tags right
+away. The file sets still have to be applied to them, so a template puts no files with secrets on a server by itself.
+Giving a new server tags needs the permission to change the settings of the servers on its node, as tags of a server do;
+without it, the server is created without them, and the panel says so.
+
+### Plugin versions
+
+A plugin of a template can keep a version known to work instead of the newest: the menu next to it offers the versions
+that suit the template's software and Minecraft version, betas and alphas included. The template is checked against them
+when it is saved, and new servers get exactly that version, downloaded with its hash checked like any other. If the kept
+version doesn't suit a new server, e.g. because it runs another Minecraft version than the template, that plugin is left
+out rather than installed in another version, the others are installed, and the panel tells which one is missing. Choose
+another version in the template, or install the plugin from the server's **Plugins** tab.
+
+### Export and import
+
+**Export** downloads a template as a JSON file, e.g. to move it to another master or to share it. The file holds what
+the template sets up: its settings, properties, tags and plugins with the versions it keeps, but no IDs of the master,
+its nodes or servers. **Import** on the **Templates** page reads such a file of up to 1 MiB under a name of choice and
+saves it like a template saved in the panel, with the same checks: its plugins and kept versions are looked up again and
+must suit its software, and properties that Noryx sets are refused. Files from a newer version of Noryx with a format
+this master doesn't know yet are refused with a message to update Noryx first.
 
 ## File sets
 

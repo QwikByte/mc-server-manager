@@ -1,5 +1,6 @@
-// Package template stores templates for new servers: their settings, server.properties
-// and plugins. Plugins are Modrinth projects; the version that suits a new server is
+// Package template stores templates for new servers: their settings, server.properties, tags
+// and plugins, and exports and imports them as files. Plugins are projects of Modrinth or
+// Hangar; unless a template keeps a version of one, the version that suits a new server is
 // installed when the server is created from the template, so templates don't go stale.
 package template
 
@@ -10,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -21,6 +23,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/plugin"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 const (
@@ -38,12 +41,28 @@ var (
 )
 
 type Template struct {
-	ID          string `json:"id"`
+	ID string `json:"id"`
+	Content
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// Content is what a template sets up for new servers, as it is also exported.
+type Content struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Settings
-	Plugins   []plugin.Project `json:"plugins"`
-	CreatedAt time.Time        `json:"createdAt"`
+	// Tags are given to the servers created from the template.
+	Tags    []string `json:"tags"`
+	Plugins []Plugin `json:"plugins"`
+}
+
+// Plugin is a plugin or mod of a template, which new servers get in the version the template
+// keeps, or else in the newest release that suits them.
+type Plugin struct {
+	plugin.Project
+	// Version is the ID of the version the template keeps, VersionNumber its number, e.g. 5.4.137.
+	Version       string `json:"version,omitempty"`
+	VersionNumber string `json:"versionNumber,omitempty"`
 }
 
 // Settings are the settings and server.properties of the servers created from a template.
@@ -64,18 +83,24 @@ type Settings struct {
 	TimeZone string `json:"timeZone"`
 }
 
-// Input is a new or changed template; plugins are Modrinth project IDs.
+// Input is a new or changed template.
 type Input struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Settings
+	Tags []string `json:"tags"`
+	// Plugins are the IDs of projects of Modrinth or Hangar.
 	Plugins []string `json:"plugins"`
+	// Versions are the IDs of the versions the template keeps, by project ID.
+	Versions map[string]string `json:"versions"`
 }
 
-// Plugins looks up Modrinth projects.
+// Plugins looks up projects of Modrinth and Hangar, and their versions.
 type Plugins interface {
 	Projects(ctx context.Context, ids []string) ([]modrinth.Project, error)
 	Describe(p modrinth.Project) plugin.Project
+	// Versions returns the versions of a project that run on servers of a type and Minecraft version.
+	Versions(ctx context.Context, project string, typ noryxv1.ServerType, gameVersion string) ([]plugin.Version, error)
 }
 
 type Service struct {
@@ -154,9 +179,10 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// build validates a template and looks up its plugins, which must support its type.
+// build validates a template and looks up its plugins, which must support its type, as must
+// the versions it keeps.
 func (s *Service) build(ctx context.Context, in Input) (Template, error) {
-	t := Template{Name: strings.TrimSpace(in.Name), Description: strings.TrimSpace(in.Description), Settings: in.Settings, Plugins: []plugin.Project{}}
+	t := Template{Content: Content{Name: strings.TrimSpace(in.Name), Description: strings.TrimSpace(in.Description), Settings: in.Settings, Plugins: []Plugin{}}}
 	typ := noryxv1.ParseServerType(t.Type)
 	t.Type = typ.Slug()
 	if typ.Proxy() {
@@ -169,6 +195,10 @@ func (s *Service) build(ctx context.Context, in Input) (Template, error) {
 	t.JVMOptions = append([]string{}, t.JVMOptions...)
 	if t.Properties == nil {
 		t.Properties = map[string]string{}
+	}
+	var err error
+	if t.Tags, err = tag.Normalize(in.Tags); err != nil {
+		return t, err
 	}
 	if msg := check(t, typ, in); msg != "" {
 		return t, httpapi.Errorf(http.StatusBadRequest, "%s", msg)
@@ -189,9 +219,29 @@ func (s *Service) build(ctx context.Context, in Input) (Template, error) {
 		if !slices.ContainsFunc(modrinth.Loaders(typ), func(l string) bool { return slices.Contains(projects[i].Loaders, l) }) {
 			return t, httpapi.Errorf(http.StatusBadRequest, "%s doesn't run on %s servers.", projects[i].Title, t.Type)
 		}
-		t.Plugins = append(t.Plugins, s.plugins.Describe(projects[i]))
+		p := Plugin{Project: s.plugins.Describe(projects[i]), Version: in.Versions[id]}
+		if p.Version != "" {
+			if p.VersionNumber, err = s.versionNumber(ctx, t, typ, projects[i], p.Version); err != nil {
+				return t, err
+			}
+		}
+		t.Plugins = append(t.Plugins, p)
 	}
 	return t, nil
+}
+
+// versionNumber returns the number of a version that a template keeps, which must run on its
+// servers.
+func (s *Service) versionNumber(ctx context.Context, t Template, typ noryxv1.ServerType, project modrinth.Project, id string) (string, error) {
+	versions, err := s.plugins.Versions(ctx, project.ID, typ, t.Version)
+	if err != nil {
+		return "", err
+	}
+	i := slices.IndexFunc(versions, func(v plugin.Version) bool { return v.ID == id })
+	if i < 0 {
+		return "", httpapi.Errorf(http.StatusBadRequest, "The chosen version of %s doesn't run on the servers of the template.", project.Title)
+	}
+	return versions[i].Number, nil
 }
 
 // check returns a message for the administrator if a template is invalid.
@@ -223,16 +273,28 @@ func check(t Template, typ noryxv1.ServerType, in Input) string {
 		return "Use at most 200 properties."
 	case len(in.Plugins) > maxPlugins:
 		return "Use at most 50 plugins."
+	case len(t.Tags) > tag.MaxPerServer:
+		return fmt.Sprintf("Use at most %d tags.", tag.MaxPerServer)
 	}
 	for key, value := range t.Properties {
-		if !propertyPattern.MatchString(key) || len(value) > maxPropValue ||
-			strings.ContainsFunc(value, func(r rune) bool { return r != '\n' && unicode.IsControl(r) }) {
+		switch {
+		case !propertyPattern.MatchString(key) || len(value) > maxPropValue ||
+			strings.ContainsFunc(value, func(r rune) bool { return r != '\n' && unicode.IsControl(r) }):
 			return "The property " + key + " is invalid."
+		case noryxv1.ManagedProperties[key] != "":
+			return key + " can't be part of a template: " + noryxv1.ManagedProperties[key]
+		case noryxv1.SecretProperties[key]:
+			return key + " is a secret and can't be part of a template."
 		}
 	}
 	for _, id := range in.Plugins {
 		if !plugin.ValidProjectID(id) {
 			return "Invalid plugin " + id + "."
+		}
+	}
+	for id, version := range in.Versions {
+		if !slices.Contains(in.Plugins, id) || !plugin.ValidProjectID(version) {
+			return "Choose versions only for the plugins of the template."
 		}
 	}
 	return ""
@@ -241,11 +303,12 @@ func check(t Template, typ noryxv1.ServerType, in Input) string {
 // stored is the JSON in the settings column.
 type stored struct {
 	Settings
-	Plugins []plugin.Project `json:"plugins"`
+	Tags    []string `json:"tags,omitempty"`
+	Plugins []Plugin `json:"plugins"`
 }
 
 func (t Template) data() (string, error) {
-	data, err := json.Marshal(stored{t.Settings, t.Plugins})
+	data, err := json.Marshal(stored{t.Settings, t.Tags, t.Plugins})
 	return string(data), err
 }
 
@@ -262,7 +325,7 @@ func scan(row scanner) (Template, error) {
 	if err := json.Unmarshal([]byte(data), &s); err != nil {
 		return t, err
 	}
-	t.Settings, t.Plugins, t.CreatedAt = s.Settings, s.Plugins, time.Unix(createdAt, 0)
+	t.Settings, t.Tags, t.Plugins, t.CreatedAt = s.Settings, append([]string{}, s.Tags...), s.Plugins, time.Unix(createdAt, 0)
 	t.StopTimeout = stopSeconds(t.StopTimeout) // templates saved before they had one
 	return t, nil
 }

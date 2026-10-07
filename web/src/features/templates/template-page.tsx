@@ -1,3 +1,4 @@
+import { DownloadSimpleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -6,10 +7,11 @@ import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
 import { PageHeader } from "@/components/page-header"
 import { usePageName } from "@/components/page-title"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { serverLook } from "@/features/servers/server-types"
-import { draftOf, emptyTemplate, templateQuery, useSaveTemplate } from "./api"
+import { draftOf, emptyTemplate, exportUrl, templateQuery, useSaveTemplate } from "./api"
 import { TemplateForm } from "./template-form"
 
 const route = getRouteApi("/_app/templates/$templateId")
@@ -30,7 +32,19 @@ export function TemplatePage() {
         <ErrorCallout error={error} />
       ) : (
         <>
-          <PageHeader {...serverLook(template.type)} title={template.name} description={template.description || undefined} />
+          <PageHeader
+            {...serverLook(template.type)}
+            title={template.name}
+            description={template.description || undefined}
+            actions={
+              <Button asChild variant="outline">
+                <a href={exportUrl(template.id)} download>
+                  <DownloadSimpleIcon />
+                  {t("Export")}
+                </a>
+              </Button>
+            }
+          />
           {/* Without the permission to manage templates, the template is only shown. */}
           <fieldset disabled={!can("templates.manage")} className="contents">
             <TemplateForm
