@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"errors"
@@ -223,14 +222,15 @@ func (d *Docker) console(ctx context.Context, id, command string, answer func(li
 		_, err := stdcopy.StdCopy(w, w, res.Reader)
 		w.CloseWithError(err)
 	}()
-	lines := bufio.NewScanner(r)
-	lines.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
-	for lines.Scan() {
-		if done, err := answer(lines.Text()); done {
-			return err
-		}
+	var done bool
+	readErr := eachLine(r, func(line string) bool {
+		done, err = answer(line)
+		return !done
+	})
+	if done {
+		return err
 	}
-	return cmp.Or(ctx.Err(), lines.Err(), errors.New("the proxy's console closed"))
+	return cmp.Or(ctx.Err(), readErr, errors.New("the proxy's console closed"))
 }
 
 // escapes are the terminal escape sequences that colour the output of BungeeCord.

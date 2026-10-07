@@ -460,17 +460,39 @@ func (d *Docker) logs(ctx context.Context, name string, tail int, after time.Tim
 			_, err := stdcopy.StdCopy(w, w, logs)
 			w.CloseWithError(err)
 		}()
-		lines := bufio.NewScanner(r)
-		lines.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
-		for lines.Scan() {
-			line := logLine(lines.Text())
-			if (after.IsZero() || line.Time.After(after)) && !yield(line, nil) {
-				return
-			}
-		}
-		if err := lines.Err(); err != nil && ctx.Err() == nil {
+		stopped := false
+		err = eachLine(r, func(text string) bool {
+			line := logLine(text)
+			stopped = (after.IsZero() || line.Time.After(after)) && !yield(line, nil)
+			return !stopped
+		})
+		if err != nil && !stopped && ctx.Err() == nil {
 			yield(runtime.LogLine{}, err)
 		}
+	}
+}
+
+// eachLine calls fn with each line of r until it returns false, with lines cut after
+// maxLineBytes: a server can write longer ones, which would otherwise end every stream of
+// its log at the same line.
+func eachLine(r io.Reader, fn func(string) bool) error {
+	br := bufio.NewReaderSize(r, 64<<10)
+	var line []byte
+	for {
+		chunk, more, err := br.ReadLine()
+		if errors.Is(err, io.EOF) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		line = append(line, chunk[:min(len(chunk), maxLineBytes-len(line))]...)
+		if more {
+			continue
+		}
+		if !fn(string(line)) {
+			return nil
+		}
+		line = line[:0]
 	}
 }
 

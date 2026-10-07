@@ -107,3 +107,16 @@ func TestStopTimeoutAndTimeZone(t *testing.T) {
 		}
 	}
 }
+
+// A line longer than any the agent sends is cut, and the lines after it still come.
+func TestEachLine(t *testing.T) {
+	long := strings.Repeat("x", 3*maxLineBytes)
+	var got []string
+	err := eachLine(strings.NewReader("a\r\n"+long+"\nb\nc"), func(line string) bool {
+		got = append(got, line)
+		return line != "b"
+	})
+	if want := []string{"a", long[:maxLineBytes], "b"}; err != nil || !slices.Equal(got, want) {
+		t.Fatalf("lines = %d, %v", len(got), err)
+	}
+}
