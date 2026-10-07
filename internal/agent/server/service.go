@@ -165,6 +165,8 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 	if err := s.rt.Create(ctx, spec); err != nil {
 		return nil, toStatus(err)
 	}
+	// The server exists now: a cancelled call mustn't leave it half made.
+	ctx = context.WithoutCancel(ctx)
 	if len(req.GetProperties()) > 0 {
 		if err := s.writeProperties(ctx, spec.ID, req.GetProperties()); err != nil {
 			return nil, toStatus(errors.Join(err, s.rt.Remove(ctx, spec.ID)))
