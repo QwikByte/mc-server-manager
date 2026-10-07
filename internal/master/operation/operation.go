@@ -121,6 +121,7 @@ func (o *Operations) Run(w http.ResponseWriter, r *http.Request, spec Spec, task
 			NetworkID: spec.NetworkID, User: user.Username, Steps: slices.Clone(spec.Steps), StartedAt: time.Now(),
 		},
 		owner: ownerOf(user), starter: user.LogAttrs(), visible: spec.Visible, category: spec.Category, done: make(chan struct{}), cancel: cancel,
+		answered: o.quick == 0, // also if the operation ends before the answer
 	}
 	if spec.Cancel != nil {
 		e.mayCancel = func(g access.Grants) (access.Permission, bool) { return spec.Cancel(r, g) }
@@ -139,7 +140,7 @@ func (o *Operations) Run(w http.ResponseWriter, r *http.Request, spec Spec, task
 		}
 	}
 	o.mu.Lock()
-	finished, view := e.FinishedAt != nil, e.view(e.owner, access.From(r.Context()))
+	finished, view := o.quick > 0 && e.FinishedAt != nil, e.view(e.owner, access.From(r.Context()))
 	e.answered = !finished
 	o.mu.Unlock()
 	switch {
