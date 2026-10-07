@@ -180,8 +180,8 @@ still checks its permission with its arguments when it runs.
 
 ## Log
 
-An agent can only add entries about its own node and its servers, at a limited rate, and entries are cut to a maximum
-size, so a compromised agent can't fill the database or write entries about other nodes. Request fields that may hold
+An agent can only add entries about its own node and its servers, at a limited rate of entries and of bytes, and entries
+are cut to a maximum size, so a compromised agent can't fill the database or write entries about other nodes. Request fields that may hold
 secrets, such as the forwarding secret of a network, are never logged. Exports protect spreadsheets from formulas in
 entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the browser connects
 again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP address is that of the

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 
 	"github.com/QwikByte/noryx/internal/logging"
@@ -134,5 +135,34 @@ func TestSpreadsheetSafe(t *testing.T) {
 		if got := spreadsheetSafe(in); got != want {
 			t.Errorf("spreadsheetSafe(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestAgentBudget(t *testing.T) {
+	big := map[string]string{}
+	for i := range maxAttrs {
+		big[strings.Repeat("k", maxName)+string(rune('a'+i))] = strings.Repeat("<", maxValue)
+	}
+	e := Entry{Message: strings.Repeat("m", 3*maxMessage), Attrs: big}
+	e.clamp()
+	size := len(e.Message)
+	for k, v := range e.Attrs {
+		size += len(k) + len(v)
+	}
+	if size > maxMessage+maxAttrsSize+20 {
+		t.Errorf("clamped entry has %d bytes", size)
+	}
+
+	limits := budget{rate.NewLimiter(agentRate, agentBurst), rate.NewLimiter(agentBytes, agentBytesBurst)}
+	now, allowed := time.Now(), 0
+	for range agentBurst {
+		e := Entry{Message: "m", Attrs: big}
+		if limits.allow(now, &e) {
+			allowed++
+		}
+	}
+	// Each entry encodes "<" as six bytes, so the bytes run out long before the entries.
+	if allowed == 0 || allowed >= agentBurst/10 {
+		t.Errorf("%d of %d large entries allowed at once", allowed, agentBurst)
 	}
 }
