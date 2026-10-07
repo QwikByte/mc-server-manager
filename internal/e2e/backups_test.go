@@ -234,6 +234,33 @@ func TestPolicies(t *testing.T) {
 	if len(list) != 2 || list[0].Name != "Closing" || list[1].LastRun == nil || list[1].LastRun.Error != "" {
 		t.Fatalf("policies = %+v", list)
 	}
+
+	// A server's page lists the policies that cover it, also through its tags; each policy
+	// keeps its runs, and the agenda lists the upcoming ones.
+	api.do("POST", "/api/servers/tags", map[string]any{"servers": []network.Ref{survival}, "add": []string{"survival"}}, http.StatusNoContent, nil)
+	api.do("POST", "/api/policies", map[string]any{
+		"name": "Tagged", "enabled": true, "settings": map[string]any{"action": "start"},
+		"schedule": map[string]any{"dates": []string{"2099-12-24"}, "times": []string{"04:00"}, "timeZone": "Europe/Berlin"},
+		"targets":  []map[string]string{{"kind": "tag", "value": "survival"}},
+	}, http.StatusCreated, &task)
+	api.do("GET", "/api/policies?node="+survival.NodeID+"&server="+survival.ServerID, nil, http.StatusOK, &list)
+	if len(list) != 3 {
+		t.Fatalf("policies of %s = %+v", survival.ServerID, list)
+	}
+	run(t, api, "/api/policies/"+task.ID)
+	var runs []schedule.Run
+	api.do("GET", "/api/policies/"+task.ID+"/runs", nil, http.StatusOK, &runs)
+	if len(runs) != 1 || runs[0].Outcome != schedule.Succeeded || runs[0].EndedAt.Before(runs[0].StartedAt) {
+		t.Fatalf("runs = %+v", runs)
+	}
+	if servers, _ := a.runtime.List(t.Context()); servers[1].State != noryxv1.ServerState_SERVER_STATE_RUNNING {
+		t.Fatal("the tagged server didn't start")
+	}
+	var upcoming []schedule.Upcoming
+	api.do("GET", "/api/policies/upcoming", nil, http.StatusOK, &upcoming)
+	if len(upcoming) != 6 || upcoming[0].At.UTC().Weekday()%2 != 1 || upcoming[0].At.UTC().Hour() != 4 {
+		t.Fatalf("upcoming = %+v", upcoming)
+	}
 	api.do("DELETE", "/api/policies/"+task.ID, nil, http.StatusNoContent, nil)
 }
 

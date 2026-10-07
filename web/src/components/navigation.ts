@@ -2,6 +2,7 @@ import {
   ArchiveIcon,
   BooksIcon,
   CalendarCheckIcon,
+  CalendarDotsIcon,
   CubeIcon,
   FilesIcon,
   GearSixIcon,
@@ -55,6 +56,12 @@ export const automation = {
   tabs: [
     { to: "/backups", label: msg("Backups"), icon: ArchiveIcon, visible: (a: Access) => a.can("backupjobs.view") },
     { to: "/policies", label: msg("Schedules"), icon: CalendarCheckIcon, visible: (a: Access) => a.can("policies.view") },
+    {
+      to: "/agenda",
+      label: msg("Agenda"),
+      icon: CalendarDotsIcon,
+      visible: (a: Access) => a.can("backupjobs.view") || a.can("policies.view"),
+    },
   ],
 } as const
 

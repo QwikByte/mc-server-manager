@@ -1,14 +1,48 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { Target } from "@/features/servers/api"
 import { api } from "@/lib/api"
 
-/** When a task runs: at the times of day on the weekdays, in a time zone. */
+/** When a task runs: at the times of day on weekdays, on days of the month or on single dates, in a time zone. */
 export interface Schedule {
   /** Weekdays, 0 for Sunday; empty means every day. */
   days: number[]
+  /** Days of the month from 1 to 31, instead of weekdays; a month without one runs on its last day. */
+  monthDays?: number[]
+  /** Single days as YYYY-MM-DD, instead of weekdays; after the last one, the task turns itself off. */
+  dates?: string[]
   /** Times of day as HH:MM. */
   times: string[]
   timeZone: string
+}
+
+/** Which servers of a network a target names; empty names all of them. */
+export type NetworkRole = "" | "servers" | "proxy"
+
+/**
+ * Servers a task runs on: a server, all servers of a node (without serverId), those with a tag, or those of a
+ * network. Nodes, tags and networks include the servers they get later.
+ */
+export type TaskTarget =
+  | { kind: "server"; nodeId: string; serverId?: string }
+  | { kind: "tag"; value: string }
+  | { kind: "network"; value: string; role?: NetworkRole }
+
+/** A run of a task. */
+export interface Run {
+  id: number
+  startedAt: string
+  endedAt: string
+  /** The user who started it by hand; none for its schedule. */
+  startedBy?: string
+  outcome: "succeeded" | "failed"
+  error?: string
+  /** What the run left out, e.g. servers without data to back up. */
+  note?: string
+}
+
+/** A scheduled run of a task. */
+export interface Upcoming {
+  id: string
+  at: string
 }
 
 /** A task that runs on servers on a schedule: a backup job or a policy. */
@@ -17,10 +51,9 @@ export interface Task<S> {
   name: string
   enabled: boolean
   schedule: Schedule
-  targets: Target[]
+  targets: TaskTarget[]
   settings: S
-  /** The latest run; note tells what it left out, e.g. servers without data to back up. */
-  lastRun?: { at: string; error?: string; note?: string }
+  lastRun?: Run
   /** The scheduled time of the next run of an enabled task. */
   nextRun?: string
   running: boolean
@@ -47,6 +80,25 @@ export function taskApi<S>(path: string) {
       queryKey: [path, id],
       queryFn: () => api<Task<S>>(`${path}/${id}`),
     })
+  /** The tasks whose targets include a server now, also through its tags and network. */
+  const coveringQuery = (nodeId: string, serverId: string) =>
+    queryOptions({
+      queryKey: [path, "covering", nodeId, serverId],
+      queryFn: () => api<Task<S>[]>(`${path}?${new URLSearchParams({ node: nodeId, server: serverId })}`),
+    })
+  /** The kept runs of a task, newest first. */
+  const runsQuery = (id: string) =>
+    queryOptions({
+      queryKey: [path, id, "runs"],
+      queryFn: () => api<Run[]>(`${path}/${id}/runs`),
+      refetchInterval: 30_000,
+    })
+  /** The runs of the enabled tasks in the next 7 days, in order. */
+  const upcomingQuery = queryOptions({
+    queryKey: [path, "upcoming"],
+    queryFn: () => api<Upcoming[]>(`${path}/upcoming`),
+    refetchInterval: 60_000,
+  })
 
   /** Creates a task, or changes it if an ID is given. */
   function useSaveTask(id?: string) {
@@ -56,7 +108,7 @@ export function taskApi<S>(path: string) {
         id ? api<Task<S>>(`${path}/${id}`, { method: "PUT", body: input }) : api<Task<S>>(path, { body: input }),
       onSuccess: (task) => {
         queryClient.setQueryData(taskQuery(task.id).queryKey, task)
-        return queryClient.invalidateQueries({ queryKey: tasksQuery.queryKey, exact: true })
+        return queryClient.invalidateQueries({ queryKey: [path], predicate: ({ queryKey }) => queryKey[1] !== task.id })
       },
     })
   }
@@ -65,7 +117,7 @@ export function taskApi<S>(path: string) {
     const queryClient = useQueryClient()
     return useMutation({
       mutationFn: (id: string) => api(`${path}/${id}`, { method: "DELETE" }),
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: tasksQuery.queryKey }),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: [path] }),
     })
   }
 
@@ -78,11 +130,7 @@ export function taskApi<S>(path: string) {
     })
   }
 
-  return { tasksQuery, taskQuery, useSaveTask, useDeleteTask, useRunTask }
+  return { tasksQuery, taskQuery, coveringQuery, runsQuery, upcomingQuery, useSaveTask, useDeleteTask, useRunTask }
 }
 
 export type TaskApi<S> = ReturnType<typeof taskApi<S>>
-
-/** Whether a task runs on a server. */
-export const covers = (targets: Target[], nodeId: string, serverId: string) =>
-  targets.some((t) => t.nodeId === nodeId && (t.serverId === "" || t.serverId === serverId))

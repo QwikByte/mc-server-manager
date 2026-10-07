@@ -1,26 +1,22 @@
-import { ClockIcon, CubeIcon, HardDrivesIcon, type Icon, PlayIcon, TrashIcon } from "@phosphor-icons/react"
-import { useQuery } from "@tanstack/react-query"
+import { ClockIcon, type Icon, PlayIcon, TrashIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import type { ReactElement, ReactNode } from "react"
 import { toast } from "sonner"
 import { Callout } from "@/components/callout"
-import { Chip } from "@/components/chip"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { IconTile } from "@/components/icon-tile"
 import { type Status, StatusBadge } from "@/components/status"
 import type { Tone } from "@/components/tone"
 import { Button } from "@/components/ui/button"
-import { nodesQuery } from "@/features/nodes/api"
-import { allServersQuery } from "@/features/servers/api"
 import { formatDateTime } from "@/lib/format"
-import type { Target } from "@/features/servers/api"
 import { msg } from "@/lib/i18n"
 import type { Task, TaskApi } from "./api"
-import { describeSchedule } from "./describe"
+import { datesPassed, describeSchedule } from "./describe"
+import { TargetChips } from "./targets"
 
 function taskStatus(task: Task<unknown>): Status {
   if (task.running) return { tone: "warning", label: msg("Running"), pulse: true }
-  if (!task.enabled) return { tone: "neutral", label: msg("Paused") }
+  if (!task.enabled) return { tone: "neutral", label: datesPassed(task.schedule) ? msg("Done") : msg("Paused") }
   if (task.lastRun?.error) return { tone: "destructive", label: msg("Failed") }
   return { tone: "success", label: msg("Active") }
 }
@@ -81,7 +77,7 @@ export function TaskCard<S>({
           {describeSchedule(task.schedule)}
           <span className="truncate text-xs text-muted-foreground">{task.schedule.timeZone.replaceAll("_", " ")}</span>
         </p>
-        <Targets targets={task.targets} />
+        <TargetChips targets={task.targets} />
       </div>
       {task.lastRun?.error && (
         <Callout tone="destructive" title={t("The last run failed")} className="py-3">
@@ -94,7 +90,7 @@ export function TaskCard<S>({
         </Callout>
       )}
       <p className="text-xs text-muted-foreground">
-        {task.lastRun ? t("Last run {{time}}", { time: formatDateTime(task.lastRun.at) }) : t("Never run")}
+        {task.lastRun ? t("Last run {{time}}", { time: formatDateTime(task.lastRun.startedAt) }) : t("Never run")}
         {task.nextRun && ` · ${t("next {{time}}", { time: formatDateTime(task.nextRun) })}`}
       </p>
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-4" hidden={!manage}>
@@ -135,25 +131,5 @@ export function TaskCard<S>({
         />
       </div>
     </li>
-  )
-}
-
-/** The nodes and servers a task runs on. */
-function Targets({ targets }: { targets: Target[] }) {
-  const { data: nodes = [] } = useQuery(nodesQuery)
-  const { data: servers = [] } = useQuery(allServersQuery)
-  if (targets.length === 0) return <p className="text-sm text-muted-foreground">{t("No servers. Edit it to choose some.")}</p>
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {targets.map((target) => {
-        const node = nodes.find((n) => n.id === target.nodeId)?.name ?? t("Node")
-        const server = servers.find((s) => s.nodeId === target.nodeId && s.id === target.serverId)
-        return (
-          <Chip key={`${target.nodeId}/${target.serverId}`} icon={target.serverId ? CubeIcon : HardDrivesIcon} className="font-normal">
-            {target.serverId ? (server?.name ?? t("Unreachable server")) : t("{{node}} · all servers", { node })}
-          </Chip>
-        )
-      })}
-    </div>
   )
 }

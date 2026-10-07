@@ -159,7 +159,8 @@ Restarting and stopping them can warn the players of the game servers first, lik
 Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
 keeps them; they follow a server that moves, copies get them, servers created from a [template](library.md#tags) get
 its tags, and they go with a deleted server. Changing them needs the permission to change the server's settings, though
-it doesn't restart the server.
+it doesn't restart the server. [File sets](library.md#file-sets),
+[backup jobs and schedules](automation.md#targets-and-times) can target a tag, so a tag can put a server under them.
 
 Servers have **notes** too, e.g. what a test server is for or whom to ask about it: up to 500 characters of plain text,
 which the server's page shows and the search of the lists and **Ctrl+K** find. **Notes…** in the menu of a server

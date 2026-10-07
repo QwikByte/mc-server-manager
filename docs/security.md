@@ -226,7 +226,13 @@ to send console commands on each server; others get the default message and can'
 Restarting servers of a network one after the other, also a single one, needs the permission to restart the proxy, which
 sends their players elsewhere, and each server that restarts; sending the players of a server elsewhere needs the
 permission to manage the players of the proxy, like sending one player. Schedules, which may restart any server, also
-server by server, need the permission to manage schedules everywhere, checked when they are saved.
+server by server, need the permission to manage schedules everywhere, checked when they are saved; backup jobs likewise
+need the permission to manage backup jobs, which applies to all servers. Both run as the master, not as the user who
+saved them, and their targets of tags and networks resolve to the servers these have at each run, which needs no rights
+beyond those that apply everywhere anyway. There is one side effect: whoever may change the settings of a server, which
+include its tags, can put it under a backup job or schedule by giving it a tag that one targets, or take it out of one
+by removing the tag; the panel says so where tags are edited. Runs that a user started by hand keep the user's name in
+the history of the job or schedule, which those see who may see it.
 
 ## Terminal
 

@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { msg } from "@/lib/i18n"
 import type { TaskInput } from "./api"
 import { ScheduleField } from "./schedule-field"
-import { TargetsField } from "@/features/servers/targets-field"
+import { TaskTargetsField } from "./targets"
 
 const texts = {
   job: {
@@ -80,7 +80,7 @@ export function TaskForm<S>({
       </FormSection>
 
       <FormSection title={t("Servers")}>
-        <TargetsField value={form.targets} onChange={(targets) => set({ targets })} />
+        <TaskTargetsField value={form.targets} onChange={(targets) => set({ targets })} />
       </FormSection>
 
       <div className="-mx-5 flex flex-wrap-reverse items-center justify-end gap-x-6 gap-y-3 rounded-b-2xl bg-muted/50 px-5 py-4 sm:-mx-8 sm:px-8">

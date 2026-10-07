@@ -13,12 +13,12 @@ pauses saving while they are archived, so players stay connected.
 
 - **By hand.** The **Backups** tab of a server backs it up now, e.g. before an update, and lists, downloads, restores
   and deletes its backups.
-- **Jobs.** The **Backups** page schedules backup jobs for servers or whole nodes (including servers created later): on
-  chosen weekdays at one or more times of day in a time zone, which a search finds by name or offset. A job keeps the
-  newest backups per server and deletes older ones; backups made by hand are never deleted that way. A job backs up one
-  server per node at a time, and skips servers without any of the selected data yet, e.g. new ones that never started:
-  its last run lists them. A job can also back up [datastores](databases.md) with all their databases, also without any
-  server, one at a time per node together with the servers there.
+- **Jobs.** The **Backups** tab of the **Automation** schedules backup jobs for nodes, servers, tags and networks at
+  set times, see [Targets and times](#targets-and-times). A job keeps the newest backups per server and deletes older
+  ones; backups made by hand are never deleted that way. A job backs up one server per node at a time, and skips servers
+  without any of the selected data yet, e.g. new ones that never started: its runs list them. A job can also back up
+  [datastores](databases.md) with all their databases, also without any server, one at a time per node together with
+  the servers there. The **Backups** tab of a server names the jobs that cover it.
 - **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds and
   leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
   stopped while the files are swapped, and started again afterwards. How the server takes part in a
@@ -54,7 +54,7 @@ The nodes keep working with the restored master. If its IP address changed, allo
 
 ## Schedules
 
-Schedules rule servers or whole nodes at set times, like backup jobs:
+Schedules rule servers at set times, on the same [targets](#targets-and-times) as backup jobs:
 
 - **Restart**, e.g. every night at 4:00. Players are warned in the chat beforehand (10, 5 and 1 minutes before by
   default, with an editable message) and the servers restart at the scheduled time. **Server by server in networks**
@@ -65,6 +65,36 @@ Schedules rule servers or whole nodes at set times, like backup jobs:
 - **Stop** and **start**, e.g. for opening hours. Stopping warns the players like restarting.
 - **Console command**, e.g. a broadcast every evening.
 
-Restarts and stops only concern running servers, starts only stopped ones. The master runs backup jobs and schedules;
-runs it misses while it is down are skipped. The latest run and its errors are shown with each job and schedule, and
-both can be run right away. Deleted servers are removed from them automatically.
+Restarts and stops only concern running servers, starts only stopped ones. The header of a server's page shows the
+active schedules that cover it, also through its tags and network.
+
+## Targets and times
+
+Backup jobs and schedules run on their **targets**, which can be combined:
+
+- **Nodes**, with all their servers, also those created later, and **single servers**. Deleted servers are removed from
+  the targets automatically.
+- The servers with a **tag**, e.g. `lobby`: those that have it at each run, so a server tagged later is included, and
+  one whose tag is removed no longer is. A run notes a tag that no server has. Whoever may change the tags of a server
+  can put it under a job or schedule this way, see [Security](security.md#permissions).
+- The servers of a **network**: all of them, its game servers or its proxy, as the network has them at each run.
+  **Server by server in networks** works for them as for any other target. A deleted network is removed from the
+  targets; a schedule left without targets says so in its runs.
+
+They run at one or more times of day in a time zone, which a search finds by name or offset:
+
+- on chosen **weekdays**, or every day;
+- **monthly**, on chosen days of the month, e.g. the 1st and the 15th. A month without a chosen day, such as February
+  without the 30th or April without the 31st, runs on its last day instead, once even if several chosen days fall on
+  it;
+- on **single days**, up to 100, e.g. for an event. After the last one, the job or schedule turns itself off, and it can
+  only be turned on again with a day that is still to come.
+
+Times follow the clocks of the time zone: a time that a day lacks as the clocks are put forward runs that much later
+(02:30 becomes 03:30), and one that a day has twice as they are put back runs once. The master runs backup jobs and
+schedules; runs it misses while it is down are skipped, and one whose last day passed meanwhile turns itself off when
+the master starts. Both can be run right away, too.
+
+The page of each job and schedule shows its latest 50 runs: when they started and how long they took, who started them
+by hand, what failed and what they left out. The **Agenda** tab of the **Automation** lists what runs now and in the
+next 7 days, day by day in your time zone.

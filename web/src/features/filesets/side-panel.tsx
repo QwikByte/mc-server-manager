@@ -6,17 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { networksQuery } from "@/features/networks/api"
 import { allServersQuery } from "@/features/servers/api"
+import { NetworkField, TagField } from "@/features/servers/group-fields"
 import type { FileSet, SetInput, Target } from "./api"
 import { targetKey, targetLabel } from "./labels"
 import { PanelSection } from "./panel-section"
 import { SecretsSection } from "./secrets"
-
-// An example in an empty field, which needs no translation.
-const exampleTag = "lobby"
 
 /** What a set is for and what it needs besides its files: its targets, secrets and details. */
 export function SidePanel({ set, draft, editable, onChange }: { set: FileSet; draft: SetInput; editable: boolean; onChange: (change: Partial<SetInput>) => void }) {
@@ -116,7 +113,14 @@ function TargetsSection({ targets, editable, onChange }: { targets: Target[]; ed
                 </DialogDescription>
               </DialogHeader>
               <TagField tags={[...new Set(servers?.flatMap((s) => s.tags))].sort()} onAdd={(value) => add({ kind: "tag", value })} />
-              <NetworkField networks={networks ?? []} onAdd={(value, role) => add({ kind: "network", value, role })} />
+              <NetworkField
+                networks={networks ?? []}
+                roles={[
+                  { value: "servers", label: t("Game servers") },
+                  { value: "proxy", label: t("Proxy") },
+                ]}
+                onAdd={(value, role) => add({ kind: "network", value, role })}
+              />
               <DialogFooter>
                 <DialogClose asChild>
                   <Button variant="outline">{t("Cancel")}</Button>
@@ -127,82 +131,5 @@ function TargetsSection({ targets, editable, onChange }: { targets: Target[]; ed
         </Dialog>
       )}
     </PanelSection>
-  )
-}
-
-function TagField({ tags, onAdd }: { tags: string[]; onAdd: (tag: string) => void }) {
-  const [tag, setTag] = useState("")
-  function submit(event: { preventDefault: () => void }) {
-    event.preventDefault()
-    if (tag.trim()) onAdd(tag.trim().toLowerCase())
-    setTag("")
-  }
-  return (
-    <Field>
-      <FieldLabel htmlFor="target-tag">{t("Servers with a tag")}</FieldLabel>
-      {/* Not a form of its own, as it may be inside one; Enter adds the tag. */}
-      <div className="flex max-w-xl gap-2">
-        <Input
-          id="target-tag"
-          list="target-tags"
-          placeholder={exampleTag}
-          value={tag}
-          onChange={(e) => setTag(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit(e)}
-        />
-        <datalist id="target-tags">
-          {tags.map((known) => (
-            <option key={known} value={known} />
-          ))}
-        </datalist>
-        <Button type="button" variant="outline" disabled={!tag.trim()} onClick={submit}>
-          <PlusIcon />
-          {t("Add")}
-        </Button>
-      </div>
-    </Field>
-  )
-}
-
-function NetworkField({
-  networks,
-  onAdd,
-}: {
-  networks: { id: string; name: string }[]
-  onAdd: (network: string, role: "servers" | "proxy") => void
-}) {
-  const [network, setNetwork] = useState("")
-  const [role, setRole] = useState<"servers" | "proxy">("servers")
-  return (
-    <Field>
-      <FieldLabel htmlFor="target-network">{t("Servers of a network")}</FieldLabel>
-      <div className="flex max-w-xl flex-wrap gap-2">
-        <Select value={network} onValueChange={setNetwork}>
-          <SelectTrigger id="target-network" className="min-w-36 flex-1">
-            <SelectValue placeholder={t("Choose a network")} />
-          </SelectTrigger>
-          <SelectContent>
-            {networks.map((n) => (
-              <SelectItem key={n.id} value={n.id}>
-                {n.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={role} onValueChange={(r) => setRole(r as "servers" | "proxy")}>
-          <SelectTrigger aria-label={t("Which servers of the network")} className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="servers">{t("Game servers")}</SelectItem>
-            <SelectItem value="proxy">{t("Proxy")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button type="button" variant="outline" disabled={!network} onClick={() => onAdd(network, role)}>
-          <PlusIcon />
-          {t("Add")}
-        </Button>
-      </div>
-    </Field>
   )
 }

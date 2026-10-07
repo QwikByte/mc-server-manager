@@ -17,8 +17,9 @@ servers. The properties Noryx sets itself (the port, address and RCON) and secre
 
 ### Tags
 
-Servers created from a template get its tags, e.g. `bedwars`, so they are targets of the file sets of these tags right
-away. The file sets still have to be applied to them, so a template puts no files with secrets on a server by itself.
+Servers created from a template get its tags, e.g. `bedwars`, so they are targets of the file sets, backup jobs and
+schedules of these tags right away. The file sets still have to be applied to them, so a template puts no files with
+secrets on a server by itself.
 Giving a new server tags needs the permission to change the settings of the servers on its node, as tags of a server do;
 without it, the server is created without them, and the panel says so.
 
