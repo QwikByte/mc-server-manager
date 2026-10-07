@@ -18,6 +18,7 @@ func TestTemplates(t *testing.T) {
 		in := map[string]any{
 			"name": "Survival", "description": "Paper with permissions", "type": "paper", "version": "", "memoryMb": 4096,
 			"java": "21", "restartPolicy": "on_crash", "aikarFlags": true, "jvmOptions": []string{"-Dfile.encoding=UTF-8"}, "cpuLimit": 2,
+			"stopTimeout": 300, "timeZone": "Europe/Berlin",
 			"properties": map[string]string{"difficulty": "hard", "motd": "§aWelcome"}, "plugins": []string{"luckperms"},
 		}
 		change(in)
@@ -30,7 +31,7 @@ func TestTemplates(t *testing.T) {
 		t.Fatalf("template = %+v", tmpl)
 	}
 	api.do("GET", "/api/templates/"+tmpl.ID, nil, http.StatusOK, &tmpl)
-	if tmpl.Properties["difficulty"] != "hard" || tmpl.RestartPolicy != "on_crash" || tmpl.CPULimit != 2 {
+	if tmpl.Properties["difficulty"] != "hard" || tmpl.RestartPolicy != "on_crash" || tmpl.CPULimit != 2 || tmpl.StopTimeout != 300 || tmpl.TimeZone != "Europe/Berlin" {
 		t.Fatalf("stored template = %+v", tmpl)
 	}
 
@@ -40,23 +41,34 @@ func TestTemplates(t *testing.T) {
 	api.do("POST", "/api/templates", input(func(in map[string]any) { in["name"], in["plugins"] = "Missing", []string{"missing"} }), http.StatusBadRequest, nil)
 	api.do("POST", "/api/templates", input(func(in map[string]any) { in["name"], in["type"] = "Proxy", "velocity" }), http.StatusBadRequest, nil)
 	api.do("POST", "/api/templates", input(func(in map[string]any) { in["name"], in["properties"] = "Bad", map[string]string{"a b": "c"} }), http.StatusBadRequest, nil)
-	api.do("PUT", "/api/templates/"+tmpl.ID, input(func(in map[string]any) { in["name"], in["memoryMb"] = "Survival 2", 2048 }), http.StatusOK, &tmpl)
-	if tmpl.Name != "Survival 2" || tmpl.MemoryMB != 2048 {
+	// Stop timeouts and time zones are checked like the agent checks them.
+	api.do("POST", "/api/templates", input(func(in map[string]any) { in["name"], in["stopTimeout"] = "Fast", 10 }), http.StatusBadRequest, nil)
+	api.do("POST", "/api/templates", input(func(in map[string]any) { in["name"], in["timeZone"] = "Local", "Local" }), http.StatusBadRequest, nil)
+	api.do("POST", "/api/templates", input(func(in map[string]any) { in["name"], in["timeZone"] = "Path", "../../etc/passwd" }), http.StatusBadRequest, nil)
+	api.do("PUT", "/api/templates/"+tmpl.ID, input(func(in map[string]any) {
+		in["name"], in["memoryMb"], in["stopTimeout"], in["timeZone"] = "Survival 2", 2048, 0, ""
+	}), http.StatusOK, &tmpl)
+	if tmpl.Name != "Survival 2" || tmpl.MemoryMB != 2048 || tmpl.StopTimeout != 60 || tmpl.TimeZone != "" {
 		t.Fatalf("updated template = %+v", tmpl)
 	}
+	api.do("PUT", "/api/templates/"+tmpl.ID, input(func(in map[string]any) { in["name"], in["memoryMb"] = "Survival 2", 2048 }), http.StatusOK, &tmpl)
 
 	// A server created with a template's settings gets its server.properties before it starts.
 	path := "/api/nodes/" + a.node.ID + "/servers"
 	server := map[string]any{
 		"name": "Survival", "type": tmpl.Type, "version": tmpl.Version, "memoryMb": tmpl.MemoryMB, "port": 25565, "acceptEula": true,
 		"java": tmpl.Java, "restartPolicy": tmpl.RestartPolicy, "aikarFlags": tmpl.AikarFlags, "jvmOptions": tmpl.JVMOptions,
-		"cpuLimit": tmpl.CPULimit, "properties": tmpl.Properties,
+		"cpuLimit": tmpl.CPULimit, "stopTimeout": tmpl.StopTimeout, "timeZone": tmpl.TimeZone, "properties": tmpl.Properties,
 	}
-	var created struct{ ID string }
+	var created struct {
+		ID      string
+		Warning string
+	}
 	api.do("POST", path, server, http.StatusCreated, &created)
 	spec := a.runtime.spec(created.ID)
-	if spec.Java != "21" || spec.RestartPolicy != noryxv1.RestartPolicy_RESTART_POLICY_ON_CRASH || !spec.AikarFlags || spec.CPUMillis != 2000 {
-		t.Fatalf("spec = %+v", spec)
+	if spec.Java != "21" || spec.RestartPolicy != noryxv1.RestartPolicy_RESTART_POLICY_ON_CRASH || !spec.AikarFlags || spec.CPUMillis != 2000 ||
+		spec.StopTimeout != 300 || spec.TimeZone != "Europe/Berlin" || created.Warning != "" {
+		t.Fatalf("spec = %+v, warning %q", spec, created.Warning)
 	}
 	props, err := os.ReadFile(filepath.Join(a.runtime.dir, created.ID, "server.properties"))
 	check(t, err)

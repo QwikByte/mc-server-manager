@@ -15,7 +15,16 @@ import type { Project } from "@/features/plugins/api"
 import { PluginIcon } from "@/features/plugins/plugin-icon"
 import { PluginSearch } from "@/features/plugins/plugin-search"
 import { defaults, serverType, splitOptions } from "@/features/servers/server-types"
-import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField, VersionField } from "@/features/servers/settings-fields"
+import {
+  CpuLimitField,
+  JavaFields,
+  JvmOptionsField,
+  MemoryField,
+  RestartPolicyField,
+  StopTimeoutField,
+  TimeZoneField,
+  VersionField,
+} from "@/features/servers/settings-fields"
 import { EndOfLifeNotice, SoftwareOptions } from "@/features/servers/software"
 import { parseProperties, propertiesText, type TemplateDraft, type TemplateInput } from "./api"
 
@@ -113,10 +122,12 @@ export function TemplateForm({
           )}
           <MemoryField id="template-memory" value={form.memoryMb} onChange={(memoryMb) => set({ memoryMb })} />
         </div>
+        <TimeZoneField id="template-time-zone" value={form.timeZone} onChange={(timeZone) => set({ timeZone })} />
       </FormSection>
 
-      <FormSection title={t("Startup")}>
+      <FormSection title={t("Starting and stopping")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
+        <StopTimeoutField id="template-stop-timeout" value={form.stopTimeout} onChange={(stopTimeout) => set({ stopTimeout })} />
       </FormSection>
 
       <FormSection title={t("Java")}>

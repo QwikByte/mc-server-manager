@@ -16,7 +16,8 @@ Container labels are the agent's only state, so servers keep running while an ag
 the Minecraft version suggests the releases that Modrinth lists, as do the settings and templates; empty means the
 latest. A game server can get a seed, a game mode, a difficulty and a world type under **World**, which start as its
 template has them, or as Minecraft's defaults. They are written to `server.properties` before the first start, and the
-agent checks them like other properties. Deleting a server with all its worlds asks for its name first.
+agent checks them like other properties. The [stop timeout and the time zone](#settings-and-images) fold away the same
+way, as the template has them, or 1 minute and UTC. Deleting a server with all its worlds asks for its name first.
 
 The page of a server shows the address players join at, with a button to copy it: the host of its node's address with
 the server's port, or its proxy's for a server of a network. Without the permissions to see that node and the networks,

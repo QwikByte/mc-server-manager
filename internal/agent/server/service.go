@@ -19,7 +19,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	_ "time/tzdata" // so that time zones are known on nodes without a database of them
 	"unicode"
 
 	"google.golang.org/grpc/codes"
@@ -83,8 +82,6 @@ var (
 	codeProperty   = regexp.MustCompile(`(?i)^(log4j|(java|javax|jdk|sun|com\.sun|jvmci|jna|logback|org\.apache\.logging)\.)`)
 	safeProperties = []string{"java.awt.headless", "java.net.preferIPv4Stack", "java.net.preferIPv6Addresses", "sun.stdout.encoding", "sun.stderr.encoding", "log4j2.formatMsgNoLookups"}
 	javaVersions   = []string{"", "8", "11", "17", "21", "25"}
-	// Names of IANA time zones, e.g. Europe/Berlin, America/Port-au-Prince or Etc/GMT+5.
-	timeZonePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_+/-]{0,63}$`)
 )
 
 type Service struct {
@@ -643,7 +640,6 @@ func (s *Service) apply(ctx context.Context, id string, op func(context.Context,
 // the number of CPU cores of the node, or 0 if unknown.
 func checkSettings(spec runtime.Spec, cpus uint32) string {
 	_, knownPolicy := noryxv1.RestartPolicy_name[int32(spec.RestartPolicy)]
-	stop := noryxv1.StopTimeout(spec.StopTimeout)
 	switch {
 	case !namePattern.MatchString(spec.Name):
 		return "Use 1-32 letters, digits, spaces, '.', '_' or '-' for the name."
@@ -669,9 +665,9 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 		return "Give the server at least 0.1 CPU cores, or no limit."
 	case cpus > 0 && spec.CPUMillis > cpus*1000:
 		return fmt.Sprintf("The node has %d CPU cores.", cpus)
-	case stop < noryxv1.MinStopTimeout || stop > noryxv1.MaxStopTimeout:
+	case !noryxv1.ValidStopTimeout(spec.StopTimeout):
 		return fmt.Sprintf("Give the server %.0f seconds to %.0f minutes to stop.", noryxv1.MinStopTimeout.Seconds(), noryxv1.MaxStopTimeout.Minutes())
-	case !validTimeZone(spec.TimeZone):
+	case !noryxv1.ValidTimeZone(spec.TimeZone):
 		return "Choose a time zone such as Europe/Berlin, or none for UTC."
 	}
 	for _, option := range spec.JVMOptions {
@@ -693,16 +689,6 @@ func checkJVMOption(option string) string {
 		return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
 	}
 	return ""
-}
-
-// validTimeZone reports whether tz is empty, for UTC, or names an IANA time zone. It ends up
-// in a variable of the image, so it has no other characters than the names of zones.
-func validTimeZone(tz string) bool {
-	if tz == "" {
-		return true
-	}
-	_, err := time.LoadLocation(tz)
-	return err == nil && tz != "Local" && timeZonePattern.MatchString(tz)
 }
 
 // refusedOptions returns the JVM options of a server that are refused now, as they were set

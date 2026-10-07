@@ -1,6 +1,10 @@
 package noryxv1
 
-import "time"
+import (
+	"regexp"
+	"time"
+	_ "time/tzdata" // so that time zones are known on systems without a database of them
+)
 
 // ContainerMemoryMB is the hard memory limit of the container of a server whose heap is
 // heapMB: Java needs memory beyond its heap, e.g. for its code and threads. The master
@@ -26,4 +30,27 @@ func StopTimeout(seconds uint32) time.Duration {
 		return DefaultStopTimeout
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+// ValidStopTimeout reports whether stop_timeout_seconds is 0, for the default, or from
+// MinStopTimeout to MaxStopTimeout.
+func ValidStopTimeout(seconds uint32) bool {
+	d := StopTimeout(seconds)
+	return d >= MinStopTimeout && d <= MaxStopTimeout
+}
+
+// Names of IANA time zones, e.g. Europe/Berlin, America/Port-au-Prince or Etc/GMT+5.
+var timeZonePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_+/-]{0,63}$`)
+
+// ValidTimeZone reports whether tz is empty, for UTC, or names an IANA time zone. It ends up
+// in a variable of the image, so it has no other characters than the names of zones.
+func ValidTimeZone(tz string) bool {
+	if tz == "" {
+		return true
+	}
+	if tz == "Local" || !timeZonePattern.MatchString(tz) {
+		return false
+	}
+	_, err := time.LoadLocation(tz)
+	return err == nil
 }

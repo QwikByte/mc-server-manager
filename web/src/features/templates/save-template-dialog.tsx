@@ -62,7 +62,7 @@ export function SaveTemplateDialog({
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const { version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit } = server
+    const { version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, stopTimeout, timeZone } = server
     save.mutate(
       {
         name: name.trim(),
@@ -75,6 +75,8 @@ export function SaveTemplateDialog({
         aikarFlags,
         jvmOptions,
         cpuLimit,
+        stopTimeout,
+        timeZone,
         properties: props,
         plugins: projects,
       },

@@ -95,7 +95,9 @@ export const runningCount = (servers: Server[]) => servers.filter((s) => s.state
 export const serverKey = (s: { nodeId: string; id: string }) => `${s.nodeId}/${s.id}`
 
 export interface NewServer
-  extends Partial<Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit" | "loaderVersion">> {
+  extends Partial<
+    Pick<Server, "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit" | "loaderVersion" | "stopTimeout" | "timeZone">
+  > {
   name: string
   type: string
   version: string
