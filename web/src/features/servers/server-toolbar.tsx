@@ -1,5 +1,15 @@
-import { FunnelSimpleIcon, ListIcon, MagnifyingGlassIcon, RowsIcon, SortAscendingIcon, SquaresFourIcon } from "@phosphor-icons/react"
+import {
+  FunnelSimpleIcon,
+  ListIcon,
+  MagnifyingGlassIcon,
+  RowsIcon,
+  SortAscendingIcon,
+  SortDescendingIcon,
+  SquaresFourIcon,
+} from "@phosphor-icons/react"
 import { t } from "i18next"
+import type { ReactNode } from "react"
+import { CsvButton } from "@/components/csv-button"
 import { FilterChip } from "@/components/filter-chip"
 import { StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
@@ -9,12 +19,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import type { Cell } from "@/lib/csv"
+import type { Order, Sorting } from "@/lib/sort"
 import { cn } from "@/lib/utils"
 import type { NodeServer, ServerState } from "./api"
 import {
@@ -63,6 +76,8 @@ export function ServerToolbar({
   facts,
   hidden,
   view,
+  sorting,
+  rows,
 }: {
   servers: NodeServer[]
   search: ServerSearch
@@ -73,6 +88,9 @@ export function ServerToolbar({
   /** Properties the list doesn't offer, e.g. the node on a node's page. */
   hidden: Property[]
   view: View
+  sorting: Sorting<Sort>
+  /** The servers listed, as CSV. */
+  rows: () => Cell[][]
 }) {
   const filters = properties
     .filter((p) => !hidden.includes(p))
@@ -133,12 +151,18 @@ export function ServerToolbar({
         )}
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           <Choice
-            icon={SortAscendingIcon}
+            icon={sorting.order === "asc" ? SortAscendingIcon : SortDescendingIcon}
             label={t("Sort")}
-            value={search.sort ?? "name"}
+            value={sorting.by}
             options={Object.entries(sorts).map(([value, label]) => ({ value: value as Sort, label: t(label) }))}
-            onChange={(sort) => onSearch({ sort: sort === "name" ? undefined : sort })}
-          />
+            onChange={(sort) => sorting.sort(sort)}
+          >
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={sorting.order} onValueChange={(order) => sorting.sort(sorting.by, order as Order)}>
+              <DropdownMenuRadioItem value="asc">{t("Ascending")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="desc">{t("Descending")}</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </Choice>
           <Choice
             icon={RowsIcon}
             label={t("Group by")}
@@ -169,6 +193,7 @@ export function ServerToolbar({
               </button>
             ))}
           </div>
+          <CsvButton name="servers" rows={rows} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -220,12 +245,15 @@ function Choice<T extends string>({
   value,
   options,
   onChange,
+  children,
 }: {
   icon: typeof SortAscendingIcon
   label: string
   value: T
   options: { value: T; label: string }[]
   onChange: (value: T) => void
+  /** More choices, after the options. */
+  children?: ReactNode
 }) {
   return (
     <DropdownMenu>
@@ -244,6 +272,7 @@ function Choice<T extends string>({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        {children}
       </DropdownMenuContent>
     </DropdownMenu>
   )

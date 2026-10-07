@@ -1,46 +1,74 @@
 import { DotsThreeIcon, PaperPlaneTiltIcon, UsersThreeIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
+import { CsvButton } from "@/components/csv-button"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableHead, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAccess } from "@/features/access/use-access"
 import { key, refOf } from "@/features/networks/servers"
 import { serverKey } from "@/features/servers/api"
+import { type Sorting, sortBy } from "@/lib/sort"
 import { playerActions } from "./actions"
 import type { PlayerAction } from "./api"
 import type { OnlinePlayer } from "./online"
 import type { PlayerDialog } from "./players-page"
 import { useScopes } from "./scopes"
+import type { OnlineSort } from "./search"
 
 /** Players shown at most, so that the page stays quick; a search finds the others. */
 const shown = 200
 const menu: PlayerAction[] = ["kick", "ban", "whitelist_add", "op"]
 
+/** What each column sorts the players by. */
+const values: Record<OnlineSort, (p: OnlinePlayer) => string | undefined> = {
+  name: (p) => p.name,
+  server: (p) => p.server.name,
+  network: (p) => p.network?.name,
+}
+
 /** The players online, with what can be done to each. */
-export function OnlinePlayers({ players, onAct }: { players: OnlinePlayer[]; onAct: (dialog: PlayerDialog) => void }) {
+export function OnlinePlayers({
+  players,
+  sorting,
+  onAct,
+}: {
+  players: OnlinePlayer[]
+  sorting: Sorting<OnlineSort>
+  onAct: (dialog: PlayerDialog) => void
+}) {
   const { can } = useAccess()
   const scopesFor = useScopes()
   if (players.length === 0) {
     return <EmptyState icon={UsersThreeIcon} title={t("No players online")} description={t("Players show up here while they play.")} />
   }
+  const sorted = sortBy(players, sorting.order, values[sorting.by], (p) => p.name)
   return (
     <>
+      <div className="mb-3 flex justify-end">
+        <CsvButton
+          name="players"
+          rows={() => [
+            ["player", "server", "server_id", "node", "node_id", "network"],
+            ...sorted.map((p) => [p.name, p.server.name, p.server.id, p.server.nodeName, p.server.nodeId, p.network?.name]),
+          ]}
+        />
+      </div>
       <div className="surface overflow-hidden rounded-xl">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="pl-4">{t("Player")}</TableHead>
-              <TableHead>{t("Server")}</TableHead>
-              <TableHead className="max-md:hidden">{t("Network")}</TableHead>
+              <SortableHead sorting={sorting} column="name" className="pl-4">{t("Player")}</SortableHead>
+              <SortableHead sorting={sorting} column="server">{t("Server")}</SortableHead>
+              <SortableHead sorting={sorting} column="network" className="max-md:hidden">{t("Network")}</SortableHead>
               <TableHead className="w-0">
                 <span className="sr-only">{t("Actions")}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {players.slice(0, shown).map(({ name, server, network }) => {
+            {sorted.slice(0, shown).map(({ name, server, network }) => {
               const actions = menu
                 .map((action) => ({ action, scopes: scopesFor(action, { server, network }) }))
                 .filter((a) => a.scopes.length > 0)

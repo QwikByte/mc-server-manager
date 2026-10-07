@@ -34,7 +34,9 @@ Argon2id password hashes, session tokens stored as SHA-256 hashes, `__Host-` coo
 `SameSite=Strict`), cross-origin request protection, a strict Content Security Policy and self-hosted fonts. Sign-in
 attempts are rate limited per client address (IPv6 per /64 network) and per username, changes that need the password per
 user. A username has a larger budget than a client, so that a single client can't keep a user out. Client addresses come
-from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`.
+from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`. The CSV
+files of servers and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
+reasons as the export of the log does.
 
 ## Two-factor authentication
 

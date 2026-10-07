@@ -2,9 +2,20 @@ import { t } from "i18next"
 import { useState } from "react"
 import { useNetworkOf } from "@/features/networks/servers"
 import { useUsages } from "@/features/usage/api"
+import { sortingOf } from "@/lib/sort"
 import { type NodeServer, serverKey } from "./api"
 import { BulkBar } from "./bulk-bar"
-import { type Facts, filterServers, groupServers, type Property, type ServerSearch, sortServers, type View } from "./browse"
+import {
+  type Facts,
+  filterServers,
+  groupServers,
+  type Property,
+  type ServerSearch,
+  serverRows,
+  sortOrders,
+  sortServers,
+  type View,
+} from "./browse"
 import { ServerToolbar } from "./server-toolbar"
 import { ServerGrid, ServerTable } from "./server-views"
 
@@ -40,7 +51,8 @@ export function ServerBrowser({
   const networkOf = useNetworkOf()
   const facts: Facts = { usage: (s) => usages.server(s.nodeId, s.id), network: (s) => networkOf({ nodeId: s.nodeId, serverId: s.id }) }
   const { found, counts, total } = filterServers(servers, search, facts)
-  const groups = groupServers(sortServers(found, search.sort, facts), search.group, facts)
+  const sorting = sortingOf(search, sortOrders, onSearch)
+  const groups = groupServers(sortServers(found, sorting.by, sorting.order, facts), search.group, facts)
   const view = search.view ?? storedView() ?? (servers.length > 12 ? "table" : "grid")
   const [selection, setSelection] = useState(new Set<string>())
   const [collapsed, setCollapsed] = useState(new Set<string>())
@@ -68,6 +80,7 @@ export function ServerBrowser({
   const props = {
     groups,
     facts,
+    sorting,
     showNode: !hidden.includes("node"),
     selected: (s: NodeServer) => selection.has(serverKey(s)),
     onSelect: (list: NodeServer[], on: boolean) => setSelection((sel) => toggle(sel, list.map(serverKey), on)),
@@ -86,6 +99,9 @@ export function ServerBrowser({
         facts={facts}
         hidden={hidden}
         view={view}
+        sorting={sorting}
+        // In the order shown, each server once, also when grouped by tags.
+        rows={() => serverRows([...new Set(groups.flatMap((g) => g.servers))], facts)}
       />
       {found.length === 0 ? (
         <p className="rounded-xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">{t("No server matches your search.")}</p>

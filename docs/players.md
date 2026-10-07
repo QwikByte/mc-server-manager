@@ -5,6 +5,10 @@ The **Players** page lists the players online on all game servers, with their se
 of a network, with how many servers have each player, and the changes that wait for stopped servers. Temporary bans,
 which Paper's ban list and plugins such as EssentialsX write, show when they end, and those that ended are marked.
 **Players online** on a network's page opens the page for that network.
+The headers of the tables sort them, by player, server and network or by player and number of servers; the address keeps
+the order. **Export CSV** downloads a tab as shown, searched and sorted, for spreadsheets: the players online with their
+server, node and network, or the players of a list with their servers, and for bans the reason, when it started and ends
+and who banned them.
 
 ## Actions
 

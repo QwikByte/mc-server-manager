@@ -6,14 +6,15 @@ import type { ReactNode } from "react"
 import { Chip } from "@/components/chip"
 import { IconTile } from "@/components/icon-tile"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableHead, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PinButton } from "@/features/preferences/pin-button"
 import { formatCores } from "@/features/usage/format"
 import { formatBytes, formatMegabytes } from "@/lib/format"
 import { rise } from "@/lib/motion"
+import type { Sorting } from "@/lib/sort"
 import { cn } from "@/lib/utils"
 import { type NodeServer, serverKey } from "./api"
-import type { Facts, Group } from "./browse"
+import type { Facts, Group, Sort } from "./browse"
 import { ServerActions } from "./server-actions"
 import { ServerStateBadge } from "./server-state"
 import { displayVersion, memoryTitle, serverLook, serverType } from "./server-types"
@@ -23,6 +24,7 @@ import { TagList } from "./tags"
 export interface ViewProps {
   groups: Group[]
   facts: Facts
+  sorting: Sorting<Sort>
   /** Whether servers of several nodes are listed, which then show their node. */
   showNode: boolean
   selected: (s: NodeServer) => boolean
@@ -229,7 +231,7 @@ function ServerCard({
 }
 
 /** A compact table of servers, for many of them, in groups that fold away. */
-export function ServerTable({ groups, facts, showNode, selected, onSelect, collapsed, onCollapse }: ViewProps) {
+export function ServerTable({ groups, facts, sorting, showNode, selected, onSelect, collapsed, onCollapse }: ViewProps) {
   const all = groups.flatMap((g) => g.servers)
   const showNetwork = all.some((s) => facts.network(s))
   const columns = 7 + Number(showNode) + Number(showNetwork)
@@ -241,13 +243,13 @@ export function ServerTable({ groups, facts, showNode, selected, onSelect, colla
             <TableHead className="w-10 pl-4">
               <SelectAll servers={[...new Set(all)]} selected={selected} onSelect={onSelect} label={t("Select all servers")} />
             </TableHead>
-            <TableHead>{t("Server")}</TableHead>
-            <TableHead>{t("State")}</TableHead>
-            {showNode && <TableHead className="max-md:hidden">{t("Node")}</TableHead>}
+            <SortableHead sorting={sorting} column="name">{t("Server")}</SortableHead>
+            <SortableHead sorting={sorting} column="state">{t("State")}</SortableHead>
+            {showNode && <SortableHead sorting={sorting} column="node" className="max-md:hidden">{t("Node")}</SortableHead>}
             {showNetwork && <TableHead className="max-lg:hidden">{t("Network")}</TableHead>}
-            <TableHead className="text-right">{t("Players")}</TableHead>
-            <TableHead className="text-right max-sm:hidden">{t("CPU")}</TableHead>
-            <TableHead className="text-right max-sm:hidden">{t("Memory")}</TableHead>
+            <SortableHead sorting={sorting} column="players" className="text-right">{t("Players")}</SortableHead>
+            <SortableHead sorting={sorting} column="cpu" className="text-right max-sm:hidden">{t("CPU")}</SortableHead>
+            <SortableHead sorting={sorting} column="memory" className="text-right max-sm:hidden">{t("Memory")}</SortableHead>
             <TableHead className="w-0">
               <span className="sr-only">{t("Actions")}</span>
             </TableHead>

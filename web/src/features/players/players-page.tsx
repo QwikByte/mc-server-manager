@@ -12,12 +12,13 @@ import { SelectItem } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { type Network, networksQuery } from "@/features/networks/api"
+import { sortingOf } from "@/lib/sort"
 import type { PlayerAction } from "./api"
 import { useOnlinePlayers } from "./online"
 import { OnlinePlayers } from "./online-players"
 import { PlayerActionDialog, type Scope } from "./player-action-dialog"
 import { type ListKind, PlayerListTab } from "./player-lists"
-import type { PlayerSearch } from "./search"
+import { listSorts, onlineSorts, type PlayerSearch } from "./search"
 import { SendDialog } from "./send-dialog"
 
 const route = getRouteApi("/_app/players")
@@ -94,10 +95,14 @@ export function PlayersPage() {
               })}
             </Callout>
           )}
-          {isPending ? <Skeleton className="h-64 rounded-xl" /> : <OnlinePlayers players={online} onAct={setDialog} />}
+          {isPending ? (
+            <Skeleton className="h-64 rounded-xl" />
+          ) : (
+            <OnlinePlayers players={online} sorting={sortingOf(search, onlineSorts, set)} onAct={setDialog} />
+          )}
         </>
       ) : (
-        <PlayerListTab kind={tab} network={network} query={query} onAct={setDialog} />
+        <PlayerListTab kind={tab} network={network} query={query} sorting={sortingOf(search, listSorts, set)} onAct={setDialog} />
       )}
       {dialog &&
         ("send" in dialog ? (

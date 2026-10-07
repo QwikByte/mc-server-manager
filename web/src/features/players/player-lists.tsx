@@ -2,24 +2,26 @@ import { ClockIcon, CrownSimpleIcon, GavelIcon, ListChecksIcon, WarningIcon } fr
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { Callout, ErrorCallout } from "@/components/callout"
+import { CsvButton } from "@/components/csv-button"
 import { EmptyState } from "@/components/empty-state"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableHead, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAccess } from "@/features/access/use-access"
 import type { Network, ServerRef } from "@/features/networks/api"
 import { findServer } from "@/features/networks/servers"
 import { allServersQuery } from "@/features/servers/api"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { msg } from "@/lib/i18n"
+import { type Sorting, sortBy } from "@/lib/sort"
 import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 import { needs, playerActions } from "./actions"
 import { type Listed, type PlayerAction, type PlayerLists, playerListsQuery } from "./api"
 import type { PlayerDialog } from "./players-page"
 import { useScopes } from "./scopes"
-import type { PlayerSearch } from "./search"
+import type { ListSort, PlayerSearch } from "./search"
 
 export type ListKind = NonNullable<PlayerSearch["tab"]>
 
@@ -55,11 +57,13 @@ export function PlayerListTab({
   kind,
   network,
   query,
+  sorting,
   onAct,
 }: {
   kind: ListKind
   network?: Network
   query: string
+  sorting: Sorting<ListSort>
   onAct: (dialog: PlayerDialog) => void
 }) {
   const { can } = useAccess()
@@ -71,7 +75,12 @@ export function PlayerListTab({
 
   const { icon, add, remove, empty, where } = kinds[kind]
   const total = data.servers.length
-  const entries = data[kind].filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
+  const entries = sortBy(
+    data[kind].filter((e) => e.name.toLowerCase().includes(query.toLowerCase())),
+    sorting.order,
+    sorting.by === "servers" ? (e) => e.servers.length : (e) => e.name,
+    (e) => e.name,
+  )
   const nameOf = (ref: ServerRef) => findServer(servers, ref)?.name ?? ref.serverId
   const failed = data.servers.filter((s) => s.error)
   const pending = data.servers.flatMap((s) => s.pending.map((p) => ({ ...p, server: nameOf(s) })))
@@ -92,6 +101,21 @@ export function PlayerListTab({
               <AddIcon />
               {playerActions[add].label()}
             </Button>
+          )}
+          {entries.length > 0 && (
+            <CsvButton
+              name={kind === "whitelisted" ? "whitelist" : kind}
+              rows={() => [
+                ["player", "uuid", ...(kind === "banned" ? ["reason", "since", "until", "source"] : []), "servers", "server_names"],
+                ...entries.map((e) => [
+                  e.name,
+                  e.uuid,
+                  ...(kind === "banned" ? [e.reason, e.since, e.until, e.source] : []),
+                  e.servers.length,
+                  e.servers.map(nameOf).join(", "),
+                ]),
+              ]}
+            />
           )}
         </div>
       </div>
@@ -124,9 +148,9 @@ export function PlayerListTab({
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4">{t("Player")}</TableHead>
+                <SortableHead sorting={sorting} column="name" className="pl-4">{t("Player")}</SortableHead>
                 {kind === "banned" && <TableHead className="max-md:hidden">{t("Reason")}</TableHead>}
-                <TableHead>{t("Servers")}</TableHead>
+                <SortableHead sorting={sorting} column="servers">{t("Servers")}</SortableHead>
                 <TableHead className="w-0">
                   <span className="sr-only">{t("Actions")}</span>
                 </TableHead>
