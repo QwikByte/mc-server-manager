@@ -1,10 +1,11 @@
 import { Decoration, type DecorationSet, EditorView, MatchDecorator, ViewPlugin, type ViewUpdate } from "@codemirror/view"
+import { hidden, placeholderPattern } from "./api"
 
-// Variables, which the master fills in for each server, and secrets, which only the agents
-// fill in, stand out in the editor.
+// Variables and connections to databases, which the master fills in for each server, and
+// secrets and passwords, which only the agents fill in, stand out in the editor.
 const decorator = new MatchDecorator({
-  regexp: /\{\{((?:server|network)\.[^{}\s]*|secret:[^{}\n]*)\}\}/g,
-  decoration: (m) => Decoration.mark({ class: m[1].startsWith("secret:") ? "cm-placeholder-secret" : "cm-placeholder-variable" }),
+  regexp: placeholderPattern,
+  decoration: (m) => Decoration.mark({ class: hidden(m[1]) ? "cm-placeholder-secret" : "cm-placeholder-variable" }),
 })
 
 /** Highlights the placeholders of a file of a set. */

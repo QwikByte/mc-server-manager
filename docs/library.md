@@ -15,24 +15,28 @@ sets) and the plugins that come from Modrinth. Worlds and plugin configurations 
 
 ## File sets
 
-A file set keeps text files that many servers share in one place, e.g. the configuration of LuckPerms, chat or
-anti-cheat plugins, and puts them on the servers of tags and networks: those with a tag, or the game servers or the
-proxy of a network. Paths are relative to the server's folder, e.g. `plugins/LuckPerms/config.yml`.
+A file set keeps files that many servers share in one place, e.g. the configuration of LuckPerms, chat or anti-cheat
+plugins or a `server-icon.png`, and puts them on the servers of tags and networks: those with a tag, or the game servers
+or the proxy of a network. Paths are relative to the server's folder, e.g. `plugins/LuckPerms/config.yml`.
 
 ### Files
 
-The page of a set is one workspace: its files as folders next to the editor, with an **Insert** menu for variables and
-secrets, and beside them the set's targets, secrets and details. A bar above tells what the set needs, e.g. servers that
-are outdated or secrets without a value, and offers to apply it. **Import** browses the folders of a server and takes
-chosen files or whole folders at the same paths, as the file manager shows them, skipping binary files and those larger
-than 1 MiB; a new file's folder can be chosen on a server too. A set keeps the newest 20 versions with who saved them;
-the history shows what each version changed and loads an older one into the editor to save it as the newest. A save
-based on an older version than the newest is refused, so that it can't undo what someone else saved. A set has up to 100
-text files (UTF-8 without NUL bytes) of up to 1 MiB, 3 MiB in all. A file can be written only to servers that don't have
-it, for files that plugins rewrite. Files that Noryx writes itself (`server.properties`, `eula.txt`, `velocity.toml`,
-BungeeCord's `config.yml`, `spigot.yml`, `config/paper-global.yml`, the lists of players, `noryx-*` files), those with
-secrets of the server and `.jar`, `.zip` and `.class` files can't be part of a set; plugins come from the **Plugins**
-page, with their hashes checked. On a server, a path comes from one set only.
+The page of a set is one workspace: its files as folders next to the editor, with an **Insert** menu for variables,
+databases and secrets, and beside them the set's targets, variables, secrets and details. A bar above tells what the set
+needs, e.g. servers that are outdated or secrets and variables without a value, and offers to apply it. **New file**
+starts an empty file or uploads one of the computer; **Import** browses the folders of a server and takes chosen files
+or whole folders at the same paths, as the file manager shows them, skipping those larger than 1 MiB and those with
+code; a new file's folder can be chosen on a server too. A set keeps the newest 20 versions of its files with who saved
+them; the history shows what each version changed and loads an older one into the editor to save it as the newest. A
+save based on an older version than the newest is refused, so that it can't undo what someone else saved. A set has up
+to 100 files of up to 1 MiB, 3 MiB in all: text files (UTF-8 without NUL bytes) and binary files, e.g. images, which the
+panel never shows as text but previews if they are images, downloads and replaces, and which servers get as they are;
+agents of older versions get none, as they would write them empty, and the state of the set tells to update them. A file
+can be written only to servers that don't have it, for files that plugins rewrite. Files that Noryx writes itself
+(`server.properties`, `eula.txt`, `velocity.toml`, BungeeCord's `config.yml`, `spigot.yml`, `config/paper-global.yml`,
+the lists of players, `noryx-*` files), those with secrets of the server, `.jar`, `.zip` and `.class` files, and
+archives, Java classes and programs under any name can't be part of a set; plugins come from the **Plugins** page, with
+their hashes checked. On a server, a path comes from one set only.
 
 ### Placeholders
 
@@ -40,28 +44,63 @@ The master fills in `{{server.name}}`, `{{server.id}}`, `{{server.port}}` and `{
 its network, for each server; these only hold letters, digits and a few other characters, so they can't add lines to a
 file. `{{secret:<name>}}` is a secret of the set: a single line of up to 1 KiB, typed in or generated randomly. The API
 only tells the names of secrets and when they changed, never their values. Other text in double braces stays as it is,
-as some plugins use it themselves. The connection of a [database](databases.md) is typed in like any other setting, its
-password best as a secret.
+as some plugins use it themselves; binary files are written as they are, without placeholders filled in.
+
+### Variables
+
+`{{var:<name>}}` is a variable of the set, for what differs between servers, e.g. their role or the name of their
+world. The set's **Variables** give it values for single servers, the servers of networks (their proxies included),
+those with tags, and all servers. A server gets its own value, else its network's, else that of the first of its tags
+in alphabetical order, else the one for all servers. A value is a single line of up to 128 characters without quotes,
+backslashes and braces, so it can't add lines to a file, end a quoted text or make up another placeholder. A set has up
+to 50 variables with up to 200 values each; they are saved with the set, like its targets, but not in its versions.
+
+### Databases
+
+`{{datastore:<datastore>.<database>.<field>}}` fills in how a server reaches a database of a
+[datastore](databases.md) of its own network, so that one set serves the servers of every node, e.g. for LuckPerms:
+
+```yaml
+address: {{datastore:main.luckperms.host}}:{{datastore:main.luckperms.port}}
+database: {{datastore:main.luckperms.database}}
+username: {{datastore:main.luckperms.user}}
+password: {{datastore:main.luckperms.password}}
+```
+
+`host` and `port` are those of the datastore's container for the servers on its node, and its address and port in the
+private network of the nodes for the others; `database` and `user` share the database's name. `password` is filled in by
+the agents only, like a secret, and the file that holds it is hidden on the server. The datastore is the one of that
+name in the server's network, so a set for several networks uses the datastore of each. Only those who may manage
+datastores may add a password to a set or change a file that holds one, which the log records, and apply a set that puts
+passwords on servers; others may change the rest of the set. A new password of a database makes the servers that have it
+outdated, until the set is applied again. Agents of older versions get no passwords.
+
+### Problems
+
+A secret or variable without a value for a server, a database the server doesn't reach (it is in no network, its
+network has no such datastore or database, or its node and the datastore's aren't both in the private network of the
+nodes), and files that grow beyond the limits of a set once filled in show on the **Servers** tab and in the preview;
+applying leaves these servers out rather than write a broken file.
 
 ### Applying
 
 Saving changes no server; **Save and apply** saves and goes on to apply. **Apply** shows first what changes on each
 server, with the diff of each file between the server's copy and the new version, servers with the same changes
 together; files with secrets show the version the server has and the new one, with placeholders instead of values, and
-whether the server's copy changed. It names the servers that get the secrets for the first time. Applying writes the
-files atomically as the server's user, removes those the set no longer has unless they changed on the server, at most 8
-servers of a node at a time, and leaves moving servers alone. It can then restart the running servers whose files
-changed, the game servers of a network a few at a time like a rolling restart, as most plugins only read their
-configuration when they start. The results tell how it went on each server, and **Retry the failed ones** applies the
-same version again to the servers where it failed. Applying can be cancelled while it writes the files, but not once it
-restarts servers.
+whether the server's copy changed, and binary files only whether they change. It names the servers that get the secrets
+for the first time. Applying writes the files atomically as the server's user, removes those the set no longer has
+unless they changed on the server, at most 8 servers of a node at a time, and leaves moving servers alone. It can then
+restart the running servers whose files changed, the game servers of a network a few at a time like a rolling restart,
+as most plugins only read their configuration when they start. The results tell how it went on each server, and **Retry
+the failed ones** applies the same version again to the servers where it failed. Applying can be cancelled while it
+writes the files, but not once it restarts servers.
 
 ### State
 
 The page of a set tells for each server whether it has the newest files, an older version or other values of its
-variables or secrets (outdated), files that changed on it since, none yet, whether it is no longer a target but still
-has files of the set, or whether its node can't be reached. The file manager marks the files that come from a set, as
-applying it again replaces changes made there.
+variables, secrets or passwords (outdated), files that changed on it since, none yet, whether it is no longer a target
+but still has files of the set, or whether its node can't be reached. The file manager marks the files that come from a
+set, as applying it again replaces changes made there.
 
 ### Leaving
 

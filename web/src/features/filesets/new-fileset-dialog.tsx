@@ -24,7 +24,7 @@ export function NewFileSetDialog({ trigger }: { trigger: ReactElement }) {
   function submit(event: FormEvent) {
     event.preventDefault()
     save.mutate(
-      { name, description, files: [], targets: [], version: 0 },
+      { name, description, files: [], targets: [], variables: [], version: 0 },
       {
         onSuccess: (set) => {
           toast.success(t("Created {{name}}", { name: set.name }))

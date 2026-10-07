@@ -14,15 +14,17 @@ import type { FileSet, SetInput, Target } from "./api"
 import { targetKey, targetLabel } from "./labels"
 import { PanelSection } from "./panel-section"
 import { SecretsSection } from "./secrets"
+import { VariablesSection } from "./variables"
 
 // An example in an empty field, which needs no translation.
 const exampleTag = "lobby"
 
-/** What a set is for and what it needs besides its files: its targets, secrets and details. */
+/** What a set is for and what it needs besides its files: its targets, variables, secrets and details. */
 export function SidePanel({ set, draft, editable, onChange }: { set: FileSet; draft: SetInput; editable: boolean; onChange: (change: Partial<SetInput>) => void }) {
   return (
-    <div className="grid content-start items-start gap-4 lg:grid-cols-3 2xl:grid-cols-1">
+    <div className="grid content-start items-start gap-4 lg:grid-cols-2 2xl:grid-cols-1">
       <TargetsSection targets={draft.targets} editable={editable} onChange={(targets) => onChange({ targets })} />
+      <VariablesSection variables={draft.variables} files={draft.files} editable={editable} onChange={(variables) => onChange({ variables })} />
       <SecretsSection set={set} files={draft.files} editable={editable} />
       <PanelSection icon={NotePencilIcon} title={t("Details")}>
         <Field>

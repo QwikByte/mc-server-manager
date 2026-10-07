@@ -145,6 +145,17 @@ itself or that hold secrets of the server, so a set can't change forwarding or R
 file through a link or into a file where a folder should be. A compromised server can change its own manifest, which
 only changes its own state or the hiding of secrets it can read anyway.
 
+Values of the variables of a set are a single line without quotes, backslashes and braces, so that they can't add lines
+to a file, end a quoted text or make up a placeholder, also one of a secret. Binary files are written as they are, and
+besides `.jar`, `.zip` and `.class` files, master and agent refuse archives, Java classes and Linux programs by their
+first bytes, so that a set can't add code under another name. The passwords of databases reach servers only through
+their placeholders, which the master fills in for the databases of a server's own network only. Saving a set that adds a
+password or changes a file with one, and applying a set that puts passwords on servers, need the permission to manage
+datastores, and the log records which passwords a set uses, so that nobody who may not see a password gets it onto a
+server they control and reads it there. The master sends them in the field of secrets, and the agent only accepts
+passwords of the form the master generates and hides the files like those with secrets. Agents tell the master that they
+write binary files and fill in passwords; older ones, which would write binary files empty, get neither.
+
 ## Databases
 
 A datastore runs as the image's user without capabilities, with `no-new-privileges`, memory, CPU and PID limits and a
@@ -170,7 +181,8 @@ tell where a value ends. It drops control characters, so that a line can't contr
 the master relays the log without logging it. The passwords are stored in the master's database like the forwarding
 secret, and are never logged. The API returns them
 only to those who may manage datastores, one at a time on request, without caching, and logs who asked; they can
-download all data in dumps anyway. A compromised master knows them, as it knows the forwarding secret, and could restore
+download all data in dumps anyway, and only they may put them into [file sets](#file-sets) and on servers.
+A compromised master knows them, as it knows the forwarding secret, and could restore
 or delete data, but can't learn the superuser's password or place data outside the allowed storage locations.
 
 ## Duplicates
