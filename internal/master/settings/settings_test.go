@@ -2,11 +2,14 @@ package settings
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/https"
 )
@@ -167,4 +170,25 @@ func TestPanelHTTPS(t *testing.T) {
 func freePort(t *testing.T) string {
 	_, port, _ := net.SplitHostPort(freeAddr(t))
 	return port
+}
+
+// A refused change leaves the settings as they are, also the limits of new nodes, which the
+// request is decoded into.
+func TestRefusedUpdate(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s, err := Load(t.Context(), db, Master{PanelDefaultAddr: "127.0.0.1:0"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"nodeDefaults": {"portMin": 30000, "portMax": 70000, "memoryReserveMb": 2048}}`
+	r := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	NewHandler(s, nil).update(rec, r.WithContext(access.WithGrants(t.Context(), access.Admin())))
+	if l := s.NodeDefaults(); rec.Code != http.StatusBadRequest || l.PortMin != nil || *l.MemoryReserveMB != 1024 {
+		t.Fatalf("status %d, limits of new nodes %+v", rec.Code, l)
+	}
 }
