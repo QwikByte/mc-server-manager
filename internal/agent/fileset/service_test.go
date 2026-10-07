@@ -2,6 +2,7 @@ package fileset
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -360,5 +361,24 @@ func check(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A huge file where a set wrote one, e.g. sparse, as a compromised server could make it, isn't read.
+func TestHugeFileIsNotRead(t *testing.T) {
+	dir, err := datadir.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.Close()
+	f, err := dir.Create("huge.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(f.Truncate(1<<40), f.Close()); err != nil {
+		t.Fatal(err)
+	}
+	if sum, exists, err := digest(dir, "huge.yml"); sum != "" || !exists || err != nil {
+		t.Fatalf("digest = %q, %v, %v", sum, exists, err)
 	}
 }

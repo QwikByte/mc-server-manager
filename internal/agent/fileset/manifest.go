@@ -154,8 +154,13 @@ func Watch(dir *datadir.Dir) func() secrets.Files {
 	}
 }
 
-// digest returns the SHA-256 of a file in hex, or "" if it is no regular file, and whether
-// anything exists at its path.
+// maxDigest is larger than any file a set writes, even a megabyte of placeholders of the
+// longest secrets filled in.
+const maxDigest = 128 << 20
+
+// digest returns the SHA-256 of a file in hex, or "" if it is no regular file or too large
+// to be one a set wrote, e.g. a huge sparse file of the server, and whether anything exists
+// at its path.
 func digest(dir *datadir.Dir, name string) (sum string, exists bool, err error) {
 	info, err := dir.Lstat(filepath.FromSlash(name))
 	switch {
@@ -163,7 +168,7 @@ func digest(dir *datadir.Dir, name string) (sum string, exists bool, err error) 
 		return "", false, nil
 	case err != nil:
 		return "", false, err
-	case !info.Mode().IsRegular():
+	case !info.Mode().IsRegular() || info.Size() > maxDigest:
 		return "", true, nil
 	}
 	f, err := dir.Open(filepath.FromSlash(name))
