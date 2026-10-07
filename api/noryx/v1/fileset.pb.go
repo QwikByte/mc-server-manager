@@ -142,11 +142,14 @@ type FileSetFile struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Relative to the server's data directory, with forward slashes.
 	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	// UTF-8 text. {{secret:<name>}} and {{datastore:<name>.<field>}} are filled in from the
-	// secrets of the request.
+	// UTF-8 text. {{secret:<name>}} and {{datastore:<name>.<database>.password}} are filled
+	// in from the secrets of the request.
 	Content string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	// Writes the file only if the server has none, for files that plugins rewrite.
 	OnlyIfMissing bool `protobuf:"varint,3,opt,name=only_if_missing,json=onlyIfMissing,proto3" json:"only_if_missing,omitempty"`
+	// The content of a binary file, e.g. an image, instead of content; nothing is filled in.
+	// Agents that don't report binary_files in ListFileSetsResponse ignore it.
+	Data          []byte `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -202,6 +205,13 @@ func (x *FileSetFile) GetOnlyIfMissing() bool {
 	return false
 }
 
+func (x *FileSetFile) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 type ApplyFileSetRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
@@ -213,7 +223,8 @@ type ApplyFileSetRequest struct {
 	// whether the server has the newest state of the set.
 	Revision string         `protobuf:"bytes,5,opt,name=revision,proto3" json:"revision,omitempty"`
 	Files    []*FileSetFile `protobuf:"bytes,6,rep,name=files,proto3" json:"files,omitempty"`
-	// The values of the placeholders, by what is between the braces, e.g. secret:db-password.
+	// The values of the placeholders that only the agent fills in, by what is between the
+	// braces, e.g. secret:db-password or datastore:main.luckperms.password.
 	Secrets map[string]string `protobuf:"bytes,7,rep,name=secrets,proto3" json:"secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Only tells what would change.
 	DryRun        bool `protobuf:"varint,8,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
@@ -563,9 +574,14 @@ func (*ListFileSetsRequest) Descriptor() ([]byte, []int) {
 type ListFileSetsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Only servers that have files of sets.
-	Servers       []*ServerFileSets `protobuf:"bytes,1,rep,name=servers,proto3" json:"servers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Servers []*ServerFileSets `protobuf:"bytes,1,rep,name=servers,proto3" json:"servers,omitempty"`
+	// The agent writes binary files (FileSetFile.data). Older agents would write them empty,
+	// so the master sends them none.
+	BinaryFiles bool `protobuf:"varint,2,opt,name=binary_files,json=binaryFiles,proto3" json:"binary_files,omitempty"`
+	// The agent fills in the passwords of databases. Older agents refuse them.
+	DatabasePasswords bool `protobuf:"varint,3,opt,name=database_passwords,json=databasePasswords,proto3" json:"database_passwords,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ListFileSetsResponse) Reset() {
@@ -603,6 +619,20 @@ func (x *ListFileSetsResponse) GetServers() []*ServerFileSets {
 		return x.Servers
 	}
 	return nil
+}
+
+func (x *ListFileSetsResponse) GetBinaryFiles() bool {
+	if x != nil {
+		return x.BinaryFiles
+	}
+	return false
+}
+
+func (x *ListFileSetsResponse) GetDatabasePasswords() bool {
+	if x != nil {
+		return x.DatabasePasswords
+	}
+	return false
 }
 
 type ServerFileSets struct {
@@ -806,11 +836,12 @@ var File_noryx_v1_fileset_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_fileset_proto_rawDesc = "" +
 	"\n" +
-	"\x16noryx/v1/fileset.proto\x12\bnoryx.v1\"c\n" +
+	"\x16noryx/v1/fileset.proto\x12\bnoryx.v1\"w\n" +
 	"\vFileSetFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12&\n" +
-	"\x0fonly_if_missing\x18\x03 \x01(\bR\ronlyIfMissing\"\xe2\x02\n" +
+	"\x0fonly_if_missing\x18\x03 \x01(\bR\ronlyIfMissing\x12\x12\n" +
+	"\x04data\x18\x04 \x01(\fR\x04data\"\xe2\x02\n" +
 	"\x13ApplyFileSetRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x15\n" +
 	"\x06set_id\x18\x02 \x01(\tR\x05setId\x12\x19\n" +
@@ -836,9 +867,11 @@ const file_noryx_v1_fileset_proto_rawDesc = "" +
 	"\adry_run\x18\x04 \x01(\bR\x06dryRun\"J\n" +
 	"\x15RemoveFileSetResponse\x121\n" +
 	"\achanges\x18\x01 \x03(\v2\x17.noryx.v1.FileSetChangeR\achanges\"\x15\n" +
-	"\x13ListFileSetsRequest\"J\n" +
+	"\x13ListFileSetsRequest\"\x9c\x01\n" +
 	"\x14ListFileSetsResponse\x122\n" +
-	"\aservers\x18\x01 \x03(\v2\x18.noryx.v1.ServerFileSetsR\aservers\"[\n" +
+	"\aservers\x18\x01 \x03(\v2\x18.noryx.v1.ServerFileSetsR\aservers\x12!\n" +
+	"\fbinary_files\x18\x02 \x01(\bR\vbinaryFiles\x12-\n" +
+	"\x12database_passwords\x18\x03 \x01(\bR\x11databasePasswords\"[\n" +
 	"\x0eServerFileSets\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12,\n" +
 	"\x04sets\x18\x02 \x03(\v2\x18.noryx.v1.AppliedFileSetR\x04sets\"\x8a\x01\n" +

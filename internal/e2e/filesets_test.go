@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,8 +12,10 @@ import (
 	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	agentoverlay "github.com/QwikByte/noryx/internal/agent/overlay"
 	"github.com/QwikByte/noryx/internal/master/access"
 	masterapp "github.com/QwikByte/noryx/internal/master/app"
+	"github.com/QwikByte/noryx/internal/master/datastore"
 	"github.com/QwikByte/noryx/internal/master/fileset"
 	"github.com/QwikByte/noryx/internal/master/network"
 )
@@ -208,6 +211,142 @@ func TestFileSets(t *testing.T) {
 	})
 	if read(lobby, chat) != "name: Lobby\n" {
 		t.Fatal("deleting the set removed other files")
+	}
+}
+
+// A set fills in its own variables and where each server reaches a database of its network,
+// and puts binary files on servers. Only those who may manage datastores may put the
+// passwords of databases into a set and on servers, where the file manager hides them.
+func TestFileSetVariablesDatabasesAndBinaryFiles(t *testing.T) {
+	m := startMaster(t)
+	a1, a2 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2")
+	proxy := m.createServer(t, a1, "Proxy", noryxv1.ServerType_SERVER_TYPE_VELOCITY, 25577)
+	lobby := m.createServer(t, a1, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	game := m.createServer(t, a2, "Game", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	api := apiClient{t: t, url: m.panel(t).URL}
+	for i, a := range []agent{a1, a2} {
+		check(t, agentoverlay.Allow(a.dir))
+		api.do("POST", "/api/nodes/"+a.node.ID+"/overlay", map[string]string{"endpoint": fmt.Sprintf("203.0.113.%d:51820", i+1)}, http.StatusOK, nil)
+	}
+	var n network.Network
+	api.do("POST", "/api/networks", map[string]any{"name": "Main", "proxy": proxy, "servers": []network.Ref{lobby, game}}, http.StatusCreated, &n)
+	var ds datastore.View
+	api.do("POST", "/api/networks/"+n.ID+"/datastores", map[string]any{"name": "main", "nodeId": a1.node.ID, "engine": "mariadb", "memoryMb": 512}, http.StatusCreated, &ds)
+	api.do("POST", "/api/datastores/"+ds.ID+"/databases", map[string]string{"name": "lp"}, http.StatusCreated, nil)
+	_, password := a1.runtime.Content(ds.ID, "lp")
+	read := func(a agent, srv network.Ref, name string) string {
+		data, err := os.ReadFile(filepath.Join(a.runtime.dir, srv.ServerID, filepath.FromSlash(name)))
+		if os.IsNotExist(err) {
+			return "<none>"
+		}
+		check(t, err)
+		return string(data)
+	}
+
+	lp, icon := "plugins/LuckPerms/config.yml", "server-icon.png"
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+	in := fileset.Input{
+		Name: "Network",
+		Files: []fileset.File{
+			{Path: lp, Content: "address: {{datastore:main.lp.host}}:{{datastore:main.lp.port}}\nuser: {{datastore:main.lp.user}}\npassword: {{datastore:main.lp.password}}\n"},
+			{Path: "plugins/Role/config.yml", Content: "role: {{var:role}}\n"},
+			{Path: icon, Data: png},
+		},
+		Targets: []fileset.Target{{Kind: fileset.KindNetwork, Value: n.ID, Role: fileset.RoleServers}},
+		Variables: []fileset.Variable{{Name: "role", Values: []fileset.Value{
+			{Kind: fileset.KindAll, Value: "game"}, {Kind: fileset.KindServer, Scope: lobby.ServerID, Value: "hub"},
+		}}},
+	}
+	// Putting a password into a set needs the permission to manage datastores.
+	writer := m.withGrants(t, map[string]any{"name": "Writers", "permissions": []string{"filesets.manage", "files.write"}, "allServers": true})
+	writer.do("POST", "/api/filesets", in, http.StatusForbidden, nil)
+	var set fileset.Set
+	api.do("POST", "/api/filesets", in, http.StatusCreated, &set)
+	if len(set.Variables) != 1 || set.Variables[0].Values[0].Kind != fileset.KindServer || string(set.Files[2].Data) != string(png) {
+		t.Fatalf("set = %+v", set)
+	}
+	// Others may change the set, but not the files with passwords.
+	path := "/api/filesets/" + set.ID
+	in.Version, in.Description = 1, "The files of the network"
+	writer.do("PUT", path, in, http.StatusOK, &set)
+	in.Files[0].Content += "url: https://example.com/?pw={{datastore:main.lp.password}}\n"
+	writer.do("PUT", path, in, http.StatusForbidden, nil)
+	in.Files[0].Content = set.Files[0].Content
+
+	// Applying needs it too; each server gets where it reaches the database and its value of
+	// the variable, and the preview shows no password.
+	writer.do("POST", path+"/preview", map[string]int64{"version": 1}, http.StatusForbidden, nil)
+	var preview fileset.Preview
+	body := api.do("POST", path+"/preview", map[string]int64{"version": 1}, http.StatusOK, &preview)
+	if strings.Contains(body, password) {
+		t.Fatal("the preview shows the password")
+	}
+	shown := map[string]string{}
+	for _, srv := range preview.Servers {
+		if srv.Error != "" || !srv.FirstSecrets || len(srv.Files) != 3 {
+			t.Fatalf("preview of %s = %+v", srv.Name, srv)
+		}
+		for _, f := range srv.Files {
+			shown[srv.Name+":"+f.Path] = preview.Contents[f.After]
+			if f.Binary != (f.Path == icon) || f.Secret != (f.Path == lp) {
+				t.Errorf("preview of %s on %s = %+v", f.Path, srv.Name, f)
+			}
+		}
+	}
+	remote := ds.Endpoints[len(ds.Endpoints)-1]
+	for key, want := range map[string]string{
+		"Lobby:" + lp:                   "address: noryx-db-" + ds.ID + ":3306\nuser: lp\npassword: {{datastore:main.lp.password}}\n",
+		"Game:" + lp:                    fmt.Sprintf("address: %s:%d\nuser: lp\npassword: {{datastore:main.lp.password}}\n", remote.Host, remote.Port),
+		"Lobby:plugins/Role/config.yml": "role: hub\n",
+		"Game:plugins/Role/config.yml":  "role: game\n",
+		"Lobby:" + icon:                 "",
+	} {
+		if shown[key] != want {
+			t.Errorf("%s shown as %q, want %q", key, shown[key], want)
+		}
+	}
+	api.do("POST", path+"/apply", map[string]int64{"version": 1}, http.StatusOK, nil)
+	if got := read(a2, game, lp); !remote.Remote || got != fmt.Sprintf("address: %s:%d\nuser: lp\npassword: %s\n", remote.Host, remote.Port, password) {
+		t.Fatalf("LuckPerms config of the game = %q", got)
+	}
+	if read(a1, lobby, icon) != string(png) || read(a1, lobby, "plugins/Role/config.yml") != "role: hub\n" {
+		t.Fatal("the lobby didn't get its files")
+	}
+	files := "/api/nodes/" + a1.node.ID + "/servers/" + lobby.ServerID + "/files"
+	api.do("GET", files+"/content?path="+lp, nil, http.StatusForbidden, nil)
+	api.do("GET", files+"/content?path="+icon, nil, http.StatusOK, nil)
+
+	status := func() map[string]fileset.ServerStatus {
+		var list []fileset.ServerStatus
+		api.do("GET", path+"/status", nil, http.StatusOK, &list)
+		states := map[string]fileset.ServerStatus{}
+		for _, st := range list {
+			states[st.Name] = st
+		}
+		return states
+	}
+	// A new password or another value makes servers outdated; a server without a value, or one
+	// that can't reach the database, can't get the set.
+	api.do("POST", "/api/datastores/"+ds.ID+"/databases/lp/rotate", nil, http.StatusNoContent, nil)
+	if got := status(); got["Lobby"].State != fileset.Outdated || got["Game"].State != fileset.Outdated {
+		t.Fatalf("status after a new password = %+v", got)
+	}
+	in.Variables[0].Values = in.Variables[0].Values[1:]
+	api.do("PUT", path, in, http.StatusOK, &set)
+	api.do("DELETE", "/api/nodes/"+a2.node.ID+"/overlay", nil, http.StatusNoContent, nil)
+	got := status()
+	if got["Lobby"].Problem != "" || !strings.Contains(got["Game"].Problem, "private network") {
+		t.Fatalf("status = %+v", got)
+	}
+	var applied struct{ Results []fileset.Result }
+	api.do("POST", path+"/apply", map[string]int64{"version": set.Version}, http.StatusOK, &applied)
+	for _, r := range applied.Results {
+		if (r.Name == "Game") != (r.Error != "") {
+			t.Errorf("result on %s = %+v", r.Name, r)
+		}
+	}
+	if _, rotated := a1.runtime.Content(ds.ID, "lp"); !strings.Contains(read(a1, lobby, lp), rotated) || !strings.Contains(read(a2, game, lp), password) {
+		t.Fatal("the lobby didn't get the new password, or the game's file changed")
 	}
 }
 

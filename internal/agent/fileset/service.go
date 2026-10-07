@@ -1,9 +1,9 @@
 // Package fileset implements the FileSetService of the agent, which keeps the files of file
-// sets on its servers: text files the master manages for groups of servers, such as the
-// configuration of a plugin. The agent fills in the secrets of a set and hides the files
-// that hold them from the file manager and from downloads, like the RCON password. Each
-// server records in its data which set wrote which file, so that the master learns which
-// servers have the newest files and which changed them.
+// sets on its servers: files the master manages for groups of servers, such as the
+// configuration of a plugin or an image. The agent fills in the secrets of a set and the
+// passwords of databases, and hides the files that hold them from the file manager and from
+// downloads, like the RCON password. Each server records in its data which set wrote which
+// file, so that the master learns which servers have the newest files and which changed them.
 package fileset
 
 import (
@@ -40,7 +40,7 @@ const (
 	maxRevision = 128
 )
 
-// secretKey matches the keys of the values of placeholders, e.g. secret:db-password.
+// secretKey matches the keys of the secrets of sets, e.g. secret:db-password.
 var secretKey = regexp.MustCompile(`^secret:[a-z0-9][a-z0-9_-]{0,63}$`)
 
 type Service struct {
@@ -140,7 +140,7 @@ func (s *Service) ListFileSets(ctx context.Context, _ *noryxv1.ListFileSetsReque
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	res := &noryxv1.ListFileSetsResponse{}
+	res := &noryxv1.ListFileSetsResponse{BinaryFiles: true, DatabasePasswords: true}
 	for _, srv := range servers {
 		sets, err := s.list(ctx, srv.ID)
 		switch {
@@ -252,21 +252,36 @@ func render(req *noryxv1.ApplyFileSetRequest) ([]change, error) {
 		return nil, errors.New("too many secrets")
 	}
 	for key, value := range req.GetSecrets() {
-		if !secretKey.MatchString(key) {
+		m := noryxv1.DatastorePlaceholder.FindStringSubmatch(key)
+		switch {
+		case m != nil && m[3] == "password":
+			if !noryxv1.DatabasePassword.MatchString(value) {
+				return nil, fmt.Errorf("invalid password of %q", key)
+			}
+		case !secretKey.MatchString(key):
 			return nil, fmt.Errorf("invalid secret %q", key)
-		}
-		if problem := noryxv1.SecretValueProblem(value); problem != "" {
-			return nil, errors.New(problem)
+		default:
+			if problem := noryxv1.SecretValueProblem(value); problem != "" {
+				return nil, errors.New(problem)
+			}
 		}
 	}
 	var files []change
 	size := 0
 	for _, f := range req.GetFiles() {
 		p, problem := noryxv1.CleanFileSetPath(f.GetPath())
-		if size += len(f.GetContent()); problem == "" && size > noryxv1.MaxFileSetSize {
+		binary := len(f.GetData()) > 0
+		if size += len(f.GetContent()) + len(f.GetData()); problem == "" && size > noryxv1.MaxFileSetSize {
 			problem = fmt.Sprintf("A file set has up to %d MiB.", noryxv1.MaxFileSetSize>>20)
 		}
-		problem = cmp.Or(problem, noryxv1.FileSetContentProblem(p, f.GetContent()))
+		switch {
+		case binary && f.GetContent() != "":
+			problem = cmp.Or(problem, p+" is text and binary at once.")
+		case binary:
+			problem = cmp.Or(problem, noryxv1.FileSetDataProblem(p, f.GetData()))
+		default:
+			problem = cmp.Or(problem, noryxv1.FileSetContentProblem(p, f.GetContent()))
+		}
 		if name := filepath.FromSlash(p); problem == "" && (secrets.Hidden(name) || secrets.Redacted(name)) {
 			problem = p + " holds secrets of the server."
 		}
@@ -276,17 +291,20 @@ func render(req *noryxv1.ApplyFileSetRequest) ([]change, error) {
 		if problem != "" {
 			return nil, errors.New(problem)
 		}
-		content, secret, err := fill(p, f.GetContent(), req.GetSecrets())
-		if err != nil {
-			return nil, err
+		content, secret := string(f.GetData()), false
+		if !binary {
+			var err error
+			if content, secret, err = fill(p, f.GetContent(), req.GetSecrets()); err != nil {
+				return nil, err
+			}
 		}
 		files = append(files, change{path: p, content: content, secret: secret, file: &file{SHA256: hash(content), OnlyIfMissing: f.GetOnlyIfMissing()}})
 	}
 	return files, nil
 }
 
-// fill fills in the secrets of a file and reports whether it has any. The master fills in
-// the variables, so those left are unknown.
+// fill fills in the secrets and passwords of a file and reports whether it has any. The
+// master fills in the variables, so those left are unknown.
 func fill(name, content string, values map[string]string) (string, bool, error) {
 	var missing string
 	filled := noryxv1.Placeholder.ReplaceAllStringFunc(content, func(m string) string {

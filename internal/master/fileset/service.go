@@ -22,16 +22,20 @@ import (
 const reconcileEvery = 15 * time.Minute
 
 type Service struct {
-	store    store
-	nodes    Nodes
-	networks Networks
-	tags     Tags
-	moves    Moves
+	store      store
+	nodes      Nodes
+	networks   Networks
+	tags       Tags
+	datastores Datastores
+	moves      Moves
 }
 
-func NewService(db *sql.DB, nodes Nodes, networks Networks, tags Tags, moves Moves) *Service {
-	return &Service{store: store{db}, nodes: nodes, networks: networks, tags: tags, moves: moves}
+func NewService(db *sql.DB, nodes Nodes, networks Networks, tags Tags, datastores Datastores, moves Moves) *Service {
+	return &Service{store: store{db}, nodes: nodes, networks: networks, tags: tags, datastores: datastores, moves: moves}
 }
+
+// errPasswords refuses passwords of databases to those who may not see them.
+var errPasswords = httpapi.Errorf(http.StatusForbidden, "Only those who may manage databases may put their passwords into file sets and on servers.")
 
 func (s *Service) List(ctx context.Context) ([]Summary, error) { return s.store.summaries(ctx) }
 
@@ -45,8 +49,10 @@ func (s *Service) Version(ctx context.Context, id string, version int64) (Versio
 	return s.store.version(ctx, id, version)
 }
 
-func (s *Service) Create(ctx context.Context, in Input, user string) (Set, error) {
-	if err := s.check(ctx, &in); err != nil {
+// Create creates a set. Files with passwords of databases need the permission to manage
+// datastores, which datastores tells.
+func (s *Service) Create(ctx context.Context, in Input, user string, datastores bool) (Set, error) {
+	if err := s.check(ctx, &in, nil, datastores); err != nil {
 		return Set{}, err
 	}
 	id := strings.ToLower(rand.Text())
@@ -58,9 +64,14 @@ func (s *Service) Create(ctx context.Context, in Input, user string) (Set, error
 
 // Update saves a change of a set. Servers that it is no longer for lose its files with
 // secrets right away, in the background; changing the files changes no server until the set
-// is applied.
-func (s *Service) Update(ctx context.Context, id string, in Input, user string) (Set, error) {
-	if err := s.check(ctx, &in); err != nil {
+// is applied. Files with passwords of databases that it adds or changes need the permission
+// to manage datastores, which datastores tells.
+func (s *Service) Update(ctx context.Context, id string, in Input, user string, datastores bool) (Set, error) {
+	set, err := s.store.get(ctx, id)
+	if err != nil {
+		return Set{}, err
+	}
+	if err := s.check(ctx, &in, set.Files, datastores); err != nil {
 		return Set{}, err
 	}
 	if _, err := s.store.save(ctx, id, in, user, false); err != nil {
@@ -80,14 +91,23 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Service) check(ctx context.Context, in *Input) error {
+// check checks a set that had the files before. Passwords of databases in files that it adds
+// or changes are logged, and need the permission to manage datastores, which datastores tells.
+func (s *Service) check(ctx context.Context, in *Input, before []File, datastores bool) error {
 	networks, err := s.networks.List(ctx)
 	if err != nil {
 		return err
 	}
-	return in.check(func(id string) bool {
+	err = in.check(func(id string) bool {
 		return slices.ContainsFunc(networks, func(n network.Network) bool { return n.ID == id })
 	})
+	if used := passwords(in.Files, before); err == nil && len(used) > 0 {
+		logging.Note(ctx, slog.Any("database_passwords", used))
+		if !datastores {
+			return errPasswords
+		}
+	}
+	return err
 }
 
 // SetSecret sets the value of a secret of a set, or a new random one if generate is set.
