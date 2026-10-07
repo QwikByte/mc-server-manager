@@ -42,7 +42,8 @@ export function useOperation() {
     background.current = false
     notification.current = notify ? toast.loading(title) : undefined
     void start((op) => {
-      setId(op.id)
+      // An action can run as several operations, e.g. in batches; once in the background, the dialog no longer shows them.
+      if (!background.current) setId(op.id)
       if (notification.current !== undefined) toast.loading(<LiveToast id={op.id} title={title} />, { id: notification.current })
     }).then(
       (result) => {

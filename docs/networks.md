@@ -41,7 +41,7 @@ players who connect through them to their own servers (`forced-hosts`, for Bunge
 name players use with `/server`; BungeeCord's servers also have a MOTD for their host names and can be restricted to
 players with the permission `bungeecord.server.<name>`. Of more than 10 servers, the map shows those players join, fall
 back to or reach through a host name and those that crash, and folds away the others until it is expanded; the list of
-servers can be searched.
+servers can be searched. **Players online** lists the network's players on the [Players](players.md) page.
 
 ## Applying changes
 

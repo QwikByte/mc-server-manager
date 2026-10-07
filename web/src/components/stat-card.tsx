@@ -13,6 +13,7 @@ export function StatCard({
   value,
   children,
   to,
+  search,
 }: {
   icon: Icon
   tone?: Tone
@@ -20,6 +21,8 @@ export function StatCard({
   value: ReactNode
   children?: ReactNode
   to?: "/servers" | "/nodes" | "/players"
+  /** The search of the page it opens, e.g. the players of one network. */
+  search?: { network: string }
 }) {
   const className = "flex min-w-0 flex-col gap-3 rounded-xl bg-card p-4 shadow-xs ring-1 ring-foreground/8 dark:shadow-none"
   const content = (
@@ -33,7 +36,7 @@ export function StatCard({
     </>
   )
   return to ? (
-    <Link to={to} className={cn(className, "lift outline-none hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-ring")}>
+    <Link to={to} search={search} className={cn(className, "lift outline-none hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-ring")}>
       {content}
     </Link>
   ) : (

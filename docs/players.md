@@ -4,6 +4,7 @@ The **Players** page lists the players online on all game servers, with their se
 [`Ctrl+K`](panel.md#search) finds them too. Its other tabs join the ban list, whitelist and operators of all servers or
 of a network, with how many servers have each player, and the changes that wait for stopped servers. Temporary bans,
 which Paper's ban list and plugins such as EssentialsX write, show when they end, and those that ended are marked.
+**Players online** on a network's page opens the page for that network.
 
 ## Actions
 
@@ -14,6 +15,7 @@ them. **Send to another server** moves a player within the network through the p
 proxy's answer, so the panel tells if the player isn't online or the proxy has no `send`. Velocity only answers if it
 can't send, so the agent waits a second for that answer; rolling restarts don't wait. Players named `all` or `current`,
 and on BungeeCord like a server of the network, can't be sent, as `send` would read their name as other players too.
+A ban suggests the reasons already in the ban list.
 
 ## Stopped servers
 

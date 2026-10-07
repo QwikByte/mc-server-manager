@@ -42,9 +42,10 @@ also only for those who may manage datastores.
 
 **Back up now** and backup jobs dump the databases into a ZIP archive with one `<database>.sql` each
 (`mariadb-dump --single-transaction`, `pg_dump`), kept next to the backups of servers in
-`<backups of the location>/datastores/<id>`, while the datastore keeps running. Restoring creates the databases of a
-dump again and loads them as each database's own user; the plugins that use them lose their connection meanwhile, so
-their servers are best stopped first. Dumps can be downloaded. Locally,
+`<backups of the location>/datastores/<id>`, while the datastore keeps running; **Back up now** asks for a label and the
+databases, all at first. Restoring asks for the databases of the dump, all at first, creates them again and loads them
+as each database's own user; one that was dropped since has to be added again first. The plugins that use them lose
+their connection meanwhile, so their servers are best stopped first. Dumps can be downloaded. Locally,
 `noryx-agent datastore list|backup|backups|restore` works without the master, and the panel's terminal only lists and
 backs up.
 

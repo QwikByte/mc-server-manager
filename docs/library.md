@@ -80,7 +80,9 @@ Where no release suits a server, it installs the newest beta or alpha and the pa
 suits the server, betas and alphas included, can be chosen instead, also to downgrade a project. Installed files are
 recognised by their hash, so the tab shows their project, version (marked as beta or alpha) and available updates, also
 for files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once.
-Own `.jar` files can be uploaded too. Servers load changes when they restart.
+Own `.jar` files can be uploaded too. Servers load changes when they restart. On the **Plugins** page, the game servers
+or the proxy of a network are chosen at once, and more than 100 servers are installed on in batches of 100, one after
+the other.
 
 ### Hangar
 
