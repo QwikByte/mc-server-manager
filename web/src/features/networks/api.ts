@@ -121,7 +121,8 @@ export interface Deleted {
 export type NetworkAction =
   | { action: "apply" | "delete" | "start" | "stop" | "restart" }
   | { action: "broadcast"; message: string }
-  | { action: "rolling-restart"; batch: number }
+  /** Restarts the running game servers a batch at a time, or only those named, e.g. one safely. */
+  | { action: "rolling-restart"; batch: number; servers?: ServerRef[] }
 
 /** Acts on a network or on all its servers. */
 export function useNetworkAction(id: string) {
@@ -135,7 +136,7 @@ export function useNetworkAction(id: string) {
         case "broadcast":
           return api(`${path}/broadcast`, { body: { message: a.message } })
         case "rolling-restart":
-          return operate(`${path}/rolling-restart`, { body: { batch: a.batch } }, a.onStart)
+          return operate(`${path}/rolling-restart`, { body: { batch: a.batch, servers: a.servers } }, a.onStart)
         default:
           return operate(`${path}/${a.action}`, { method: "POST" }, a.onStart)
       }

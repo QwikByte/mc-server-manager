@@ -149,6 +149,21 @@ func TestSendCommand(t *testing.T) {
 	}
 }
 
+// Restarting some servers safely and moving their players only takes different game servers of
+// the network, which the panel names by their names in it.
+func TestCheckBackends(t *testing.T) {
+	lobby, game := Ref{"n1", "lobby"}, Ref{"n2", "game"}
+	n := Network{Proxy: Ref{"n1", "proxy"}, Backends: []Backend{{Ref: lobby, Name: "lobby"}, {Ref: game, Name: "game"}}}
+	if err := n.checkBackends([]Ref{game, lobby}); err != nil || !slices.Equal(n.names([]Ref{game, lobby}), []string{"lobby", "game"}) {
+		t.Fatalf("servers of the network: %v, names %q", err, n.names([]Ref{game, lobby}))
+	}
+	for _, bad := range [][]Ref{{n.Proxy}, {Ref{"n3", "other"}}, {Ref{"n2", "lobby"}}, {lobby, lobby}, {{}}} {
+		if n.checkBackends(bad) == nil {
+			t.Errorf("accepted %v", bad)
+		}
+	}
+}
+
 // A rolling restart gets for each group the longest stop timeout among its servers and the
 // time to start again, and an hour at least.
 func TestRollingTimeout(t *testing.T) {

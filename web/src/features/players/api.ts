@@ -87,3 +87,10 @@ export function useSendPlayer(networkId: string) {
     mutationFn: (body: { name: string; server: string }) => api(`/networks/${networkId}/players/send`, { body }),
   })
 }
+
+/** Sends the players of a game server of a network to another server of it, the one players join first if it runs. */
+export function useMovePlayers(networkId: string) {
+  return useMutation({
+    mutationFn: (server: ServerRef) => api<{ players: number }>(`/networks/${networkId}/players/move`, { body: { server } }),
+  })
+}

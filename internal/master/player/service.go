@@ -32,6 +32,8 @@ type Nodes interface {
 // Networks looks up networks, whose proxies send players between their servers.
 type Networks interface {
 	Get(ctx context.Context, id string) (network.Network, error)
+	// MovePlayers sends the players of a game server of a network to another one of it.
+	MovePlayers(ctx context.Context, n network.Network, from network.Ref) (int, error)
 }
 
 type Service struct {

@@ -80,7 +80,7 @@ func (s *Service) RollingRestart(ctx context.Context, n Network, batch int, only
 	operation.Count(ctx, 0, total, "servers")
 	for _, group := range groups {
 		if listed[n.Proxy].GetState() == running {
-			if err := s.moveOff(ctx, n, group, slices.Concat(restarting, others)); err != nil {
+			if _, err := s.moveOff(ctx, n, group, slices.Concat(restarting, others)); err != nil {
 				return err
 			}
 		}
@@ -108,14 +108,45 @@ func rollingTimeout(groups [][]Backend, listed map[Ref]*noryxv1.Server) time.Dur
 	return max(total, minRollingTimeout)
 }
 
+// MovePlayers sends the players of a running game server of a network to another running
+// server of it through the proxy, as before a restart, and returns how many it sent.
+func (s *Service) MovePlayers(ctx context.Context, n Network, from Ref) (int, error) {
+	if err := n.checkBackends([]Ref{from}); err != nil {
+		return 0, err
+	}
+	listed, err := s.listed(ctx, append(refs(n.Backends), n.Proxy))
+	if err != nil {
+		return 0, err
+	}
+	var group, up []Backend
+	for _, b := range n.Backends {
+		switch {
+		case listed[b.Ref].GetState() != running:
+		case b.Ref == from:
+			group = []Backend{b}
+		default:
+			up = append(up, b)
+		}
+	}
+	switch {
+	case listed[n.Proxy].GetState() != running:
+		return 0, httpapi.Errorf(http.StatusConflict, "The proxy doesn't run.")
+	case len(group) == 0:
+		return 0, httpapi.Errorf(http.StatusConflict, "The server doesn't run.")
+	case len(up) == 0:
+		return 0, httpapi.Errorf(http.StatusConflict, "No other server of the network runs, so the players have nowhere to go.")
+	}
+	return s.moveOff(ctx, n, group, up)
+}
+
 // moveOff sends the players of servers to another running server through the proxy: to the
 // first that players join, if it can, and gives them a moment to move. It fails if the proxy
 // can't send anyone, e.g. without a send command or while its node can't be reached, so that
-// the servers don't restart.
-func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) error {
+// the servers don't restart. It returns how many players it sent.
+func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) (int, error) {
 	others := slices.DeleteFunc(slices.Clone(up), func(b Backend) bool { return slices.ContainsFunc(group, b.same) })
 	if len(others) == 0 {
-		return nil // the players have nowhere to go
+		return 0, nil // the players have nowhere to go
 	}
 	target := others[0].Name
 	for _, name := range n.Try {
@@ -126,13 +157,14 @@ func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) e
 	}
 	players := s.players(ctx, group)
 	if len(players) == 0 {
-		return nil
+		return 0, nil
 	}
 	conn, err := s.nodes.Conn(ctx, n.Proxy.NodeID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	proxy := noryxv1.NewServerServiceClient(conn)
+	sent := 0
 	for _, name := range players {
 		command, ok := n.SendCommand(name, target)
 		if !ok {
@@ -142,16 +174,18 @@ func (s *Service) moveOff(ctx context.Context, n Network, group, up []Backend) e
 		_, err := proxy.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: n.Proxy.ServerID, Command: command, NoWait: true})
 		switch {
 		case status.Code(err) == codes.FailedPrecondition:
-			return httpapi.Errorf(http.StatusConflict, "The restart stopped, as the players can't move to another server. %s", status.Convert(err).Message())
+			return sent, httpapi.Errorf(http.StatusConflict, "The players can't move to another server. %s", status.Convert(err).Message())
 		case err != nil:
-			slog.Debug("Can't move a player before a restart", "player", name, "err", err)
+			slog.Debug("Can't move a player to another server", "player", name, "err", err)
+		default:
+			sent++
 		}
 	}
 	select {
 	case <-ctx.Done():
 	case <-time.After(moveWait):
 	}
-	return nil
+	return sent, nil
 }
 
 // players returns the names of the players on servers, as their agents measured them last.

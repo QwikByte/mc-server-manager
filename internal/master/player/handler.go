@@ -20,6 +20,7 @@ import (
 const (
 	maxServers    = 500
 	changeTimeout = 10 * time.Minute
+	moveTimeout   = time.Minute
 )
 
 type Handler struct {
@@ -35,6 +36,7 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/players/actions", access.SignedIn, h.change)
 	mux.Handle("GET /api/players/lists", access.SignedIn, h.lists)
 	mux.Handle("POST /api/networks/{id}/players/send", access.Everywhere(access.NetworksView), h.send)
+	mux.Handle("POST /api/networks/{id}/players/move", access.Everywhere(access.NetworksView), h.move)
 }
 
 // change kicks, bans, pardons, whitelists or makes operator a player on servers, or turns
@@ -137,14 +139,7 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		Name   string `json:"name"`
 		Server string `json:"server"`
 	}
-	err := httpapi.ReadJSON(w, r, &req)
-	var n network.Network
-	if err == nil {
-		n, err = h.svc.networks.Get(r.Context(), r.PathValue("id"))
-	}
-	if err == nil && !access.From(r.Context()).On(access.PlayersManage, n.Proxy.NodeID, n.Proxy.ServerID) {
-		err = access.Denied(access.PlayersManage)
-	}
+	n, err := h.sender(w, r, &req)
 	if err == nil {
 		logging.Note(r.Context(), slog.String("name", n.Name), slog.String("player", req.Name), slog.String("server", req.Server))
 		err = h.svc.Send(r.Context(), n, req.Name, req.Server)
@@ -154,6 +149,41 @@ func (h *Handler) send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// move sends the players of a game server of a network to another server of it, e.g. before
+// the server restarts, and tells how many it sent.
+func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Server network.Ref `json:"server"`
+	}
+	n, err := h.sender(w, r, &req)
+	var moved int
+	if err == nil {
+		logging.Note(r.Context(), slog.String("name", n.Name), slog.String(logging.KeyNode, req.Server.NodeID), slog.String(logging.KeyServer, req.Server.ServerID))
+		ctx, cancel := context.WithTimeout(r.Context(), moveTimeout)
+		defer cancel()
+		moved, err = h.svc.networks.MovePlayers(ctx, n, req.Server)
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]int{"players": moved})
+}
+
+// sender reads a request to send players through the proxy of a network into req and returns
+// the network, if the user may manage the players of its proxy.
+func (h *Handler) sender(w http.ResponseWriter, r *http.Request, req any) (network.Network, error) {
+	err := httpapi.ReadJSON(w, r, req)
+	var n network.Network
+	if err == nil {
+		n, err = h.svc.networks.Get(r.Context(), r.PathValue("id"))
+	}
+	if err == nil && !access.From(r.Context()).On(access.PlayersManage, n.Proxy.NodeID, n.Proxy.ServerID) {
+		err = access.Denied(access.PlayersManage)
+	}
+	return n, err
 }
 
 // check checks that a request names up to maxServers different servers, on each of which

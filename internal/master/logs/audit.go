@@ -109,6 +109,7 @@ var actions = map[string]action{
 	"POST /api/networks/{id}/maintenance":                      {logging.Networks, "Change network maintenance"},
 	"POST /api/networks/{id}/maintenance/players":              {logging.Networks, "Change who may join during maintenance"},
 	"POST /api/networks/{id}/players/send":                     {logging.Players, "Send player to server"},
+	"POST /api/networks/{id}/players/move":                     {logging.Players, "Send players to another server"},
 	"POST /api/players/actions":                                {logging.Players, "Change player"},
 	"POST /api/templates":                                      {logging.Templates, "Create template"},
 	"PUT /api/templates/{id}":                                  {logging.Templates, "Change template"},

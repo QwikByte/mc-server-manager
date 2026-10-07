@@ -48,6 +48,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Restart the network {{name}}", { name: subject })
     case "network.rolling-restart":
       return t("Restart {{name}} server by server", { name: subject })
+    case "network.safe-restart":
+      return t("Restart {{name}} safely", { name: subject })
     case "network.maintenance-on":
       return t("Turn on maintenance of {{name}}", { name: subject })
     case "network.maintenance-off":
@@ -182,7 +184,7 @@ export function stepOf(op: Operation, step: string): string {
       return t("Warn the players")
     case "servers":
       if (op.kind.startsWith("players.")) return t("Apply it on the servers")
-      if (verb === "rolling-restart") return t("Restart the servers one after the other")
+      if (verb === "rolling-restart" || verb === "safe-restart") return t("Restart the servers one after the other")
       if (verb === "start") return t("Start the servers")
       if (verb === "stop") return t("Stop the servers")
       if (verb === "restart") return t("Restart the servers")

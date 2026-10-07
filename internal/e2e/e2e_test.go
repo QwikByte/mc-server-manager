@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"iter"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -395,6 +397,8 @@ type fakeRuntime struct {
 	networks map[string]runtime.Network
 	commands []string
 	sent     map[string][]string // the console commands of each server
+	// online are the players of servers that their consoles list.
+	online map[string][]string
 	// on, if set, acts on console commands and on restarts ("restart"), e.g. like a plugin.
 	on       func(id, what string)
 	restarts []string
@@ -533,6 +537,9 @@ func (f *fakeRuntime) SendCommand(_ context.Context, id, command string) (string
 	f.sent[id] = append(f.sent[id], command)
 	if f.on != nil {
 		f.on(id, command)
+	}
+	if names, ok := f.online[id]; ok && command == "minecraft:list" {
+		return fmt.Sprintf("There are %d of a max of 20 players online: %s", len(names), strings.Join(names, ", ")), nil
 	}
 	return "§6ran " + command, nil
 }

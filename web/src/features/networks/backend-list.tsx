@@ -18,6 +18,7 @@ import type { ServerUsage } from "@/features/usage/api"
 import { cn } from "@/lib/utils"
 import { AddBackendDialog } from "./add-backend-dialog"
 import type { Backend, Network } from "./api"
+import { BackendActions } from "./backend-actions"
 import { type Draft, withoutBackend } from "./draft"
 import { nameError } from "./problems"
 import { ServerLabel } from "./server-label"
@@ -25,7 +26,8 @@ import { findServer, firewallCommand, forwardingMod, key, routeOf } from "./serv
 
 /**
  * The game servers behind the proxy, one row each with the name players use, searchable for
- * networks with many servers. BungeeCord's settings and firewall rules fold out of the rows.
+ * networks with many servers. BungeeCord's settings and firewall rules fold out of the rows,
+ * and running servers restart safely or send their players elsewhere from their menu.
  */
 export function BackendList({
   network,
@@ -102,6 +104,8 @@ export function BackendList({
           const error = nameError(draft.backends, i)
           const firewall = route === "public" && draft.forwarding === "legacy" && server && proxyHost
           const details = bungee || firewall
+          // Servers that are only added in the draft can't be acted on yet.
+          const saved = network.backends.find((b) => key(b) === k)
           return (
             <li key={k} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_15rem_auto] md:items-start">
               <div className="flex min-w-0 items-center gap-3">
@@ -164,6 +168,7 @@ export function BackendList({
                 {error && <FieldError>{error}</FieldError>}
               </Field>
               <div className="flex items-center justify-end gap-1">
+                {saved && <BackendActions network={network} backend={saved} servers={servers} />}
                 {details && (
                   <Button
                     size="icon-sm"

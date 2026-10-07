@@ -206,6 +206,9 @@ safely: restoring a backup, moving a server, stopping or restarting one once it 
 restarting servers one after the other always finish.
 A warning before a stop or restart by hand is the console command `say`, so a message of one's own needs the permission
 to send console commands on each server; others get the default message and can't put text of their own in the chat.
+Restarting servers of a network one after the other, also a single one, needs the permission to restart the proxy, which
+sends their players elsewhere, and each server that restarts; sending the players of a server elsewhere needs the
+permission to manage the players of the proxy, like sending one player.
 
 ## Terminal
 

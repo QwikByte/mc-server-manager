@@ -686,6 +686,27 @@ func (n *Network) has(ref Ref) bool {
 	return n.Proxy == ref || slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.Ref == ref })
 }
 
+// checkBackends checks that servers are different game servers of the network.
+func (n *Network) checkBackends(servers []Ref) error {
+	for i, ref := range servers {
+		if slices.Contains(servers[:i], ref) || !slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.Ref == ref }) {
+			return httpapi.Errorf(http.StatusBadRequest, "Choose different game servers of the network.")
+		}
+	}
+	return nil
+}
+
+// names returns the names of game servers of the network.
+func (n *Network) names(servers []Ref) []string {
+	var names []string
+	for _, b := range n.Backends {
+		if slices.Contains(servers, b.Ref) {
+			names = append(names, b.Name)
+		}
+	}
+	return names
+}
+
 // moved changes the node of a server of the network.
 func (n *Network) moved(serverID, from, to string) {
 	if n.Proxy == (Ref{from, serverID}) {

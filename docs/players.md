@@ -21,6 +21,8 @@ them. **Send to another server** moves a player within the network through the p
 proxy's answer, so the panel tells if the player isn't online or the proxy has no `send`. Velocity only answers if it
 can't send, so the agent waits a second for that answer; rolling restarts don't wait. Players named `all` or `current`,
 and on BungeeCord like a server of the network, can't be sent, as `send` would read their name as other players too.
+**Send players elsewhere** in the [network's list of servers](networks.md#restart-server-by-server) moves all players of
+a server at once, like a rolling restart does before a server restarts.
 A ban suggests the reasons already in the ban list.
 
 ## Stopped servers
@@ -47,4 +49,5 @@ joined the server.
 ## Permissions
 
 Acting on players needs the permission to manage players on each server; making operators also needs the permission to
-send console commands, as operators may run any command in the game.
+send console commands, as operators may run any command in the game. Sending players to another server of a network
+needs the permission to manage the players of its proxy.

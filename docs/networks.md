@@ -102,6 +102,12 @@ the restart. It also stops before servers whose players the proxy can't send, e.
 without its module `cmd_send`. A rolling restart may take as long as its servers need: for each batch the longest
 [stop timeout](servers.md#settings-and-images) among them and 8 minutes to start and run again, an hour at least.
 
+The menu of a running server in the network's list of servers restarts that one alone the same way, **Restart safely**:
+its players move to the server players join first, or another running one, and the proxy keeps running. **Send players
+elsewhere** only moves its players, e.g. before working on the server. Restarting server by server, all servers or one,
+needs the permission to restart the proxy and each server that restarts; sending players elsewhere needs the permission
+to manage the players of the proxy, like [sending one player](players.md#actions).
+
 ## Maintenance
 
 The network's overview turns maintenance on and off with the [Maintenance](https://modrinth.com/plugin/maintenance)
