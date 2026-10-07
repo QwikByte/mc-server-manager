@@ -24,9 +24,10 @@ settings apply right away: the enrollment address join tokens contain (it replac
 the flag again), how long join tokens are valid (5 minutes to a day, 1 hour by default), how long sign-ins to the panel
 last (1 hour to a week, 12 hours by default), who has to use
 [two-factor authentication](#two-factor-authentication), how long log entries are kept (1 day to a year, 30 days by
-default) and how much space the log may take ([100 MiB to 100 GiB, 2 GiB by default](monitoring.md#logs)), the port
-range and memory reserve that new nodes get, and whether the master looks for updates. Administrators can also look for
-an update right away.
+default) and how much space the log may take ([100 MiB to 100 GiB, 2 GiB by default](monitoring.md#logs)), the
+thresholds at which the usage of servers and nodes warns ([Warnings](monitoring.md#warnings)), the port range and memory
+reserve that new nodes get, and whether the master looks for updates. Administrators can also look for an update right
+away.
 
 ### Agents
 

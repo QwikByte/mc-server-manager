@@ -270,7 +270,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes, Overlay: overlays,
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
-		Usage: usage.NewStore(m.db, nodes), Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
+		Usage: usage.NewStore(m.db, nodes, m.settings), Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/https"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/usage"
 	"github.com/QwikByte/noryx/internal/pki"
 )
 
@@ -72,6 +73,8 @@ type Settings struct {
 	CheckUpdates bool `json:"checkUpdates"`
 	// RequireMFA tells who has to use two-factor authentication.
 	RequireMFA MFARequirement `json:"requireMfa"`
+	// Thresholds tell when the usage of nodes and servers warns, unless they have their own.
+	Thresholds usage.Defaults `json:"thresholds"`
 }
 
 // MFARequirement tells who has to use two-factor authentication: all users, or the members
@@ -85,7 +88,7 @@ type MFARequirement struct {
 func defaults() Settings {
 	return Settings{
 		SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true,
-		RequireMFA: MFARequirement{Groups: []string{}},
+		RequireMFA: MFARequirement{Groups: []string{}}, Thresholds: usage.DefaultThresholds(),
 	}
 }
 
@@ -141,13 +144,14 @@ func Load(ctx context.Context, db *sql.DB, master Master, cert *pki.Holder) (*Se
 	return s, nil
 }
 
-// Get returns a copy of the current settings, also of the limits they point to, so that
-// changing it, e.g. by decoding a request into it, leaves the current settings as they are.
+// Get returns a copy of the current settings, also of the limits and thresholds they point to,
+// so that changing it, e.g. by decoding a request into it, leaves the current settings as they are.
 func (s *Service) Get() Settings {
 	st := *s.current.Load()
 	l := &st.NodeDefaults
 	l.PortMin, l.PortMax, l.MemoryReserveMB = clone(l.PortMin), clone(l.PortMax), clone(l.MemoryReserveMB)
 	st.RequireMFA.Groups = slices.Clone(st.RequireMFA.Groups)
+	st.Thresholds = st.Thresholds.Clone()
 	return st
 }
 
@@ -271,6 +275,9 @@ func (s *Service) LogMaxSize() int64 { return int64(s.Get().LogSizeMB) << 20 }
 // CheckUpdates implements update.Config.
 func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
 
+// Thresholds implements usage.Config.
+func (s *Service) Thresholds() usage.Defaults { return s.Get().Thresholds }
+
 // SessionTTL is how long new sign-ins to the panel last.
 func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().SessionHours) * time.Hour }
 
@@ -303,7 +310,7 @@ func validate(s Settings, panelAddr string) error {
 	case len(s.RequireMFA.Groups) > maxMFAGroups || slices.ContainsFunc(s.RequireMFA.Groups, func(id string) bool { return !groupID.MatchString(id) }):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d groups that have to use two-factor authentication.", maxMFAGroups)
 	}
-	return s.NodeDefaults.Validate()
+	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate())
 }
 
 // validAddr accepts host:port with a port from 1 to 65535 and a host that validHost accepts.

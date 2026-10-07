@@ -90,7 +90,8 @@ type Config interface {
 
 const nodeColumns = `id, name, address, enrolled_at, created_at, certificate_expires_at, default_storage, port_min, port_max, memory_reserve_mb`
 
-var storageName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+// StorageName matches the names of storage locations, which agents allow.
+var StorageName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 type Service struct {
 	noryxv1.UnimplementedEnrollmentServiceServer
@@ -187,7 +188,7 @@ func validate(n Node) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
 	case !validAddress(n.Address):
 		return httpapi.Errorf(http.StatusBadRequest, "Enter the agent address as host:port, for example 203.0.113.10:7443.")
-	case n.DefaultStorage != "" && !storageName.MatchString(n.DefaultStorage):
+	case n.DefaultStorage != "" && !StorageName.MatchString(n.DefaultStorage):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose a storage location of the node.")
 	}
 	return n.Validate()

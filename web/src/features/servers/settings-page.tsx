@@ -9,8 +9,10 @@ import { FormSection } from "@/components/form-section"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
 import { useOperation } from "@/features/operations/use-operation"
+import { UsageWarnings } from "@/features/usage/thresholds"
 import { cn } from "@/lib/utils"
 import { freeMemoryMb, type Server, type ServerSettings, serversQuery, useServer, useUpdateImage, useUpdateServer } from "./api"
 import { isModded, serverType, splitOptions } from "./server-types"
@@ -31,11 +33,13 @@ const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/settings")
 export function SettingsPage() {
   const { nodeId, serverId } = route.useParams()
   const { server } = useServer(nodeId, serverId)
+  const { can } = useAccess()
   if (!server) return null
   // Remounting on save resets the form to what the agent applied.
   return (
     <div className="space-y-6">
       <SettingsForm key={JSON.stringify(settingsOf(server))} nodeId={nodeId} server={server} />
+      <UsageWarnings nodeId={nodeId} serverId={server.id} editable={can("servers.settings", nodeId, server.id)} />
       <UpdateImage nodeId={nodeId} server={server} />
     </div>
   )

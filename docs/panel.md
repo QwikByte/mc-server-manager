@@ -6,10 +6,11 @@ How the admin panel is organised, and what works the same on all of its pages.
 
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use, the
 networks, the servers with the most players, and what needs attention: crashing and unhealthy servers, offline nodes,
-nodes with more memory assigned than they can give or almost full storage, nodes whose certificate expires within two
-weeks, proxies that are stopped while their servers run, and backup jobs and schedules whose last run failed. It counts
-like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned against what the
-online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
+nodes with more memory assigned than they can give, servers and nodes beyond a threshold of their usage, e.g. almost
+full storage ([Warnings](monitoring.md#warnings)), nodes whose certificate expires within two weeks, proxies that are
+stopped while their servers run, and backup jobs and schedules whose last run failed. It counts like the **Nodes** page:
+servers that run, not those that start or crash, and the memory assigned against what the online nodes can give their
+servers, after the reserve. Sizes are in binary units (MiB, GiB).
 
 A node's certificate is renewed a month before it expires while the node is online; one that stays offline until then
 has to be connected again with a new join token. The master stores when a node's certificate expires as it issues or

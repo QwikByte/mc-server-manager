@@ -150,7 +150,7 @@ func serve(ctx context.Context, cfg config) error {
 	}
 	updates := update.New(nodes, conf, update.Options{DataDir: cfg.dataDir})
 	go updates.Run(ctx)
-	usageStore := usage.NewStore(db, nodes)
+	usageStore := usage.NewStore(db, nodes, conf)
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
 	networks, tags := network.NewService(db, nodes, plugins, overlays, datastores), tag.NewStore(db)

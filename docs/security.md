@@ -227,6 +227,14 @@ entries, and log files are only readable by their owner. A live stream ends ever
 again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP address is that of the
 proxy, unless `--trusted-proxy` names it.
 
+## Usage
+
+Agents report what their node and its servers use, so a compromised agent can make up or hide the usage and the warnings
+of its own node and servers, but of no others. The master records at most 500 servers of a node, with valid IDs only,
+and checks at most 32 storage locations with valid names, so that an agent can't fill its database or memory. Changing
+the thresholds of a server needs the permission to change its settings, of a node the permission to change the node,
+and warnings only show to those who may see the server or node.
+
 ## Moving servers
 
 Agents never connect to each other: the master relays the server's archive and backups between them over its mutually

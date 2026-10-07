@@ -5,8 +5,9 @@ import type { Network } from "@/features/networks/api"
 import { type Node, memoryCapacityMb } from "@/features/nodes/api"
 import type { Overlay } from "@/features/overlay/api"
 import { assignedMemoryMb, type NodeServer } from "@/features/servers/api"
-import type { useUsages } from "@/features/usage/api"
-import { formatAgo, formatDate, formatMegabytes } from "@/lib/format"
+import type { UsageWarning, useUsages } from "@/features/usage/api"
+import { formatNumber } from "@/features/usage/format"
+import { formatAgo, formatDate, formatDuration, formatMegabytes } from "@/lib/format"
 import { type AutomationTask, failed } from "./tasks"
 
 /** Something that needs an operator, with where to look into it. */
@@ -23,13 +24,12 @@ export interface Problem {
     | AutomationTask["link"]
 }
 
-const full = 0.9
 /** How long before its certificate expires a node is listed. */
 const expiring = 14 * 86_400_000
 
 /**
- * What needs attention across nodes, servers, networks, the private network of the nodes, and backup jobs and schedules,
- * the most urgent first.
+ * What needs attention across nodes, servers, networks, the private network of the nodes, backup jobs and schedules, and
+ * what servers and nodes use beyond their thresholds, the most urgent first.
  */
 export function problemsOf(
   nodes: Node[],
@@ -39,6 +39,7 @@ export function problemsOf(
   overlay?: Overlay,
   datastores: Datastore[] = [],
   tasks: AutomationTask[] = [],
+  warnings: UsageWarning[] = [],
 ): Problem[] {
   const problems: Problem[] = []
   const add = (p: Problem) => problems.push(p)
@@ -144,27 +145,38 @@ export function problemsOf(
         link,
       })
     }
-    const usage = usages.node(n.id)
-    if (usage?.memoryTotalBytes && usage.memoryUsedBytes / usage.memoryTotalBytes > full) {
-      add({
-        key: `memory/${n.id}`,
-        tone: "warning",
-        title: t("{{name}} is running out of memory", { name: n.name }),
-        detail: t("{{percent}} % in use", { percent: Math.round((usage.memoryUsedBytes / usage.memoryTotalBytes) * 100) }),
-        link,
-      })
+  }
+  // What servers and nodes use beyond their thresholds; offline nodes are a problem of their own.
+  for (const w of warnings) {
+    const node = nodes.find((n) => n.id === w.nodeId && n.status === "online")
+    const server = servers.find((s) => s.nodeId === w.nodeId && s.id === w.serverId)
+    const name = w.serverId ? server?.name : node?.name
+    if (!node || !name) continue
+    const titles = {
+      cpu: () => t("{{name}} uses too much CPU", { name }),
+      memory: () => t("{{name}} is running out of memory", { name }),
+      tps: () => t("{{name}} ticks too slowly", { name }),
+      storage: () => t("Storage {{storage}} on {{name}} is almost full", { storage: w.storage, name }),
     }
-    for (const storage of n.info?.storage ?? []) {
-      if (storage.totalBytes && 1 - storage.freeBytes / storage.totalBytes > full) {
-        add({
-          key: `storage/${n.id}/${storage.name}`,
-          tone: "warning",
-          title: t("Storage {{storage}} on {{name}} is almost full", { storage: storage.name, name: n.name }),
-          detail: t("{{percent}} % in use", { percent: Math.round((1 - storage.freeBytes / storage.totalBytes) * 100) }),
-          link,
-        })
-      }
-    }
+    const value =
+      w.measure === "tps"
+        ? t("{{tps}} ticks per second", { tps: formatNumber(w.value) })
+        : t("{{percent}} % in use", { percent: Math.round(w.value) })
+    add({
+      key: `usage/${w.nodeId}/${w.serverId ?? ""}/${w.measure}/${w.storage ?? ""}`,
+      tone: "warning",
+      title: titles[w.measure](),
+      detail: [
+        w.serverId && node.name,
+        value,
+        t("for {{duration}}", { duration: formatDuration(Math.max(Date.now() - Date.parse(w.since), 60_000)) }),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      link: w.serverId
+        ? { to: "/nodes/$nodeId/servers/$serverId", params: { nodeId: w.nodeId, serverId: w.serverId } }
+        : { to: "/nodes/$nodeId", params: { nodeId: w.nodeId } },
+    })
   }
   for (const network of networks) {
     const proxy = servers.find((s) => s.nodeId === network.proxy.nodeId && s.id === network.proxy.serverId)

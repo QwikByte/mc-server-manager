@@ -1,5 +1,7 @@
 // Package usage keeps a history of what nodes and their servers use, from the
-// measurements of the agents, and serves it to the panel along with the latest one.
+// measurements of the agents, and serves it to the panel along with the latest one. It warns
+// when they use too much for a while, as thresholds of the settings, or of a node or server
+// itself, tell.
 package usage
 
 import (
@@ -42,16 +44,30 @@ var Ranges = map[string]struct{ Span, Step time.Duration }{
 // Nodes provides the nodes and connections to their agents.
 type Nodes interface {
 	List(ctx context.Context) ([]node.Node, error)
+	Get(ctx context.Context, id string) (node.Node, error)
 	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
 }
 
-// Store keeps what nodes and servers used during the last week.
+// Config provides the settings of the master that concern usage. They can change at any time.
+type Config interface {
+	// Thresholds are the default thresholds of nodes and servers.
+	Thresholds() Defaults
+}
+
+// Store keeps what nodes and servers used during the last week, and the measures that are
+// beyond their thresholds.
 type Store struct {
 	db    *sql.DB
 	nodes Nodes
+	conf  Config
+
+	mu        sync.Mutex
+	crossings map[key]*crossing
 }
 
-func NewStore(db *sql.DB, nodes Nodes) *Store { return &Store{db: db, nodes: nodes} }
+func NewStore(db *sql.DB, nodes Nodes, conf Config) *Store {
+	return &Store{db: db, nodes: nodes, conf: conf, crossings: map[key]*crossing{}}
+}
 
 // Run records the latest measurement of every agent each minute until ctx ends.
 func (s *Store) Run(ctx context.Context) {
@@ -67,17 +83,25 @@ func (s *Store) Run(ctx context.Context) {
 	}
 }
 
+// sample records the latest measurement of every agent, and checks it against the thresholds
+// unless they can't be read.
 func (s *Store) sample(ctx context.Context, now time.Time) {
 	nodes, err := s.nodes.List(ctx)
 	if err != nil {
 		slog.Warn("Can't record the usage of the nodes", logging.Nodes, "err", err)
 		return
 	}
+	th, thErr := s.thresholds(ctx)
+	if thErr != nil {
+		slog.Warn("Can't read the thresholds of usage", logging.Usage, "err", thErr)
+	}
+	enrolled := map[string]bool{}
 	var wg sync.WaitGroup
 	for _, n := range nodes {
 		if n.EnrolledAt == nil {
 			continue
 		}
+		enrolled[n.ID] = true
 		wg.Go(func() {
 			stats, err := s.Latest(ctx, n.ID)
 			if err == nil {
@@ -85,10 +109,13 @@ func (s *Store) sample(ctx context.Context, now time.Time) {
 			}
 			if err != nil { // offline nodes are left out
 				slog.Debug("Can't record the usage of a node", logging.Nodes, logging.KeyNode, n.ID, "err", err)
+			} else if thErr == nil {
+				s.checkNode(ctx, n.ID, now, stats, th)
 			}
 		})
 	}
 	wg.Wait()
+	s.forget(func(k key) bool { return !enrolled[k.node] })
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM usage_samples WHERE time < ?`, now.Add(-retention).Unix()); err != nil {
 		slog.Warn("Can't delete old usage", logging.Nodes, "err", err)
 	}
@@ -127,17 +154,12 @@ func (s *Store) add(ctx context.Context, nodeID string, at time.Time, stats *nor
 	if _, err := insert.ExecContext(ctx, at.Unix(), nodeID, "", n.GetCpuMillis(), n.GetMemoryUsedBytes(), 0, 0, 0, nil, nil); err != nil {
 		return err
 	}
-	recorded := map[string]bool{}
-	for _, srv := range stats.GetServers() {
-		if !srv.GetRunning() || !serverPattern.MatchString(srv.GetId()) || recorded[srv.GetId()] || len(recorded) == maxServers {
-			continue
-		}
-		recorded[srv.GetId()] = true
+	for _, srv := range recorded(stats) {
 		var players, tps any
 		if p := srv.GetPlayers(); p != nil {
 			players = p.GetOnline()
 		}
-		if srv.GetTps() > 0 {
+		if validTPS(srv.GetTps()) {
 			tps = srv.GetTps()
 		}
 		if _, err := insert.ExecContext(ctx, at.Unix(), nodeID, srv.GetId(), srv.GetCpuMillis(), srv.GetMemoryBytes(),
@@ -146,6 +168,20 @@ func (s *Store) add(ctx context.Context, nodeID string, at time.Time, stats *nor
 		}
 	}
 	return tx.Commit()
+}
+
+// recorded returns the running servers of a measurement with valid IDs, each once, and at most
+// maxServers of them.
+func recorded(stats *noryxv1.GetStatsResponse) []*noryxv1.ServerStats {
+	var servers []*noryxv1.ServerStats
+	seen := map[string]bool{}
+	for _, srv := range stats.GetServers() {
+		if srv.GetRunning() && serverPattern.MatchString(srv.GetId()) && !seen[srv.GetId()] && len(servers) < maxServers {
+			seen[srv.GetId()] = true
+			servers = append(servers, srv)
+		}
+	}
+	return servers
 }
 
 // Point is what a node or server used on average during a step of a history.
@@ -195,14 +231,23 @@ func (s *Store) History(ctx context.Context, nodeID, serverID string, span, step
 	return points, rows.Err()
 }
 
-// Forget deletes the history of a deleted server.
+// Forget deletes the history and the thresholds of a deleted server, and its warnings.
 func (s *Store) Forget(ctx context.Context, nodeID, serverID string) error {
+	s.forget(func(k key) bool { return k.node == nodeID && k.server == serverID })
 	_, err := s.db.ExecContext(ctx, `DELETE FROM usage_samples WHERE node_id = ? AND server_id = ?`, nodeID, serverID)
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `DELETE FROM usage_thresholds WHERE node_id = ? AND server_id = ?`, nodeID, serverID)
+	}
 	return err
 }
 
-// Move keeps the history of a server that moved to another node.
+// Move keeps the history and the thresholds of a server that moved to another node. Its
+// warnings start over there.
 func (s *Store) Move(ctx context.Context, serverID, from, to string) error {
+	s.forget(func(k key) bool { return k.node == from && k.server == serverID })
 	_, err := s.db.ExecContext(ctx, `UPDATE usage_samples SET node_id = ? WHERE node_id = ? AND server_id = ?`, to, from, serverID)
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `UPDATE OR REPLACE usage_thresholds SET node_id = ? WHERE node_id = ? AND server_id = ?`, to, from, serverID)
+	}
 	return err
 }

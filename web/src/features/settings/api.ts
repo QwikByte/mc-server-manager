@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
 import type { NodeLimits } from "@/features/nodes/api"
+import type { ThresholdDefaults } from "@/features/usage/api"
 import { api } from "@/lib/api"
 
 /** The certificate the panel serves: self-signed, of Let's Encrypt, or none for plain HTTP, e.g. behind a reverse proxy. */
@@ -27,6 +28,8 @@ export interface MasterSettings {
   checkUpdates: boolean
   /** Who has to use two-factor authentication: all users, or the members of the groups with these IDs. */
   requireMfa: { all: boolean; groups: string[] }
+  /** When the usage of servers and nodes warns, unless they have their own thresholds. */
+  thresholds: ThresholdDefaults
 }
 
 /** The certificate the panel serves. */

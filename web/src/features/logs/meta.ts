@@ -25,6 +25,7 @@ export const categories: Record<string, string> = {
   backups: msg("Backups"),
   networks: msg("Networks"),
   databases: msg("Databases"),
+  usage: msg("Usage"),
   players: msg("Players"),
   templates: msg("Templates"),
   policies: msg("Schedules"),

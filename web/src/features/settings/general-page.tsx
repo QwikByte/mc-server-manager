@@ -20,7 +20,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
 import { StatCard } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
-import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -31,6 +31,7 @@ import { useAccess } from "@/features/access/use-access"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
 import { UpdateCheck } from "@/features/updates/update-check"
+import { ThresholdFields, ThresholdsHelp } from "@/features/usage/thresholds"
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import {
@@ -198,6 +199,7 @@ function formOf(s: MasterSettings) {
     logSizeMb,
     checkUpdates,
     requireMfa,
+    thresholds: s.thresholds,
     nodeDefaults: limitsForm(s.nodeDefaults),
   }
 }
@@ -329,6 +331,29 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               )}
             </FieldDescription>
           </Field>
+        </FormSection>
+
+        <FormSection title={t("Usage warnings")}>
+          <ThresholdsHelp />
+          <p className="text-sm text-muted-foreground">{t("Servers and nodes can have their own thresholds in their settings.")}</p>
+          <FieldSet>
+            <FieldLegend variant="label">{t("Servers")}</FieldLegend>
+            <ThresholdFields
+              id="settings-servers"
+              kind="servers"
+              value={form.thresholds.servers}
+              onChange={(servers) => set({ thresholds: { ...form.thresholds, servers } })}
+            />
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend variant="label">{t("Nodes")}</FieldLegend>
+            <ThresholdFields
+              id="settings-nodes"
+              kind="nodes"
+              value={form.thresholds.nodes}
+              onChange={(nodes) => set({ thresholds: { ...form.thresholds, nodes } })}
+            />
+          </FieldSet>
         </FormSection>
 
         <FormSection title={t("Updates")}>

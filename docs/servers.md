@@ -129,12 +129,12 @@ players stay connected. The copy doesn't take over the original's place in a net
 A server can move to another node with its ID, files, settings and, if chosen, its backups; otherwise the backups are
 deleted with it. Port, storage location, memory and CPU limits are checked on the new node first. The server then stops,
 its data is copied through the master, and it starts on the new node if it ran before. Its backup jobs, schedules, the
-scopes of groups and its usage history follow it, and its network is configured again, which restarts the proxy. The
-original is deleted only once the server is complete on the new node; if anything fails before, the copy goes away and
-the server runs where it was. While it moves, the panel shows the progress, refuses changes to the server and continues
-on the new node once it is done; scheduled tasks leave it out meanwhile. The new node needs free space for the archive
-of the data besides the data itself, until it is extracted. If the master stops during a move, the server stays on its
-old node, stopped.
+scopes of groups, its usage history and thresholds follow it, and its network is configured again, which restarts the
+proxy. The original is deleted only once the server is complete on the new node; if anything fails before, the copy goes
+away and the server runs where it was. While it moves, the panel shows the progress, refuses changes to the server and
+continues on the new node once it is done; scheduled tasks leave it out meanwhile. The new node needs free space for the
+archive of the data besides the data itself, until it is extracted. If the master stops during a move, the server stays
+on its old node, stopped.
 
 ## Lists, tags and bulk actions
 
