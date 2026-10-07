@@ -21,7 +21,7 @@ export function LoginPage() {
     event.preventDefault()
     login.mutate(
       { ...credentials, code },
-      { onSuccess: (result) => ("mfaRequired" in result ? setCode("") : navigate({ to: redirect ?? "/nodes" })) },
+      { onSuccess: (result) => ("mfaRequired" in result ? setCode("") : navigate({ to: redirect ?? "/" })) },
     )
   }
 
