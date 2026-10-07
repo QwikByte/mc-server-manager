@@ -119,6 +119,9 @@ message Server {
   // The node publishes the port of the backend only at its address in the private network of
   // the nodes, for the node of its proxy.
   bool overlay = 19;
+  // A running server whose health check fails, e.g. one that hangs. Actions treat it like any
+  // running server.
+  bool unhealthy = 20;
 }
 
 message ListServersRequest {}

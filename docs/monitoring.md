@@ -53,7 +53,9 @@ and narrows the list to its user, server or category. Key figures and a chart sh
 ### Everywhere else
 
 A bell in the sidebar counts the new warnings and errors, and new ones show up as notifications, except those of the
-user's own actions. Servers have an **Activity** tab and nodes an **Activity** section.
+user's own actions. Among them are every crash of a server, servers that become unhealthy, and nodes that go offline:
+the master checks the connections to the agents every 30 seconds and logs a node that fails two checks in a row once,
+and once more when it is back. Servers have an **Activity** tab and nodes an **Activity** section.
 
 ### Command line
 

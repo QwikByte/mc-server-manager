@@ -109,10 +109,14 @@ export const serverStates: Record<ServerState, Status> = {
 }
 
 const crashed: Status = { tone: "warning", label: msg("Crashed") }
+const unhealthy: Status = { tone: "warning", label: msg("Unhealthy"), pulse: true }
 
-/** The state of a server to show: one that stopped after crashing says that it crashed. */
-export const statusOf = (s: { state: ServerState; crashes: number }) =>
-  s.state === "stopped" && s.crashes > 0 ? crashed : serverStates[s.state]
+/**
+ * The state of a server to show: one that stopped after crashing says that it crashed, and a
+ * running one whose health check fails that it is unhealthy.
+ */
+export const statusOf = (s: { state: ServerState; crashes: number; unhealthy?: boolean }) =>
+  s.state === "stopped" && s.crashes > 0 ? crashed : s.state === "running" && s.unhealthy ? unhealthy : serverStates[s.state]
 
 /** The states in the order lists show them. */
 export const states = Object.keys(serverStates) as ServerState[]

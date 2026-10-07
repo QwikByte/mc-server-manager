@@ -142,7 +142,7 @@ export function ServerPage() {
               <ServerActions nodeId={nodeId} server={server} onDeleted={() => navigate({ to: "/nodes/$nodeId", params: { nodeId } })} />
             }
           />
-          <CrashNotice server={server} />
+          <CrashNotice server={server} nodeId={nodeId} canReadFiles={can("files.read", nodeId, serverId)} />
           <RefusedOptionsNotice server={server} nodeId={nodeId} canEdit={can("servers.settings", nodeId, serverId)} />
           <EndOfLifeNotice type={server.type} className="mb-6" />
           <Tabs label={t("Server")}>

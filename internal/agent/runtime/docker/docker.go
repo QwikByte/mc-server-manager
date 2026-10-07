@@ -126,7 +126,7 @@ func (d *Docker) List(ctx context.Context) ([]runtime.Server, error) {
 	for _, c := range res.Items {
 		// The name check skips the old container while a server is being recreated.
 		if spec, ok := specOf(c.Labels); ok && slices.Contains(c.Names, "/"+containerName(spec.ID)) {
-			srv := runtime.Server{Spec: spec, State: state(c)}
+			srv := runtime.Server{Spec: spec, State: state(c), Unhealthy: unhealthy(c)}
 			if mayHaveCrashed(c) {
 				d.addCrashes(ctx, c.ID, &srv)
 			}
@@ -142,6 +142,8 @@ func specOf(labels map[string]string) (runtime.Spec, bool) {
 	return spec, json.Unmarshal([]byte(labels[labelSpec]), &spec) == nil
 }
 
+// state is the state of a server by its container. A server whose health check fails
+// runs, but is unhealthy.
 func state(c container.Summary) noryxv1.ServerState {
 	switch {
 	case c.State == container.StateRestarting: // after a crash, until Docker starts it again
@@ -153,6 +155,12 @@ func state(c container.Summary) noryxv1.ServerState {
 	default:
 		return noryxv1.ServerState_SERVER_STATE_RUNNING
 	}
+}
+
+// unhealthy reports whether a running server's health check fails, which the images of
+// itzg run, e.g. as the server hangs.
+func unhealthy(c container.Summary) bool {
+	return c.State == container.StateRunning && c.Health != nil && c.Health.Status == container.Unhealthy
 }
 
 func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {

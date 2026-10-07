@@ -121,6 +121,7 @@ func serve(ctx context.Context, cfg config) error {
 	go logStore.Collect(ctx, nodes)
 	go masterCert.Maintain(ctx, time.Hour, ca.MasterCertificate)
 	go nodes.MaintainCertificates(ctx, 6*time.Hour)
+	go nodes.WatchPresence(ctx, 30*time.Second)
 	if ok, err := users.HasUsers(ctx); err == nil && !ok {
 		slog.Warn("No administrator account exists yet, create one with: noryx-master user add <username>", logging.Auth)
 	}

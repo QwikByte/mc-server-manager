@@ -50,10 +50,15 @@ with; **Update image** in its settings pulls the newest one and, if it changed, 
 way. The old image is removed once no server uses it. New servers get the newest image too: creating one pulls it, which
 downloads its changes if it was updated since. Deleting servers keeps their images.
 
-## Crashes
+## Crashes and health
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
-crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.
+crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever. Each
+crash is a warning in the log, which the bell counts, and the notice on the server's page links to its crash reports.
+
+The images check the health of their server. A server that runs but fails its health check, e.g. as it hangs, shows as
+**unhealthy** on its card and page and under what needs attention on the overview; the log tells when it becomes
+unhealthy and healthy again. It still counts as running: its console, restarts, stops and schedules work as usual.
 
 ## Copies
 
