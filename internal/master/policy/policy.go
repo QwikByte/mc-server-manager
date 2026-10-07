@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/schedule"
+	"github.com/QwikByte/noryx/internal/master/server"
 )
 
 // TaskKind identifies policies among the scheduled tasks.
@@ -36,22 +36,14 @@ const (
 
 	maxWarnings = 5
 	maxMinutes  = 60
-	maxMessage  = 200
 	maxCommand  = 1000
 	// actionTimeout covers a graceful stop, in which a server saves its worlds, which may take
 	// the longest stop timeout.
 	actionTimeout = 2*time.Minute + noryxv1.MaxStopTimeout
-	// lateWarning is how late a warning may be sent, e.g. when the master just started.
-	lateWarning = time.Minute
 )
 
 // actions are what the log says a policy did to a server.
 var actions = map[string]string{restart: "Restart server", stop: "Stop server", start: "Start server", command: "Send console command"}
-
-var defaultMessages = map[string]string{
-	restart: "The server restarts in {minutes} min.",
-	stop:    "The server stops in {minutes} min.",
-}
 
 // Settings say what a policy does.
 type Settings struct {
@@ -80,12 +72,11 @@ func (Policies) Check(raw json.RawMessage) (json.RawMessage, error) {
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose what the schedule does.")
 	}
-	if _, warns := defaultMessages[s.Action]; warns {
+	var err error
+	if s.Action == restart || s.Action == stop {
 		slices.SortFunc(s.Warnings, func(a, b uint32) int { return cmp.Compare(b, a) })
-		s.Warnings, s.Message = slices.Compact(s.Warnings), strings.TrimSpace(s.Message)
-		if s.Message == "" {
-			s.Message = defaultMessages[s.Action]
-		}
+		s.Warnings = slices.Compact(s.Warnings)
+		s.Message, err = server.WarningMessage(s.Action, s.Message)
 	} else {
 		s.Warnings, s.Message = nil, ""
 	}
@@ -98,8 +89,8 @@ func (Policies) Check(raw json.RawMessage) (json.RawMessage, error) {
 		return nil, httpapi.Errorf(http.StatusBadRequest, "Choose what the schedule does.")
 	case len(s.Warnings) > maxWarnings || slices.ContainsFunc(s.Warnings, func(m uint32) bool { return m == 0 || m > maxMinutes }):
 		return nil, httpapi.Errorf(http.StatusBadRequest, "Warn the players up to %d times, 1 to %d minutes before.", maxWarnings, maxMinutes)
-	case len(s.Message) > maxMessage || strings.ContainsFunc(s.Message, unicode.IsControl):
-		return nil, httpapi.Errorf(http.StatusBadRequest, "Keep the warning on one line with up to %d characters.", maxMessage)
+	case err != nil:
+		return nil, err
 	case s.Action == command && (s.Command == "" || len(s.Command) > maxCommand || strings.ContainsFunc(s.Command, unicode.IsControl)):
 		return nil, httpapi.Errorf(http.StatusBadRequest, "Enter a single console command with up to %d characters.", maxCommand)
 	}
@@ -128,22 +119,13 @@ func (p Policies) Run(ctx context.Context, t schedule.Task, servers schedule.Ser
 		return err
 	}
 	list, err := servers(ctx)
-	for _, minutes := range s.Warnings {
-		warnAt := at.Add(-time.Duration(minutes) * time.Minute)
-		if time.Until(warnAt) < -lateWarning {
-			continue
-		}
-		if err := sleepUntil(ctx, warnAt); err != nil {
-			return err
-		}
-		say := "say " + strings.ReplaceAll(s.Message, "{minutes}", strconv.FormatUint(uint64(minutes), 10))
+	if err := server.Countdown(ctx, at, s.Warnings, func(minutes uint32) {
 		for _, srv := range list {
-			if srv.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING && !srv.GetType().Proxy() && concerns(s, srv) {
-				_ = p.call(ctx, srv, command, say) // a server that misses a warning restarts anyway
+			if server.Warnable(srv.Server) && concerns(s, srv) {
+				_ = p.call(ctx, srv, command, server.SayWarning(s.Message, minutes)) // a server that misses a warning restarts anyway
 			}
 		}
-	}
-	if err := sleepUntil(ctx, at); err != nil {
+	}); err != nil {
 		return err
 	}
 	if len(s.Warnings) > 0 { // servers may have been started or stopped during the countdown
@@ -200,15 +182,4 @@ func (p Policies) call(ctx context.Context, srv schedule.Server, action, cmd str
 		_, err = c.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: cmd})
 	}
 	return err
-}
-
-func sleepUntil(ctx context.Context, t time.Time) error {
-	timer := time.NewTimer(time.Until(t))
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }

@@ -292,6 +292,21 @@ func TestCancelOperations(t *testing.T) {
 	if got := waitForOperation(t, api, restoring.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); got.Error != "" {
 		t.Fatalf("restoring: %+v", got)
 	}
+
+	// A restart that warns the players first can be cancelled while it warns them.
+	check(t, a.runtime.Start(t.Context(), lobby.ServerID))
+	var restarting operation.Operation
+	api.do("POST", path+"/"+lobby.ServerID+"/restart", map[string]any{"warning": map[string]any{"minutes": 2}}, http.StatusAccepted, &restarting)
+	if !restarting.Cancellable || !slices.Equal(restarting.Steps, []string{"warn", "restart"}) {
+		t.Fatalf("restarting: %+v", restarting)
+	}
+	waitForOperation(t, api, restarting.ID, func(op operation.Operation) bool { return op.Unit == "minutes" })
+	api.do("POST", "/api/operations/"+restarting.ID+"/cancel", nil, http.StatusAccepted, nil)
+	got = waitForOperation(t, api, restarting.ID, func(op operation.Operation) bool { return op.FinishedAt != nil })
+	if !got.Cancelled || got.Steps[got.Step] != "warn" || slices.Contains(a.runtime.restarted(), lobby.ServerID) ||
+		!slices.Contains(a.runtime.commandsTo(lobby.ServerID), "say The server restarts in 2 min.") {
+		t.Fatalf("restarting: %+v, commands %q", got, a.runtime.commandsTo(lobby.ServerID))
+	}
 }
 
 // Servers created at the same time, e.g. after a double click, can't take the same port,

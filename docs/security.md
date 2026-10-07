@@ -202,8 +202,10 @@ do, so no one can raise their own permissions.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
 change with the user who made it, also denied attempts. An operation in progress can only be cancelled by the user who
 started it, or by one who has the permissions it needed on what it is about, and only while it is at steps that stop
-safely: restoring a backup, moving a server, stopping or restarting one and restarting servers one after the other
-always finish.
+safely: restoring a backup, moving a server, stopping or restarting one once it no longer warns its players, and
+restarting servers one after the other always finish.
+A warning before a stop or restart by hand is the console command `say`, so a message of one's own needs the permission
+to send console commands on each server; others get the default message and can't put text of their own in the chat.
 
 ## Terminal
 

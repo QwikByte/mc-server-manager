@@ -648,19 +648,48 @@ func (h *Handler) startServer(w http.ResponseWriter, r *http.Request) {
 
 // power stops or restarts a server as an operation, server.stop or server.restart with the
 // step of the same name: a graceful stop may take the server's stop timeout, longer than a
-// proxy in front of the master waits for an answer. It can't be cancelled, as a restart cut
+// proxy in front of the master waits for an answer. A request with a warning warns the players
+// first, in the step warn, until which it can be cancelled; then it can't, as a restart cut
 // short would leave the server stopped.
 func (h *Handler) power(action string) http.HandlerFunc {
-	call := serverActions[action].call
+	act := serverActions[action]
 	return func(w http.ResponseWriter, r *http.Request) {
 		nodeID, id := r.PathValue("node"), r.PathValue("id")
+		servers := []tag.Server{{NodeID: nodeID, ServerID: id}}
+		var req struct {
+			Warning *warning `json:"warning"`
+		}
+		var err error
+		if r.ContentLength != 0 { // the body is optional
+			err = httpapi.ReadJSON(w, r, &req)
+		}
+		if err == nil {
+			err = req.Warning.check(r, action, servers)
+		}
+		if err != nil {
+			httpapi.WriteError(w, r, err)
+			return
+		}
 		spec := operation.Spec{
 			Kind: "server." + action, NodeID: nodeID, ServerID: id, Steps: []string{action}, Status: http.StatusNoContent,
-			Timeout: actionTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
+			Timeout: actionTimeout + req.Warning.duration(), Category: logging.Servers, Visible: viewable(nodeID, id),
+		}
+		if req.Warning != nil {
+			spec.Steps, spec.Cancel = []string{"warn", action}, access.OnServer(act.need)
 		}
 		h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+			if req.Warning != nil {
+				err := h.countdown(ctx, req.Warning, servers)
+				if err == nil {
+					err = operation.Keep(ctx)
+				}
+				if err != nil {
+					return nil, err
+				}
+				operation.Step(ctx, action)
+			}
 			return nil, h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
-				return call(ctx, c, id, "")
+				return act.call(ctx, c, id, "")
 			})
 		})
 	}

@@ -20,7 +20,7 @@ export interface Operation {
   /** How much of the current step is done, and of how much; total is 0 if unknown. */
   done: number
   total: number
-  unit?: "bytes" | "servers" | "backups" | "files"
+  unit?: "bytes" | "servers" | "backups" | "files" | "minutes"
   error?: string
   result?: unknown
   startedAt: string

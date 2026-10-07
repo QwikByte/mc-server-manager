@@ -98,6 +98,12 @@ Stopping and restarting a server run as [operations](panel.md#operations), as th
 timeout: the panel follows them in a notification, and a reverse proxy in front of the master, e.g. nginx, which gives
 up after 60 seconds by default, doesn't cut them off. Starting a server only takes a moment and answers right away.
 
+**Restart with a warning…** and **Stop with a warning…** in the menu of a running game server warn its players in the
+chat first, 1, 2, 5 or 10 minutes before, and again 5 minutes and 1 minute before, like
+[schedules](automation.md#schedules) do. Until then, the operation shows the time left and can be cancelled, which
+leaves the server running. The warning has the default message of schedules; one's own message needs the permission to
+send console commands, as the warning is the console command `say`. Proxies get no warning.
+
 When a node shuts down or reboots, systemd gives Docker 90 seconds to stop (its `DefaultTimeoutStopSec`), which cuts
 longer stop timeouts short: servers that haven't saved their worlds by then are killed. To give them their full stop
 timeout, raise `TimeoutStopSec` of `docker.service` beyond the longest one, e.g. to 11 minutes:
@@ -147,6 +153,7 @@ lists and all their browsers. **Export CSV** downloads the servers as listed, wi
 port, state, tags and what running servers use, for spreadsheets. Selected servers start, restart or stop together, run
 a console command such as `save-all`, or get and lose tags; an action applies to the selected servers in a fitting state
 on which the user may do it, at most 8 at a time on each node, and the panel tells which failed and offers to try those again.
+Restarting and stopping them can warn the players of the game servers first, like a single server.
 
 Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
 keeps them; they follow a server that moves, copies get them, and they go with a deleted server. Changing them needs the

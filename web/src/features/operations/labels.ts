@@ -1,5 +1,5 @@
 import { t } from "i18next"
-import { formatBytes } from "@/lib/format"
+import { formatBytes, formatElapsed } from "@/lib/format"
 import type { Operation } from "./api"
 
 /** What an operation does, e.g. "Create Lobby". name is the name of its server, for operations that don't name it. */
@@ -178,6 +178,8 @@ export function stepOf(op: Operation, step: string): string {
       return t("Write the files on the servers")
     case "restart":
       return op.kind === "server.restart" ? t("Restart the server") : t("Restart the servers whose files changed")
+    case "warn":
+      return t("Warn the players")
     case "servers":
       if (op.kind.startsWith("players.")) return t("Apply it on the servers")
       if (verb === "rolling-restart") return t("Restart the servers one after the other")
@@ -198,11 +200,16 @@ export function amountOf(op: Operation): string | undefined {
   if (op.unit === "servers" && op.total > 1) return t("{{done}} of {{count}} servers", { done: op.done, count: op.total })
   if (op.unit === "backups" && op.total > 0) return t("{{done}} of {{count}} backups", { done: op.done, count: op.total })
   if (op.unit === "files" && op.total > 0) return t("{{done}} of {{count}} files", { done: op.done, count: op.total })
+  if (op.unit === "minutes" && op.total > 0) return t("{{time}} left", { time: formatElapsed(warningLeft(op)) })
   return undefined
 }
 
 /** How much of the current step of an operation is done, from 0 to 1, if it is known. */
 export function shareOf(op: Operation): number | undefined {
+  if (op.unit === "minutes" && op.total > 0) return 1 - warningLeft(op) / (op.total * 60_000)
   if (op.total > 0 && (op.unit !== "servers" || op.total > 1)) return Math.min(op.done / op.total, 1)
   return undefined
 }
+
+/** The milliseconds left of a warning, which counts down the minutes in total from the start of its operation. */
+const warningLeft = (op: Operation) => Math.max(0, Date.parse(op.startedAt) + op.total * 60_000 - Date.now())

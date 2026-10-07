@@ -51,12 +51,14 @@ type bulkResult struct {
 }
 
 // bulk starts, stops or restarts servers, or sends them a console command, as an operation
-// that tells how it ended on each.
+// that tells how it ended on each. Stops and restarts can warn the players first.
 func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Action  string       `json:"action"`
 		Command string       `json:"command"`
 		Servers []tag.Server `json:"servers"`
+		// Warning warns the players before a stop or restart.
+		Warning *warning `json:"warning"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
@@ -71,7 +73,11 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Enter a command."))
 		return
 	}
-	if err := checkServers(r, req.Servers, action.need); err != nil {
+	err := checkServers(r, req.Servers, action.need)
+	if err == nil {
+		err = req.Warning.check(r, req.Action, req.Servers)
+	}
+	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
@@ -80,14 +86,22 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 	for i, s := range req.Servers {
 		nodes[i] = s.NodeID
 	}
+	steps := []string{"servers"}
+	if req.Warning != nil {
+		steps = []string{"warn", "servers"}
+	}
 	h.ops.Run(w, r, operation.Spec{
-		Kind: "servers." + req.Action, Subject: strconv.Itoa(len(req.Servers)), Steps: []string{"servers"},
-		Status: http.StatusOK, Timeout: bulkTimeout(nodes), Category: logging.Servers,
+		Kind: "servers." + req.Action, Subject: strconv.Itoa(len(req.Servers)), Steps: steps,
+		Status: http.StatusOK, Timeout: bulkTimeout(nodes) + req.Warning.duration(), Category: logging.Servers,
 		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, req.Servers) },
 		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
 			return action.need, onAll(g, action.need, req.Servers)
 		},
 	}, func(ctx context.Context) (any, error) {
+		if err := h.countdown(ctx, req.Warning, req.Servers); err != nil {
+			return nil, err
+		}
+		operation.Step(ctx, "servers")
 		results := make([]bulkResult, len(req.Servers))
 		failed := func(i int, err error) { results[i] = bulkResult{Server: req.Servers[i], Error: httpapi.Message(err)} }
 		operation.Each(ctx, nodes, func(ctx context.Context, i int) {

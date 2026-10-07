@@ -97,7 +97,8 @@ server leaves no server; once a new server has its modpack, it stays, as install
 action on many servers begins no more servers, but finishes on those it began, so that e.g. no restart is cut short and
 leaves a server stopped. Applying a file set can be cancelled while it writes the files, but not once it restarts
 servers. Restoring backups, moving servers, stopping and restarting them, changing their settings or image, and the
-actions on networks and datastores can't be cancelled, as they must finish once they began. Whoever started an
+actions on networks and datastores can't be cancelled, as they must finish once they began; only while a stop or
+restart still [warns the players](servers.md#settings-and-images) can it be cancelled, which stops nothing. Whoever started an
 operation may cancel it, and so may others who may do the same, e.g. back up the server; for a file set, those who may
 change the files of all servers.
 

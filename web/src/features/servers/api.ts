@@ -217,7 +217,18 @@ export function useMoveServer(nodeId: string, serverId: string) {
 
 export type ServerAction = "start" | "stop" | "restart" | "delete"
 
-export type BulkAction = { action: "start" | "stop" | "restart" } | { action: "command"; command: string }
+/** Warns the players in the chat before servers stop or restart, and again 5 minutes and 1 minute before. */
+export interface Warning {
+  /** 1 to 10. */
+  minutes: number
+  /** {minutes} becomes the minutes left; empty is the default. A message of one's own needs the permission to send console commands. */
+  message?: string
+}
+
+export type BulkAction =
+  | { action: "start" }
+  | { action: "stop" | "restart"; warning?: Warning }
+  | { action: "command"; command: string }
 
 /** How an action ended on each server; failed ones have an error. */
 export interface BulkResult {
@@ -277,15 +288,18 @@ export function usePendingAction(nodeId: string, serverId: string): BulkAction["
   return undefined
 }
 
-/** Starts, stops, restarts or deletes a server; stopping and restarting may become operations, as a server may take minutes to stop. */
+/**
+ * Starts, stops, restarts or deletes a server; stopping and restarting may become operations, as a server may take
+ * minutes to stop, and may warn the players first.
+ */
 export function useServerAction(nodeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: ["server-action", nodeId],
-    mutationFn: ({ id, action, onStart }: { id: string; action: ServerAction } & Followed) =>
+    mutationFn: ({ id, action, warning, onStart }: { id: string; action: ServerAction; warning?: Warning } & Followed) =>
       action === "delete"
         ? api(`/nodes/${nodeId}/servers/${id}`, { method: "DELETE" })
-        : operate(`/nodes/${nodeId}/servers/${id}/${action}`, { method: "POST" }, onStart),
+        : operate(`/nodes/${nodeId}/servers/${id}/${action}`, warning ? { body: { warning } } : { method: "POST" }, onStart),
     onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
   })
 }
