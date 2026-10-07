@@ -102,9 +102,13 @@ type consoleRuntime struct {
 	out string
 }
 
-func (r consoleRuntime) Usage(context.Context, string) (runtime.Usage, error) { return runtime.Usage{}, nil }
+func (r consoleRuntime) Usage(context.Context, string) (runtime.Usage, error) {
+	return runtime.Usage{}, nil
+}
 
-func (r consoleRuntime) SendCommand(context.Context, string, string) (string, error) { return r.out, nil }
+func (r consoleRuntime) SendCommand(context.Context, string, string) (string, error) {
+	return r.out, nil
+}
 
 // unusedPort is a port at which nothing listens.
 func unusedPort(t *testing.T) uint32 {
