@@ -83,7 +83,8 @@ The agent confines every path to the server's data directory, including through 
 the server's user. Downloads are sent as attachments with a sandboxing CSP, so an uploaded HTML file can't run scripts
 in the panel. Secrets of the server stay on the node: files that only hold them can't be listed, read, written or moved,
 others show them as `<hidden>`, no file or folder with secrets can be moved where they would show, and archives leave
-them out. Only moving a server to another node copies them.
+them out. Only moving a server to another node copies them. Moving or deleting several files and folders at once
+checks each of them like a single one.
 
 ## Plugins and downloads
 

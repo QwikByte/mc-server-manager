@@ -44,6 +44,18 @@ func Name(p string) (string, bool) {
 	return filepath.FromSlash(name), true
 }
 
+// Outermost removes duplicates and names inside others from a list of names.
+func Outermost(names []string) []string {
+	if slices.Contains(names, ".") {
+		return []string{"."}
+	}
+	slices.Sort(names)
+	all := slices.Compact(slices.Clone(names))
+	return slices.DeleteFunc(slices.Compact(names), func(p string) bool {
+		return slices.ContainsFunc(all, func(parent string) bool { return strings.HasPrefix(p, parent+string(filepath.Separator)) })
+	})
+}
+
 // IsTemp reports whether a file or folder name is one of the agent's temporary ones.
 func IsTemp(name string) bool { return strings.HasPrefix(name, tempPrefix) }
 

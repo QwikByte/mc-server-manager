@@ -100,6 +100,19 @@ func TestFiles(t *testing.T) {
 		t.Fatalf("archived file = %q", content)
 	}
 
+	// Chosen files and folders download as one archive, and move into another folder, but
+	// not into themselves.
+	api.do("PUT", base+"/content"+q("plugins/Example/other.yml"), []byte("other\n"), http.StatusCreated, nil)
+	archive = api.do("GET", base+"/archive"+q("plugins/Example")+"&name=settings.yml", nil, http.StatusOK, nil)
+	zr, err = zip.NewReader(bytes.NewReader([]byte(archive)), int64(len(archive)))
+	check(t, err)
+	if len(zr.File) != 1 || zr.File[0].Name != "settings.yml" {
+		t.Fatalf("archive of a chosen file = %v", zr.File)
+	}
+	api.do("GET", base+"/archive"+q("plugins")+"&name=missing", nil, http.StatusNotFound, nil)
+	api.do("POST", base+"/move", map[string]string{"from": "index.html", "to": "plugins/index.html"}, http.StatusNoContent, nil)
+	api.do("POST", base+"/move", map[string]string{"from": "plugins", "to": "plugins/Example/plugins"}, http.StatusBadRequest, nil)
+
 	// Paths can't leave the server's directory, not even through a symbolic link.
 	check(t, os.Symlink(t.TempDir(), filepath.Join(a.runtime.dir, srv.ServerID, "outside")))
 	for _, p := range []string{"../" + srv.ServerID, "/../../etc/passwd", `..\x`, "outside/x"} {

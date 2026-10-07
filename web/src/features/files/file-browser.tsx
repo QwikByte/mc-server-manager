@@ -1,45 +1,85 @@
-import { ArrowUpIcon, FolderPlusIcon, UploadSimpleIcon, WarningIcon } from "@phosphor-icons/react"
-import { useQuery } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { ArrowUpIcon, UploadSimpleIcon, WarningIcon } from "@phosphor-icons/react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { Link, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
-import { type AnchorHTMLAttributes, type DragEvent, Fragment, useRef, useState } from "react"
+import { type AnchorHTMLAttributes, type DragEvent, Fragment, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { IconTile } from "@/components/icon-tile"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
-import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAccess } from "@/features/access/use-access"
 import type { Server } from "@/features/servers/api"
 import { formatBytes, formatDateTime } from "@/lib/format"
-import { contentUrl, type FileEntry, filesQuery, join, maxEditableBytes, type ServerFiles, useChangeFiles } from "./api"
+import { contentUrl, type FileEntry, filesQuery, join, maxEditableBytes, type ServerFiles, upload, useChangeFiles } from "./api"
+import { browse, storedSort, storeSort } from "./browse"
 import { FileActions } from "./file-actions"
 import { FileTypeIcon } from "./file-icon"
+import { FileMenus, FilterBar } from "./file-toolbar"
 import { NameDialog } from "./name-dialog"
+import { SelectionBar } from "./selection-bar"
 import { UploadList } from "./upload-list"
-import { useUploads } from "./use-uploads"
+import { type Batch, readDrop, readPicked, useUploads } from "./use-uploads"
 
-/** Lists a folder of a server; files can be dropped onto it to upload them. */
+/** The file or folder at the top of a path, e.g. "world" of "world/region/r.0.0.mca". */
+const top = (path: string) => path.split("/")[0]
+
+/**
+ * Lists a folder of a server, filtered and sorted; files and folders can be dropped onto it to
+ * upload them. Chosen entries can be downloaded, moved and deleted at once; the selection only
+ * counts the entries that are listed.
+ */
 export function FileBrowser({ files, path, server }: { files: ServerFiles; path: string; server: Server }) {
   const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const { data, isPending, error } = useQuery(filesQuery(files, path))
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const change = useChangeFiles(files)
   const { uploads, add, cancel } = useUploads(files)
   const [dragging, setDragging] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [replace, setReplace] = useState<File[]>([])
+  const [creating, setCreating] = useState<"file" | "folder">()
+  const [replace, setReplace] = useState<Batch>({ files: [], folders: [] })
+  const [sort, setSort] = useState(storedSort)
+  const [filter, setFilter] = useState("")
+  const [selection, setSelection] = useState(new Set<string>())
+  const [listed, setListed] = useState(path)
   const picker = useRef<HTMLInputElement>(null)
   const dragDepth = useRef(0)
   const folder = path.split("/").pop() || server.name
+  const entries = useMemo(() => browse(data?.files ?? [], sort, filter), [data, sort, filter])
+  const chosen = entries.filter((e) => selection.has(e.name))
+  const replacing = [...new Set([...replace.files.map((f) => top(f.path)), ...replace.folders.map(top)])]
 
-  // Files that exist already are only replaced after confirmation.
-  function start(selected: File[]) {
+  // Another folder starts without a filter and a selection.
+  if (listed !== path) {
+    setListed(path)
+    setFilter("")
+    setSelection(new Set())
+  }
+
+  function select(names: string[], on: boolean) {
+    setSelection((current) => {
+      const next = new Set(current)
+      for (const name of names) {
+        if (on) next.add(name)
+        else next.delete(name)
+      }
+      return next
+    })
+  }
+
+  // Files and folders that exist already are only replaced after confirmation.
+  function start(batch: Batch) {
     const existing = new Set(data?.files.map((f) => f.name))
-    const fresh = selected.filter((f) => !existing.has(f.name))
-    if (fresh.length) add(fresh, path, false)
-    setReplace(selected.filter((f) => existing.has(f.name)))
+    const part = (exists: boolean): Batch => ({
+      files: batch.files.filter((f) => existing.has(top(f.path)) === exists),
+      folders: batch.folders.filter((f) => existing.has(top(f)) === exists),
+    })
+    void add(part(false), path, false)
+    setReplace(part(true))
   }
 
   function drop(event: DragEvent) {
@@ -47,10 +87,20 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
     dragDepth.current = 0
     setDragging(false)
     if (!writable) return
-    const items = [...event.dataTransfer.items].filter((item) => item.kind === "file")
-    const isFolder = (item: DataTransferItem) => item.webkitGetAsEntry()?.isDirectory
-    if (items.some(isFolder)) toast.error(t("Folders can't be uploaded. Create the folder and upload the files inside it."))
-    start(items.flatMap((item) => (isFolder(item) ? [] : (item.getAsFile() ?? []))))
+    // The entries can only be taken during the event; reading them takes longer.
+    const entries = [...event.dataTransfer.items].flatMap((item) => (item.kind === "file" ? (item.webkitGetAsEntry() ?? []) : []))
+    readDrop(entries).then(start, (e: Error) => toast.error(e.message))
+  }
+
+  async function createFile(name: string) {
+    const created = join(path, name)
+    await upload(files, created, "")
+    void queryClient.invalidateQueries({ queryKey: ["files", files.nodeId, files.serverId, path] })
+    void navigate({
+      to: "/nodes/$nodeId/servers/$serverId/files",
+      params: { nodeId: files.nodeId, serverId: files.serverId },
+      search: { path: path || undefined, edit: created },
+    })
   }
 
   function dragBy(step: number) {
@@ -83,27 +133,42 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
       <div className="surface overflow-hidden rounded-xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
           <PathBreadcrumb files={files} path={path} root={server.name} />
-          <div className="flex gap-2" hidden={!writable}>
-            <Button variant="outline" onClick={() => setCreating(true)}>
-              <FolderPlusIcon />
-              {t("New folder")}
-            </Button>
-            <Button onClick={() => picker.current?.click()}>
-              <UploadSimpleIcon />
-              {t("Upload")}
-            </Button>
-            <input
-              ref={picker}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                start([...(e.target.files ?? [])])
-                e.target.value = ""
+          {writable && (
+            <FileMenus
+              onCreate={setCreating}
+              onUpload={(whole) => {
+                if (!picker.current) return
+                picker.current.webkitdirectory = whole
+                picker.current.click()
               }}
             />
-          </div>
+          )}
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              try {
+                start(readPicked([...(e.target.files ?? [])]))
+              } catch (err) {
+                toast.error((err as Error).message)
+              }
+              e.target.value = ""
+            }}
+          />
         </div>
+        {data && data.files.length > 0 && (
+          <FilterBar
+            filter={filter}
+            onFilter={setFilter}
+            sort={sort}
+            onSort={(s) => {
+              setSort(s)
+              storeSort(s)
+            }}
+          />
+        )}
         {isPending ? (
           <Skeleton className="m-4 h-64" />
         ) : error ? (
@@ -112,6 +177,14 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    aria-label={t("Select all")}
+                    disabled={entries.length === 0}
+                    checked={chosen.length === 0 ? false : chosen.length === entries.length ? true : "indeterminate"}
+                    onCheckedChange={(on) => select(entries.map((e) => e.name), on === true)}
+                  />
+                </TableHead>
                 <TableHead>{t("Name")}</TableHead>
                 <TableHead className="hidden w-28 text-right sm:table-cell">{t("Size")}</TableHead>
                 <TableHead className="hidden w-48 md:table-cell">{t("Modified")}</TableHead>
@@ -123,7 +196,7 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
             <TableBody>
               {path && (
                 <TableRow>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={5}>
                     <FolderLink
                       files={files}
                       path={path.split("/").slice(0, -1).join("/")}
@@ -135,15 +208,24 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
                   </TableCell>
                 </TableRow>
               )}
-              {data.files.length === 0 && (
+              {entries.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-14 text-center text-muted-foreground">
-                    {t("This folder is empty. Drop files here to upload them.")}
+                  <TableCell colSpan={5} className="py-14 text-center text-muted-foreground">
+                    {data.files.length === 0
+                      ? t("This folder is empty. Drop files here to upload them.")
+                      : t("No file or folder here matches “{{filter}}”.", { filter })}
                   </TableCell>
                 </TableRow>
               )}
-              {data.files.map((entry) => (
-                <TableRow key={entry.name}>
+              {entries.map((entry) => (
+                <TableRow key={entry.name} data-state={selection.has(entry.name) ? "selected" : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      aria-label={t("Select {{name}}", { name: entry.name })}
+                      checked={selection.has(entry.name)}
+                      onCheckedChange={(on) => select([entry.name], on === true)}
+                    />
+                  </TableCell>
                   <TableCell className="max-w-0 w-full">
                     <EntryLink files={files} dir={path} entry={entry} />
                   </TableCell>
@@ -163,6 +245,15 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
       {data?.truncated && (
         <p className="mt-3 text-sm text-muted-foreground">{t("This folder has more entries than can be listed here.")}</p>
       )}
+      {chosen.length > 0 && (
+        <SelectionBar
+          files={files}
+          dir={path}
+          names={chosen.map((e) => e.name)}
+          all={chosen.length === data?.files.length && !data.truncated}
+          onClear={() => setSelection(new Set())}
+        />
+      )}
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-primary bg-background/85 backdrop-blur-sm">
           <IconTile icon={UploadSimpleIcon} size="lg" />
@@ -170,30 +261,45 @@ export function FileBrowser({ files, path, server }: { files: ServerFiles; path:
         </div>
       )}
       <NameDialog
-        open={creating}
-        onOpenChange={setCreating}
+        open={creating === "folder"}
+        onOpenChange={(open) => !open && setCreating(undefined)}
         title={t("New folder")}
         label={t("Name")}
         action={t("Create folder")}
         onSubmit={(name) => change.mutateAsync({ action: "mkdir", path: join(path, name) })}
       />
+      <NameDialog
+        open={creating === "file"}
+        onOpenChange={(open) => !open && setCreating(undefined)}
+        title={t("New file")}
+        label={t("Name")}
+        action={t("Create file")}
+        onSubmit={createFile}
+      />
       <ConfirmDialog
-        open={replace.length > 0}
-        onOpenChange={(open) => !open && setReplace([])}
+        open={replacing.length > 0}
+        onOpenChange={(open) => !open && setReplace({ files: [], folders: [] })}
         title={
-          replace.length === 1
-            ? t("Replace {{name}}?", { name: replace[0].name })
-            : t("Replace {{count}} files?", { count: replace.length })
+          replacing.length === 1
+            ? t("Replace {{name}}?", { name: replacing[0] })
+            : replace.folders.length > 0
+              ? t("Replace {{count}} files and folders?", { count: replacing.length })
+              : t("Replace {{count}} files?", { count: replacing.length })
         }
-        description={t("{{names}} already exist in {{folder}}.", {
-          count: replace.length,
-          names: replace.map((f) => f.name).join(", "),
-          folder,
-          defaultValue_one: "{{names}} already exists in {{folder}}.",
-        })}
+        description={
+          <>
+            {t("{{names}} already exist in {{folder}}.", {
+              count: replacing.length,
+              names: replacing.join(", "),
+              folder,
+              defaultValue_one: "{{names}} already exists in {{folder}}.",
+            })}
+            {replace.folders.length > 0 && ` ${t("Files in folders replace those with the same names, and the others stay.")}`}
+          </>
+        }
         action={t("Replace")}
         destructive
-        onConfirm={() => add(replace, path, true)}
+        onConfirm={() => void add(replace, path, true)}
       />
     </section>
   )

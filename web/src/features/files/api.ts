@@ -33,7 +33,10 @@ const query = (path: string) => `?path=${encodeURIComponent(path)}`
 export const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name)
 
 export const contentUrl = (s: ServerFiles, path: string) => `/api${base(s)}/content${query(path)}`
-export const archiveUrl = (s: ServerFiles, path: string) => `/api${base(s)}/archive${query(path)}`
+
+/** Downloads a folder as a ZIP archive, or only the files and folders in it with the given names. */
+export const archiveUrl = (s: ServerFiles, path: string, names: string[] = []) =>
+  `/api${base(s)}/archive${query(path)}${names.map((n) => `&name=${encodeURIComponent(n)}`).join("")}`
 
 export const filesQuery = (s: ServerFiles, path: string) =>
   queryOptions({
@@ -43,21 +46,49 @@ export const filesQuery = (s: ServerFiles, path: string) =>
 
 export type FileChange = { action: "mkdir" | "delete"; path: string } | { action: "move"; from: string; to: string }
 
+function changeFiles(s: ServerFiles, change: FileChange) {
+  switch (change.action) {
+    case "mkdir":
+      return api(`${base(s)}/directories`, { body: { path: change.path } })
+    case "move":
+      return api(`${base(s)}/move`, { body: { from: change.from, to: change.to } })
+    case "delete":
+      return api(`${base(s)}${query(change.path)}`, { method: "DELETE" })
+  }
+}
+
 export function useChangeFiles(s: ServerFiles) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (change: FileChange) => {
-      switch (change.action) {
-        case "mkdir":
-          return api(`${base(s)}/directories`, { body: { path: change.path } })
-        case "move":
-          return api(`${base(s)}/move`, { body: { from: change.from, to: change.to } })
-        case "delete":
-          return api(`${base(s)}${query(change.path)}`, { method: "DELETE" })
-      }
+    mutationFn: (change: FileChange) => changeFiles(s, change),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["files", s.nodeId, s.serverId] }),
+  })
+}
+
+/**
+ * Makes changes one after another, each checked on its own like a single one, and returns the
+ * errors of those that failed by their index.
+ */
+export function useChangeEach(s: ServerFiles) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (changes: FileChange[]) => {
+      const failed = new Map<number, Error>()
+      for (const [i, change] of changes.entries()) await changeFiles(s, change).catch((e: Error) => failed.set(i, e))
+      return failed
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["files", s.nodeId, s.serverId] }),
   })
+}
+
+/** Creates folders with the folders they are in, unless they exist. */
+export async function createFolders(s: ServerFiles, paths: string[]) {
+  // Creating a folder creates those it is in.
+  for (const path of new Set(paths.filter((p) => !paths.some((other) => other.startsWith(`${p}/`))))) {
+    await changeFiles(s, { action: "mkdir", path }).catch((e) => {
+      if (!(e instanceof ApiError && e.status === 409)) throw e
+    })
+  }
 }
 
 export class BinaryFileError extends Error {}

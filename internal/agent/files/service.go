@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -207,6 +208,10 @@ func (s *Service) ArchiveDirectory(req *noryxv1.ArchiveDirectoryRequest, stream 
 		return toStatus(err)
 	}
 	defer sub.Close()
+	paths, err := archived(sub, req.GetPaths())
+	if err != nil {
+		return err
+	}
 	var censor datadir.Censor
 	if req.GetHideSecrets() {
 		// A file set may write files with secrets while the archive is read.
@@ -215,10 +220,40 @@ func (s *Service) ArchiveDirectory(req *noryxv1.ArchiveDirectoryRequest, stream 
 	}
 	r, w := io.Pipe()
 	defer r.Close() // stops WriteZip if the client goes away
-	go func() { w.CloseWithError(datadir.WriteZip(stream.Context(), w, sub, censor, ".")) }()
+	go func() { w.CloseWithError(datadir.WriteZip(stream.Context(), w, sub, censor, paths...)) }()
+	res := &noryxv1.ArchiveDirectoryResponse{PathsOnly: len(req.GetPaths()) > 0}
 	return sendChunks(r, func(data []byte) error {
-		return stream.Send(&noryxv1.ArchiveDirectoryResponse{Data: data})
+		res.Data = data
+		err := stream.Send(res)
+		res = &noryxv1.ArchiveDirectoryResponse{}
+		return err
 	})
+}
+
+// archived returns what an archive of the folder root holds: all of it, or the files and
+// folders of paths in it, which must exist. Symbolic links are left out, as in folders.
+func archived(root *os.Root, paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return []string{"."}, nil
+	}
+	if len(paths) > maxEntries {
+		return nil, status.Errorf(codes.InvalidArgument, "An archive can hold up to %d files and folders.", maxEntries)
+	}
+	names := make([]string, 0, len(paths))
+	for _, p := range paths {
+		name, err := clean(p)
+		if err != nil {
+			return nil, err
+		}
+		info, err := root.Lstat(name)
+		if err != nil {
+			return nil, toStatus(err)
+		}
+		if info.IsDir() || info.Mode().IsRegular() {
+			names = append(names, name)
+		}
+	}
+	return datadir.Outermost(names), nil
 }
 
 func (s *Service) CreateDirectory(ctx context.Context, req *noryxv1.CreateDirectoryRequest) (*noryxv1.CreateDirectoryResponse, error) {
@@ -250,6 +285,8 @@ func (s *Service) MoveFile(ctx context.Context, req *noryxv1.MoveFileRequest) (*
 	switch {
 	case from == "." || to == ".":
 		return nil, status.Error(codes.InvalidArgument, "The server folder itself can't be moved.")
+	case strings.HasPrefix(to, from+string(filepath.Separator)):
+		return nil, status.Error(codes.InvalidArgument, "A folder can't be moved into itself.")
 	case slices.ContainsFunc(hidden.Under(from), func(p string) bool { _, err := dir.Lstat(p); return err == nil }):
 		return nil, errSecret // the secrets would show at the new place
 	case hidden.Hidden(to):

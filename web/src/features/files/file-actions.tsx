@@ -1,4 +1,4 @@
-import { DotsThreeIcon, DownloadSimpleIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react"
+import { DotsThreeIcon, DownloadSimpleIcon, FolderOpenIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -13,13 +13,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { archiveUrl, contentUrl, type FileEntry, join, type ServerFiles, useChangeFiles } from "./api"
+import { MoveDialog } from "./move-dialog"
 import { NameDialog } from "./name-dialog"
 
-/** Menu of a file or folder: download, rename and delete. */
+/** Menu of a file or folder: download, rename, move and delete. */
 export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: string; entry: FileEntry }) {
   const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const change = useChangeFiles(files)
-  const [dialog, setDialog] = useState<"rename" | "delete">()
+  const [dialog, setDialog] = useState<"rename" | "move" | "delete">()
   const path = join(dir, entry.name)
   const close = (open: boolean) => !open && setDialog(undefined)
 
@@ -45,6 +46,10 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
                 <PencilSimpleIcon />
                 {t("Rename")}
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setDialog("move")}>
+                <FolderOpenIcon />
+                {t("Move to…")}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setDialog("delete")}>
                 <TrashIcon />
@@ -63,6 +68,7 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
         action={t("Rename")}
         onSubmit={(name) => change.mutateAsync({ action: "move", from: path, to: join(dir, name) })}
       />
+      {dialog === "move" && <MoveDialog files={files} dir={dir} names={[entry.name]} onClose={() => setDialog(undefined)} />}
       <ConfirmDialog
         open={dialog === "delete"}
         onOpenChange={close}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"path"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
@@ -24,6 +26,7 @@ import (
 const (
 	chunkSize      = 256 << 10
 	maxUploadBytes = 16 << 30 // the agent enforces the same limit
+	maxArchived    = 1000     // files and folders chosen for an archive, which the log names
 	opTimeout      = 30 * time.Second
 )
 
@@ -125,19 +128,33 @@ func ifMatch(r *http.Request) (*noryxv1.FileVersion, error) {
 	return &v, nil
 }
 
+// archive downloads a folder as a ZIP archive, or only the files and folders in it that the
+// parameter name names.
 func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
-	c, err := h.client(r.Context(), r)
+	ctx, cancel := context.WithCancel(r.Context()) // ends archives that the agent can't make
+	defer cancel()
+	p, names := r.URL.Query().Get("path"), r.URL.Query()["name"]
+	if len(names) > maxArchived {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Download up to %d files and folders at once.", maxArchived))
+		return
+	}
+	if len(names) > 0 {
+		logging.Note(ctx, slog.Any("names", names))
+	}
+	c, err := h.client(ctx, r)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	p := r.URL.Query().Get("path")
-	stream, err := c.ArchiveDirectory(r.Context(), &noryxv1.ArchiveDirectoryRequest{ServerId: r.PathValue("id"), Path: p, HideSecrets: true})
+	stream, err := c.ArchiveDirectory(ctx, &noryxv1.ArchiveDirectoryRequest{ServerId: r.PathValue("id"), Path: p, Paths: names, HideSecrets: true})
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
 	first, err := stream.Recv()
+	if err == nil && len(names) > 0 && !first.GetPathsOnly() { // an older agent, which archives the whole folder
+		err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the node to download several files and folders at once.")
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -239,6 +256,7 @@ func (h *Handler) createDirectory(w http.ResponseWriter, r *http.Request) {
 		Path string `json:"path"`
 	}
 	h.unary(w, r, &req, func(ctx context.Context, c noryxv1.FileServiceClient, id string) error {
+		logging.Note(ctx, slog.String("path", req.Path))
 		_, err := c.CreateDirectory(ctx, &noryxv1.CreateDirectoryRequest{ServerId: id, Path: req.Path})
 		return err
 	})
@@ -250,6 +268,7 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
 		To   string `json:"to"`
 	}
 	h.unary(w, r, &req, func(ctx context.Context, c noryxv1.FileServiceClient, id string) error {
+		logging.Note(ctx, slog.String("from", req.From), slog.String("to", req.To))
 		_, err := c.MoveFile(ctx, &noryxv1.MoveFileRequest{ServerId: id, From: req.From, To: req.To})
 		return err
 	})

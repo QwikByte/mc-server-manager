@@ -593,7 +593,10 @@ type ArchiveDirectoryRequest struct {
 	Path     string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	// Leaves out the files that only hold secrets, such as the RCON password, and replaces
 	// the secrets in others, as for the panel's users. Moves need all of it.
-	HideSecrets   bool `protobuf:"varint,3,opt,name=hide_secrets,json=hideSecrets,proto3" json:"hide_secrets,omitempty"`
+	HideSecrets bool `protobuf:"varint,3,opt,name=hide_secrets,json=hideSecrets,proto3" json:"hide_secrets,omitempty"`
+	// Files and folders in path to archive instead of all of it, by their paths relative to
+	// path, which name them in the archive. Agents of older versions archive all of path.
+	Paths         []string `protobuf:"bytes,4,rep,name=paths,proto3" json:"paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -649,9 +652,18 @@ func (x *ArchiveDirectoryRequest) GetHideSecrets() bool {
 	return false
 }
 
+func (x *ArchiveDirectoryRequest) GetPaths() []string {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
 type ArchiveDirectoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Data  []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	// Set in the first message if the archive holds only the paths of the request.
+	PathsOnly     bool `protobuf:"varint,2,opt,name=paths_only,json=pathsOnly,proto3" json:"paths_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -691,6 +703,13 @@ func (x *ArchiveDirectoryResponse) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *ArchiveDirectoryResponse) GetPathsOnly() bool {
+	if x != nil {
+		return x.PathsOnly
+	}
+	return false
 }
 
 type CreateDirectoryRequest struct {
@@ -1004,13 +1023,16 @@ const file_noryx_v1_file_proto_rawDesc = "" +
 	"\bexpected\x18\x05 \x01(\v2\x15.noryx.v1.FileVersionR\bexpected\"l\n" +
 	"\x11WriteFileResponse\x12&\n" +
 	"\x04file\x18\x01 \x01(\v2\x12.noryx.v1.FileInfoR\x04file\x12/\n" +
-	"\aversion\x18\x02 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\"m\n" +
+	"\aversion\x18\x02 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\"\x83\x01\n" +
 	"\x17ArchiveDirectoryRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
-	"\fhide_secrets\x18\x03 \x01(\bR\vhideSecrets\".\n" +
+	"\fhide_secrets\x18\x03 \x01(\bR\vhideSecrets\x12\x14\n" +
+	"\x05paths\x18\x04 \x03(\tR\x05paths\"M\n" +
 	"\x18ArchiveDirectoryResponse\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\"I\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
+	"\n" +
+	"paths_only\x18\x02 \x01(\bR\tpathsOnly\"I\n" +
 	"\x16CreateDirectoryRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"\x19\n" +

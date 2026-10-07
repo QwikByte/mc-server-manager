@@ -4,13 +4,24 @@ import { Compartment, EditorState, type Extension } from "@codemirror/state"
 import { EditorView, keymap } from "@codemirror/view"
 import { basicSetup } from "codemirror"
 import i18next from "i18next"
-import { type Ref, useEffect, useImperativeHandle, useRef } from "react"
-import { highlight, languageOf, theme, translated } from "./editor-setup"
+import { type Ref, useEffect, useImperativeHandle, useMemo, useRef } from "react"
+import { checkOf, highlight, languageOf, theme, translated } from "./editor-setup"
+
+/** A syntax error in the text, at a position of it. */
+export interface Problem {
+  message: string
+  at: number
+  line: number
+}
 
 export interface EditorHandle {
   value: () => string
   /** Replaces the selection with text and focuses the editor. */
   insert: (text: string) => void
+  /** The first syntax error of the text, if the editor can check the file's syntax. */
+  problem: () => Promise<Problem | undefined>
+  /** Moves the cursor to a position and focuses the editor. */
+  reveal: (at: number) => void
 }
 
 const none: Extension = []
@@ -37,6 +48,8 @@ export function CodeEditor({
   useEffect(() => {
     changed.current = onChange
   })
+  // Loaded with the editor, so that saving checks at once.
+  const check = useMemo(() => checkOf(filename), [filename])
   useImperativeHandle(
     ref,
     () => ({
@@ -45,8 +58,17 @@ export function CodeEditor({
         view.current?.dispatch(view.current.state.replaceSelection(text))
         view.current?.focus()
       },
+      problem: async () => {
+        const editor = view.current
+        const found = editor && (await check)?.(editor)[0]
+        return found ? { message: found.message, at: found.from, line: editor.state.doc.lineAt(found.from).number } : undefined
+      },
+      reveal: (at) => {
+        view.current?.dispatch({ selection: { anchor: Math.min(at, view.current.state.doc.length) }, scrollIntoView: true })
+        view.current?.focus()
+      },
     }),
-    [],
+    [check],
   )
 
   useEffect(() => {

@@ -32,12 +32,20 @@ commands once they were created again, e.g. by saving their settings.
 
 ## File manager
 
-The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through the
-master, as long as 1 GB stays free on the node, like for backups), edits configuration files in the browser and
-downloads files or whole folders as ZIP archives. If something changed or deleted a file while it was open in the
-editor, e.g. a plugin, a file set or another user, saving shows the difference to the file on the server and offers to
-load that version or to overwrite it. Agents tell the editor the version of a file by when it was modified and its
-size; with agents of older versions, saving overwrites the file as before.
+The file manager of a server browses its data, uploads files and whole folders by drag and drop or with **Upload** (up
+to 16 GB each and 10,000 files at once, streamed through the master, as long as 1 GB stays free on the node, like for
+backups), creates files and folders, edits configuration files in the browser and downloads files or whole folders as
+ZIP archives. A folder can be filtered by name and sorted by name, the largest or the newest first; the browser keeps
+the order for every folder. **Move to…** in the menu of a file or folder moves it into another folder. Selected files
+and folders are downloaded as one ZIP archive, moved or deleted together; agents of older versions can't download
+several of them at once.
+
+If something changed or deleted a file while it was open in the editor, e.g. a plugin, a file set or another user,
+saving shows the difference to the file on the server and offers to load that version or to overwrite it. Agents tell
+the editor the version of a file by when it was modified and its size; with agents of older versions, saving
+overwrites the file as before. Saving a JSON or YAML file with a syntax error, which servers and plugins may fail to
+read, asks first and names the line. The editor highlights JSON, JSON5, YAML, properties, TOML, INI-like files
+(`.conf`, `.cfg`, `.ini`), shell scripts, JavaScript and XML.
 
 Secrets such as the RCON password and the forwarding secret of a network never reach the panel. The file manager hides
 files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`, Floodgate's `key.pem`) and shows

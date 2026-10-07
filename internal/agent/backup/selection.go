@@ -53,22 +53,10 @@ func selected(dir *datadir.Dir, typ noryxv1.ServerType, sel *noryxv1.BackupSelec
 			paths = append(paths, name)
 		}
 	}
-	return outermost(paths), nil
+	return datadir.Outermost(paths), nil
 }
 
 func isFile(dir *datadir.Dir, name string) bool {
 	info, err := dir.Lstat(name)
 	return err == nil && info.Mode().IsRegular()
-}
-
-// outermost removes duplicates and paths inside others from a list of paths.
-func outermost(paths []string) []string {
-	if slices.Contains(paths, ".") {
-		return []string{"."}
-	}
-	slices.Sort(paths)
-	all := slices.Compact(slices.Clone(paths))
-	return slices.DeleteFunc(slices.Compact(paths), func(p string) bool {
-		return slices.ContainsFunc(all, func(parent string) bool { return strings.HasPrefix(p, parent+string(filepath.Separator)) })
-	})
 }

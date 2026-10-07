@@ -45,7 +45,7 @@ type FileServiceClient interface {
 	// WriteFile creates or replaces a file. The first message names the file, the others
 	// carry its content. The file only appears once it has been written completely.
 	WriteFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteFileRequest, WriteFileResponse], error)
-	// ArchiveDirectory sends a directory as a ZIP archive in chunks.
+	// ArchiveDirectory sends a directory, or files and folders in it, as a ZIP archive in chunks.
 	ArchiveDirectory(ctx context.Context, in *ArchiveDirectoryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ArchiveDirectoryResponse], error)
 	CreateDirectory(ctx context.Context, in *CreateDirectoryRequest, opts ...grpc.CallOption) (*CreateDirectoryResponse, error)
 	// MoveFile renames or moves a file or directory. It never replaces an existing one.
@@ -170,7 +170,7 @@ type FileServiceServer interface {
 	// WriteFile creates or replaces a file. The first message names the file, the others
 	// carry its content. The file only appears once it has been written completely.
 	WriteFile(grpc.ClientStreamingServer[WriteFileRequest, WriteFileResponse]) error
-	// ArchiveDirectory sends a directory as a ZIP archive in chunks.
+	// ArchiveDirectory sends a directory, or files and folders in it, as a ZIP archive in chunks.
 	ArchiveDirectory(*ArchiveDirectoryRequest, grpc.ServerStreamingServer[ArchiveDirectoryResponse]) error
 	CreateDirectory(context.Context, *CreateDirectoryRequest) (*CreateDirectoryResponse, error)
 	// MoveFile renames or moves a file or directory. It never replaces an existing one.

@@ -1,8 +1,11 @@
 package files
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -68,6 +71,99 @@ func TestWriteExpectedVersion(t *testing.T) {
 	}
 }
 
+// An archive of chosen files and folders holds only them, without secrets and links, and
+// tells the master so, as older agents archive the whole folder.
+func TestArchiveChosen(t *testing.T) {
+	rt := dataRuntime{dir: t.TempDir()}
+	svc, id := NewService(rt), runtime.NewID()
+	data := filepath.Join(rt.dir, id)
+	for name, content := range map[string]string{
+		"server.properties": "motd=A\nrcon.password=secret\n",
+		".rcon-cli.env":     "password=secret\n",
+		"plugins/a.yml":     "a: 1\n",
+		"plugins/b.yml":     "b: 1\n",
+		"world/level.dat":   "level",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(data, name)), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(data, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("server.properties", filepath.Join(data, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		dir   string
+		paths []string
+		want  map[string]string
+	}{
+		{"", []string{"plugins", "plugins/a.yml", "server.properties", ".rcon-cli.env", "link", "plugins"}, map[string]string{
+			"plugins/": "", "plugins/a.yml": "a: 1\n", "plugins/b.yml": "b: 1\n", "server.properties": "motd=A\nrcon.password=<hidden>\n",
+		}},
+		{"plugins", []string{"b.yml"}, map[string]string{"b.yml": "b: 1\n"}},
+		{"world", nil, map[string]string{"level.dat": "level"}},
+	} {
+		stream := &archiveStream{ctx: t.Context()}
+		err := svc.ArchiveDirectory(&noryxv1.ArchiveDirectoryRequest{ServerId: id, Path: c.dir, Paths: c.paths, HideSecrets: true}, stream)
+		if err != nil {
+			t.Fatalf("archive of %q in %q: %v", c.paths, c.dir, err)
+		}
+		if got := unzip(t, stream.data.Bytes()); !maps.Equal(got, c.want) {
+			t.Errorf("archive of %q in %q = %q, want %q", c.paths, c.dir, got, c.want)
+		}
+		if stream.first.GetPathsOnly() != (c.paths != nil) {
+			t.Errorf("archive of %q in %q: paths only = %v", c.paths, c.dir, stream.first.GetPathsOnly())
+		}
+	}
+
+	for p, code := range map[string]codes.Code{"../x": codes.InvalidArgument, "missing": codes.NotFound} {
+		err := svc.ArchiveDirectory(&noryxv1.ArchiveDirectoryRequest{ServerId: id, Paths: []string{"plugins", p}}, &archiveStream{ctx: t.Context()})
+		if status.Code(err) != code {
+			t.Errorf("archive of %q: %v, want %v", p, err, code)
+		}
+	}
+}
+
+// A folder can't be moved into itself, which the kernel would refuse with a less clear error.
+func TestMoveIntoItself(t *testing.T) {
+	rt := dataRuntime{dir: t.TempDir()}
+	svc, id := NewService(rt), runtime.NewID()
+	if err := os.MkdirAll(filepath.Join(rt.dir, id, "plugins", "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.MoveFile(t.Context(), &noryxv1.MoveFileRequest{ServerId: id, From: "plugins", To: "plugins/sub/plugins"})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("move into itself: %v", err)
+	}
+	if _, err := svc.MoveFile(t.Context(), &noryxv1.MoveFileRequest{ServerId: id, From: "plugins/sub", To: "sub"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func unzip(t *testing.T, data []byte) map[string]string {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, f := range zr.File {
+		r, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[f.Name] = string(content)
+	}
+	return files
+}
+
 func read(t *testing.T, svc *Service, id, name string) *noryxv1.FileVersion {
 	t.Helper()
 	stream := &readStream{ctx: t.Context()}
@@ -108,6 +204,23 @@ func (s *readStream) Send(res *noryxv1.ReadFileResponse) error {
 	if s.first == nil {
 		s.first = res
 	}
+	return nil
+}
+
+type archiveStream struct {
+	grpc.ServerStream
+	ctx   context.Context
+	first *noryxv1.ArchiveDirectoryResponse
+	data  bytes.Buffer
+}
+
+func (s *archiveStream) Context() context.Context { return s.ctx }
+
+func (s *archiveStream) Send(res *noryxv1.ArchiveDirectoryResponse) error {
+	if s.first == nil {
+		s.first = res
+	}
+	s.data.Write(res.GetData())
 	return nil
 }
 
