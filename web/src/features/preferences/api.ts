@@ -5,7 +5,7 @@ import type { Grouping, Sort, View } from "@/features/servers/browse"
 import { api } from "@/lib/api"
 import { type Clock, chooseClock } from "@/lib/i18n"
 import type { Order } from "@/lib/sort"
-import { setTheme, type Theme } from "@/lib/theme"
+import { type Accent, type Density, setLook, type Theme } from "@/lib/theme"
 
 /** A widget of the overview and how many of its three columns it spans on large screens. */
 export interface Widget {
@@ -25,6 +25,8 @@ export interface ServerRef {
  */
 export interface Settings {
   theme?: Theme
+  accent?: Accent
+  density?: Density
   clock?: Clock
   /** How lists of servers are shown where their address doesn't say. */
   serverView?: View
@@ -115,7 +117,7 @@ export function useSettings() {
   return {
     settings: data?.settings ?? {},
     change: (change: Settings) => {
-      if (change.theme) setTheme(change.theme)
+      setLook(change)
       mutate(change)
     },
   }
@@ -126,10 +128,8 @@ export function useApplySettings() {
   const { data } = useQuery(preferencesQuery)
   // Another clock reloads the panel, so it waits until the changes are stored.
   const storing = useIsMutating({ mutationKey: settingsKey }) > 0
-  const { theme, clock } = data?.settings ?? {}
-  useEffect(() => {
-    if (theme) setTheme(theme)
-  }, [theme])
+  const { theme, accent, density, clock } = data?.settings ?? {}
+  useEffect(() => setLook({ theme, accent, density }), [theme, accent, density])
   useEffect(() => {
     if (clock && !storing) chooseClock(clock)
   }, [clock, storing])

@@ -227,6 +227,8 @@ func TestSettings(t *testing.T) {
 	for name, c := range map[string]map[string]*string{
 		"unknown key":   {"font": ptr("large")},
 		"unknown value": {"theme": ptr("blue")},
+		"accent":        {"accent": ptr("#ff0000")},
+		"density":       {"density": ptr("tight")},
 		"capitals":      {"theme": ptr("Dark")},
 		"empty":         {"clock": ptr("")},
 		"key of a list": {"serverview": ptr("table")},
@@ -240,13 +242,13 @@ func TestSettings(t *testing.T) {
 	check(alice, Settings{})
 
 	// Changes merge with what is stored; null removes a key, and nothing changes nothing.
-	change(alice, map[string]*string{"theme": ptr("dark"), "serverSort": ptr("players")})
-	change(alice, map[string]*string{"clock": ptr("24h"), "serverSort": ptr("cpu")})
+	change(alice, map[string]*string{"theme": ptr("dark"), "serverSort": ptr("players"), "accent": ptr("violet")})
+	change(alice, map[string]*string{"clock": ptr("24h"), "serverSort": ptr("cpu"), "density": ptr("compact")})
 	change(bob, map[string]*string{"theme": ptr("light")})
-	check(alice, Settings{"theme": "dark", "clock": "24h", "serverSort": "cpu"})
-	change(alice, map[string]*string{"theme": nil, "serverView": nil})
+	check(alice, Settings{"theme": "dark", "accent": "violet", "density": "compact", "clock": "24h", "serverSort": "cpu"})
+	change(alice, map[string]*string{"theme": nil, "accent": nil, "serverView": nil})
 	change(alice, nil)
-	check(alice, Settings{"clock": "24h", "serverSort": "cpu"})
+	check(alice, Settings{"density": "compact", "clock": "24h", "serverSort": "cpu"})
 	check(bob, Settings{"theme": "light"})
 
 	// Values that a newer version stored, or an older one knew, aren't shown.

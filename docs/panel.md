@@ -36,12 +36,17 @@ remembers. Lists, figures, charts, tabs and pages are animated, unless the opera
 
 ## Settings of each user
 
-Each user chooses on their account page, in the menu of their name, the colour theme, whether times have 24 or 12 hours
-and the language of the panel; the menu itself offers the colour theme and the language too. The master keeps these
-choices for each user, as well as the view, sort and grouping of server lists chosen last, so that they apply in all
-their browsers. Each browser remembers the colour theme and the clock it showed last and uses them until someone signs
-in; what a user never chose follows the browser. `GET /api/preferences` returns a user's settings with the layout of
-their overview and their pinned servers, and `PATCH /api/preferences/settings` changes some of them, e.g.
+Each user chooses on their account page, in the menu of their name, the colour theme, the accent colour, the density,
+whether times have 24 or 12 hours and the language of the panel; the menu itself offers the colour theme and the
+language too. The accent gives buttons, links and highlights their colour: emerald, blue, violet or graphite, each
+readable in both themes (WCAG AA), while the colours of states, such as running or failed, stay. The compact density
+tightens all spacing, e.g. for long lists of servers, on screens used with a mouse or touchpad; touch screens keep the
+comfortable one.
+
+The master keeps these choices for each user, as well as the view, sort and grouping of server lists chosen last, so
+that they apply in all their browsers. Each browser remembers the look and the clock it showed last and uses them until
+someone signs in; what a user never chose follows the browser. `GET /api/preferences` returns a user's settings with the
+layout of their overview and their pinned servers, and `PATCH /api/preferences/settings` changes some of them, e.g.
 `{"theme": "dark"}`, or takes one back to the browser's with `null`. The master refuses settings and values it doesn't
 know.
 

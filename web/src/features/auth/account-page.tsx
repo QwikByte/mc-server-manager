@@ -1,6 +1,19 @@
-import { ClockIcon, type Icon, KeyIcon, PaletteIcon, ShieldCheckIcon, ShieldIcon, TranslateIcon, UserCircleIcon } from "@phosphor-icons/react"
+import {
+  ArrowsInLineVerticalIcon,
+  CheckIcon,
+  ClockIcon,
+  type Icon,
+  KeyIcon,
+  PaletteIcon,
+  ShieldCheckIcon,
+  ShieldIcon,
+  SwatchesIcon,
+  TranslateIcon,
+  UserCircleIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
+import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
@@ -15,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSettings } from "@/features/preferences/api"
 import { type Clock, clock, languageName, languages, msg, timeWith } from "@/lib/i18n"
-import { type Theme, useTheme } from "@/lib/theme"
+import { type Accent, accents, type Density, type Theme, useLook } from "@/lib/theme"
 import { meQuery, mfaQuery, useDisableMfa, useEnableMfa, useNewRecoveryCodes, useSetLanguage, type User } from "./api"
 import { ConfirmPasswordDialog, MfaSetupDialog, RecoveryCodesDialog } from "./mfa-dialogs"
 import { PasswordDialog } from "./password-dialog"
@@ -61,7 +74,7 @@ const afternoon = new Date(2000, 0, 1, 14, 30)
 /** How the panel looks for the user, in all their browsers. */
 function PanelSettings({ user }: { user: User }) {
   const { settings, change } = useSettings()
-  const theme = useTheme()
+  const look = useLook()
   const setLanguage = useSetLanguage()
   return (
     <>
@@ -72,13 +85,39 @@ function PanelSettings({ user }: { user: User }) {
         actions={
           <Segmented
             label={t("Colour theme")}
-            value={theme}
+            value={look.theme}
             options={themes.map((o) => ({ value: o.value, label: t(o.label) }))}
             onChange={(value) => change({ theme: value })}
           />
         }
       >
         {t("System follows your operating system.")}
+      </AccountRow>
+      <AccountRow
+        icon={SwatchesIcon}
+        tone="violet"
+        title={t("Accent colour")}
+        actions={<AccentChoices value={look.accent} onChange={(value) => change({ accent: value })} />}
+      >
+        {t("The colour of buttons, links and highlights. The colours of states stay.")}
+      </AccountRow>
+      <AccountRow
+        icon={ArrowsInLineVerticalIcon}
+        tone="violet"
+        title={t("Density")}
+        actions={
+          <Segmented<Density>
+            label={t("Density")}
+            value={look.density}
+            options={[
+              { value: "comfortable", label: t("Comfortable") },
+              { value: "compact", label: t("Compact") },
+            ]}
+            onChange={(value) => change({ density: value })}
+          />
+        }
+      >
+        {t("Compact fits more on the screen, e.g. long lists of servers. Touch screens keep the room to tap.")}
       </AccountRow>
       <AccountRow
         icon={ClockIcon}
@@ -123,6 +162,41 @@ function PanelSettings({ user }: { user: User }) {
         {t("Dates, times and numbers follow it too.")}
       </AccountRow>
     </>
+  )
+}
+
+const accentNames: Record<Accent, string> = {
+  emerald: msg("Emerald"),
+  blue: msg("Blue"),
+  violet: msg("Violet"),
+  graphite: msg("Graphite"),
+}
+
+/** The accents as swatches in their own colours; the arrow keys move through them. */
+function AccentChoices({ value, onChange }: { value: Accent; onChange: (accent: Accent) => void }) {
+  return (
+    <RadioGroupPrimitive.Root
+      value={value}
+      onValueChange={(accent) => onChange(accent as Accent)}
+      orientation="horizontal"
+      aria-label={t("Accent colour")}
+      className="flex gap-2"
+    >
+      {accents.map((accent) => (
+        <RadioGroupPrimitive.Item
+          key={accent}
+          value={accent}
+          data-accent={accent}
+          aria-label={t(accentNames[accent])}
+          title={t(accentNames[accent])}
+          className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm ring-offset-2 ring-offset-card transition-transform outline-none hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:size-10 motion-reduce:hover:scale-100"
+        >
+          <RadioGroupPrimitive.Indicator className="grid place-items-center">
+            <CheckIcon weight="bold" className="size-4" />
+          </RadioGroupPrimitive.Indicator>
+        </RadioGroupPrimitive.Item>
+      ))}
+    </RadioGroupPrimitive.Root>
   )
 }
 

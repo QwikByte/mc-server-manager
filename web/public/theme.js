@@ -1,9 +1,12 @@
-// Applies the saved colour theme before the first paint, so that the panel doesn't flash.
+// Applies the saved colour theme, accent and density before the first paint, so that the panel doesn't flash.
 // It is a file rather than an inline script because the Content Security Policy forbids inline scripts.
 try {
+  const root = document.documentElement
   const theme = localStorage.getItem("theme")
   const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)
-  document.documentElement.classList.toggle("dark", dark)
+  root.classList.toggle("dark", dark)
+  root.dataset.accent = localStorage.getItem("noryx-accent") ?? "emerald"
+  root.dataset.density = localStorage.getItem("noryx-density") ?? "comfortable"
 } catch {
   // Storage can be blocked; the light theme is used then.
 }

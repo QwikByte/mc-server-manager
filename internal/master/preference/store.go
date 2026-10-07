@@ -32,8 +32,10 @@ var (
 // settings are the keys of Settings and the values each takes, which the panel knows too
 // (web/src/features/preferences/api.ts).
 var settings = map[string][]string{
-	"theme": {"light", "dark", "system"},
-	"clock": {"12h", "24h"},
+	"theme":   {"light", "dark", "system"},
+	"accent":  {"emerald", "blue", "violet", "graphite"},
+	"density": {"comfortable", "compact"},
+	"clock":   {"12h", "24h"},
 	// How lists of servers are shown where their address doesn't say.
 	"serverView":  {"grid", "table"},
 	"serverSort":  {"name", "state", "players", "cpu", "memory", "node"},
