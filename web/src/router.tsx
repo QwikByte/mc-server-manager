@@ -159,6 +159,7 @@ const serverUsageRoute = createRoute({
 const serverPlayersRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "players",
+  staticData: { title: msg("Players") },
   validateSearch: validatePlayerSearch,
   component: lazyRouteComponent(() => import("@/features/players/server-players-page"), "ServerPlayersPage"),
 })
