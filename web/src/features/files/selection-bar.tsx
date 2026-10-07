@@ -77,7 +77,11 @@ export function SelectionBar({
         open={dialog === "delete"}
         onOpenChange={(open) => !open && setDialog(undefined)}
         title={t("Delete {{count}} items?", { count: names.length })}
-        description={t("{{names}} will be deleted, folders with everything in them. This can't be undone.", { names: listNames(names) })}
+        description={t("{{names}} will be deleted, folders with everything in them. This can't be undone.", {
+          names: listNames(names),
+          count: names.length,
+          defaultValue_one: "{{names}} will be deleted, and if it's a folder, everything in it. This can't be undone.",
+        })}
         action={t("Delete")}
         destructive
         onConfirm={() => void remove()}

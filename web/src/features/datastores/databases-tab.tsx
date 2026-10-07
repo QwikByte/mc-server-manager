@@ -173,9 +173,11 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
           <Callout tone="destructive" icon={WarningCircleIcon} role="alert">
             {manage ? (
               <Trans
-                i18nKey="Its health check fails. <link>The log of its container</link> on {{node}} tells why."
-                values={{ node: ds.nodeName }}
-                components={{ link: <button type="button" className="font-medium underline underline-offset-4" onClick={showLog} /> }}
+                i18nKey="Its health check fails. <link>The log of its container</link> on <node/> tells why."
+                components={{
+                  link: <button type="button" className="font-medium underline underline-offset-4" onClick={showLog} />,
+                  node: <span>{ds.nodeName}</span>,
+                }}
               />
             ) : (
               t("Its health check fails. The log of its container on {{node}} tells why.", { node: ds.nodeName })
