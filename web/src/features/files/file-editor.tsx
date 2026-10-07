@@ -1,4 +1,4 @@
-import { CaretLeftIcon, DownloadSimpleIcon, FloppyDiskIcon } from "@phosphor-icons/react"
+import { ArrowCounterClockwiseIcon, CaretLeftIcon, DownloadSimpleIcon, FloppyDiskIcon } from "@phosphor-icons/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -8,55 +8,94 @@ import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
-import { contentUrl, readText, type ServerFiles, upload } from "./api"
+import { guard } from "@/features/operations/use-operation"
+import { ApiError } from "@/lib/api"
+import { contentUrl, FileChangedError, readText, saveText, type ServerFiles, type TextFile } from "./api"
 import type { EditorHandle } from "./code-editor"
 
 // CodeMirror is only loaded when a file is opened.
 const CodeEditor = lazy(() => import("./code-editor").then((m) => ({ default: m.CodeEditor })))
+const DiffView = lazy(() => import("@/features/filesets/diff-view").then((m) => ({ default: m.DiffView })))
 
-/** Edits a text file of a server. Leaving with unsaved changes asks first. */
+/** A change of the file on the server since it was opened, which saving would replace. */
+interface Conflict {
+  /** The file on the server; empty if it is gone. */
+  server: TextFile
+  mine: string
+}
+
+/**
+ * Edits a text file of a server. Leaving with unsaved changes asks first, and saving asks
+ * before it replaces a change made on the server since the file was opened.
+ */
 export function FileEditor({ files, path, onClose }: { files: ServerFiles; path: string; onClose: () => void }) {
   const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const name = path.split("/").pop() ?? path
   const queryClient = useQueryClient()
   const editor = useRef<EditorHandle>(null)
   const [dirty, setDirty] = useState(false)
+  const [conflict, setConflict] = useState<Conflict>()
+  const key = ["file", files.nodeId, files.serverId, path]
   const {
-    data: text,
+    data: file,
     error,
     isPending,
   } = useQuery({
-    queryKey: ["file", files.nodeId, files.serverId, path],
+    queryKey: key,
     queryFn: () => readText(files, path),
     staleTime: Infinity,
     gcTime: 0,
     retry: false,
   })
+  // The version saved last, which the next save expects; until then, the one opened.
+  const saved = useRef<string>(undefined)
   const save = useMutation({
-    mutationFn: () => upload(files, path, editor.current?.value() ?? "", { overwrite: true }),
-    onSuccess: () => {
+    /** Saves the editor's text over the given version of the file, or over any without one. */
+    mutationFn: ({ over }: { over?: string }) => saveText(files, path, editor.current?.value() ?? "", over),
+    onSuccess: (version) => {
+      saved.current = version
+      setConflict(undefined)
       setDirty(false)
       toast.success(t("Saved {{name}}", { name }))
       void queryClient.invalidateQueries({ queryKey: ["files", files.nodeId, files.serverId] })
     },
-    onError: (e) => toast.error(e.message),
+    onError: async (e) => {
+      if (!(e instanceof FileChangedError)) return void toast.error(e.message)
+      const mine = editor.current?.value() ?? ""
+      try {
+        setConflict({ server: await readText(files, path), mine })
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) setConflict({ server: { text: "" }, mine })
+        else toast.error((e as Error).message)
+      }
+    },
   })
   const blocker = useBlocker({ shouldBlockFn: () => dirty, enableBeforeUnload: () => dirty, withResolver: true })
   const { mutate } = save
+  const opened = file?.version
 
   // Ctrl+S saves wherever the focus is, e.g. after a dialog closed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault()
-        if (dirty) mutate()
+        if (dirty) mutate({ over: saved.current ?? opened })
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [dirty, mutate])
+  }, [dirty, mutate, opened])
+
+  /** Discards the changes and edits the file as it is on the server. */
+  const takeServers = (server: TextFile) => {
+    saved.current = undefined
+    queryClient.setQueryData(key, server)
+    setConflict(undefined)
+    setDirty(false)
+  }
 
   return (
     <section aria-labelledby="editor-heading">
@@ -79,7 +118,7 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
             </a>
           </Button>
           {writable && (
-            <Button disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+            <Button disabled={!dirty || save.isPending} onClick={() => save.mutate({ over: saved.current ?? opened })}>
               <FloppyDiskIcon />
               {save.isPending ? t("Saving…") : t("Save")}
             </Button>
@@ -94,7 +133,7 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
         </p>
       ) : (
         <Suspense fallback={<Skeleton className="h-[65vh] min-h-80 rounded-xl" />}>
-          <CodeEditor ref={editor} value={text} filename={name} readOnly={!writable} onChange={() => setDirty(true)} />
+          <CodeEditor ref={editor} value={file.text} filename={name} readOnly={!writable} onChange={() => setDirty(true)} />
         </Suspense>
       )}
       <p className="mt-3 text-xs text-muted-foreground" hidden={!writable}>
@@ -103,6 +142,40 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
           components={{ key: <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem]" /> }}
         />
       </p>
+      <Dialog open={!!conflict} onOpenChange={(open) => !open && setConflict(undefined)}>
+        {conflict && (
+          <DialogContent className="sm:max-w-4xl" {...guard(save.isPending)}>
+            <DialogHeader>
+              <DialogTitle>{t("{{name}} changed on the server", { name })}</DialogTitle>
+              <DialogDescription>
+                {conflict.server.version
+                  ? t("It changed since you opened it, e.g. by a plugin, a file set or another user. Saving replaces that change with yours:")
+                  : t("It was deleted since you opened it. Saving creates it again with your text.")}
+              </DialogDescription>
+            </DialogHeader>
+            <Suspense fallback={<Skeleton className="h-48 rounded-lg" />}>
+              <DiffView
+                before={conflict.server.text}
+                after={conflict.mine}
+                filename={name}
+                label={t("Your changes to the file on the server")}
+              />
+            </Suspense>
+            <DialogFooter>
+              {conflict.server.version && (
+                <Button variant="outline" disabled={save.isPending} onClick={() => takeServers(conflict.server)}>
+                  <ArrowCounterClockwiseIcon />
+                  {t("Load the server's version")}
+                </Button>
+              )}
+              <Button variant="destructive" disabled={save.isPending} onClick={() => save.mutate({ over: conflict.server.version })}>
+                <FloppyDiskIcon />
+                {conflict.server.version ? t("Overwrite") : t("Save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
       <ConfirmDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => !open && blocker.reset?.()}

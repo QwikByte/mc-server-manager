@@ -257,9 +257,12 @@ func (x *ReadFileRequest) GetPath() string {
 }
 
 type ReadFileResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Size          int64                  `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
-	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The size of what is sent, which hidden secrets change.
+	Size int64  `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	// The version of the file, in the first message.
+	Version       *FileVersion `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -308,6 +311,68 @@ func (x *ReadFileResponse) GetData() []byte {
 	return nil
 }
 
+func (x *ReadFileResponse) GetVersion() *FileVersion {
+	if x != nil {
+		return x.Version
+	}
+	return nil
+}
+
+// FileVersion tells a version of a file apart from others, by when it was last modified and
+// its size on the disk. A hash of the content wouldn't do, as the panel only sees secrets as
+// "<hidden>".
+type FileVersion struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ModifiedUnixNano int64                  `protobuf:"varint,1,opt,name=modified_unix_nano,json=modifiedUnixNano,proto3" json:"modified_unix_nano,omitempty"`
+	Size             int64                  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *FileVersion) Reset() {
+	*x = FileVersion{}
+	mi := &file_noryx_v1_file_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileVersion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileVersion) ProtoMessage() {}
+
+func (x *FileVersion) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileVersion.ProtoReflect.Descriptor instead.
+func (*FileVersion) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *FileVersion) GetModifiedUnixNano() int64 {
+	if x != nil {
+		return x.ModifiedUnixNano
+	}
+	return 0
+}
+
+func (x *FileVersion) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
 type WriteFileRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Content:
@@ -321,7 +386,7 @@ type WriteFileRequest struct {
 
 func (x *WriteFileRequest) Reset() {
 	*x = WriteFileRequest{}
-	mi := &file_noryx_v1_file_proto_msgTypes[5]
+	mi := &file_noryx_v1_file_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -333,7 +398,7 @@ func (x *WriteFileRequest) String() string {
 func (*WriteFileRequest) ProtoMessage() {}
 
 func (x *WriteFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[5]
+	mi := &file_noryx_v1_file_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -346,7 +411,7 @@ func (x *WriteFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileRequest.ProtoReflect.Descriptor instead.
 func (*WriteFileRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{5}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WriteFileRequest) GetContent() isWriteFileRequest_Content {
@@ -397,14 +462,17 @@ type WriteFileHeader struct {
 	// Replace an existing file; otherwise writing to an existing file fails.
 	Overwrite bool `protobuf:"varint,3,opt,name=overwrite,proto3" json:"overwrite,omitempty"`
 	// Size of the file if known, so that one that doesn't fit is refused before it is sent.
-	Size          int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	Size int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	// Replace the file only while it still has this version, e.g. the one an editor opened;
+	// otherwise the write fails with FAILED_PRECONDITION. A file that is gone has changed too.
+	Expected      *FileVersion `protobuf:"bytes,5,opt,name=expected,proto3" json:"expected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WriteFileHeader) Reset() {
 	*x = WriteFileHeader{}
-	mi := &file_noryx_v1_file_proto_msgTypes[6]
+	mi := &file_noryx_v1_file_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -416,7 +484,7 @@ func (x *WriteFileHeader) String() string {
 func (*WriteFileHeader) ProtoMessage() {}
 
 func (x *WriteFileHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[6]
+	mi := &file_noryx_v1_file_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -429,7 +497,7 @@ func (x *WriteFileHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileHeader.ProtoReflect.Descriptor instead.
 func (*WriteFileHeader) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{6}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *WriteFileHeader) GetServerId() string {
@@ -460,16 +528,24 @@ func (x *WriteFileHeader) GetSize() int64 {
 	return 0
 }
 
+func (x *WriteFileHeader) GetExpected() *FileVersion {
+	if x != nil {
+		return x.Expected
+	}
+	return nil
+}
+
 type WriteFileResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	File          *FileInfo              `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Version       *FileVersion           `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WriteFileResponse) Reset() {
 	*x = WriteFileResponse{}
-	mi := &file_noryx_v1_file_proto_msgTypes[7]
+	mi := &file_noryx_v1_file_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -481,7 +557,7 @@ func (x *WriteFileResponse) String() string {
 func (*WriteFileResponse) ProtoMessage() {}
 
 func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[7]
+	mi := &file_noryx_v1_file_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -494,12 +570,19 @@ func (x *WriteFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFileResponse.ProtoReflect.Descriptor instead.
 func (*WriteFileResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{7}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WriteFileResponse) GetFile() *FileInfo {
 	if x != nil {
 		return x.File
+	}
+	return nil
+}
+
+func (x *WriteFileResponse) GetVersion() *FileVersion {
+	if x != nil {
+		return x.Version
 	}
 	return nil
 }
@@ -517,7 +600,7 @@ type ArchiveDirectoryRequest struct {
 
 func (x *ArchiveDirectoryRequest) Reset() {
 	*x = ArchiveDirectoryRequest{}
-	mi := &file_noryx_v1_file_proto_msgTypes[8]
+	mi := &file_noryx_v1_file_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -529,7 +612,7 @@ func (x *ArchiveDirectoryRequest) String() string {
 func (*ArchiveDirectoryRequest) ProtoMessage() {}
 
 func (x *ArchiveDirectoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[8]
+	mi := &file_noryx_v1_file_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -542,7 +625,7 @@ func (x *ArchiveDirectoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveDirectoryRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveDirectoryRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{8}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ArchiveDirectoryRequest) GetServerId() string {
@@ -575,7 +658,7 @@ type ArchiveDirectoryResponse struct {
 
 func (x *ArchiveDirectoryResponse) Reset() {
 	*x = ArchiveDirectoryResponse{}
-	mi := &file_noryx_v1_file_proto_msgTypes[9]
+	mi := &file_noryx_v1_file_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -587,7 +670,7 @@ func (x *ArchiveDirectoryResponse) String() string {
 func (*ArchiveDirectoryResponse) ProtoMessage() {}
 
 func (x *ArchiveDirectoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[9]
+	mi := &file_noryx_v1_file_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -600,7 +683,7 @@ func (x *ArchiveDirectoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveDirectoryResponse.ProtoReflect.Descriptor instead.
 func (*ArchiveDirectoryResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{9}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ArchiveDirectoryResponse) GetData() []byte {
@@ -620,7 +703,7 @@ type CreateDirectoryRequest struct {
 
 func (x *CreateDirectoryRequest) Reset() {
 	*x = CreateDirectoryRequest{}
-	mi := &file_noryx_v1_file_proto_msgTypes[10]
+	mi := &file_noryx_v1_file_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -632,7 +715,7 @@ func (x *CreateDirectoryRequest) String() string {
 func (*CreateDirectoryRequest) ProtoMessage() {}
 
 func (x *CreateDirectoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[10]
+	mi := &file_noryx_v1_file_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -645,7 +728,7 @@ func (x *CreateDirectoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDirectoryRequest.ProtoReflect.Descriptor instead.
 func (*CreateDirectoryRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{10}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateDirectoryRequest) GetServerId() string {
@@ -670,7 +753,7 @@ type CreateDirectoryResponse struct {
 
 func (x *CreateDirectoryResponse) Reset() {
 	*x = CreateDirectoryResponse{}
-	mi := &file_noryx_v1_file_proto_msgTypes[11]
+	mi := &file_noryx_v1_file_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -682,7 +765,7 @@ func (x *CreateDirectoryResponse) String() string {
 func (*CreateDirectoryResponse) ProtoMessage() {}
 
 func (x *CreateDirectoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[11]
+	mi := &file_noryx_v1_file_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -695,7 +778,7 @@ func (x *CreateDirectoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDirectoryResponse.ProtoReflect.Descriptor instead.
 func (*CreateDirectoryResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{11}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{12}
 }
 
 type MoveFileRequest struct {
@@ -709,7 +792,7 @@ type MoveFileRequest struct {
 
 func (x *MoveFileRequest) Reset() {
 	*x = MoveFileRequest{}
-	mi := &file_noryx_v1_file_proto_msgTypes[12]
+	mi := &file_noryx_v1_file_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -721,7 +804,7 @@ func (x *MoveFileRequest) String() string {
 func (*MoveFileRequest) ProtoMessage() {}
 
 func (x *MoveFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[12]
+	mi := &file_noryx_v1_file_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -734,7 +817,7 @@ func (x *MoveFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveFileRequest.ProtoReflect.Descriptor instead.
 func (*MoveFileRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{12}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MoveFileRequest) GetServerId() string {
@@ -766,7 +849,7 @@ type MoveFileResponse struct {
 
 func (x *MoveFileResponse) Reset() {
 	*x = MoveFileResponse{}
-	mi := &file_noryx_v1_file_proto_msgTypes[13]
+	mi := &file_noryx_v1_file_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +861,7 @@ func (x *MoveFileResponse) String() string {
 func (*MoveFileResponse) ProtoMessage() {}
 
 func (x *MoveFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[13]
+	mi := &file_noryx_v1_file_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +874,7 @@ func (x *MoveFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveFileResponse.ProtoReflect.Descriptor instead.
 func (*MoveFileResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{13}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{14}
 }
 
 type DeleteFileRequest struct {
@@ -804,7 +887,7 @@ type DeleteFileRequest struct {
 
 func (x *DeleteFileRequest) Reset() {
 	*x = DeleteFileRequest{}
-	mi := &file_noryx_v1_file_proto_msgTypes[14]
+	mi := &file_noryx_v1_file_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -816,7 +899,7 @@ func (x *DeleteFileRequest) String() string {
 func (*DeleteFileRequest) ProtoMessage() {}
 
 func (x *DeleteFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[14]
+	mi := &file_noryx_v1_file_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -829,7 +912,7 @@ func (x *DeleteFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFileRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{14}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DeleteFileRequest) GetServerId() string {
@@ -854,7 +937,7 @@ type DeleteFileResponse struct {
 
 func (x *DeleteFileResponse) Reset() {
 	*x = DeleteFileResponse{}
-	mi := &file_noryx_v1_file_proto_msgTypes[15]
+	mi := &file_noryx_v1_file_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -866,7 +949,7 @@ func (x *DeleteFileResponse) String() string {
 func (*DeleteFileResponse) ProtoMessage() {}
 
 func (x *DeleteFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_file_proto_msgTypes[15]
+	mi := &file_noryx_v1_file_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +962,7 @@ func (x *DeleteFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFileResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_file_proto_rawDescGZIP(), []int{15}
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{16}
 }
 
 var File_noryx_v1_file_proto protoreflect.FileDescriptor
@@ -901,21 +984,27 @@ const file_noryx_v1_file_proto_rawDesc = "" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"B\n" +
 	"\x0fReadFileRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\":\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\"k\n" +
 	"\x10ReadFileResponse\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\"h\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\x12/\n" +
+	"\aversion\x18\x03 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\"O\n" +
+	"\vFileVersion\x12,\n" +
+	"\x12modified_unix_nano\x18\x01 \x01(\x03R\x10modifiedUnixNano\x12\x12\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\"h\n" +
 	"\x10WriteFileRequest\x123\n" +
 	"\x06header\x18\x01 \x01(\v2\x19.noryx.v1.WriteFileHeaderH\x00R\x06header\x12\x14\n" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
-	"\acontent\"t\n" +
+	"\acontent\"\xa7\x01\n" +
 	"\x0fWriteFileHeader\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1c\n" +
 	"\toverwrite\x18\x03 \x01(\bR\toverwrite\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size\";\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\x121\n" +
+	"\bexpected\x18\x05 \x01(\v2\x15.noryx.v1.FileVersionR\bexpected\"l\n" +
 	"\x11WriteFileResponse\x12&\n" +
-	"\x04file\x18\x01 \x01(\v2\x12.noryx.v1.FileInfoR\x04file\"m\n" +
+	"\x04file\x18\x01 \x01(\v2\x12.noryx.v1.FileInfoR\x04file\x12/\n" +
+	"\aversion\x18\x02 \x01(\v2\x15.noryx.v1.FileVersionR\aversion\"m\n" +
 	"\x17ArchiveDirectoryRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
@@ -957,48 +1046,52 @@ func file_noryx_v1_file_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_file_proto_rawDescData
 }
 
-var file_noryx_v1_file_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_noryx_v1_file_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_noryx_v1_file_proto_goTypes = []any{
 	(*FileInfo)(nil),                 // 0: noryx.v1.FileInfo
 	(*ListFilesRequest)(nil),         // 1: noryx.v1.ListFilesRequest
 	(*ListFilesResponse)(nil),        // 2: noryx.v1.ListFilesResponse
 	(*ReadFileRequest)(nil),          // 3: noryx.v1.ReadFileRequest
 	(*ReadFileResponse)(nil),         // 4: noryx.v1.ReadFileResponse
-	(*WriteFileRequest)(nil),         // 5: noryx.v1.WriteFileRequest
-	(*WriteFileHeader)(nil),          // 6: noryx.v1.WriteFileHeader
-	(*WriteFileResponse)(nil),        // 7: noryx.v1.WriteFileResponse
-	(*ArchiveDirectoryRequest)(nil),  // 8: noryx.v1.ArchiveDirectoryRequest
-	(*ArchiveDirectoryResponse)(nil), // 9: noryx.v1.ArchiveDirectoryResponse
-	(*CreateDirectoryRequest)(nil),   // 10: noryx.v1.CreateDirectoryRequest
-	(*CreateDirectoryResponse)(nil),  // 11: noryx.v1.CreateDirectoryResponse
-	(*MoveFileRequest)(nil),          // 12: noryx.v1.MoveFileRequest
-	(*MoveFileResponse)(nil),         // 13: noryx.v1.MoveFileResponse
-	(*DeleteFileRequest)(nil),        // 14: noryx.v1.DeleteFileRequest
-	(*DeleteFileResponse)(nil),       // 15: noryx.v1.DeleteFileResponse
+	(*FileVersion)(nil),              // 5: noryx.v1.FileVersion
+	(*WriteFileRequest)(nil),         // 6: noryx.v1.WriteFileRequest
+	(*WriteFileHeader)(nil),          // 7: noryx.v1.WriteFileHeader
+	(*WriteFileResponse)(nil),        // 8: noryx.v1.WriteFileResponse
+	(*ArchiveDirectoryRequest)(nil),  // 9: noryx.v1.ArchiveDirectoryRequest
+	(*ArchiveDirectoryResponse)(nil), // 10: noryx.v1.ArchiveDirectoryResponse
+	(*CreateDirectoryRequest)(nil),   // 11: noryx.v1.CreateDirectoryRequest
+	(*CreateDirectoryResponse)(nil),  // 12: noryx.v1.CreateDirectoryResponse
+	(*MoveFileRequest)(nil),          // 13: noryx.v1.MoveFileRequest
+	(*MoveFileResponse)(nil),         // 14: noryx.v1.MoveFileResponse
+	(*DeleteFileRequest)(nil),        // 15: noryx.v1.DeleteFileRequest
+	(*DeleteFileResponse)(nil),       // 16: noryx.v1.DeleteFileResponse
 }
 var file_noryx_v1_file_proto_depIdxs = []int32{
 	0,  // 0: noryx.v1.ListFilesResponse.files:type_name -> noryx.v1.FileInfo
-	6,  // 1: noryx.v1.WriteFileRequest.header:type_name -> noryx.v1.WriteFileHeader
-	0,  // 2: noryx.v1.WriteFileResponse.file:type_name -> noryx.v1.FileInfo
-	1,  // 3: noryx.v1.FileService.ListFiles:input_type -> noryx.v1.ListFilesRequest
-	3,  // 4: noryx.v1.FileService.ReadFile:input_type -> noryx.v1.ReadFileRequest
-	5,  // 5: noryx.v1.FileService.WriteFile:input_type -> noryx.v1.WriteFileRequest
-	8,  // 6: noryx.v1.FileService.ArchiveDirectory:input_type -> noryx.v1.ArchiveDirectoryRequest
-	10, // 7: noryx.v1.FileService.CreateDirectory:input_type -> noryx.v1.CreateDirectoryRequest
-	12, // 8: noryx.v1.FileService.MoveFile:input_type -> noryx.v1.MoveFileRequest
-	14, // 9: noryx.v1.FileService.DeleteFile:input_type -> noryx.v1.DeleteFileRequest
-	2,  // 10: noryx.v1.FileService.ListFiles:output_type -> noryx.v1.ListFilesResponse
-	4,  // 11: noryx.v1.FileService.ReadFile:output_type -> noryx.v1.ReadFileResponse
-	7,  // 12: noryx.v1.FileService.WriteFile:output_type -> noryx.v1.WriteFileResponse
-	9,  // 13: noryx.v1.FileService.ArchiveDirectory:output_type -> noryx.v1.ArchiveDirectoryResponse
-	11, // 14: noryx.v1.FileService.CreateDirectory:output_type -> noryx.v1.CreateDirectoryResponse
-	13, // 15: noryx.v1.FileService.MoveFile:output_type -> noryx.v1.MoveFileResponse
-	15, // 16: noryx.v1.FileService.DeleteFile:output_type -> noryx.v1.DeleteFileResponse
-	10, // [10:17] is the sub-list for method output_type
-	3,  // [3:10] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	5,  // 1: noryx.v1.ReadFileResponse.version:type_name -> noryx.v1.FileVersion
+	7,  // 2: noryx.v1.WriteFileRequest.header:type_name -> noryx.v1.WriteFileHeader
+	5,  // 3: noryx.v1.WriteFileHeader.expected:type_name -> noryx.v1.FileVersion
+	0,  // 4: noryx.v1.WriteFileResponse.file:type_name -> noryx.v1.FileInfo
+	5,  // 5: noryx.v1.WriteFileResponse.version:type_name -> noryx.v1.FileVersion
+	1,  // 6: noryx.v1.FileService.ListFiles:input_type -> noryx.v1.ListFilesRequest
+	3,  // 7: noryx.v1.FileService.ReadFile:input_type -> noryx.v1.ReadFileRequest
+	6,  // 8: noryx.v1.FileService.WriteFile:input_type -> noryx.v1.WriteFileRequest
+	9,  // 9: noryx.v1.FileService.ArchiveDirectory:input_type -> noryx.v1.ArchiveDirectoryRequest
+	11, // 10: noryx.v1.FileService.CreateDirectory:input_type -> noryx.v1.CreateDirectoryRequest
+	13, // 11: noryx.v1.FileService.MoveFile:input_type -> noryx.v1.MoveFileRequest
+	15, // 12: noryx.v1.FileService.DeleteFile:input_type -> noryx.v1.DeleteFileRequest
+	2,  // 13: noryx.v1.FileService.ListFiles:output_type -> noryx.v1.ListFilesResponse
+	4,  // 14: noryx.v1.FileService.ReadFile:output_type -> noryx.v1.ReadFileResponse
+	8,  // 15: noryx.v1.FileService.WriteFile:output_type -> noryx.v1.WriteFileResponse
+	10, // 16: noryx.v1.FileService.ArchiveDirectory:output_type -> noryx.v1.ArchiveDirectoryResponse
+	12, // 17: noryx.v1.FileService.CreateDirectory:output_type -> noryx.v1.CreateDirectoryResponse
+	14, // 18: noryx.v1.FileService.MoveFile:output_type -> noryx.v1.MoveFileResponse
+	16, // 19: noryx.v1.FileService.DeleteFile:output_type -> noryx.v1.DeleteFileResponse
+	13, // [13:20] is the sub-list for method output_type
+	6,  // [6:13] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_file_proto_init() }
@@ -1006,7 +1099,7 @@ func file_noryx_v1_file_proto_init() {
 	if File_noryx_v1_file_proto != nil {
 		return
 	}
-	file_noryx_v1_file_proto_msgTypes[5].OneofWrappers = []any{
+	file_noryx_v1_file_proto_msgTypes[6].OneofWrappers = []any{
 		(*WriteFileRequest_Header)(nil),
 		(*WriteFileRequest_Data)(nil),
 	}
@@ -1016,7 +1109,7 @@ func file_noryx_v1_file_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_file_proto_rawDesc), len(file_noryx_v1_file_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

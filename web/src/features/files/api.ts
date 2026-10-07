@@ -62,18 +62,42 @@ export function useChangeFiles(s: ServerFiles) {
 
 export class BinaryFileError extends Error {}
 
+/** A text file, with the version it was read in if the agent tells it. */
+export interface TextFile {
+  text: string
+  version?: string
+}
+
 /** Reads a file as UTF-8 text, or throws BinaryFileError for other content. */
-export async function readText(s: ServerFiles, path: string): Promise<string> {
+export async function readText(s: ServerFiles, path: string): Promise<TextFile> {
   const res = await fetch(contentUrl(s, path))
   if (!res.ok) throw await responseError(res, t("The file could not be loaded (status {{status}}).", { status: res.status }))
   const bytes = new Uint8Array(await res.arrayBuffer())
   try {
     const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-    if (!text.includes("\0")) return text
+    if (!text.includes("\0")) return { text, version: res.headers.get("ETag") ?? undefined }
   } catch {
     // not UTF-8
   }
   throw new BinaryFileError(t("This file isn't text and can't be edited here."))
+}
+
+/** Thrown by saveText if the file changed on the server since it was read. */
+export class FileChangedError extends Error {}
+
+/**
+ * Saves a text file and returns the version saved. With the version it was read in, it only
+ * replaces that one, else throws FileChangedError; without, it replaces whatever is there.
+ */
+export async function saveText(s: ServerFiles, path: string, text: string, version?: string): Promise<string | undefined> {
+  const res = await fetch(`${contentUrl(s, path)}&overwrite=true`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/octet-stream", ...(version && { "If-Match": version }) },
+    body: text,
+  })
+  if (res.status === 412) throw new FileChangedError((await responseError(res)).message)
+  if (!res.ok) throw await responseError(res)
+  return res.headers.get("ETag") ?? undefined
 }
 
 /**

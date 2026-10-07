@@ -22,7 +22,10 @@ commands once they were created again, e.g. by saving their settings.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through the
 master, as long as 1 GB stays free on the node, like for backups), edits configuration files in the browser and
-downloads files or whole folders as ZIP archives.
+downloads files or whole folders as ZIP archives. If something changed or deleted a file while it was open in the
+editor, e.g. a plugin, a file set or another user, saving shows the difference to the file on the server and offers to
+load that version or to overwrite it. Agents tell the editor the version of a file by when it was modified and its
+size; with agents of older versions, saving overwrites the file as before.
 
 Secrets such as the RCON password and the forwarding secret of a network never reach the panel. The file manager hides
 files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`, Floodgate's `key.pem`) and shows
