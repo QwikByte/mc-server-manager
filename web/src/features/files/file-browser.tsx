@@ -19,6 +19,7 @@ import { browse, storedSort, storeSort } from "./browse"
 import { FileActions } from "./file-actions"
 import { FileTypeIcon } from "./file-icon"
 import { FileMenus, FilterBar } from "./file-toolbar"
+import { isLog } from "./log-reader"
 import { NameDialog } from "./name-dialog"
 import { SelectionBar } from "./selection-bar"
 import { UploadList } from "./upload-list"
@@ -321,7 +322,7 @@ function FolderLink({
   )
 }
 
-/** Opens a folder, a text file in the editor, or downloads a large file. */
+/** Opens a folder, a text file in the editor, a log in the viewer, or downloads a large file. */
 function EntryLink({ files, dir, entry }: { files: ServerFiles; dir: string; entry: FileEntry }) {
   const path = join(dir, entry.name)
   const content = (
@@ -345,7 +346,7 @@ function EntryLink({ files, dir, entry }: { files: ServerFiles; dir: string; ent
         {content}
       </FolderLink>
     )
-  if (entry.size > maxEditableBytes)
+  if (entry.size > maxEditableBytes && !isLog(entry.name))
     return (
       <a href={contentUrl(files, path)} download className={className} title={t("Too large for the editor, downloads the file")}>
         {content}

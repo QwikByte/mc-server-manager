@@ -164,6 +164,48 @@ func unzip(t *testing.T, data []byte) map[string]string {
 	return files
 }
 
+// A part of a file can be read, e.g. the end of a large log, also of a file with secrets.
+func TestReadPart(t *testing.T) {
+	rt := dataRuntime{dir: t.TempDir()}
+	svc, id := NewService(rt), runtime.NewID()
+	if err := os.MkdirAll(filepath.Join(rt.dir, id, "logs"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{"logs/latest.log": "0123456789", "server.properties": "rcon.password=secret\nmotd=A\n"} {
+		if err := os.WriteFile(filepath.Join(rt.dir, id, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		name          string
+		offset, limit int64
+		want          string
+		start, total  int64
+	}{
+		{"logs/latest.log", 0, 0, "0123456789", 0, 0}, // the whole file, as older masters ask
+		{"logs/latest.log", -4, 0, "6789", 6, 10},
+		{"logs/latest.log", -40, 0, "0123456789", 0, 10},
+		{"logs/latest.log", 2, 3, "234", 2, 10},
+		{"logs/latest.log", 8, 5, "89", 8, 10},
+		{"logs/latest.log", 12, 0, "", 10, 10},
+		{"server.properties", -7, 0, "motd=A\n", 23, 30}, // counted with the secret as <hidden>
+	} {
+		stream := &readStream{ctx: t.Context()}
+		if err := svc.ReadFile(&noryxv1.ReadFileRequest{ServerId: id, Path: tc.name, Offset: tc.offset, Limit: tc.limit}, stream); err != nil {
+			t.Fatal(err)
+		}
+		if got := stream.first; string(stream.data) != tc.want || got.GetSize() != int64(len(tc.want)) ||
+			got.GetOffset() != tc.start || got.GetFileSize() != tc.total {
+			t.Errorf("read %s from %d, %d bytes: %q, size %d at %d of %d", tc.name, tc.offset, tc.limit, stream.data,
+				got.GetSize(), got.GetOffset(), got.GetFileSize())
+		}
+	}
+	err := svc.ReadFile(&noryxv1.ReadFileRequest{ServerId: id, Path: "logs/latest.log", Limit: -1}, &readStream{ctx: t.Context()})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("negative limit: %v", err)
+	}
+}
+
 func read(t *testing.T, svc *Service, id, name string) *noryxv1.FileVersion {
 	t.Helper()
 	stream := &readStream{ctx: t.Context()}
@@ -196,6 +238,7 @@ type readStream struct {
 	grpc.ServerStream
 	ctx   context.Context
 	first *noryxv1.ReadFileResponse
+	data  []byte
 }
 
 func (s *readStream) Context() context.Context { return s.ctx }
@@ -204,6 +247,7 @@ func (s *readStream) Send(res *noryxv1.ReadFileResponse) error {
 	if s.first == nil {
 		s.first = res
 	}
+	s.data = append(s.data, res.GetData()...)
 	return nil
 }
 

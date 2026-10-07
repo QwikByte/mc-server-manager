@@ -230,9 +230,16 @@ message StreamLogsRequest {
 }
 
 message StreamLogsResponse {
+  // The line as plain text, without colours.
   string line = 1;
   // When the server wrote the line; 0 if unknown.
   int64 time_unix_nano = 2;
+  // The line with its colours and formatting in Minecraft's codes, empty if it has none: §
+  // followed by 0-9 or a-f for a colour, l, m, n or o for bold, strikethrough, underlined or
+  // italic text, or r to reset them. A colour resets the formatting, as in Minecraft, and
+  // colours of terminals become the nearest of Minecraft's. Clients show them as styles of
+  // the text, never as markup.
+  string formatted = 3;
 }
 
 message SendCommandRequest {
@@ -245,7 +252,10 @@ message SendCommandRequest {
 }
 
 message SendCommandResponse {
+  // The output as plain text, without colours.
   string output = 1;
+  // The output with its colours and formatting, if it has any, like StreamLogsResponse's.
+  string formatted = 2;
 }
 
 message ConfigureNetworkRequest {

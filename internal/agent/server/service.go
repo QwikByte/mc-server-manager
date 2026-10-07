@@ -85,8 +85,6 @@ var (
 	javaVersions   = []string{"", "8", "11", "17", "21", "25"}
 	// Names of IANA time zones, e.g. Europe/Berlin, America/Port-au-Prince or Etc/GMT+5.
 	timeZonePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_+/-]{0,63}$`)
-	// Terminal escape sequences and Minecraft formatting codes (§a, §l, ...).
-	formatting = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|§[0-9a-fk-orxA-FK-ORX]|\r`)
 )
 
 type Service struct {
@@ -430,7 +428,7 @@ func (s *Service) StreamLogs(req *noryxv1.StreamLogsRequest, stream noryxv1.Serv
 		if err != nil {
 			return toStatus(err)
 		}
-		res := &noryxv1.StreamLogsResponse{Line: plain(line.Text)}
+		res := &noryxv1.StreamLogsResponse{Line: plain(line.Text), Formatted: formatted(line.Text)}
 		if !line.Time.IsZero() {
 			res.TimeUnixNano = line.Time.UnixNano()
 		}
@@ -463,7 +461,7 @@ func (s *Service) SendCommand(ctx context.Context, req *noryxv1.SendCommandReque
 	case err != nil:
 		return nil, toStatus(err)
 	}
-	return &noryxv1.SendCommandResponse{Output: plain(output)}, nil
+	return &noryxv1.SendCommandResponse{Output: plain(output), Formatted: formatted(output)}, nil
 }
 
 func (s *Service) ConfigureNetwork(ctx context.Context, req *noryxv1.ConfigureNetworkRequest) (*noryxv1.ConfigureNetworkResponse, error) {
@@ -624,12 +622,6 @@ func validAddress(address string) bool {
 func validIPv4(s string) bool {
 	addr, err := netip.ParseAddr(s)
 	return err == nil && addr.Is4()
-}
-
-// plain removes colours and formatting so that console output reads as plain text, and
-// replaces invalid UTF-8, which gRPC can't send in a string.
-func plain(text string) string {
-	return strings.ToValidUTF8(formatting.ReplaceAllString(text, ""), "�")
 }
 
 func (s *Service) apply(ctx context.Context, id string, op func(context.Context, string) error) error {

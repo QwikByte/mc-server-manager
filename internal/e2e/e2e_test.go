@@ -113,18 +113,21 @@ func TestEnrollAndControlNode(t *testing.T) {
 	}
 	out, err := servers.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: "/say hi"})
 	check(t, err)
-	if out.GetOutput() != "ran say hi" {
-		t.Fatalf("command output = %q", out.GetOutput())
+	if out.GetOutput() != "ran say hi" || out.GetFormatted() != "§6ran say hi" {
+		t.Fatalf("command output = %q, formatted %q", out.GetOutput(), out.GetFormatted())
 	}
 
 	// The master relays the console to the browser as Server-Sent Events, whose IDs let a
-	// browser that connects again continue after the last line it got.
-	consoleURL := m.panel(t).URL + "/api/nodes/" + a.node.ID + "/servers/" + id + "/logs"
+	// browser that connects again continue after the last line it got. Colours are kept as
+	// Minecraft's codes for panels that ask for them.
+	panel := m.panel(t)
+	console := "/api/nodes/" + a.node.ID + "/servers/" + id + "/logs"
 	for query, want := range map[string]string{
 		"":                  "id: 1000000001\ndata: [INFO]: Starting\n\nid: 1000000002\ndata: [INFO]: Done\n\nevent: end\ndata:\n\n",
 		"?after=1000000001": "id: 1000000002\ndata: [INFO]: Done\n\nevent: end\ndata:\n\n",
+		"?colors=true":      "id: 1000000001\ndata: §2[INFO]: Starting\n\nid: 1000000002\ndata: [INFO]: Done\n\nevent: end\ndata:\n\n",
 	} {
-		res, err := http.Get(consoleURL + query)
+		res, err := http.Get(panel.URL + console + query)
 		check(t, err)
 		body, err := io.ReadAll(res.Body)
 		res.Body.Close()
@@ -132,6 +135,20 @@ func TestEnrollAndControlNode(t *testing.T) {
 		if string(body) != want {
 			t.Fatalf("event stream%s = %q, want %q", query, body, want)
 		}
+	}
+
+	// Earlier output ends before the line that the console shows first.
+	var earlier struct {
+		Lines []struct{ ID, Text string } `json:"lines"`
+	}
+	api := apiClient{t: t, url: panel.URL}
+	api.do("GET", console+"/earlier?before=1000000002", nil, http.StatusOK, &earlier)
+	if len(earlier.Lines) != 1 || earlier.Lines[0].ID != "1000000001" || earlier.Lines[0].Text != "§2[INFO]: Starting" {
+		t.Fatalf("earlier output = %+v", earlier.Lines)
+	}
+	api.do("GET", console+"/earlier?before=1000000001", nil, http.StatusOK, &earlier)
+	if len(earlier.Lines) != 0 {
+		t.Fatalf("output before the first line = %+v", earlier.Lines)
 	}
 
 	// Invalid requests are rejected by the agent.

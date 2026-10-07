@@ -27,6 +27,27 @@ func TestPlainRemovesFormatting(t *testing.T) {
 	}
 }
 
+// Colours of terminals and Minecraft's codes both become Minecraft's codes for the panel.
+func TestFormattedKeepsColours(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain line":           "",
+		"\x1b[2K\rplain again": "",
+		// Paper writes Minecraft's light colours as bright ones and resets after each line.
+		"\x1b[0;32;1m[12:00:00 INFO]: Done\x1b[m\r":               "§a[12:00:00 INFO]: Done",
+		"\x1b[0;31m[ERROR]\x1b[m: crashed":                        "§4[ERROR]§r: crashed",
+		"\x1b[1m\x1b[33mwarn\x1b[22m ok\x1b[39m.":                 "§ewarn§6 ok§r.",
+		"\x1b[21;4mbold\x1b[24m only":                             "§l§nbold§r§l only",
+		"\x1b[38;5;203mred\x1b[48;5;21m \x1b[38;2;85;85;255mblue": "§cred §9blue",
+		"§6There are §c2§6 of §lmax§r players":                    "§6There are §c2§6 of §lmax§r players",
+		"§x§F§F§5§5§5§5Hex §kmagic":                               "§cHex magic",
+		"§zno code":                                               "",
+	} {
+		if got := formatted(in); got != want {
+			t.Errorf("formatted(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestCheckSettings(t *testing.T) {
 	valid := runtime.Spec{Name: "Lobby", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, Version: "LATEST", MemoryMB: 2048, Port: 25565}
 	tests := []struct {

@@ -142,6 +142,7 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/move", access.All(access.OnServer(access.ServersDelete), access.OnServer(access.FilesRead)), h.move)
 	mux.Handle("GET /api/moves", access.SignedIn, h.listMoves)
 	mux.Handle("GET /api/nodes/{node}/servers/{id}/logs", access.OnServer(access.ConsoleView), h.logs)
+	mux.Handle("GET /api/nodes/{node}/servers/{id}/logs/earlier", access.OnServer(access.ConsoleView), h.earlier)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/command", access.OnServer(access.ConsoleCommands), h.command)
 }
 

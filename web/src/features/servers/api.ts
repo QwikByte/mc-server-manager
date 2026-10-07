@@ -315,11 +315,17 @@ export function useUpdateImage(nodeId: string, serverId: string) {
   })
 }
 
+/** Runs a console command; formatted is its output with Minecraft's codes of colours, if it has any. */
 export function useSendCommand(nodeId: string, serverId: string) {
   return useMutation({
-    mutationFn: (command: string) => api<{ output: string }>(`/nodes/${nodeId}/servers/${serverId}/command`, { body: { command } }),
+    mutationFn: (command: string) =>
+      api<{ output: string; formatted?: string }>(`/nodes/${nodeId}/servers/${serverId}/command`, { body: { command } }),
   })
 }
+
+/** Lines of a server's console before the one with the given ID, oldest first, with Minecraft's codes of colours. */
+export const earlierOutput = (nodeId: string, serverId: string, before: string) =>
+  api<{ lines: { id: string; text: string }[] }>(`/nodes/${nodeId}/servers/${serverId}/logs/earlier?before=${encodeURIComponent(before)}`)
 
 /** A server, or all servers of a node (including later ones) if serverId is empty. */
 export interface Target {

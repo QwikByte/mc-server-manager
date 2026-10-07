@@ -30,6 +30,15 @@ agent keeps one console connection per game server for all its commands, so the 
 Commands typed in quick succession run one after the other, in their order. Proxies created by earlier versions accept
 commands once they were created again, e.g. by saving their settings.
 
+The output keeps the colours of the server and its plugins, and warnings and errors stand out. It can be searched,
+narrowed down to warnings and errors, cleared and downloaded as a text file of what is shown. While scrolled up, a button
+counts the new lines and leads back to the end. The console opens with the last 300 lines; **Load earlier output** adds
+the earlier ones of the last 1000 lines the node keeps, and older output is in the server's log files.
+
+The prompt keeps the commands of each server while the browser tab is open, and the arrow keys walk through them. While
+typing, it suggests Minecraft's commands (or the proxy's), their arguments, the names of the players online and earlier
+commands; **Tab** takes a suggestion. Agents of older versions send the output without colours.
+
 ## File manager
 
 The file manager of a server browses its data, uploads files and whole folders by drag and drop or with **Upload** (up
@@ -46,6 +55,10 @@ the editor the version of a file by when it was modified and its size; with agen
 overwrites the file as before. Saving a JSON or YAML file with a syntax error, which servers and plugins may fail to
 read, asks first and names the line. The editor highlights JSON, JSON5, YAML, properties, TOML, INI-like files
 (`.conf`, `.cfg`, `.ini`), shell scripts, JavaScript and XML.
+
+Logs (`.log` files) open read only in a viewer that highlights warnings and errors. Of a large log, it shows the last
+2 MB and loads earlier parts on request; with agents of older versions, large logs can only be downloaded. Archived logs
+(`.log.gz`) are unpacked in the browser, up to their first 16 MB.
 
 Secrets such as the RCON password and the forwarding secret of a network never reach the panel. The file manager hides
 files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`, Floodgate's `key.pem`) and shows

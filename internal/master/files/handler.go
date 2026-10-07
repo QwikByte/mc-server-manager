@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -91,7 +93,9 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := r.URL.Query().Get("path")
-	stream, err := c.ReadFile(r.Context(), &noryxv1.ReadFileRequest{ServerId: r.PathValue("id"), Path: p})
+	req := &noryxv1.ReadFileRequest{ServerId: r.PathValue("id"), Path: p}
+	req.Offset, req.Limit = byteRange(r.Header.Get("Range"))
+	stream, err := c.ReadFile(r.Context(), req)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
@@ -102,9 +106,44 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Attachment(w, path.Base(p))
-	w.Header().Set("Content-Length", strconv.FormatInt(first.GetSize(), 10))
 	setETag(w, first.GetVersion())
+	// Agents of older versions send the whole file, as does one of an empty file.
+	if total := first.GetFileSize(); total > 0 {
+		start, n := first.GetOffset(), first.GetSize()
+		if n == 0 {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", total))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, start+n-1, total))
+		w.Header().Set("Content-Length", strconv.FormatInt(n, 10))
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.Header().Set("Content-Length", strconv.FormatInt(first.GetSize(), 10))
+	}
 	httpapi.Relay(w, first, stream)
+}
+
+// byteRange returns the part of a file that a Range header asks for, as offset and limit of
+// ReadFileRequest: bytes=first-last, bytes=first- or bytes=-length. Without one, or for other
+// ranges, e.g. several, the whole file is read, as HTTP allows.
+func byteRange(header string) (offset, limit int64) {
+	spec, ok := strings.CutPrefix(header, "bytes=")
+	first, last, dash := strings.Cut(spec, "-")
+	if !ok || !dash || strings.Contains(spec, ",") {
+		return 0, 0
+	}
+	a, errA := strconv.ParseInt(first, 10, 64)
+	b, errB := strconv.ParseInt(last, 10, 64)
+	switch {
+	case first == "" && errB == nil && b > 0:
+		return -b, 0
+	case errA == nil && a >= 0 && last == "":
+		return a, 0
+	case errA == nil && errB == nil && a >= 0 && b >= a && b < math.MaxInt64:
+		return a, b - a + 1
+	}
+	return 0, 0
 }
 
 // setETag tells the version of a file, which an upload can expect with If-Match. Agents of

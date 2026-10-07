@@ -1463,9 +1463,16 @@ func (x *StreamLogsRequest) GetAfterUnixNano() int64 {
 
 type StreamLogsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Line  string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	// The line as plain text, without colours.
+	Line string `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
 	// When the server wrote the line; 0 if unknown.
-	TimeUnixNano  int64 `protobuf:"varint,2,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
+	TimeUnixNano int64 `protobuf:"varint,2,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
+	// The line with its colours and formatting in Minecraft's codes, empty if it has none: §
+	// followed by 0-9 or a-f for a colour, l, m, n or o for bold, strikethrough, underlined or
+	// italic text, or r to reset them. A colour resets the formatting, as in Minecraft, and
+	// colours of terminals become the nearest of Minecraft's. Clients show them as styles of
+	// the text, never as markup.
+	Formatted     string `protobuf:"bytes,3,opt,name=formatted,proto3" json:"formatted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1512,6 +1519,13 @@ func (x *StreamLogsResponse) GetTimeUnixNano() int64 {
 		return x.TimeUnixNano
 	}
 	return 0
+}
+
+func (x *StreamLogsResponse) GetFormatted() string {
+	if x != nil {
+		return x.Formatted
+	}
+	return ""
 }
 
 type SendCommandRequest struct {
@@ -1578,8 +1592,11 @@ func (x *SendCommandRequest) GetNoWait() bool {
 }
 
 type SendCommandResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Output        string                 `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The output as plain text, without colours.
+	Output string `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	// The output with its colours and formatting, if it has any, like StreamLogsResponse's.
+	Formatted     string `protobuf:"bytes,2,opt,name=formatted,proto3" json:"formatted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1617,6 +1634,13 @@ func (*SendCommandResponse) Descriptor() ([]byte, []int) {
 func (x *SendCommandResponse) GetOutput() string {
 	if x != nil {
 		return x.Output
+	}
+	return ""
+}
+
+func (x *SendCommandResponse) GetFormatted() string {
+	if x != nil {
+		return x.Formatted
 	}
 	return ""
 }
@@ -2308,16 +2332,18 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x11StreamLogsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04tail\x18\x02 \x01(\rR\x04tail\x12&\n" +
-	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"N\n" +
+	"\x0fafter_unix_nano\x18\x03 \x01(\x03R\rafterUnixNano\"l\n" +
 	"\x12StreamLogsResponse\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\tR\x04line\x12$\n" +
-	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\"W\n" +
+	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\x12\x1c\n" +
+	"\tformatted\x18\x03 \x01(\tR\tformatted\"W\n" +
 	"\x12SendCommandRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\x12\x17\n" +
-	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"-\n" +
+	"\ano_wait\x18\x03 \x01(\bR\x06noWait\"K\n" +
 	"\x13SendCommandResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\"\xc4\x03\n" +
+	"\x06output\x18\x01 \x01(\tR\x06output\x12\x1c\n" +
+	"\tformatted\x18\x02 \x01(\tR\tformatted\"\xc4\x03\n" +
 	"\x17ConfigureNetworkRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x11forwarding_secret\x18\x02 \x01(\tR\x10forwardingSecret\x124\n" +

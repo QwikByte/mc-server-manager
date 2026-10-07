@@ -104,10 +104,13 @@ func (s *Service) ReadFile(req *noryxv1.ReadFileRequest, stream noryxv1.FileServ
 	if err != nil {
 		return toStatus(err)
 	}
-	if info.IsDir() {
+	switch {
+	case info.IsDir():
 		return status.Error(codes.InvalidArgument, "This is a folder. Download it as a ZIP archive instead.")
+	case req.GetLimit() < 0:
+		return status.Error(codes.InvalidArgument, "The limit can't be negative.")
 	}
-	r, size := io.Reader(f), info.Size()
+	r, size := io.ReaderAt(f), info.Size()
 	if secrets.Redacted(name) {
 		data, err := readRedacted(f)
 		if err != nil {
@@ -117,7 +120,13 @@ func (s *Service) ReadFile(req *noryxv1.ReadFileRequest, stream noryxv1.FileServ
 		r, size = bytes.NewReader(data), int64(len(data))
 	}
 	res := &noryxv1.ReadFileResponse{Size: size, Version: version(info)}
-	return sendChunks(r, func(data []byte) error {
+	start, n := int64(0), size
+	if req.GetOffset() != 0 || req.GetLimit() != 0 {
+		start, n = part(req.GetOffset(), req.GetLimit(), size)
+		res.Size, res.Offset, res.FileSize = n, start, size
+	}
+	// Sends what the size tells, also of a log that grows meanwhile.
+	return sendChunks(io.NewSectionReader(r, start, n), func(data []byte) error {
 		res.Data = data
 		err := stream.Send(res)
 		res = &noryxv1.ReadFileResponse{}
@@ -183,6 +192,21 @@ func (s *Service) WriteFile(stream noryxv1.FileService_WriteFileServer) error {
 		return toStatus(err)
 	}
 	return stream.SendAndClose(&noryxv1.WriteFileResponse{File: fileInfo(info), Version: version(info)})
+}
+
+// part returns where the part of a file of the given size that ReadFileRequest names with
+// offset and limit starts, and its length.
+func part(offset, limit, size int64) (start, n int64) {
+	if offset < 0 {
+		start = max(size+offset, 0)
+	} else {
+		start = min(offset, size)
+	}
+	n = size - start
+	if limit > 0 {
+		n = min(n, limit)
+	}
+	return start, n
 }
 
 // unchanged refuses to replace a file that no longer has the expected version, if any.

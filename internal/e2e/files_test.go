@@ -59,6 +59,31 @@ func TestFiles(t *testing.T) {
 		t.Fatalf("content = %q", got)
 	}
 
+	// A range of a file can be read, e.g. the end of a large log.
+	api.do("PUT", base+"/content"+q("latest.log"), []byte("0123456789"), http.StatusCreated, nil)
+	for header, want := range map[string]struct {
+		status       int
+		body, within string
+	}{
+		"bytes=-4":      {http.StatusPartialContent, "6789", "bytes 6-9/10"},
+		"bytes=2-4":     {http.StatusPartialContent, "234", "bytes 2-4/10"},
+		"bytes=8-":      {http.StatusPartialContent, "89", "bytes 8-9/10"},
+		"bytes=20-":     {http.StatusRequestedRangeNotSatisfiable, "", "bytes */10"},
+		"bytes=0-1,4-5": {http.StatusOK, "0123456789", ""},
+	} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, panel.URL+base+"/content"+q("latest.log"), nil)
+		check(t, err)
+		req.Header.Set("Range", header)
+		res, err := http.DefaultClient.Do(req)
+		check(t, err)
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		check(t, err)
+		if res.StatusCode != want.status || string(body) != want.body || res.Header.Get("Content-Range") != want.within {
+			t.Errorf("read %s: status %d, %q, Content-Range %q", header, res.StatusCode, body, res.Header.Get("Content-Range"))
+		}
+	}
+
 	// An editor saves only the version it opened, which the ETag names, unless told to overwrite.
 	put := func(etag, content string) (int, string) {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, panel.URL+base+"/content"+q("plugins/Example/config.yml")+"&overwrite=true", strings.NewReader(content))

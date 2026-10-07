@@ -87,7 +87,8 @@ the server's user. Downloads are sent as attachments with a sandboxing CSP, so a
 in the panel. Secrets of the server stay on the node: files that only hold them can't be listed, read, written or moved,
 others show them as `<hidden>`, no file or folder with secrets can be moved where they would show, and archives leave
 them out. Only moving a server to another node copies them. Moving or deleting several files and folders at once
-checks each of them like a single one.
+checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the browser
+only up to 16 MB, so that a small archive can't exhaust the browser's memory.
 
 ## Plugins and downloads
 
@@ -209,6 +210,9 @@ files, and to create servers on the new node.
 To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console password from the
 server's `server.properties` and connects to the server's console port inside Docker's network; the password never
 leaves the node.
+
+Servers and their plugins write the output, so the panel shows it only as text: the agent turns its colours into
+Minecraft's colour codes, which the panel only maps to class names of a fixed set, never to markup.
 
 ## Private network
 

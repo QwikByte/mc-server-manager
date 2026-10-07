@@ -50,6 +50,12 @@ message ListFilesResponse {
 message ReadFileRequest {
   string server_id = 1;
   string path = 2;
+  // Reads only part of the file, e.g. the end of a large log: from offset, or with a negative
+  // offset from that many bytes before the end, and at most limit bytes; 0 reads to the end.
+  // Offsets count in the file as the panel sees it, with hidden secrets. Agents of older
+  // versions send the whole file and leave out file_size.
+  int64 offset = 3;
+  int64 limit = 4;
 }
 
 message ReadFileResponse {
@@ -58,6 +64,10 @@ message ReadFileResponse {
   bytes data = 2;
   // The version of the file, in the first message.
   FileVersion version = 3;
+  // Where what is sent starts in the file, and the size of the whole file, in the first
+  // message if part of the file was asked for.
+  int64 offset = 4;
+  int64 file_size = 5;
 }
 
 // FileVersion tells a version of a file apart from others, by when it was last modified and
