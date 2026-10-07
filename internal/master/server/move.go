@@ -263,10 +263,13 @@ func (h *Handler) runMove(ctx context.Context, mv Move, src *noryxv1.Server, req
 	ctx, cancel := context.WithTimeout(ctx, moveTimeout)
 	defer cancel()
 	running := src.GetState() != noryxv1.ServerState_SERVER_STATE_STOPPED
-	err := h.transfer(ctx, mv, src, req, running)
+	imported, err := h.transfer(ctx, mv, src, req, running)
 	var warnings []string
 	if err == nil {
 		warnings = h.finish(ctx, mv, running)
+		if w := olderAgentWarning(src.GetStopTimeoutSeconds(), src.GetTimeZone(), imported); w != "" {
+			warnings = append(warnings, w)
+		}
 	}
 	attrs := []any{logging.Servers, logging.KeyUser, user, logging.KeyNode, mv.From, logging.KeyServer, mv.ServerID,
 		logging.KeyServerName, mv.ServerName, "to", mv.ToName, "to_id", mv.To}
@@ -287,21 +290,22 @@ func (h *Handler) runMove(ctx context.Context, mv Move, src *noryxv1.Server, req
 	})
 }
 
-// transfer stops the server and copies it, and its backups if asked, to the new node. If
-// that fails, the copy goes away and the server runs again as before.
-func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, req moveRequest, running bool) (err error) {
+// transfer stops the server and copies it, and its backups if asked, to the new node, which
+// answers with the server as it imported it. If that fails, the copy goes away and the
+// server runs again as before.
+func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, req moveRequest, running bool) (imported *noryxv1.Server, err error) {
 	from, err := h.nodes.Conn(ctx, mv.From)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	to, err := h.nodes.Conn(ctx, mv.To)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	source, target := noryxv1.NewServerServiceClient(from), noryxv1.NewServerServiceClient(to)
 	if running {
 		if _, err := source.StopServer(ctx, &noryxv1.StopServerRequest{Id: mv.ServerID}); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	defer func() {
@@ -331,7 +335,8 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, re
 		AikarFlags: src.GetAikarFlags(), JvmOptions: src.GetJvmOptions(), CpuMillis: src.GetCpuMillis(), LoaderVersion: src.GetLoaderVersion(),
 		StopTimeoutSeconds: src.GetStopTimeoutSeconds(), TimeZone: src.GetTimeZone(),
 	}
-	err = relay(ctx,
+	var res *noryxv1.ImportServerResponse
+	res, err = relay(ctx,
 		func(ctx context.Context) (grpc.ServerStreamingClient[noryxv1.ArchiveDirectoryResponse], error) {
 			return noryxv1.NewFileServiceClient(from).ArchiveDirectory(ctx, &noryxv1.ArchiveDirectoryRequest{ServerId: mv.ServerID, Path: "."})
 		},
@@ -342,13 +347,13 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, re
 		},
 		progress)
 	if err != nil || !req.Backups {
-		return err
+		return res.GetServer(), err
 	}
 
 	backups := noryxv1.NewBackupServiceClient(from)
 	list, err := backups.ListBackups(ctx, &noryxv1.ListBackupsRequest{ServerId: mv.ServerID})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	h.moves.update(mv.ServerID, func(m *Move) { m.Phase, m.BackupsTotal = "backups", len(list.GetBackups()) })
 	for _, b := range list.GetBackups() {
@@ -356,7 +361,7 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, re
 			Id: b.GetId(), Label: b.GetLabel(), CreatedUnix: b.GetCreatedUnix(), Location: req.Storage, Paths: b.GetPaths(), JobId: b.GetJobId(),
 			Size: b.GetSize(), // refused upfront if it doesn't fit
 		}
-		err := relay(ctx,
+		_, err := relay(ctx,
 			func(ctx context.Context) (grpc.ServerStreamingClient[noryxv1.DownloadBackupResponse], error) {
 				return backups.DownloadBackup(ctx, &noryxv1.DownloadBackupRequest{ServerId: mv.ServerID, BackupId: b.GetId()})
 			},
@@ -367,15 +372,16 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, re
 			},
 			progress)
 		if err != nil {
-			return fmt.Errorf("backup %q: %w", cmp.Or(b.GetLabel(), b.GetId()), err)
+			return nil, fmt.Errorf("backup %q: %w", cmp.Or(b.GetLabel(), b.GetId()), err)
 		}
 		h.moves.update(mv.ServerID, func(m *Move) { m.Backups++ })
 	}
-	return nil
+	return res.GetServer(), nil
 }
 
-// relay downloads a file from one agent and uploads it to another, after a header. If the
-// download fails, the upload is cancelled, so that the agent discards what it received.
+// relay downloads a file from one agent and uploads it to another, after a header, and
+// returns the answer of the upload. If the download fails, the upload is cancelled, so that
+// the agent discards what it received.
 func relay[D any, PD interface {
 	*D
 	GetData() []byte
@@ -386,12 +392,12 @@ func relay[D any, PD interface {
 	header *Req,
 	data func([]byte) *Req,
 	progress func(int),
-) error {
+) (*Res, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	down, err := download(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	up, err := upload(ctx)
 	if err == nil {
@@ -400,20 +406,19 @@ func relay[D any, PD interface {
 	for err == nil {
 		var chunk *D
 		if chunk, err = down.Recv(); errors.Is(err, io.EOF) {
-			_, err = up.CloseAndRecv()
-			return err
+			return up.CloseAndRecv()
 		}
 		if err != nil {
-			return err // cancels the upload
+			return nil, err // cancels the upload
 		}
 		if err = up.Send(data(PD(chunk).GetData())); err == nil {
 			progress(len(PD(chunk).GetData()))
 		}
 	}
 	if errors.Is(err, io.EOF) { // the agent ended the upload; its answer tells why
-		_, err = up.CloseAndRecv()
+		return up.CloseAndRecv()
 	}
-	return err
+	return nil, err
 }
 
 // finish points everything at the server's new node, starts it if it ran and deletes the

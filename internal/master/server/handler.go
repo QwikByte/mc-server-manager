@@ -416,7 +416,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			view
 			// PluginError tells why the plugins couldn't be installed.
 			PluginError string `json:"pluginError,omitempty"`
-		}{view: toView(res.GetServer())}
+			// Warning tells what the server didn't get, e.g. from an older agent.
+			Warning string `json:"warning,omitempty"`
+		}{view: toView(res.GetServer()), Warning: olderAgentWarning(req.StopTimeout, req.TimeZone, res.GetServer())}
 		if len(req.Plugins) > 0 {
 			operation.Step(ctx, "plugins")
 			if err := h.plugins.InstallOn(ctx, req.Plugins, nodeID, id); err != nil {
@@ -550,10 +552,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 				updated.Warning = httpapi.Message(err)
 			}
 		}
-		// Older agents answer without the settings they don't know.
-		if updated.StopTimeout != stopSeconds(req.StopTimeout) || updated.TimeZone != req.TimeZone {
-			updated.Warning = strings.TrimSpace(updated.Warning + " The agent of the node is too old for a stop timeout and a time zone, so the server keeps 60 seconds and UTC. Update the agent first.")
-		}
+		updated.Warning = strings.TrimSpace(updated.Warning + " " + olderAgentWarning(req.StopTimeout, req.TimeZone, res.GetServer()))
 		return updated, nil
 	})
 }
@@ -665,6 +664,15 @@ func (h *Handler) power(action string) http.HandlerFunc {
 			})
 		})
 	}
+}
+
+// olderAgentWarning returns a warning if a node's agent answered without the stop timeout or
+// time zone it was asked to give a server, as agents of earlier versions don't know them.
+func olderAgentWarning(stopTimeout uint32, timeZone string, got *noryxv1.Server) string {
+	if stopSeconds(got.GetStopTimeoutSeconds()) == stopSeconds(stopTimeout) && got.GetTimeZone() == timeZone {
+		return ""
+	}
+	return "The agent of the node is too old for a stop timeout and a time zone, so the server keeps 60 seconds and UTC. Update the agent first, then set them in the server's settings."
 }
 
 // agent calls the agent of a node within an operation, which follows the call's progress.

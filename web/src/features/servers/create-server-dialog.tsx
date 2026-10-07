@@ -150,7 +150,8 @@ export function CreateServerDialog({
         message: created.pluginError
           ? t("Created {{name}}, but its plugins couldn't be installed: {{error}}", { name: created.name, error: created.pluginError })
           : t("Created {{name}}", { name: created.name }),
-        warning: !!created.pluginError,
+        description: created.warning,
+        warning: !!created.pluginError || !!created.warning,
         action: { label: t("Open"), onClick: () => void open(created.id) },
       }),
       then: (created) => {

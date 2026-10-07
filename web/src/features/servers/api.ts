@@ -139,13 +139,14 @@ export interface Followed {
 
 /**
  * Creates a server, with the projects of Modrinth or Hangar to install on it, e.g. the plugins of a
- * template. pluginError tells why they couldn't be installed; the server exists anyway.
+ * template. pluginError tells why they couldn't be installed, and warning what else the server didn't
+ * get, e.g. a stop timeout from an older agent; the server exists anyway.
  */
 export function useCreateServer() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ nodeId, server, plugins, onStart }: { nodeId: string; server: NewServer; plugins?: string[] } & Followed) =>
-      operate<Server & { pluginError?: string }>(`/nodes/${nodeId}/servers`, { body: { ...server, plugins } }, onStart),
+      operate<Server & { pluginError?: string; warning?: string }>(`/nodes/${nodeId}/servers`, { body: { ...server, plugins } }, onStart),
     onSettled: (_data, _error, { nodeId }) => refreshServers(queryClient, nodeId),
   })
 }

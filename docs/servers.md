@@ -91,7 +91,7 @@ The **stop timeout** is how long a server may take to save its worlds when it st
 from 30 seconds to 10 minutes, 1 minute unless changed, e.g. longer for a large modded world. The **time zone**, one of
 the IANA time zones such as `Europe/Berlin` chosen from a searchable list, sets the time of the server's log and of
 plugins that work with times; servers run in UTC unless one is chosen. Agents of earlier versions keep 1 minute and UTC,
-which saving the settings tells.
+which saving the settings, creating a server and moving one to their node tell.
 
 Stopping and restarting a server run as [operations](panel.md#operations), as they may take as long as its stop
 timeout: the panel follows them in a notification, and a reverse proxy in front of the master, e.g. nginx, which gives
