@@ -61,7 +61,7 @@ export function NetworkField<R extends string>({
       <FieldLabel htmlFor="target-network">{t("Servers of a network")}</FieldLabel>
       <div className="flex max-w-xl flex-wrap gap-2">
         <Select value={network} onValueChange={setNetwork}>
-          <SelectTrigger id="target-network" className="min-w-36 flex-1">
+          <SelectTrigger id="target-network" className="min-w-48 flex-1">
             <SelectValue placeholder={t("Choose a network")} />
           </SelectTrigger>
           <SelectContent>

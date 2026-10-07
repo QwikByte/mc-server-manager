@@ -11,7 +11,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,7 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
-	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
@@ -28,7 +27,6 @@ import (
 
 const (
 	listTimeout = 30 * time.Second
-	maxError    = 4000
 	// maxUpcoming is the most scheduled runs that Upcoming returns.
 	maxUpcoming = 1000
 )
@@ -51,6 +49,22 @@ type OptionalTargets interface {
 	TargetsOptional(settings json.RawMessage) bool
 }
 
+// Needing is implemented by the kinds of tasks that need permissions on all servers beyond the
+// one to manage them, depending on their settings, e.g. to back up servers before restarting
+// them. Whoever saves such a task or runs it by hand needs them, and so does each run the user
+// who saved it last.
+type Needing interface {
+	Needs(settings json.RawMessage) []access.Permission
+}
+
+// needs returns the permissions that a task of a kind with the settings needs everywhere.
+func needs(k Kind, settings json.RawMessage) []access.Permission {
+	if n, ok := k.(Needing); ok {
+		return n.Needs(settings)
+	}
+	return nil
+}
+
 // Servers returns the target servers of a task in their current state. Its error names the
 // targets that couldn't be reached; the others are returned anyway.
 type Servers func(ctx context.Context) ([]Server, error)
@@ -60,48 +74,7 @@ type Server struct {
 	*noryxv1.Server
 	NodeID   string
 	NodeName string
-	notes    *notes // of the run
-}
-
-// Skipped is the error of an action that left a server out rather than failed on it, e.g. a
-// backup of a server without data yet. Report notes it on the run, which succeeds.
-type Skipped string
-
-func (s Skipped) Error() string { return string(s) }
-
-// Report logs the outcome of an action of a task on the server, e.g. "Restart server", and
-// returns its error with the name of the server.
-func (s Server) Report(t Task, category slog.Attr, action string, err error) error {
-	attrs := []any{category, "task", t.Name, logging.KeyNode, s.NodeID, logging.KeyNodeName, s.NodeName,
-		logging.KeyServer, s.GetId(), logging.KeyServerName, s.GetName()}
-	var skipped Skipped
-	switch {
-	case err == nil:
-		slog.Info(action, attrs...)
-		return nil
-	case errors.As(err, &skipped):
-		slog.Info(action+" skipped", append(attrs, "reason", string(skipped))...)
-		s.notes.add(fmt.Sprintf("%s on %s: %s", s.GetName(), s.NodeName, skipped))
-		return nil
-	}
-	msg := status.Convert(err).Message()
-	slog.Warn(action+" failed", append(attrs, "err", msg)...)
-	return fmt.Errorf("%s on %s: %s", s.GetName(), s.NodeName, msg)
-}
-
-// notes are what a run tells besides its errors, e.g. the servers it skipped.
-type notes struct {
-	mu   sync.Mutex
-	list []string
-}
-
-func (n *notes) add(note string) {
-	if n == nil { // a server outside of a run
-		return
-	}
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.list = append(n.list, note)
+	journal  *journal // of the run
 }
 
 // Nodes provides the nodes and connections to their agents.
@@ -120,18 +93,24 @@ type Networks interface {
 	List(ctx context.Context) ([]network.Network, error)
 }
 
+// Access tells the permissions of users, e.g. of the one who saved a task last.
+type Access interface {
+	Grants(ctx context.Context, userID int64) (access.Grants, error)
+}
+
 type Service struct {
 	db       *sql.DB
 	nodes    Nodes
 	tags     Tags
 	networks Networks
+	access   Access
 	kinds    map[string]Kind
 	busy     func(serverID string) bool
 
 	mu      sync.Mutex
 	ctx     context.Context // ends the runs when the master stops
 	slots   map[string]*slot
-	running map[string]bool
+	running map[string]chan struct{} // closed once the task is deleted or paused, see Task.Withdrawn
 	wake    chan struct{}
 }
 
@@ -144,10 +123,10 @@ type slot struct {
 
 // NewService returns the service of the tasks. busy tells which servers tasks leave out for
 // now, e.g. while they move to another node.
-func NewService(db *sql.DB, nodes Nodes, tags Tags, networks Networks, kinds map[string]Kind, busy func(serverID string) bool) *Service {
+func NewService(db *sql.DB, nodes Nodes, tags Tags, networks Networks, access Access, kinds map[string]Kind, busy func(serverID string) bool) *Service {
 	return &Service{
-		db: db, nodes: nodes, tags: tags, networks: networks, kinds: kinds, busy: busy, ctx: context.Background(),
-		slots: map[string]*slot{}, running: map[string]bool{}, wake: make(chan struct{}, 1),
+		db: db, nodes: nodes, tags: tags, networks: networks, access: access, kinds: kinds, busy: busy, ctx: context.Background(),
+		slots: map[string]*slot{}, running: map[string]chan struct{}{}, wake: make(chan struct{}, 1),
 	}
 }
 
@@ -203,10 +182,14 @@ func (s *Service) loop(ctx context.Context) {
 	}
 }
 
-// plan schedules the next run of an enabled task and unschedules a disabled one.
+// plan schedules the next run of an enabled task and unschedules a disabled one. A run of a
+// task that is paused stops waiting.
 func (s *Service) plan(t Task) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, enabled := s.slots[t.ID]; enabled && !t.Enabled {
+		s.withdraw(t.ID)
+	}
 	delete(s.slots, t.ID)
 	if k, ok := s.kinds[t.kind]; ok && t.Enabled {
 		if at := t.Schedule.Next(time.Now()); !at.IsZero() {
@@ -272,18 +255,33 @@ func (s *Service) nextRun(id string) *time.Time {
 func (s *Service) runningTasks() map[string]bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return maps.Clone(s.running)
+	running := map[string]bool{}
+	for id := range s.running {
+		running[id] = true
+	}
+	return running
+}
+
+// withdraw tells a run of a task that it was deleted or paused. The caller holds s.mu.
+func (s *Service) withdraw(id string) {
+	if withdrawn, ok := s.running[id]; ok && withdrawn != nil {
+		close(withdrawn)
+		s.running[id] = nil
+	}
 }
 
 // RunNow runs a task right away for a user, after its lead time if it has one, e.g. to warn
-// players.
-func (s *Service) RunNow(ctx context.Context, kind, id, user string) (Task, error) {
+// players. The user needs the permissions that the task needs.
+func (s *Service) RunNow(ctx context.Context, kind, id string, by Author) (Task, error) {
 	t, err := s.Get(ctx, kind, id)
+	if err == nil {
+		err = by.allowed(needs(s.kinds[kind], t.Settings))
+	}
 	if err != nil {
 		return t, err
 	}
 	s.mu.Lock()
-	started := s.run(t.ID, time.Now().Add(s.kinds[kind].Lead(t.Settings)), user)
+	started := s.run(t.ID, time.Now().Add(s.kinds[kind].Lead(t.Settings)), by.Name)
 	s.mu.Unlock()
 	if !started {
 		return t, httpapi.Errorf(http.StatusConflict, "%s is running already.", t.Name)
@@ -295,10 +293,11 @@ func (s *Service) RunNow(ctx context.Context, kind, id, user string) (Task, erro
 // run starts a run for its scheduled time in the background, by a user or by the schedule if
 // user is empty, unless the task is running already. The caller holds s.mu.
 func (s *Service) run(id string, at time.Time, user string) bool {
-	if s.running[id] {
+	if _, running := s.running[id]; running {
 		return false
 	}
-	s.running[id] = true
+	withdrawn := make(chan struct{})
+	s.running[id] = withdrawn
 	ctx := s.ctx
 	go func() {
 		defer func() {
@@ -306,14 +305,14 @@ func (s *Service) run(id string, at time.Time, user string) bool {
 			defer s.mu.Unlock()
 			delete(s.running, id)
 		}()
-		s.execute(ctx, id, at, user)
+		s.execute(ctx, id, at, user, withdrawn)
 	}()
 	return true
 }
 
 // execute runs the current version of a task and records the run.
-func (s *Service) execute(ctx context.Context, id string, at time.Time, user string) {
-	r := Run{StartedAt: time.Now(), StartedBy: user, Outcome: Succeeded}
+func (s *Service) execute(ctx context.Context, id string, at time.Time, user string, withdrawn <-chan struct{}) {
+	r := Run{StartedAt: time.Now(), StartedBy: user}
 	t, err := s.Get(ctx, "", id)
 	switch {
 	case errors.Is(err, errNotFound):
@@ -322,46 +321,51 @@ func (s *Service) execute(ctx context.Context, id string, at time.Time, user str
 		slog.Warn("Can't run a scheduled task", "task_id", id, "err", err)
 		return
 	}
-	run := &notes{}
+	t.withdrawn = withdrawn
+	run := &journal{}
 	k := s.kinds[t.kind]
 	if optional, _ := k.(OptionalTargets); len(t.Targets) == 0 && (optional == nil || !optional.TargetsOptional(t.Settings)) {
-		run.add("It has no targets left, e.g. as their network was deleted. Choose servers, tags or networks for it.")
+		run.note("It has no targets left, e.g. as their network was deleted. Choose servers, tags or networks for it.")
 	}
-	err = k.Run(ctx, t, s.servers(t.Targets, run), at)
+	err = s.authorize(ctx, t, needs(k, t.Settings))
+	if err == nil {
+		err = k.Run(ctx, t, s.servers(t.Targets, run), at)
+	}
 	category := k.Category()
 	if err != nil {
-		r.Outcome, r.Error = Failed, clip(err.Error())
-		slog.Warn("Run scheduled task failed", category, "task", t.Name, "err", r.Error)
+		slog.Warn("Run scheduled task failed", category, "task", t.Name, "err", err)
 	} else {
 		slog.Info("Run scheduled task", category, "task", t.Name)
 	}
-	slices.Sort(run.list)
-	r.EndedAt, r.Note = time.Now(), clip(strings.Join(slices.Compact(run.list), "\n"))
+	run.end(&r, err)
 	if err := s.record(context.WithoutCancel(ctx), id, r); err != nil {
 		slog.Error("Can't record the run of a task", category, "task", t.Name, "err", err)
 	}
 }
 
-// record stores a run of a task, unless the task was deleted meanwhile, and forgets the
-// oldest runs beyond maxRuns.
-func (s *Service) record(ctx context.Context, id string, r Run) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO task_runs (task_id, started_at, ended_at, started_by, outcome, error, note)
-		SELECT id, ?, ?, ?, ?, ?, ? FROM tasks WHERE id = ?`,
-		r.StartedAt.Unix(), r.EndedAt.Unix(), r.StartedBy, r.Outcome, r.Error, r.Note, id)
-	if err == nil {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM task_runs WHERE task_id = ? AND id <= (
-			SELECT id FROM task_runs WHERE task_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?)`, id, id, maxRuns)
+// authorize checks that the user who saved a task last still has the permissions it needs.
+func (s *Service) authorize(ctx context.Context, t Task, perms []access.Permission) error {
+	if len(perms) == 0 {
+		return nil
 	}
-	return err
+	if t.author == 0 {
+		return errors.New("the user who saved it last was deleted or disabled, so it runs with nobody's permissions; save it again")
+	}
+	g, err := s.access.Grants(ctx, t.author)
+	if err != nil {
+		return err
+	}
+	for _, p := range perms {
+		if !g.Has(p) {
+			return fmt.Errorf("%s, who saved it last, no longer has the permission %q on all servers; save it again with that permission", t.SavedBy, access.Label(p))
+		}
+	}
+	return nil
 }
-
-// clip shortens the error or note of a run to what is stored.
-func clip(msg string) string { return msg[:min(len(msg), maxError)] }
 
 // servers returns a function that finds the servers of the targets on their nodes for a run
 // with its notes. Tags and networks have the servers they have when it is called.
-func (s *Service) servers(targets []Target, run *notes) Servers {
+func (s *Service) servers(targets []Target, run *journal) Servers {
 	return func(ctx context.Context) ([]Server, error) {
 		g, err := s.groups(ctx, targets)
 		if err != nil {
@@ -386,7 +390,7 @@ func (s *Service) servers(targets []Target, run *notes) Servers {
 			return cmp.Or(cmp.Compare(a.NodeName, b.NodeName), cmp.Compare(a.GetName(), b.GetName()))
 		})
 		for i := range servers {
-			servers[i].notes = run
+			servers[i].journal = run
 		}
 		return servers, errors.Join(errs...)
 	}
@@ -467,7 +471,7 @@ func (sel selection) covers(srv tag.Server) bool {
 }
 
 // resolve returns the servers that targets name now, and notes the tags that no server has.
-func (g groups) resolve(targets []Target, run *notes) selection {
+func (g groups) resolve(targets []Target, run *journal) selection {
 	sel := selection{}
 	for _, t := range targets {
 		switch t.Kind {
@@ -482,7 +486,7 @@ func (g groups) resolve(targets []Target, run *notes) selection {
 				}
 			}
 			if !found {
-				run.add(fmt.Sprintf("No server has the tag %s.", t.Value))
+				run.note(fmt.Sprintf("No server has the tag %s.", t.Value))
 			}
 		case KindNetwork:
 			for _, n := range g.networks {

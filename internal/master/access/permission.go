@@ -162,6 +162,12 @@ var Catalog = []Area{
 	}},
 }
 
+// Label returns how the panel names a permission, e.g. "Back up servers".
+func Label(p Permission) string {
+	info, _ := lookup(p)
+	return info.Label
+}
+
 // lookup finds the description of a permission.
 func lookup(p Permission) (Info, bool) {
 	for _, a := range Catalog {

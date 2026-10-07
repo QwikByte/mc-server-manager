@@ -47,8 +47,8 @@ func (h *Handler) Register(mux access.Mux, base string) {
 	mux.Handle("GET "+base+"/upcoming", view, func(w http.ResponseWriter, r *http.Request) {
 		write(w, r, http.StatusOK, h.svc.Upcoming(h.kind, time.Now().Add(agenda)), nil)
 	})
-	mux.Handle("POST "+base, manage, h.save(http.StatusCreated, func(ctx context.Context, _ string, in Input) (Task, error) {
-		return h.svc.Create(ctx, h.kind, in)
+	mux.Handle("POST "+base, manage, h.save(http.StatusCreated, func(ctx context.Context, _ string, in Input, by Author) (Task, error) {
+		return h.svc.Create(ctx, h.kind, in, by)
 	}))
 	mux.Handle("GET "+base+"/{id}", view, func(w http.ResponseWriter, r *http.Request) {
 		t, err := h.svc.Get(r.Context(), h.kind, r.PathValue("id"))
@@ -58,21 +58,26 @@ func (h *Handler) Register(mux access.Mux, base string) {
 		runs, err := h.svc.Runs(r.Context(), h.kind, r.PathValue("id"))
 		write(w, r, http.StatusOK, runs, err)
 	})
-	mux.Handle("PUT "+base+"/{id}", manage, h.save(http.StatusOK, func(ctx context.Context, id string, in Input) (Task, error) {
-		return h.svc.Update(ctx, h.kind, id, in)
+	mux.Handle("PUT "+base+"/{id}", manage, h.save(http.StatusOK, func(ctx context.Context, id string, in Input, by Author) (Task, error) {
+		return h.svc.Update(ctx, h.kind, id, in, by)
 	}))
 	mux.Handle("DELETE "+base+"/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
 		write(w, r, http.StatusNoContent, nil, h.svc.Delete(r.Context(), h.kind, r.PathValue("id")))
 	})
 	// The run continues in the background; the task shows when it is done.
 	mux.Handle("POST "+base+"/{id}/run", manage, func(w http.ResponseWriter, r *http.Request) {
-		user, _ := auth.UserFrom(r.Context())
-		t, err := h.svc.RunNow(r.Context(), h.kind, r.PathValue("id"), user.Username)
+		t, err := h.svc.RunNow(r.Context(), h.kind, r.PathValue("id"), author(r))
 		write(w, r, http.StatusAccepted, t, err)
 	})
 }
 
-func (h *Handler) save(status int, op func(ctx context.Context, id string, in Input) (Task, error)) http.HandlerFunc {
+// author is the user of a request, with its permissions.
+func author(r *http.Request) Author {
+	user, _ := auth.UserFrom(r.Context())
+	return Author{ID: user.ID, Name: user.Username, Grants: access.From(r.Context())}
+}
+
+func (h *Handler) save(status int, op func(ctx context.Context, id string, in Input, by Author) (Task, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in Input
 		if err := httpapi.ReadJSON(w, r, &in); err != nil {
@@ -82,7 +87,7 @@ func (h *Handler) save(status int, op func(ctx context.Context, id string, in In
 		logging.Note(r.Context(), slog.String("name", in.Name))
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
-		t, err := op(ctx, r.PathValue("id"), in)
+		t, err := op(ctx, r.PathValue("id"), in, author(r))
 		write(w, r, status, t, err)
 	}
 }

@@ -26,17 +26,33 @@ export type TaskTarget =
   | { kind: "tag"; value: string }
   | { kind: "network"; value: string; role?: NetworkRole }
 
-/** A run of a task. */
+export type Outcome = "succeeded" | "failed" | "skipped"
+
+/** What a run did on a server. */
+export interface Step {
+  /** What the master calls it, e.g. "Restart server". */
+  action: string
+  server: string
+  node: string
+  outcome: Outcome
+  /** Why it failed or left the server out. */
+  detail?: string
+  /** What it changed, e.g. the plugins it updated. */
+  change?: string
+}
+
+/** A run of a task; it is skipped if all its steps left their servers out. */
 export interface Run {
   id: number
   startedAt: string
   endedAt: string
   /** The user who started it by hand; none for its schedule. */
   startedBy?: string
-  outcome: "succeeded" | "failed"
+  outcome: Outcome
   error?: string
   /** What the run left out, e.g. servers without data to back up. */
   note?: string
+  steps: Step[]
 }
 
 /** A scheduled run of a task. */
@@ -58,6 +74,8 @@ export interface Task<S> {
   nextRun?: string
   running: boolean
   createdAt: string
+  /** The user who saved it last, whose permissions its runs need if it backs up or updates. */
+  savedBy?: string
 }
 
 export type TaskInput<S> = Pick<Task<S>, "name" | "enabled" | "schedule" | "targets" | "settings">
