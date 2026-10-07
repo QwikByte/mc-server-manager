@@ -2277,6 +2277,7 @@
   "Your changes to the settings haven't been saved.": "Deine Änderungen an den Einstellungen sind noch nicht gespeichert.",
   "Your changes to the template haven't been saved.": "Deine Änderungen an der Vorlage sind noch nicht gespeichert.",
   "Your groups don't include permissions for the settings.": "Deine Gruppen geben dir keinen Zugriff auf die Einstellungen.",
+  "Your groups don't include the permission to see the log.": "Deine Gruppen geben dir keinen Zugriff auf das Log.",
   "Your groups don't let you read the console of this server.": "Deine Gruppen erlauben dir nicht, die Konsole dieses Servers einzusehen.",
   "Your groups don't let you send commands": "Deine Gruppen erlauben dir nicht, Befehle zu senden",
   "Your password alone signs you in.": "Du meldest dich nur mit deinem Passwort an.",

@@ -2277,6 +2277,7 @@
   "Your changes to the settings haven't been saved.": "Your changes to the settings haven't been saved.",
   "Your changes to the template haven't been saved.": "Your changes to the template haven't been saved.",
   "Your groups don't include permissions for the settings.": "Your groups don't include permissions for the settings.",
+  "Your groups don't include the permission to see the log.": "Your groups don't include the permission to see the log.",
   "Your groups don't let you read the console of this server.": "Your groups don't let you read the console of this server.",
   "Your groups don't let you send commands": "Your groups don't let you send commands",
   "Your password alone signs you in.": "Your password alone signs you in.",

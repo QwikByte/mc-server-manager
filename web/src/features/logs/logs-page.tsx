@@ -2,10 +2,12 @@ import { DownloadSimpleIcon, ScrollIcon } from "@phosphor-icons/react"
 import { getRouteApi } from "@tanstack/react-router"
 import { t } from "i18next"
 import { useMemo, useState } from "react"
+import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { Section } from "@/components/section"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useAccess } from "@/features/access/use-access"
 import { cn } from "@/lib/utils"
 import { exportUrl, type LogFilter, useLiveLogs } from "./api"
 import { LogOverview } from "./log-chart"
@@ -26,7 +28,17 @@ export function LogsPage() {
   const update = (change: Partial<typeof search>) => void navigate({ search: (prev) => ({ ...prev, ...change }), replace: true })
   // An hour in the past gets no new entries.
   const streaming = live && !hour
-  const down = useLiveLogs(filter, streaming)
+  // Opened by its address without the permission, the page would ask for the log again and again.
+  const allowed = useAccess().canSomewhere("logs.view")
+  const down = useLiveLogs(filter, streaming && allowed)
+  if (!allowed) {
+    return (
+      <>
+        <PageHeader icon={ScrollIcon} tone="violet" title={t("Logs")} />
+        <EmptyState icon={ScrollIcon} tone="neutral" title={t("Nothing to see here")} description={t("Your groups don't include the permission to see the log.")} />
+      </>
+    )
+  }
 
   return (
     <>
