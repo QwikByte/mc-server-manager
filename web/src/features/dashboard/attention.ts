@@ -231,7 +231,7 @@ export function problemsOf(
       key: `task/${link.to}/${task.id}`,
       tone: "warning",
       title: t("The last run of {{name}} failed", { name: task.name }),
-      detail: [formatAgo(task.lastRun!.at), task.lastRun!.error].join(" · "),
+      detail: [formatAgo(task.lastRun!.endedAt), task.lastRun!.error].join(" · "),
       link,
     })
   }

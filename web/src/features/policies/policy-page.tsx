@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { useAccess } from "@/features/access/use-access"
 import type { TaskInput } from "@/features/schedules/api"
+import { RunHistory } from "@/features/schedules/run-history"
 import { TaskForm } from "@/features/schedules/task-form"
 import { actions, emptyPolicy, type PolicyAction, type PolicySettings, policies, warns } from "./api"
 
@@ -59,6 +60,7 @@ export function PolicyPage() {
               onSaved={(p) => toast.success(t("Saved {{name}}", { name: p.name }))}
             />
           </fieldset>
+          <RunHistory taskApi={policies} id={policyId} />
         </>
       )}
     </>

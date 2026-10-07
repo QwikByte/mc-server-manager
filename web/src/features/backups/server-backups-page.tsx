@@ -28,7 +28,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
 import { guard, useOperation } from "@/features/operations/use-operation"
-import { covers } from "@/features/schedules/api"
 import { describeSchedule } from "@/features/schedules/describe"
 import { type Server, useServer } from "@/features/servers/api"
 import { formatBytes, formatDateTime } from "@/lib/format"
@@ -53,9 +52,9 @@ export function ServerBackupsPage() {
   const { nodeId, serverId } = route.useParams()
   const { server } = useServer(nodeId, serverId)
   const { data: backups, isPending, error } = useQuery(backupsQuery(nodeId, serverId))
-  const { data: jobList = [] } = useQuery({ ...jobs.tasksQuery, enabled: can("backupjobs.view") })
+  const { data: jobList = [] } = useQuery({ ...jobs.coveringQuery(nodeId, serverId), enabled: can("backupjobs.view") })
   const create = can("backups.create", nodeId, serverId)
-  const covering = jobList.filter((j) => j.enabled && covers(j.targets, nodeId, serverId))
+  const covering = jobList.filter((j) => j.enabled)
 
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />
   if (error) return <ErrorCallout error={error} />

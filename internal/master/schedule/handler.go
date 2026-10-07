@@ -8,10 +8,16 @@ import (
 
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
-const timeout = 30 * time.Second
+const (
+	timeout = 30 * time.Second
+	// agenda is how far ahead the upcoming runs of tasks are listed.
+	agenda = 7 * 24 * time.Hour
+)
 
 // Handler serves the tasks of one kind under a path, e.g. /api/backup-jobs. Tasks run on
 // any server, so their permissions apply everywhere.
@@ -27,9 +33,19 @@ func NewHandler(svc *Service, kind string, view, manage access.Permission) *Hand
 
 func (h *Handler) Register(mux access.Mux, base string) {
 	view, manage := access.Everywhere(h.view), access.Everywhere(h.manage)
+	// With ?node=…&server=…, only the tasks that cover the server.
 	mux.Handle("GET "+base, view, func(w http.ResponseWriter, r *http.Request) {
-		tasks, err := h.svc.List(r.Context(), h.kind)
+		var tasks []Task
+		var err error
+		if q := r.URL.Query(); q.Has("node") || q.Has("server") {
+			tasks, err = h.svc.Covering(r.Context(), h.kind, tag.Server{NodeID: q.Get("node"), ServerID: q.Get("server")})
+		} else {
+			tasks, err = h.svc.List(r.Context(), h.kind)
+		}
 		write(w, r, http.StatusOK, tasks, err)
+	})
+	mux.Handle("GET "+base+"/upcoming", view, func(w http.ResponseWriter, r *http.Request) {
+		write(w, r, http.StatusOK, h.svc.Upcoming(h.kind, time.Now().Add(agenda)), nil)
 	})
 	mux.Handle("POST "+base, manage, h.save(http.StatusCreated, func(ctx context.Context, _ string, in Input) (Task, error) {
 		return h.svc.Create(ctx, h.kind, in)
@@ -37,6 +53,10 @@ func (h *Handler) Register(mux access.Mux, base string) {
 	mux.Handle("GET "+base+"/{id}", view, func(w http.ResponseWriter, r *http.Request) {
 		t, err := h.svc.Get(r.Context(), h.kind, r.PathValue("id"))
 		write(w, r, http.StatusOK, t, err)
+	})
+	mux.Handle("GET "+base+"/{id}/runs", view, func(w http.ResponseWriter, r *http.Request) {
+		runs, err := h.svc.Runs(r.Context(), h.kind, r.PathValue("id"))
+		write(w, r, http.StatusOK, runs, err)
 	})
 	mux.Handle("PUT "+base+"/{id}", manage, h.save(http.StatusOK, func(ctx context.Context, id string, in Input) (Task, error) {
 		return h.svc.Update(ctx, h.kind, id, in)
@@ -46,7 +66,8 @@ func (h *Handler) Register(mux access.Mux, base string) {
 	})
 	// The run continues in the background; the task shows when it is done.
 	mux.Handle("POST "+base+"/{id}/run", manage, func(w http.ResponseWriter, r *http.Request) {
-		t, err := h.svc.RunNow(r.Context(), h.kind, r.PathValue("id"))
+		user, _ := auth.UserFrom(r.Context())
+		t, err := h.svc.RunNow(r.Context(), h.kind, r.PathValue("id"), user.Username)
 		write(w, r, http.StatusAccepted, t, err)
 	})
 }

@@ -15,6 +15,7 @@ import { useAccess } from "@/features/access/use-access"
 import { DatastoresField } from "@/features/datastores/datastores-field"
 import { nodesQuery } from "@/features/nodes/api"
 import type { TaskInput } from "@/features/schedules/api"
+import { RunHistory } from "@/features/schedules/run-history"
 import { TaskForm } from "@/features/schedules/task-form"
 import { emptyJob, type JobSettings, jobs } from "./api"
 import { LocationField, SelectionField } from "./backup-fields"
@@ -48,6 +49,7 @@ export function BackupJobPage() {
               onSaved={(j) => toast.success(t("Saved {{name}}", { name: j.name }))}
             />
           </fieldset>
+          <RunHistory taskApi={jobs} id={jobId} />
         </>
       )}
     </>

@@ -25,6 +25,7 @@ import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { nodeQuery } from "@/features/nodes/api"
+import { ServerSchedules } from "@/features/policies/server-schedules"
 import { PinButton } from "@/features/preferences/pin-button"
 import { formatMegabytes } from "@/lib/format"
 import { useServer } from "./api"
@@ -145,6 +146,7 @@ export function ServerPage() {
                 </Chip>
                 {node && <Chip icon={HardDrivesIcon}>{node.name}</Chip>}
                 <TagList tags={server.tags} className="items-center" />
+                <ServerSchedules nodeId={nodeId} serverId={serverId} />
               </span>
             }
             actions={

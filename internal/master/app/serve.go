@@ -145,7 +145,8 @@ func serve(ctx context.Context, cfg config) error {
 	overlays := overlay.NewService(db, nodes)
 	datastores := datastore.NewStore(db, nodes, overlays)
 	networks := network.NewService(db, nodes, plugins, overlays, datastores)
-	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
+	tags := tag.NewStore(db)
+	tasks := schedule.NewService(db, nodes, tags, networks, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
@@ -154,7 +155,6 @@ func serve(ctx context.Context, cfg config) error {
 	usageStore := usage.NewStore(db, nodes, conf)
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
-	tags := tag.NewStore(db)
 	fileSets := fileset.NewService(db, nodes, networks, tags, moves)
 	go fileSets.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.

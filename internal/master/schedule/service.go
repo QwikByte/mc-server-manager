@@ -21,12 +21,16 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 const (
 	listTimeout = 30 * time.Second
 	maxError    = 4000
+	// maxUpcoming is the most scheduled runs that Upcoming returns.
+	maxUpcoming = 1000
 )
 
 // Kind is a type of task, e.g. backup jobs. Its settings are JSON.
@@ -106,11 +110,23 @@ type Nodes interface {
 	Conn(ctx context.Context, id string) (grpc.ClientConnInterface, error)
 }
 
+// Tags are the tags of servers, which tag targets resolve with.
+type Tags interface {
+	All(ctx context.Context) (map[tag.Server][]string, error)
+}
+
+// Networks are the networks that network targets resolve with.
+type Networks interface {
+	List(ctx context.Context) ([]network.Network, error)
+}
+
 type Service struct {
-	db    *sql.DB
-	nodes Nodes
-	kinds map[string]Kind
-	busy  func(serverID string) bool
+	db       *sql.DB
+	nodes    Nodes
+	tags     Tags
+	networks Networks
+	kinds    map[string]Kind
+	busy     func(serverID string) bool
 
 	mu      sync.Mutex
 	ctx     context.Context // ends the runs when the master stops
@@ -121,22 +137,22 @@ type Service struct {
 
 // slot is the next run of an enabled task.
 type slot struct {
-	schedule Schedule
-	lead     time.Duration
-	at       time.Time
+	task Task
+	lead time.Duration
+	at   time.Time
 }
 
 // NewService returns the service of the tasks. busy tells which servers tasks leave out for
 // now, e.g. while they move to another node.
-func NewService(db *sql.DB, nodes Nodes, kinds map[string]Kind, busy func(serverID string) bool) *Service {
+func NewService(db *sql.DB, nodes Nodes, tags Tags, networks Networks, kinds map[string]Kind, busy func(serverID string) bool) *Service {
 	return &Service{
-		db: db, nodes: nodes, kinds: kinds, busy: busy, ctx: context.Background(),
+		db: db, nodes: nodes, tags: tags, networks: networks, kinds: kinds, busy: busy, ctx: context.Background(),
 		slots: map[string]*slot{}, running: map[string]bool{}, wake: make(chan struct{}, 1),
 	}
 }
 
 // Start runs the enabled tasks at their times until ctx is done. Runs that were missed
-// while the master was down are skipped.
+// while the master was down are skipped, and tasks whose dates passed meanwhile turn off.
 func (s *Service) Start(ctx context.Context) error {
 	tasks, err := s.load(ctx, "", "")
 	if err != nil {
@@ -162,14 +178,17 @@ func (s *Service) loop(ctx context.Context) {
 				wait = min(wait, start.Sub(now))
 				continue
 			}
-			if !s.run(id, sl.at) {
-				slog.Warn("Skipped a scheduled run, the previous one is still running", "task_id", id)
+			if !s.run(id, sl.at, "") {
+				slog.Warn("Skipped a scheduled run, the previous one is still running", s.kinds[sl.task.kind].Category(), "task", sl.task.Name)
 			}
 			after := sl.at
 			if now.After(after) {
 				after = now
 			}
-			sl.at = sl.schedule.Next(after)
+			if sl.at = sl.task.Schedule.Next(after); sl.at.IsZero() {
+				delete(s.slots, id)
+				go s.finish(s.ctx, sl.task)
+			}
 		}
 		s.mu.Unlock()
 		timer := time.NewTimer(wait)
@@ -191,13 +210,51 @@ func (s *Service) plan(t Task) {
 	delete(s.slots, t.ID)
 	if k, ok := s.kinds[t.kind]; ok && t.Enabled {
 		if at := t.Schedule.Next(time.Now()); !at.IsZero() {
-			s.slots[t.ID] = &slot{schedule: t.Schedule, lead: k.Lead(t.Settings), at: at}
+			s.slots[t.ID] = &slot{task: t, lead: k.Lead(t.Settings), at: at}
+		} else {
+			go s.finish(s.ctx, t)
 		}
 	}
 	select {
 	case s.wake <- struct{}{}:
 	default:
 	}
+}
+
+// finish turns off a task whose dates all passed, unless its schedule changed meanwhile.
+func (s *Service) finish(ctx context.Context, t Task) {
+	schedule, err := json.Marshal(t.Schedule)
+	var res sql.Result
+	if err == nil {
+		res, err = s.db.ExecContext(ctx, `UPDATE tasks SET enabled = 0 WHERE id = ? AND enabled AND schedule = ?`, t.ID, schedule)
+	}
+	category := s.kinds[t.kind].Category()
+	if err != nil {
+		slog.Warn("Can't turn off a task after its last date", category, "task", t.Name, "err", err)
+	} else if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("Turned off a task after its last date", category, "task", t.Name)
+	}
+}
+
+// Upcoming is a scheduled run of a task.
+type Upcoming struct {
+	TaskID string    `json:"id"`
+	At     time.Time `json:"at"`
+}
+
+// Upcoming returns the scheduled runs of the enabled tasks of a kind until a time, in order,
+// at most maxUpcoming.
+func (s *Service) Upcoming(kind string, until time.Time) []Upcoming {
+	list := []Upcoming{}
+	s.mu.Lock()
+	for id, sl := range s.slots {
+		for at := sl.at; sl.task.kind == kind && !at.IsZero() && !at.After(until); at = sl.task.Schedule.Next(at) {
+			list = append(list, Upcoming{TaskID: id, At: at})
+		}
+	}
+	s.mu.Unlock()
+	slices.SortFunc(list, func(a, b Upcoming) int { return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.TaskID, b.TaskID)) })
+	return list[:min(len(list), maxUpcoming)]
 }
 
 // nextRun returns when an enabled task runs next.
@@ -218,14 +275,15 @@ func (s *Service) runningTasks() map[string]bool {
 	return maps.Clone(s.running)
 }
 
-// RunNow runs a task right away, after its lead time if it has one, e.g. to warn players.
-func (s *Service) RunNow(ctx context.Context, kind, id string) (Task, error) {
+// RunNow runs a task right away for a user, after its lead time if it has one, e.g. to warn
+// players.
+func (s *Service) RunNow(ctx context.Context, kind, id, user string) (Task, error) {
 	t, err := s.Get(ctx, kind, id)
 	if err != nil {
 		return t, err
 	}
 	s.mu.Lock()
-	started := s.run(t.ID, time.Now().Add(s.kinds[kind].Lead(t.Settings)))
+	started := s.run(t.ID, time.Now().Add(s.kinds[kind].Lead(t.Settings)), user)
 	s.mu.Unlock()
 	if !started {
 		return t, httpapi.Errorf(http.StatusConflict, "%s is running already.", t.Name)
@@ -234,8 +292,9 @@ func (s *Service) RunNow(ctx context.Context, kind, id string) (Task, error) {
 	return t, nil
 }
 
-// run starts a run in the background unless the task is running already. The caller holds s.mu.
-func (s *Service) run(id string, at time.Time) bool {
+// run starts a run for its scheduled time in the background, by a user or by the schedule if
+// user is empty, unless the task is running already. The caller holds s.mu.
+func (s *Service) run(id string, at time.Time, user string) bool {
 	if s.running[id] {
 		return false
 	}
@@ -247,13 +306,14 @@ func (s *Service) run(id string, at time.Time) bool {
 			defer s.mu.Unlock()
 			delete(s.running, id)
 		}()
-		s.execute(ctx, id, at)
+		s.execute(ctx, id, at, user)
 	}()
 	return true
 }
 
-// execute runs the current version of a task and records the outcome.
-func (s *Service) execute(ctx context.Context, id string, at time.Time) {
+// execute runs the current version of a task and records the run.
+func (s *Service) execute(ctx context.Context, id string, at time.Time, user string) {
+	r := Run{StartedAt: time.Now(), StartedBy: user, Outcome: Succeeded}
 	t, err := s.Get(ctx, "", id)
 	switch {
 	case errors.Is(err, errNotFound):
@@ -263,32 +323,49 @@ func (s *Service) execute(ctx context.Context, id string, at time.Time) {
 		return
 	}
 	run := &notes{}
-	err = s.kinds[t.kind].Run(ctx, t, s.servers(t.Targets, run), at)
-	var msg string
-	category := s.kinds[t.kind].Category()
+	k := s.kinds[t.kind]
+	if optional, _ := k.(OptionalTargets); len(t.Targets) == 0 && (optional == nil || !optional.TargetsOptional(t.Settings)) {
+		run.add("It has no targets left, e.g. as their network was deleted. Choose servers, tags or networks for it.")
+	}
+	err = k.Run(ctx, t, s.servers(t.Targets, run), at)
+	category := k.Category()
 	if err != nil {
-		msg = clip(err.Error())
-		slog.Warn("Run scheduled task failed", category, "task", t.Name, "err", msg)
+		r.Outcome, r.Error = Failed, clip(err.Error())
+		slog.Warn("Run scheduled task failed", category, "task", t.Name, "err", r.Error)
 	} else {
 		slog.Info("Run scheduled task", category, "task", t.Name)
 	}
 	slices.Sort(run.list)
-	if _, err := s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE tasks SET last_run_at = ?, last_error = ?, last_note = ? WHERE id = ?`,
-		at.Unix(), msg, clip(strings.Join(run.list, "\n")), id); err != nil {
+	r.EndedAt, r.Note = time.Now(), clip(strings.Join(slices.Compact(run.list), "\n"))
+	if err := s.record(context.WithoutCancel(ctx), id, r); err != nil {
 		slog.Error("Can't record the run of a task", category, "task", t.Name, "err", err)
 	}
+}
+
+// record stores a run of a task, unless the task was deleted meanwhile, and forgets the
+// oldest runs beyond maxRuns.
+func (s *Service) record(ctx context.Context, id string, r Run) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO task_runs (task_id, started_at, ended_at, started_by, outcome, error, note)
+		SELECT id, ?, ?, ?, ?, ?, ? FROM tasks WHERE id = ?`,
+		r.StartedAt.Unix(), r.EndedAt.Unix(), r.StartedBy, r.Outcome, r.Error, r.Note, id)
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `DELETE FROM task_runs WHERE task_id = ? AND id <= (
+			SELECT id FROM task_runs WHERE task_id = ? ORDER BY id DESC LIMIT 1 OFFSET ?)`, id, id, maxRuns)
+	}
+	return err
 }
 
 // clip shortens the error or note of a run to what is stored.
 func clip(msg string) string { return msg[:min(len(msg), maxError)] }
 
 // servers returns a function that finds the servers of the targets on their nodes for a run
-// with its notes.
+// with its notes. Tags and networks have the servers they have when it is called.
 func (s *Service) servers(targets []Target, run *notes) Servers {
 	return func(ctx context.Context) ([]Server, error) {
-		byNode := map[string][]string{}
-		for _, t := range targets {
-			byNode[t.NodeID] = append(byNode[t.NodeID], t.ServerID)
+		g, err := s.groups(ctx, targets)
+		if err != nil {
+			return nil, fmt.Errorf("can't find the servers of tags and networks: %w", err)
 		}
 		var (
 			mu      sync.Mutex
@@ -296,7 +373,7 @@ func (s *Service) servers(targets []Target, run *notes) Servers {
 			servers []Server
 			errs    []error
 		)
-		for nodeID, ids := range byNode {
+		for nodeID, ids := range g.resolve(targets, run) {
 			wg.Go(func() {
 				found, err := s.nodeServers(ctx, nodeID, ids)
 				mu.Lock()
@@ -316,7 +393,8 @@ func (s *Service) servers(targets []Target, run *notes) Servers {
 }
 
 // nodeServers returns the servers of a node with the given IDs; an empty ID stands for all.
-func (s *Service) nodeServers(ctx context.Context, nodeID string, ids []string) ([]Server, error) {
+// A server that is named on its own must exist.
+func (s *Service) nodeServers(ctx context.Context, nodeID string, ids map[string]bool) ([]Server, error) {
 	n, err := s.nodes.Get(ctx, nodeID)
 	if err != nil {
 		return nil, err
@@ -333,18 +411,94 @@ func (s *Service) nodeServers(ctx context.Context, nodeID string, ids []string) 
 	}
 	var servers []Server
 	for _, srv := range res.GetServers() {
+		_, all := ids[""]
+		_, listed := ids[srv.GetId()]
 		switch {
-		case !slices.Contains(ids, "") && !slices.Contains(ids, srv.GetId()):
+		case !all && !listed:
 		case s.busy(srv.GetId()):
 			err = errors.Join(err, fmt.Errorf("%s: %s is moving to another node", n.Name, srv.GetName()))
 		default:
 			servers = append(servers, Server{Server: srv, NodeID: n.ID, NodeName: n.Name})
 		}
 	}
-	for _, id := range ids {
-		if id != "" && !slices.ContainsFunc(res.GetServers(), func(srv *noryxv1.Server) bool { return srv.GetId() == id }) {
+	for _, id := range slices.Sorted(maps.Keys(ids)) {
+		if ids[id] && !slices.ContainsFunc(res.GetServers(), func(srv *noryxv1.Server) bool { return srv.GetId() == id }) {
 			err = errors.Join(err, fmt.Errorf("%s: the server %s no longer exists", n.Name, id))
 		}
 	}
 	return servers, err
+}
+
+// groups are what tag and network targets resolve with: the tags of servers and the networks.
+type groups struct {
+	tags     map[tag.Server][]string
+	networks []network.Network
+}
+
+// groups loads what the tag and network targets among targets resolve with.
+func (s *Service) groups(ctx context.Context, targets []Target) (g groups, err error) {
+	has := func(kind string) bool {
+		return slices.ContainsFunc(targets, func(t Target) bool { return t.Kind == kind })
+	}
+	if has(KindTag) {
+		g.tags, err = s.tags.All(ctx)
+	}
+	if err == nil && has(KindNetwork) {
+		g.networks, err = s.networks.List(ctx)
+	}
+	return g, err
+}
+
+// selection are servers by node: their IDs, "" for all servers of the node, and whether each
+// must exist, as one that is named on its own must.
+type selection map[string]map[string]bool
+
+func (sel selection) add(nodeID, serverID string, named bool) {
+	if sel[nodeID] == nil {
+		sel[nodeID] = map[string]bool{}
+	}
+	sel[nodeID][serverID] = sel[nodeID][serverID] || named
+}
+
+func (sel selection) covers(srv tag.Server) bool {
+	_, all := sel[srv.NodeID][""]
+	_, listed := sel[srv.NodeID][srv.ServerID]
+	return all || listed
+}
+
+// resolve returns the servers that targets name now, and notes the tags that no server has.
+func (g groups) resolve(targets []Target, run *notes) selection {
+	sel := selection{}
+	for _, t := range targets {
+		switch t.Kind {
+		case KindServer:
+			sel.add(t.NodeID, t.ServerID, t.ServerID != "")
+		case KindTag:
+			found := false
+			for srv, tags := range g.tags {
+				if slices.Contains(tags, t.Value) {
+					sel.add(srv.NodeID, srv.ServerID, false)
+					found = true
+				}
+			}
+			if !found {
+				run.add(fmt.Sprintf("No server has the tag %s.", t.Value))
+			}
+		case KindNetwork:
+			for _, n := range g.networks {
+				if n.ID != t.Value {
+					continue
+				}
+				if t.Role != RoleServers {
+					sel.add(n.Proxy.NodeID, n.Proxy.ServerID, false)
+				}
+				for _, b := range n.Backends {
+					if t.Role != RoleProxy {
+						sel.add(b.NodeID, b.ServerID, false)
+					}
+				}
+			}
+		}
+	}
+	return sel
 }

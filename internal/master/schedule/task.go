@@ -1,6 +1,7 @@
 package schedule
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -14,13 +15,31 @@ import (
 	"time"
 
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
-const maxTargets = 200
+const (
+	maxTargets = 200
+	// maxRuns is how many runs of a task are kept.
+	maxRuns = 50
+
+	// Kinds of targets.
+	KindServer  = "server" // a server, or all servers of a node
+	KindTag     = "tag"
+	KindNetwork = "network"
+	// Roles of the servers of a network that a target names; empty names all of them.
+	RoleServers = "servers"
+	RoleProxy   = "proxy"
+
+	// Outcomes of runs.
+	Succeeded = "succeeded"
+	Failed    = "failed"
+)
 
 var (
-	errNotFound   = httpapi.Errorf(http.StatusNotFound, "Not found. It may have been deleted.")
-	serverPattern = regexp.MustCompile(`^[a-z2-7]{26}$`)
+	errNotFound = httpapi.Errorf(http.StatusNotFound, "Not found. It may have been deleted.")
+	errTargets  = httpapi.Errorf(http.StatusBadRequest, "Choose 1 to %d nodes, servers, tags or networks.", maxTargets)
+	idPattern   = regexp.MustCompile(`^[a-z2-7]{26}$`)
 )
 
 // Task runs on its target servers at the times of its schedule. Its settings are those of
@@ -40,16 +59,30 @@ type Task struct {
 	kind      string
 }
 
-// Target is a server, or all servers of a node if ServerID is empty.
+// Target names servers of a task: a server, all servers of a node (without ServerID), those
+// with a tag, or those of a network. Nodes, tags and networks include the servers they get
+// later, as targets are resolved at each run.
 type Target struct {
-	NodeID   string `json:"nodeId"`
-	ServerID string `json:"serverId"`
+	// Kind is server, tag or network; empty is server, as targets were before the others.
+	Kind     string `json:"kind"`
+	NodeID   string `json:"nodeId,omitempty"`
+	ServerID string `json:"serverId,omitempty"`
+	// Value is the tag, or the ID of the network.
+	Value string `json:"value,omitempty"`
+	// Role chooses the game servers or the proxy of a network; empty is all its servers.
+	Role string `json:"role,omitempty"`
 }
 
-// Run is the outcome of the latest run of a task.
+// Run is a run of a task.
 type Run struct {
-	At    time.Time `json:"at"`
-	Error string    `json:"error,omitempty"`
+	ID        int64     `json:"id"`
+	StartedAt time.Time `json:"startedAt"`
+	EndedAt   time.Time `json:"endedAt"`
+	// StartedBy is the user who started the run by hand; empty for its schedule.
+	StartedBy string `json:"startedBy,omitempty"`
+	// Outcome is succeeded or failed.
+	Outcome string `json:"outcome"`
+	Error   string `json:"error,omitempty"`
 	// Note tells what the run left out, e.g. servers without data to back up.
 	Note string `json:"note,omitempty"`
 }
@@ -76,6 +109,41 @@ func (s *Service) Get(ctx context.Context, kind, id string) (Task, error) {
 		return Task{}, err
 	}
 	return tasks[0], nil
+}
+
+// Covering returns the tasks of a kind whose targets include a server now.
+func (s *Service) Covering(ctx context.Context, kind string, srv tag.Server) ([]Task, error) {
+	tasks, err := s.List(ctx, kind)
+	var g groups
+	if err == nil {
+		g, err = s.groups(ctx, []Target{{Kind: KindTag}, {Kind: KindNetwork}})
+	}
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(tasks, func(t Task) bool { return !g.resolve(t.Targets, nil).covers(srv) }), nil
+}
+
+// Runs returns the kept runs of a task, newest first.
+func (s *Service) Runs(ctx context.Context, kind, id string) ([]Run, error) {
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ? AND kind = ?)`, id, kind).Scan(&exists); err != nil || !exists {
+		return nil, cmp.Or(err, errNotFound)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+runColumns+` FROM task_runs r WHERE task_id = ? ORDER BY id DESC`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	runs := []Run{}
+	for rows.Next() {
+		var r runRow
+		if err := rows.Scan(r.dest()...); err != nil {
+			return nil, err
+		}
+		runs = append(runs, *r.run())
+	}
+	return runs, rows.Err()
 }
 
 func (s *Service) Create(ctx context.Context, kind string, in Input) (Task, error) {
@@ -134,35 +202,67 @@ func (s *Service) build(kind string, in Input) (Task, error) {
 	if !ok {
 		return t, fmt.Errorf("unknown kind of task %q", kind)
 	}
-	var validTargets bool
-	t.Targets, validTargets = targets(in.Targets)
+	var err error
+	t.Targets, err = targets(in.Targets)
 	optional, _ := k.(OptionalTargets)
 	switch msg := t.Schedule.normalize(); {
 	case t.Name == "" || len(t.Name) > 64:
 		return t, httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
 	case msg != "":
 		return t, httpapi.Errorf(http.StatusBadRequest, "%s", msg)
-	case !validTargets || len(t.Targets) == 0 && (optional == nil || !optional.TargetsOptional(in.Settings)):
-		return t, httpapi.Errorf(http.StatusBadRequest, "Choose 1 to %d nodes or servers.", maxTargets)
+	case t.Enabled && t.Schedule.Next(time.Now()).IsZero():
+		return t, httpapi.Errorf(http.StatusBadRequest, "All dates have passed. Add one that is still to come, or pause it.")
+	case err != nil:
+		return t, err
+	case len(t.Targets) == 0 && (optional == nil || !optional.TargetsOptional(in.Settings)):
+		return t, errTargets
 	}
-	var err error
 	t.Settings, err = k.Check(in.Settings)
 	return t, err
 }
 
-// targets removes duplicates and servers of nodes whose servers are all targets anyway.
-func targets(in []Target) ([]Target, bool) {
-	var out []Target
-	for _, t := range in {
-		wholeNode := slices.Contains(in, Target{NodeID: t.NodeID})
-		switch {
-		case t.NodeID == "" || (t.ServerID != "" && !serverPattern.MatchString(t.ServerID)):
-			return nil, false
-		case !slices.Contains(out, t) && (t.ServerID == "" || !wholeNode):
+// targets checks targets and puts them into their canonical form, without duplicates and
+// without single servers of nodes whose servers are all targets anyway.
+func targets(in []Target) ([]Target, error) {
+	if len(in) > maxTargets {
+		return nil, errTargets
+	}
+	canonical := make([]Target, len(in))
+	for i, t := range in {
+		var err error
+		if canonical[i], err = t.canonical(); err != nil {
+			return nil, err
+		}
+	}
+	out := []Target{}
+	for _, t := range canonical {
+		wholeNode := t.ServerID != "" && slices.Contains(canonical, Target{Kind: KindServer, NodeID: t.NodeID})
+		if !wholeNode && !slices.Contains(out, t) {
 			out = append(out, t)
 		}
 	}
-	return out, len(out) <= maxTargets
+	return out, nil
+}
+
+// canonical returns a target with only the fields of its kind, or an error if it is invalid.
+func (t Target) canonical() (Target, error) {
+	switch t.Kind {
+	case "", KindServer:
+		if t.NodeID != "" && (t.ServerID == "" || idPattern.MatchString(t.ServerID)) {
+			return Target{Kind: KindServer, NodeID: t.NodeID, ServerID: t.ServerID}, nil
+		}
+	case KindTag:
+		tags, err := tag.Normalize([]string{t.Value})
+		if err != nil {
+			return t, err
+		}
+		return Target{Kind: KindTag, Value: tags[0]}, nil
+	case KindNetwork:
+		if idPattern.MatchString(t.Value) && slices.Contains([]string{"", RoleServers, RoleProxy}, t.Role) {
+			return Target{Kind: KindNetwork, Value: t.Value, Role: t.Role}, nil
+		}
+	}
+	return t, errTargets
 }
 
 // save writes a task and its targets with the statement write, and schedules it.
@@ -187,8 +287,18 @@ func (s *Service) save(ctx context.Context, t Task, write func(tx *sql.Tx, sched
 			return err
 		}
 		for _, target := range t.Targets {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO task_targets (task_id, node_id, server_id) VALUES (?, ?, ?)`,
-				t.ID, target.NodeID, target.ServerID); err != nil {
+			var node, network any // NULL unless the target names one
+			tag := ""
+			switch target.Kind {
+			case KindServer:
+				node = target.NodeID
+			case KindTag:
+				tag = target.Value
+			case KindNetwork:
+				network = target.Value
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO task_targets (task_id, node_id, server_id, tag, network_id, role) VALUES (?, ?, ?, ?, ?, ?)`,
+				t.ID, node, target.ServerID, tag, network, target.Role); err != nil {
 				return err
 			}
 		}
@@ -206,19 +316,43 @@ func constraint(err error, name string) error {
 	case strings.Contains(msg, "UNIQUE"):
 		return httpapi.Errorf(http.StatusConflict, "The name %q is taken already.", name)
 	case strings.Contains(msg, "FOREIGN KEY"):
-		return httpapi.Errorf(http.StatusBadRequest, "Choose nodes that exist.")
+		return httpapi.Errorf(http.StatusBadRequest, "Choose nodes and networks that exist.")
 	}
 	return err
 }
 
-// load reads the tasks of a kind, or one of them if id isn't empty.
+// runColumns are the columns of a run in task_runs r, which runRow reads.
+const runColumns = "r.id, r.started_at, r.ended_at, r.started_by, r.outcome, r.error, r.note"
+
+// runRow reads a run, which may be missing, e.g. for a task that never ran.
+type runRow struct {
+	id, started, ended         sql.NullInt64
+	by, outcome, errMsg, notes sql.NullString
+}
+
+func (r *runRow) dest() []any {
+	return []any{&r.id, &r.started, &r.ended, &r.by, &r.outcome, &r.errMsg, &r.notes}
+}
+
+func (r *runRow) run() *Run {
+	if !r.id.Valid {
+		return nil
+	}
+	return &Run{
+		ID: r.id.Int64, StartedAt: time.Unix(r.started.Int64, 0), EndedAt: time.Unix(r.ended.Int64, 0),
+		StartedBy: r.by.String, Outcome: r.outcome.String, Error: r.errMsg.String, Note: r.notes.String,
+	}
+}
+
+// load reads the tasks of a kind, or one of them if id isn't empty, with their latest runs.
 func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 	// A run records its outcome before it ends, so reading which tasks run first ensures
 	// that a task that isn't running shows the outcome of its latest run.
 	running := s.runningTasks()
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, kind, name, enabled, schedule, settings, last_run_at, last_error, last_note, created_at
-		FROM tasks WHERE ? IN ('', kind) AND ? IN ('', id) ORDER BY name`, kind, id)
+		SELECT t.id, t.kind, t.name, t.enabled, t.schedule, t.settings, t.created_at, `+runColumns+`
+		FROM tasks t LEFT JOIN task_runs r ON r.id = (SELECT max(id) FROM task_runs WHERE task_id = t.id)
+		WHERE ? IN ('', t.kind) AND ? IN ('', t.id) ORDER BY t.name`, kind, id)
 	if err != nil {
 		return nil, err
 	}
@@ -228,19 +362,15 @@ func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 	for rows.Next() {
 		t := Task{Targets: []Target{}}
 		var schedule, settings string
-		var lastRun sql.NullInt64
-		var lastError, lastNote sql.NullString
 		var createdAt int64
-		if err := rows.Scan(&t.ID, &t.kind, &t.Name, &t.Enabled, &schedule, &settings, &lastRun, &lastError, &lastNote, &createdAt); err != nil {
+		var last runRow
+		if err := rows.Scan(append([]any{&t.ID, &t.kind, &t.Name, &t.Enabled, &schedule, &settings, &createdAt}, last.dest()...)...); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(schedule), &t.Schedule); err != nil {
 			return nil, err
 		}
-		t.Settings, t.CreatedAt = json.RawMessage(settings), time.Unix(createdAt, 0)
-		if lastRun.Valid {
-			t.LastRun = &Run{At: time.Unix(lastRun.Int64, 0), Error: lastError.String, Note: lastNote.String}
-		}
+		t.Settings, t.CreatedAt, t.LastRun = json.RawMessage(settings), time.Unix(createdAt, 0), last.run()
 		t.NextRun, t.Running = s.nextRun(t.ID), running[t.ID]
 		index[t.ID] = len(tasks)
 		tasks = append(tasks, t)
@@ -248,16 +378,24 @@ func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	targets, err := s.db.QueryContext(ctx, `SELECT task_id, node_id, server_id FROM task_targets WHERE ? IN ('', task_id) ORDER BY rowid`, id)
+	targets, err := s.db.QueryContext(ctx, `
+		SELECT task_id, coalesce(node_id, ''), server_id, tag, coalesce(network_id, ''), role
+		FROM task_targets WHERE ? IN ('', task_id) ORDER BY rowid`, id)
 	if err != nil {
 		return nil, err
 	}
 	defer targets.Close()
 	for targets.Next() {
-		var taskID string
-		var t Target
-		if err := targets.Scan(&taskID, &t.NodeID, &t.ServerID); err != nil {
+		var taskID, tag, network string
+		t := Target{Kind: KindServer}
+		if err := targets.Scan(&taskID, &t.NodeID, &t.ServerID, &tag, &network, &t.Role); err != nil {
 			return nil, err
+		}
+		switch {
+		case tag != "":
+			t.Kind, t.Value = KindTag, tag
+		case network != "":
+			t.Kind, t.Value = KindNetwork, network
 		}
 		if i, ok := index[taskID]; ok {
 			tasks[i].Targets = append(tasks[i].Targets, t)

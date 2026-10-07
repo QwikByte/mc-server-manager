@@ -127,7 +127,11 @@ export function TagsDialog({ servers, onOpenChange }: { servers: TaggedServer[];
                 ? t("Tags of {{name}}", { name: servers[0].name })
                 : t("Tags of {{count}} servers", { count: servers.length })}
             </DialogTitle>
-            <DialogDescription>{t("Tags such as lobby or bedwars help to find, filter and group servers.")}</DialogDescription>
+            <DialogDescription>
+              {t(
+                "Tags such as lobby or bedwars help to find, filter and group servers. File sets, backup jobs and schedules can target them, so a tag can put a server under a backup job or a nightly restart.",
+              )}
+            </DialogDescription>
           </DialogHeader>
           <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg bg-muted/50 p-2">
             {shown.length === 0 && <span className="px-1 text-sm text-muted-foreground">{t("No tags")}</span>}

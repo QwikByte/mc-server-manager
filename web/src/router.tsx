@@ -365,6 +365,13 @@ const policyRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/policies/policy-page"), "PolicyPage"),
 })
 
+const agendaRoute = createRoute({
+  getParentRoute: () => automationRoute,
+  path: "/agenda",
+  staticData: { title: msg("Agenda") },
+  component: lazyRouteComponent(() => import("@/features/schedules/agenda-page"), "AgendaPage"),
+})
+
 const pluginsRoute = createRoute({
   getParentRoute: () => libraryRoute,
   path: "/plugins",
@@ -473,7 +480,7 @@ export const router = createRouter({
       newTemplateRoute,
       templateRoute,
       fileSetRoute,
-      automationRoute.addChildren([backupJobsRoute, policiesRoute]),
+      automationRoute.addChildren([backupJobsRoute, policiesRoute, agendaRoute]),
       newBackupJobRoute,
       backupJobRoute,
       newPolicyRoute,
