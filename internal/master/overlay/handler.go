@@ -59,8 +59,11 @@ func (h *Handler) Register(mux access.Mux) {
 		}
 		write(w, r, s, err)
 	})
+	// Like the overview, the status only names the peers on the nodes the user may see.
 	mux.Handle("GET /api/nodes/{id}/overlay", access.OnNode(access.NodesView, "id"), func(w http.ResponseWriter, r *http.Request) {
 		st, err := h.svc.Status(r.Context(), r.PathValue("id"))
+		grants := access.From(r.Context())
+		st.Peers = slices.DeleteFunc(st.Peers, func(p Peer) bool { return !grants.SeesNode(p.NodeID) })
 		write(w, r, st, err)
 	})
 	mux.Handle("POST /api/nodes/{id}/overlay", manage, h.withEndpoint(h.svc.Join))
