@@ -22,10 +22,22 @@ import { availableServers, canJoin, findServer, isBungee, key, proxyTypes, refOf
 const steps = ["proxy", "forwarding", "servers"] as const
 type Step = (typeof steps)[number]
 
-/** Creates a network in three steps: its proxy, how the proxy forwards players, and its servers. */
-/** trigger replaces the button that opens the dialog. */
-export function CreateNetworkDialog({ trigger }: { trigger?: ReactElement }) {
-  const [open, setOpen] = useState(false)
+/**
+ * Creates a network in three steps: its proxy, how the proxy forwards players, and its servers.
+ * trigger replaces the button that opens the dialog; with open, it opens without one, e.g. from
+ * the palette, and onOpenChange tells when it closes.
+ */
+export function CreateNetworkDialog({
+  trigger,
+  open: shown,
+  onOpenChange: onShownChange,
+}: {
+  trigger?: ReactElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [ownOpen, setOpen] = useState(false)
+  const open = shown ?? ownOpen
   const [step, setStep] = useState<Step>("proxy")
   const [name, setName] = useState("")
   const [proxy, setProxy] = useState<ServerRef>()
@@ -47,6 +59,7 @@ export function CreateNetworkDialog({ trigger }: { trigger?: ReactElement }) {
 
   function onOpenChange(next: boolean) {
     setOpen(next)
+    onShownChange?.(next)
     if (!next) {
       create.reset()
       operation.reset()
@@ -89,14 +102,16 @@ export function CreateNetworkDialog({ trigger }: { trigger?: ReactElement }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button>
-            <PlusIcon />
-            {t("Create network")}
-          </Button>
-        )}
-      </DialogTrigger>
+      {shown === undefined && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button>
+              <PlusIcon />
+              {t("Create network")}
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-2xl" {...guard(create.isPending)}>
         {operation.live ? (
           <OperationStatus

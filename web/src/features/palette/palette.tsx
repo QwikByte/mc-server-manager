@@ -1,12 +1,26 @@
-import { ArrowClockwiseIcon, GraphIcon, HardDrivesIcon, PlayIcon, StopIcon, TerminalIcon, UserIcon } from "@phosphor-icons/react"
+import {
+  ArchiveIcon,
+  ArrowClockwiseIcon,
+  CalendarCheckIcon,
+  FilesIcon,
+  GraphIcon,
+  HardDrivesIcon,
+  KeyboardIcon,
+  PlayIcon,
+  StackIcon,
+  StopIcon,
+  TerminalIcon,
+  UserCircleIcon,
+  UserIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { useNavigate } from "@tanstack/react-router"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { toast } from "sonner"
 import { IconTile } from "@/components/icon-tile"
 import { pages as visiblePages } from "@/components/navigation"
-import { StatusDot } from "@/components/status"
+import { type Status, StatusDot } from "@/components/status"
 import {
   Command,
   CommandDialog,
@@ -17,15 +31,25 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command"
+import { usersQuery } from "@/features/access/api"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
+import { meQuery } from "@/features/auth/api"
+import { jobs } from "@/features/backups/api"
+import { fileSetsQuery } from "@/features/filesets/api"
 import { networksQuery } from "@/features/networks/api"
 import { nodesQuery } from "@/features/nodes/api"
 import { useOnlinePlayers } from "@/features/players/online"
+import { actions as policyActions, policies } from "@/features/policies/api"
+import { describeSchedule } from "@/features/schedules/describe"
 import { allServersQuery, type NodeServer, serverKey, useBulkAction } from "@/features/servers/api"
 import { serverLook, serverType, statusOf } from "@/features/servers/server-types"
 import { settings } from "@/features/settings/tabs"
-import { msg } from "@/lib/i18n"
+import { templatesQuery } from "@/features/templates/api"
+import { cn } from "@/lib/utils"
+import { openedPath, readRecent } from "./recent"
+import { account, type Creation, creations, pageKeys } from "./shortcuts"
+import { Keys } from "./shortcuts-dialog"
 
 /** Actions on a server that the palette offers once a search starts with their name, e.g. "restart lobby". */
 const actions = [
@@ -41,18 +65,50 @@ const actions = [
   { kind: "stop", icon: StopIcon, label: () => t("Stop"), permission: "servers.stop", when: (s: NodeServer) => s.state !== "stopped" },
 ] as const satisfies readonly { permission: Permission; [key: string]: unknown }[]
 
-/** Searches servers, players, networks, nodes and pages, and acts on servers. */
-export function Palette({ onClose }: { onClose: () => void }) {
+/** Something the palette finds and opens. */
+interface Entry {
+  /** Unique among the entries; the search matches it too, e.g. "template" finds the templates. */
+  value: string
+  /** The address it opens, by which it is found among those opened recently, too. */
+  path: string
+  label: string
+  keywords?: string[]
+  icon: ReactNode
+  status?: Status
+  detail?: string
+  labelClass?: string
+  /** Opens it if its address alone doesn't, e.g. a player on the players page. */
+  open?: () => Promise<void>
+}
+
+/** An address of the panel from its parts, e.g. of a template from its ID. */
+const at = (...parts: string[]) => `/${parts.map(encodeURIComponent).join("/")}`
+
+const recentLimit = 5
+
+/**
+ * Searches servers, players, networks, nodes, the library, the automation, users and pages, acts
+ * on servers, and creates servers, networks and nodes; onOpen opens the dialogs for these.
+ */
+export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (what: Creation | "shortcuts") => void }) {
   const access = useAccess()
   const navigate = useNavigate()
   const bulk = useBulkAction()
   const [query, setQuery] = useState("")
+  const { data: me } = useQuery(meQuery)
+  const [recent] = useState(() => (me ? readRecent(me.id) : []))
+  const here = useLocation({ select: (l) => openedPath(l.pathname) })
   const { data: servers = [] } = useQuery({ ...allServersQuery, enabled: access.canSomewhere("servers.view") })
   const { data: networks = [] } = useQuery({ ...networksQuery, enabled: access.can("networks.view") })
   const { data: nodes = [] } = useQuery({
     ...nodesQuery,
     enabled: access.canSomewhere("nodes.view") || access.canSomewhere("servers.view"),
   })
+  const { data: templates = [] } = useQuery({ ...templatesQuery, enabled: access.can("templates.view") })
+  const { data: fileSets = [] } = useQuery({ ...fileSetsQuery, enabled: access.can("filesets.view") })
+  const { data: backupJobs = [] } = useQuery({ ...jobs.tasksQuery, enabled: access.can("backupjobs.view") })
+  const { data: schedules = [] } = useQuery({ ...policies.tasksQuery, enabled: access.can("policies.view") })
+  const { data: users = [] } = useQuery({ ...usersQuery, enabled: access.can("users.view") })
   const { players } = useOnlinePlayers(access.canSomewhere("servers.view"))
   const needle = query.trim().toLowerCase()
   const found = needle.length >= 2 ? players.filter((p) => p.name.toLowerCase().includes(needle)).slice(0, 8) : []
@@ -60,16 +116,143 @@ export function Palette({ onClose }: { onClose: () => void }) {
   // "neustart" names "Neu starten" too.
   const named = actions.filter((a) => words.some((w) => w.length >= 3 && a.label().toLowerCase().replace(/\s/g, "").startsWith(w)))
   // The tabs of the settings are found by name too, e.g. "users".
-  const pages = [
-    ...visiblePages(access),
-    ...settings.tabs.filter((tab) => tab.to !== "/settings" && tab.visible(access)),
-    { to: "/account", label: msg("Your account"), icon: UserIcon },
-  ] as const
+  const pages = [...visiblePages(access), ...settings.tabs.filter((tab) => tab.to !== "/settings" && tab.visible(access)), account]
+  const creatable = creations.filter((c) => c.allowed(access))
+
+  // The library, the automation and the users only show once something is searched.
+  const groups: { heading: string; entries: Entry[]; searched?: boolean }[] = [
+    {
+      heading: t("Servers"),
+      entries: servers.map((s) => ({
+        value: `server/${serverKey(s)}`,
+        path: at("nodes", s.nodeId, "servers", s.id),
+        label: s.name,
+        keywords: [serverType(s.type).label, s.nodeName, String(s.port), ...s.tags],
+        icon: <IconTile {...serverLook(s.type)} size="sm" className="size-6 rounded-md [&>svg]:size-3.5" />,
+        status: statusOf(s),
+        detail: [...s.tags.map((tag) => `#${tag}`), s.nodeName].join(" · "),
+      })),
+    },
+    {
+      heading: t("Players"),
+      entries: found.map((p) => ({
+        value: `player/${p.name}@${serverKey(p.server)}`,
+        path: "/players",
+        label: p.name,
+        labelClass: "font-mono",
+        icon: <UserIcon weight="duotone" className="text-info" />,
+        detail: p.server.name,
+        open: () => navigate({ to: "/players", search: { q: p.name } }),
+      })),
+    },
+    {
+      heading: t("Networks"),
+      entries: networks.map((n) => ({
+        value: `network/${n.id}`,
+        path: at("networks", n.id),
+        label: n.name,
+        keywords: [serverType(n.proxyType).label],
+        icon: <GraphIcon weight="duotone" className="text-violet" />,
+        detail: t("{{count}} servers", { count: n.backends.length, defaultValue_one: "{{count}} server" }),
+      })),
+    },
+    {
+      heading: t("Nodes"),
+      entries: nodes.map((n) => ({
+        value: `node/${n.id}`,
+        path: at("nodes", n.id),
+        label: n.name,
+        keywords: [n.address ?? ""],
+        icon: <HardDrivesIcon weight="duotone" className="text-info" />,
+        status: { tone: n.status === "online" ? "success" : n.status === "pending" ? "warning" : "destructive", label: "" },
+      })),
+    },
+    {
+      heading: t("Templates"),
+      searched: true,
+      entries: templates.map((tpl) => ({
+        value: `template/${tpl.id}`,
+        path: at("templates", tpl.id),
+        label: tpl.name,
+        keywords: [tpl.description],
+        icon: <StackIcon weight="duotone" className="text-info" />,
+        detail: serverType(tpl.type).label,
+      })),
+    },
+    {
+      heading: t("File sets"),
+      searched: true,
+      entries: fileSets.map((set) => ({
+        value: `fileset/${set.id}`,
+        path: at("filesets", set.id),
+        label: set.name,
+        keywords: [set.description],
+        icon: <FilesIcon weight="duotone" className="text-info" />,
+        detail: t("{{count}} files", { count: set.paths.length, defaultValue_one: "{{count}} file" }),
+      })),
+    },
+    {
+      heading: t("Backup jobs"),
+      searched: true,
+      entries: backupJobs.map((job) => ({
+        value: `backupjob/${job.id}`,
+        path: at("backups", job.id),
+        label: job.name,
+        icon: <ArchiveIcon weight="duotone" className="text-warning" />,
+        detail: describeSchedule(job.schedule),
+      })),
+    },
+    {
+      heading: t("Schedules"),
+      searched: true,
+      entries: schedules.map((policy) => ({
+        value: `schedule/${policy.id}`,
+        path: at("policies", policy.id),
+        label: policy.name,
+        keywords: [t(policyActions[policy.settings.action].label)],
+        icon: <CalendarCheckIcon weight="duotone" className="text-warning" />,
+        detail: describeSchedule(policy.schedule),
+      })),
+    },
+    {
+      heading: t("Users"),
+      searched: true,
+      entries: users.map((user) => ({
+        value: `user/${user.id}`,
+        path: "/settings/users",
+        label: user.username,
+        icon: <UserCircleIcon weight="duotone" />,
+        detail: user.disabled ? t("Disabled") : undefined,
+      })),
+    },
+  ]
+  const all = groups.flatMap((group) => group.entries)
+  // What is open now isn't offered again.
+  const opened = needle
+    ? []
+    : recent
+        .filter((path) => path !== here)
+        .flatMap((path) => all.find((e) => e.path === path) ?? [])
+        .slice(0, recentLimit)
 
   function go(to: () => Promise<void>) {
     onClose()
     void to()
   }
+
+  const item = (entry: Entry, value = entry.value) => (
+    <CommandItem
+      key={value}
+      value={value}
+      keywords={[entry.label, ...(entry.keywords ?? [])]}
+      onSelect={() => go(entry.open ?? (() => navigate({ href: entry.path })))}
+    >
+      {entry.icon}
+      <span className={cn("truncate font-medium", entry.labelClass)}>{entry.label}</span>
+      {entry.status && <StatusDot status={entry.status} label={entry.status.label ? t(entry.status.label) : undefined} />}
+      {entry.detail && <CommandShortcut className="truncate tracking-normal">{entry.detail}</CommandShortcut>}
+    </CommandItem>
+  )
 
   function act(kind: (typeof actions)[number]["kind"], server: NodeServer) {
     const params = { nodeId: server.nodeId, serverId: server.id }
@@ -92,13 +275,14 @@ export function Palette({ onClose }: { onClose: () => void }) {
       open
       onOpenChange={(open) => !open && onClose()}
       title={t("Search")}
-      description={t("Search servers, players, networks, nodes and pages")}
+      description={t("Search servers, players, networks and more, or create something")}
       className="sm:max-w-xl"
     >
       <Command loop>
-        <CommandInput value={query} onValueChange={setQuery} placeholder={t("Search servers, players, networks, nodes and pages…")} />
+        <CommandInput value={query} onValueChange={setQuery} placeholder={t("Search servers, players, networks and more…")} />
         <CommandList className="max-h-[min(28rem,60svh)]">
           <CommandEmpty>{t("Nothing found.")}</CommandEmpty>
+          {opened.length > 0 && <CommandGroup heading={t("Recently opened")}>{opened.map((e) => item(e, `recent/${e.value}`))}</CommandGroup>}
           {named.length > 0 && (
             <CommandGroup heading={t("Actions")}>
               {named.flatMap((a) =>
@@ -121,86 +305,50 @@ export function Palette({ onClose }: { onClose: () => void }) {
               )}
             </CommandGroup>
           )}
-          {servers.length > 0 && (
-            <CommandGroup heading={t("Servers")}>
-              {servers.map((s) => (
-                <CommandItem
-                  key={serverKey(s)}
-                  value={serverKey(s)}
-                  keywords={[s.name, serverType(s.type).label, s.nodeName, String(s.port), ...s.tags]}
-                  onSelect={() =>
-                    go(() => navigate({ to: "/nodes/$nodeId/servers/$serverId", params: { nodeId: s.nodeId, serverId: s.id } }))
-                  }
-                >
-                  <IconTile {...serverLook(s.type)} size="sm" className="size-6 rounded-md [&>svg]:size-3.5" />
-                  <span className="truncate font-medium">{s.name}</span>
-                  <StatusDot status={statusOf(s)} label={t(statusOf(s).label)} />
-                  <CommandShortcut className="truncate tracking-normal">
-                    {[...s.tags.map((tag) => `#${tag}`), s.nodeName].join(" · ")}
+          {groups.map(
+            (group) =>
+              group.entries.length > 0 &&
+              (needle || !group.searched) && (
+                <CommandGroup key={group.heading} heading={group.heading}>
+                  {group.entries.map((e) => item(e))}
+                </CommandGroup>
+              ),
+          )}
+          {creatable.length > 0 && (
+            <CommandGroup heading={t("Create")}>
+              {creatable.map((c) => (
+                <CommandItem key={c.opens} value={`create/${c.opens}`} keywords={[t(c.label)]} onSelect={() => onOpen(c.opens)}>
+                  <c.icon weight="duotone" />
+                  {t(c.label)}
+                  <CommandShortcut>
+                    <Keys keys={["c", c.key]} />
                   </CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-          {found.length > 0 && (
-            <CommandGroup heading={t("Players")}>
-              {found.map((p) => (
-                <CommandItem
-                  key={`player/${p.name}@${serverKey(p.server)}`}
-                  value={`player/${p.name}@${serverKey(p.server)}`}
-                  keywords={[p.name]}
-                  onSelect={() => go(() => navigate({ to: "/players", search: { q: p.name } }))}
-                >
-                  <UserIcon weight="duotone" className="text-info" />
-                  <span className="truncate font-mono font-medium">{p.name}</span>
-                  <CommandShortcut className="truncate tracking-normal">{p.server.name}</CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-          {networks.length > 0 && (
-            <CommandGroup heading={t("Networks")}>
-              {networks.map((n) => (
-                <CommandItem
-                  key={n.id}
-                  value={`network/${n.id}`}
-                  keywords={[n.name, serverType(n.proxyType).label]}
-                  onSelect={() => go(() => navigate({ to: "/networks/$networkId", params: { networkId: n.id } }))}
-                >
-                  <GraphIcon weight="duotone" className="text-violet" />
-                  <span className="truncate font-medium">{n.name}</span>
-                  <CommandShortcut className="tracking-normal">
-                    {t("{{count}} servers", { count: n.backends.length, defaultValue_one: "{{count}} server" })}
-                  </CommandShortcut>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
-          {nodes.length > 0 && (
-            <CommandGroup heading={t("Nodes")}>
-              {nodes.map((n) => (
-                <CommandItem
-                  key={n.id}
-                  value={`node/${n.id}`}
-                  keywords={[n.name, n.address ?? ""]}
-                  onSelect={() => go(() => navigate({ to: "/nodes/$nodeId", params: { nodeId: n.id } }))}
-                >
-                  <HardDrivesIcon weight="duotone" className="text-info" />
-                  <span className="truncate font-medium">{n.name}</span>
-                  <StatusDot
-                    status={{ tone: n.status === "online" ? "success" : n.status === "pending" ? "warning" : "destructive", label: "" }}
-                  />
                 </CommandItem>
               ))}
             </CommandGroup>
           )}
           <CommandGroup heading={t("Pages")}>
-            {pages.map(({ to, label, icon: Icon }) => (
-              <CommandItem key={to} value={`page${to}`} keywords={[t(label)]} onSelect={() => go(() => navigate({ to }))}>
-                <Icon weight="duotone" />
-                {t(label)}
-              </CommandItem>
-            ))}
+            {pages.map(({ to, label, icon: Icon }) => {
+              const key = pageKeys[to]
+              return (
+                <CommandItem key={to} value={`page${to}`} keywords={[t(label)]} onSelect={() => go(() => navigate({ to }))}>
+                  <Icon weight="duotone" />
+                  {t(label)}
+                  {key && (
+                    <CommandShortcut>
+                      <Keys keys={["g", key]} />
+                    </CommandShortcut>
+                  )}
+                </CommandItem>
+              )
+            })}
+            <CommandItem value="shortcuts" keywords={[t("Keyboard shortcuts")]} onSelect={() => onOpen("shortcuts")}>
+              <KeyboardIcon weight="duotone" />
+              {t("Keyboard shortcuts")}
+              <CommandShortcut>
+                <Keys keys={["?"]} />
+              </CommandShortcut>
+            </CommandItem>
           </CommandGroup>
         </CommandList>
         <p className="border-t px-3 py-2 text-xs text-muted-foreground">{t("Tip: type an action and a server, e.g. “restart lobby”.")}</p>

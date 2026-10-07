@@ -36,8 +36,27 @@ remembers. Lists, figures, charts, tabs and pages are animated, unless the opera
 
 ## Search
 
-**Ctrl+K** (⌘K) searches servers, also by tag, networks, nodes and pages from anywhere in the panel. A search that
-starts with an action, e.g. `restart lobby`, starts, restarts or stops a server or opens its console.
+**Ctrl+K** (⌘K) or `/` searches servers, also by tag, players online, networks, nodes and pages from anywhere in the
+panel, and, once something is typed, templates, file sets, backup jobs, schedules and users; each only for those who may
+see them. Before anything is typed, it offers what was opened last: servers, networks, nodes, templates, file sets,
+backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user
+may still see are offered. A search that starts with an action, e.g. `restart lobby`, starts, restarts or stops a server
+or opens its console. **Create server**, **Create network** and **Add node** open their dialogs from the search too.
+
+## Keyboard shortcuts
+
+Shortcuts are keys typed one after the other, e.g. `g` and then `s` for the servers. `?` lists those the user may use.
+They do nothing while the focus is in a field or the editor, or while a dialog is open; only **Ctrl+K** works there too.
+
+| Keys                              | Opens                                                  |
+| --------------------------------- | ------------------------------------------------------ |
+| **Ctrl+K** (⌘K), `/`              | the search                                             |
+| `?`                               | the list of shortcuts                                  |
+| `g o`, `g s`, `g n`, `g p`, `g m` | the overview, servers, networks, players and nodes     |
+| `g t`, `g f`, `g e`               | templates, file sets, and plugins and mods             |
+| `g b`, `g c`                      | backup jobs and schedules                              |
+| `g l`, `g ,`, `g a`               | the log, the settings and the user's account           |
+| `c s`, `c n`, `c m`               | **Create server**, **Create network** and **Add node** |
 
 ## Operations
 

@@ -19,14 +19,27 @@ import { EnrollSteps } from "./enroll-steps"
 
 const empty = { name: "", address: "" }
 
-/** trigger replaces the button that opens the dialog. */
-export function AddNodeDialog({ trigger }: { trigger?: ReactElement }) {
-  const [open, setOpen] = useState(false)
+/**
+ * trigger replaces the button that opens the dialog; with open, it opens without one, e.g. from
+ * the palette, and onOpenChange tells when it closes.
+ */
+export function AddNodeDialog({
+  trigger,
+  open: shown,
+  onOpenChange: onShownChange,
+}: {
+  trigger?: ReactElement
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [ownOpen, setOpen] = useState(false)
+  const open = shown ?? ownOpen
   const [form, setForm] = useState(empty)
   const create = useCreateNode()
 
   function onOpenChange(next: boolean) {
     setOpen(next)
+    onShownChange?.(next)
     if (!next) {
       create.reset()
       setForm(empty)
@@ -40,14 +53,16 @@ export function AddNodeDialog({ trigger }: { trigger?: ReactElement }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button>
-            <PlusIcon />
-            {t("Add node")}
-          </Button>
-        )}
-      </DialogTrigger>
+      {shown === undefined && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button>
+              <PlusIcon />
+              {t("Add node")}
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-lg">
         {create.data ? (
           <>

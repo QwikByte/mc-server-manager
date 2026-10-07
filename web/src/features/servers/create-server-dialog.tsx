@@ -74,12 +74,18 @@ export function CreateServerDialog({
   nodeId: fixedNode,
   template: fixedTemplate,
   trigger,
+  open: shown,
+  onOpenChange: onShownChange,
 }: {
   nodeId?: string
   template?: Template
   trigger?: ReactElement
+  /** Opens the dialog without its button, e.g. from the palette; onOpenChange tells when it closes. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [ownOpen, setOpen] = useState(false)
+  const open = shown ?? ownOpen
   const [form, setForm] = useState(() => blank(fixedTemplate))
   const create = useCreateServer()
   const operation = useOperation()
@@ -105,6 +111,7 @@ export function CreateServerDialog({
 
   function onOpenChange(next: boolean) {
     setOpen(next)
+    onShownChange?.(next)
     if (!next) {
       create.reset()
       operation.reset()
@@ -152,14 +159,16 @@ export function CreateServerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button>
-            <PlusIcon />
-            {t("Create server")}
-          </Button>
-        )}
-      </DialogTrigger>
+      {shown === undefined && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button>
+              <PlusIcon />
+              {t("Create server")}
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-lg" {...guard(create.isPending)}>
         {operation.live ? (
           <OperationStatus
