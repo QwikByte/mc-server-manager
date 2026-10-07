@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch"
 import { groupsQuery } from "@/features/access/api"
 import { GroupPicker } from "@/features/access/group-picker"
 import { useAccess } from "@/features/access/use-access"
+import { mfaQuery } from "@/features/auth/api"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
 import { UpdateCheck } from "@/features/updates/update-check"
@@ -513,6 +514,7 @@ function MfaRequirementFields({ value, onChange }: { value: MfaRequirement; onCh
   const [choice, setChoice] = useState<keyof typeof mfaChoices>(value.all ? "all" : value.groups.length ? "groups" : "none")
   const canSeeGroups = useAccess().can("users.view")
   const groups = useQuery({ ...groupsQuery, enabled: canSeeGroups && choice === "groups" })
+  const own = useQuery(mfaQuery)
 
   function choose(next: keyof typeof mfaChoices) {
     setChoice(next)
@@ -561,6 +563,11 @@ function MfaRequirementFields({ value, onChange }: { value: MfaRequirement; onCh
           "Users it applies to who haven't set it up are asked to as soon as they use the panel, and can do nothing else until they did. Setting it up always works, so nobody is locked out.",
         )}
       </FieldDescription>
+      {choice !== "none" && own.data && !own.data.enabled && (
+        <Callout tone="warning" icon={ShieldIcon} role="status" title={t("You haven't set it up yourself")}>
+          {t("If the requirement applies to you, the panel asks you to set up two-factor authentication as soon as you save.")}
+        </Callout>
+      )}
     </Field>
   )
 }
