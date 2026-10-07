@@ -7,6 +7,7 @@ package datadir
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -23,7 +24,11 @@ const (
 	// tempPrefix starts the names of temporary files and folders of the agent.
 	tempPrefix = ".noryx-"
 	maxPath    = 1024
+	// maxRead limits what ReadFile reads, configuration files of a few kilobytes.
+	maxRead = 16 << 20
 )
+
+var errSpecial = errors.New("neither a regular file nor a folder")
 
 // Name turns a slash-separated path relative to a data directory into a name in it, "."
 // for the directory itself. os.Root rejects escaping paths too, but ".." has no use here,
@@ -124,6 +129,41 @@ func (d *Dir) MkdirAll(name string) error {
 		}
 	}
 	return nil
+}
+
+// Open opens a regular file or a folder for reading. The server owns its data, so it could
+// put a named pipe where the agent expects a file, whose opening would wait for a writer.
+func (d *Dir) Open(name string) (*os.File, error) { return openPlain(d.Root, name) }
+
+// ReadFile reads a regular file of up to maxRead bytes, as the server could make one huge.
+func (d *Dir) ReadFile(name string) ([]byte, error) {
+	f, err := d.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxRead+1))
+	if err == nil && len(data) > maxRead {
+		err = fmt.Errorf("%s is larger than %d MiB", name, maxRead>>20)
+	}
+	return data, err
+}
+
+// openPlain opens a regular file or a folder of root for reading, and refuses anything else
+// without waiting for it.
+func openPlain(root *os.Root, name string) (*os.File, error) {
+	f, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err == nil && !info.Mode().IsRegular() && !info.IsDir() {
+		err = &fs.PathError{Op: "open", Path: name, Err: errSpecial}
+	}
+	if err != nil {
+		return nil, errors.Join(err, f.Close())
+	}
+	return f, nil
 }
 
 // ReadOptional reads a file; a missing file reads as empty.

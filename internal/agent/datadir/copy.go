@@ -55,7 +55,7 @@ func Copy(ctx context.Context, src, dst string) error {
 }
 
 func copyFile(ctx context.Context, from, to *os.Root, name string) error {
-	in, err := from.Open(name)
+	in, err := openPlain(from, name) // the server may have put a named pipe there meanwhile
 	if err != nil {
 		return err
 	}

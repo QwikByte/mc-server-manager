@@ -2,12 +2,14 @@ package datadir
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestDir(t *testing.T) {
@@ -58,6 +60,48 @@ func TestDir(t *testing.T) {
 	}
 	if data, err := d.ReadOptional("missing.txt"); data != nil || err != nil {
 		t.Fatalf("missing file = %q, %v", data, err)
+	}
+}
+
+// The server owns its files, so the agent neither waits for a named pipe nor reads a huge
+// file at once.
+func TestServerFiles(t *testing.T) {
+	path := t.TempDir()
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if err := syscall.Mkfifo(filepath.Join(path, "server.properties"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "huge.yml"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(filepath.Join(path, "huge.yml"), 1<<40); err != nil { // sparse
+		t.Fatal(err)
+	}
+	done := make(chan string, 1)
+	go func() {
+		_, err := d.Open("server.properties")
+		_, optionalErr := d.ReadOptional("server.properties")
+		_, hugeErr := d.ReadFile("huge.yml")
+		dir, dirErr := d.Open(".") // folders open
+		if dirErr == nil {
+			dirErr = dir.Close()
+		}
+		if err == nil || optionalErr == nil || hugeErr == nil || dirErr != nil {
+			done <- fmt.Sprintf("pipe: %v, %v; huge file: %v; folder: %v", err, optionalErr, hugeErr, dirErr)
+		}
+		close(done)
+	}()
+	select {
+	case problem := <-done:
+		if problem != "" {
+			t.Fatal(problem)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("waited for a writer of the named pipe")
 	}
 }
 

@@ -107,7 +107,7 @@ func addFile(ctx context.Context, zw *zip.Writer, root *os.Root, name string, d 
 	var f *os.File
 	var edit func([]byte) []byte
 	if !d.IsDir() {
-		if f, err = root.Open(name); err != nil {
+		if f, err = openPlain(root, name); err != nil { // the server may have put a named pipe there meanwhile
 			return err
 		}
 		defer f.Close()
