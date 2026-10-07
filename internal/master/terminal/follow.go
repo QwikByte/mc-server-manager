@@ -16,7 +16,7 @@ var errFollowLimit = errors.New("stopped following after 5 minutes, so that your
 
 // following are the commands that run until they are stopped, with the flag that makes
 // them follow, if they need one.
-var following = map[string]string{"server logs": "", "logs": "follow"}
+var following = map[string]string{"server logs": "", "datastore logs": "", "logs": "follow"}
 
 // follows reports whether the command at path follows output with the flags it got.
 func follows(cmd *cobra.Command, path string) bool {

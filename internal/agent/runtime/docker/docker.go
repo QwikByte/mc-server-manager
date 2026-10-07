@@ -418,12 +418,18 @@ func (d *Docker) removeData(spec runtime.Spec) error {
 }
 
 func (d *Docker) Logs(ctx context.Context, id string, tail int, after time.Time) iter.Seq2[runtime.LogLine, error] {
+	return d.logs(ctx, containerName(id), tail, after)
+}
+
+// logs yields the last tail lines of the output of a container written after the time after,
+// if it isn't zero, then follows it until the container stops or ctx is cancelled.
+func (d *Docker) logs(ctx context.Context, name string, tail int, after time.Time) iter.Seq2[runtime.LogLine, error] {
 	return func(yield func(runtime.LogLine, error) bool) {
 		opts := client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Follow: true, Timestamps: true, Tail: strconv.Itoa(tail)}
 		if !after.IsZero() {
 			opts.Since = after.Format(time.RFC3339Nano) // includes the line written at that time
 		}
-		logs, err := d.cli.ContainerLogs(ctx, containerName(id), opts)
+		logs, err := d.cli.ContainerLogs(ctx, name, opts)
 		if err != nil {
 			yield(runtime.LogLine{}, notFound(err))
 			return

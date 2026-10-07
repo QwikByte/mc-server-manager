@@ -102,6 +102,7 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 		"datastore list":    global(access.DatastoresView),
 		"datastore backups": global(access.DatastoresView),
 		"datastore backup":  global(access.DatastoresManage),
+		"datastore logs":    global(access.DatastoresManage),
 		// Only the panel's Databases tab restores, as it gives the users of the databases their
 		// passwords first; the local CLI is for emergencies.
 		"datastore restore": {run: func(context.Context, access.Grants, []string) error { return errDatastoreRestore }},

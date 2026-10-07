@@ -38,6 +38,16 @@ which the plugins that use the database need then.
 time, in the order of the primary key, with values cut to 200 characters and binary ones in hexadecimal. It only reads,
 also only for those who may manage datastores.
 
+## Log
+
+**Show log** on the tab follows the log of the datastore's container: what MariaDB or PostgreSQL writes, e.g. why it
+doesn't start or why its health check fails, which the message about a failing health check links to. It starts with the
+last 300 lines and continues when the datastore starts again. The agent hides the passwords in the statements that the
+engines log, e.g. when one fails: `ALTER ROLE shop PASSWORD '…'` shows as `ALTER ROLE shop PASSWORD '<hidden>'`, and
+the same for `PASSWORD('…')`, `IDENTIFIED BY '…'` and `USING '…'`. Only those who may manage datastores see the log. On
+the node and in the panel's terminal, `noryx-agent datastore logs <id>` follows it too, after the last 100 lines or as
+many as `-n` asks for, up to 1000.
+
 ## Backups
 
 **Back up now** and backup jobs dump the databases into a ZIP archive with one `<database>.sql` each
@@ -46,8 +56,8 @@ also only for those who may manage datastores.
 databases, all at first. Restoring asks for the databases of the dump, all at first, creates them again and loads them
 as each database's own user; one that was dropped since has to be added again first. The plugins that use them lose
 their connection meanwhile, so their servers are best stopped first. Dumps can be downloaded. Locally,
-`noryx-agent datastore list|backup|backups|restore` works without the master, and the panel's terminal only lists and
-backs up.
+`noryx-agent datastore list|backup|backups|restore` works without the master, and the panel's terminal does all but
+restore.
 
 ## Upgrades and changes
 

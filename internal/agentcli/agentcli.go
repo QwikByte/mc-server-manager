@@ -223,6 +223,11 @@ func followLogs(ctx context.Context, conn grpc.ClientConnInterface, id string, o
 	if err != nil {
 		return err
 	}
+	return printLines(stream, out)
+}
+
+// printLines prints the lines of a stream until it ends or the command is stopped.
+func printLines[T interface{ GetLine() string }](stream interface{ Recv() (T, error) }, out io.Writer) error {
 	for {
 		res, err := stream.Recv()
 		if errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {

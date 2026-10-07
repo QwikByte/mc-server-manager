@@ -101,7 +101,8 @@ the master](automation.md#backing-up-the-master)).
 
 ### On a node
 
-`sudo noryx-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the agent's own log.
+`sudo noryx-agent status` checks the node, `server logs <id>` follows a console, `datastore logs <id>` the log of a
+datastore and `logs -f` the agent's own log.
 `backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is unreachable too.
 `storage add ssd /mnt/ssd/noryx` allows another directory for server data, e.g. on a faster disk; new servers can then
 be created there from the panel, and backup jobs can keep their backups there. `overlay allow` lets the panel add the

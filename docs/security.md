@@ -135,8 +135,13 @@ the time of the load. The agent never stores the passwords of users: upgrades ke
 uses them in a statement. Dumps are kept like backups and checked before a restore drops anything, so a damaged one
 changes nothing. Browsing reads as the superuser in a session that only reads and stops each statement after 10 seconds,
 with statements the agent builds itself from names that need no escaping: tables, schemas and columns whose names don't
-match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. The
-passwords are stored in the master's database like the forwarding secret, and are never logged. The API returns them
+match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. The log
+of a datastore's container, which only those who may manage datastores see, shows the statements that the engines log,
+e.g. when one fails, so the agent hides every quoted value after `PASSWORD`, `PASSWORD(`, `IDENTIFIED BY` and `USING`,
+the hashes of passwords too, before it sends a line: also with escaped quotes, and to the end of the line where it can't
+tell where a value ends. It drops control characters, so that a line can't control the terminal of the local CLI, and
+the master relays the log without logging it. The passwords are stored in the master's database like the forwarding
+secret, and are never logged. The API returns them
 only to those who may manage datastores, one at a time on request, without caching, and logs who asked; they can
 download all data in dumps anyway. A compromised master knows them, as it knows the forwarding secret, and could restore
 or delete data, but can't learn the superuser's password or place data outside the allowed storage locations.
@@ -161,10 +166,11 @@ same way; the backups on the node keep them, so restoring works.
 
 Every API route states the permission it needs when it is registered, so none can be added without; the terminal checks
 each command the same way and refuses commands without a check. Permissions are loaded for every request, so changes,
-disabling and deleting apply right away; disabled users are signed out. Streams that follow output, the console and
-terminal commands such as `server logs`, end every 5 minutes, so the panel checks the session and the permissions again;
-the console connects again on its own and continues. Users can only grant permissions they have themselves, within their
-own scope, and only manage users who have no more permissions than they do, so no one can raise their own permissions.
+disabling and deleting apply right away; disabled users are signed out. Streams that follow output, the console, the
+log of a datastore and terminal commands such as `server logs`, end every 5 minutes, so the panel checks the session and
+the permissions again; the console and the log connect again on their own and continue. Users can only grant
+permissions they have themselves, within their own scope, and only manage users who have no more permissions than they
+do, so no one can raise their own permissions.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
 change with the user who made it, also denied attempts.
 

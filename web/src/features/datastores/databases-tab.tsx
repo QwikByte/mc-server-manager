@@ -19,7 +19,8 @@ import {
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { t } from "i18next"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useRef, useState } from "react"
+import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
@@ -36,6 +37,7 @@ import { useAccess } from "@/features/access/use-access"
 import { formatBytes, formatDateTime, formatMegabytes } from "@/lib/format"
 import { type Database, type Datastore, downloadUrl, type Dump, dumpsQuery, networkDatastoresQuery, passwordQuery, useDatastore } from "./api"
 import { ChangeDatastoreDialog, CreateDatastoreDialog, DeleteDatastoreDialog } from "./datastore-dialogs"
+import { DatastoreLog } from "./datastore-log"
 import { BackUpDialog, RestoreDialog } from "./dump-dialogs"
 import { engines, states } from "./labels"
 
@@ -83,6 +85,13 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
   const { can } = useAccess()
   const manage = can("datastores.manage")
   const { power, addDatabase, update } = useDatastore(ds.id)
+  const [logOpen, setLogOpen] = useState(false)
+  const log = useRef<HTMLElement>(null)
+  const showLog = () => {
+    setLogOpen(true)
+    log.current?.focus({ preventScroll: true })
+    log.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
   const run = (action: "start" | "stop") =>
     power.mutate(action, {
       onSuccess: () => toast.success(action === "start" ? t("Started {{name}}", { name: ds.name }) : t("Stopped {{name}}", { name: ds.name })),
@@ -162,7 +171,15 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
         )}
         {ds.state === "unhealthy" && (
           <Callout tone="destructive" icon={WarningCircleIcon} role="alert">
-            {t("Its health check fails. The log of its container on {{node}} tells why.", { node: ds.nodeName })}
+            {manage ? (
+              <Trans
+                i18nKey="Its health check fails. <link>The log of its container</link> on {{node}} tells why."
+                values={{ node: ds.nodeName }}
+                components={{ link: <button type="button" className="font-medium underline underline-offset-4" onClick={showLog} /> }}
+              />
+            ) : (
+              t("Its health check fails. The log of its container on {{node}} tells why.", { node: ds.nodeName })
+            )}
           </Callout>
         )}
         {ds.missing.length > 0 && (
@@ -202,6 +219,7 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
         )}
         <Databases datastore={ds} />
         <Dumps datastore={ds} />
+        {manage && <DatastoreLog ref={log} datastore={ds} open={logOpen} onOpenChange={setLogOpen} />}
       </div>
     </article>
   )

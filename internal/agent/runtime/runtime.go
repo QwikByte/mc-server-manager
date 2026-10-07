@@ -179,7 +179,8 @@ type Usage struct {
 	NetTxBytes  uint64
 }
 
-// LogLine is a line of a server's console and when it was written; Time is zero if unknown.
+// LogLine is a line of a server's console or a datastore's log and when it was written; Time
+// is zero if unknown.
 type LogLine struct {
 	Time time.Time
 	Text string

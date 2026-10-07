@@ -26,8 +26,9 @@ func NewHandler(svc *Service, ops *operation.Operations) *Handler {
 	return &Handler{svc: svc, ops: ops}
 }
 
-// Register adds the routes. Passwords, tables and dumps give away the data of the databases,
-// so only those who manage datastores may see them.
+// Register adds the routes. Passwords, tables, dumps and the log, which shows the statements
+// that failed, give away the data of the databases, so only those who manage datastores may see
+// them.
 func (h *Handler) Register(mux access.Mux) {
 	view, manage := access.Everywhere(access.DatastoresView), access.Everywhere(access.DatastoresManage)
 	mux.Handle("GET /api/datastores", view, func(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +75,9 @@ func (h *Handler) Register(mux access.Mux) {
 	}
 	mux.Handle("DELETE /api/datastores/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
 		write(w, r, http.StatusNoContent, nil, h.svc.Delete(r.Context(), r.PathValue("id")))
+	})
+	mux.Handle("GET /api/datastores/{id}/logs", manage, func(w http.ResponseWriter, r *http.Request) {
+		h.svc.Log(w, r, r.PathValue("id"))
 	})
 	mux.Handle("POST /api/datastores/{id}/databases", manage, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {

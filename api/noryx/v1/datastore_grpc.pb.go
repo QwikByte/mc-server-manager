@@ -19,22 +19,23 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DatastoreService_ListDatastores_FullMethodName   = "/noryx.v1.DatastoreService/ListDatastores"
-	DatastoreService_CreateDatastore_FullMethodName  = "/noryx.v1.DatastoreService/CreateDatastore"
-	DatastoreService_StartDatastore_FullMethodName   = "/noryx.v1.DatastoreService/StartDatastore"
-	DatastoreService_StopDatastore_FullMethodName    = "/noryx.v1.DatastoreService/StopDatastore"
-	DatastoreService_UpdateDatastore_FullMethodName  = "/noryx.v1.DatastoreService/UpdateDatastore"
-	DatastoreService_PublishDatastore_FullMethodName = "/noryx.v1.DatastoreService/PublishDatastore"
-	DatastoreService_DeleteDatastore_FullMethodName  = "/noryx.v1.DatastoreService/DeleteDatastore"
-	DatastoreService_EnsureDatabase_FullMethodName   = "/noryx.v1.DatastoreService/EnsureDatabase"
-	DatastoreService_DropDatabase_FullMethodName     = "/noryx.v1.DatastoreService/DropDatabase"
-	DatastoreService_CreateDump_FullMethodName       = "/noryx.v1.DatastoreService/CreateDump"
-	DatastoreService_ListDumps_FullMethodName        = "/noryx.v1.DatastoreService/ListDumps"
-	DatastoreService_RestoreDump_FullMethodName      = "/noryx.v1.DatastoreService/RestoreDump"
-	DatastoreService_DeleteDump_FullMethodName       = "/noryx.v1.DatastoreService/DeleteDump"
-	DatastoreService_DownloadDump_FullMethodName     = "/noryx.v1.DatastoreService/DownloadDump"
-	DatastoreService_ListTables_FullMethodName       = "/noryx.v1.DatastoreService/ListTables"
-	DatastoreService_BrowseTable_FullMethodName      = "/noryx.v1.DatastoreService/BrowseTable"
+	DatastoreService_ListDatastores_FullMethodName      = "/noryx.v1.DatastoreService/ListDatastores"
+	DatastoreService_CreateDatastore_FullMethodName     = "/noryx.v1.DatastoreService/CreateDatastore"
+	DatastoreService_StartDatastore_FullMethodName      = "/noryx.v1.DatastoreService/StartDatastore"
+	DatastoreService_StopDatastore_FullMethodName       = "/noryx.v1.DatastoreService/StopDatastore"
+	DatastoreService_UpdateDatastore_FullMethodName     = "/noryx.v1.DatastoreService/UpdateDatastore"
+	DatastoreService_PublishDatastore_FullMethodName    = "/noryx.v1.DatastoreService/PublishDatastore"
+	DatastoreService_DeleteDatastore_FullMethodName     = "/noryx.v1.DatastoreService/DeleteDatastore"
+	DatastoreService_EnsureDatabase_FullMethodName      = "/noryx.v1.DatastoreService/EnsureDatabase"
+	DatastoreService_DropDatabase_FullMethodName        = "/noryx.v1.DatastoreService/DropDatabase"
+	DatastoreService_CreateDump_FullMethodName          = "/noryx.v1.DatastoreService/CreateDump"
+	DatastoreService_ListDumps_FullMethodName           = "/noryx.v1.DatastoreService/ListDumps"
+	DatastoreService_RestoreDump_FullMethodName         = "/noryx.v1.DatastoreService/RestoreDump"
+	DatastoreService_DeleteDump_FullMethodName          = "/noryx.v1.DatastoreService/DeleteDump"
+	DatastoreService_DownloadDump_FullMethodName        = "/noryx.v1.DatastoreService/DownloadDump"
+	DatastoreService_ListTables_FullMethodName          = "/noryx.v1.DatastoreService/ListTables"
+	DatastoreService_BrowseTable_FullMethodName         = "/noryx.v1.DatastoreService/BrowseTable"
+	DatastoreService_StreamDatastoreLogs_FullMethodName = "/noryx.v1.DatastoreService/StreamDatastoreLogs"
 )
 
 // DatastoreServiceClient is the client API for DatastoreService service.
@@ -78,6 +79,11 @@ type DatastoreServiceClient interface {
 	// BrowseTable returns rows of a table as text, with long values cut short. It only reads,
 	// with statements the agent builds itself.
 	BrowseTable(ctx context.Context, in *BrowseTableRequest, opts ...grpc.CallOption) (*BrowseTableResponse, error)
+	// StreamDatastoreLogs sends the last lines of the log of a datastore's container, then
+	// follows it until the container stops or the client disconnects, like StreamLogs of
+	// servers. The agent hides passwords in the statements that the engines log, e.g. when
+	// they fail.
+	StreamDatastoreLogs(ctx context.Context, in *StreamDatastoreLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDatastoreLogsResponse], error)
 }
 
 type datastoreServiceClient struct {
@@ -257,6 +263,25 @@ func (c *datastoreServiceClient) BrowseTable(ctx context.Context, in *BrowseTabl
 	return out, nil
 }
 
+func (c *datastoreServiceClient) StreamDatastoreLogs(ctx context.Context, in *StreamDatastoreLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDatastoreLogsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DatastoreService_ServiceDesc.Streams[1], DatastoreService_StreamDatastoreLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamDatastoreLogsRequest, StreamDatastoreLogsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DatastoreService_StreamDatastoreLogsClient = grpc.ServerStreamingClient[StreamDatastoreLogsResponse]
+
 // DatastoreServiceServer is the server API for DatastoreService service.
 // All implementations must embed UnimplementedDatastoreServiceServer
 // for forward compatibility.
@@ -298,6 +323,11 @@ type DatastoreServiceServer interface {
 	// BrowseTable returns rows of a table as text, with long values cut short. It only reads,
 	// with statements the agent builds itself.
 	BrowseTable(context.Context, *BrowseTableRequest) (*BrowseTableResponse, error)
+	// StreamDatastoreLogs sends the last lines of the log of a datastore's container, then
+	// follows it until the container stops or the client disconnects, like StreamLogs of
+	// servers. The agent hides passwords in the statements that the engines log, e.g. when
+	// they fail.
+	StreamDatastoreLogs(*StreamDatastoreLogsRequest, grpc.ServerStreamingServer[StreamDatastoreLogsResponse]) error
 	mustEmbedUnimplementedDatastoreServiceServer()
 }
 
@@ -355,6 +385,9 @@ func (UnimplementedDatastoreServiceServer) ListTables(context.Context, *ListTabl
 }
 func (UnimplementedDatastoreServiceServer) BrowseTable(context.Context, *BrowseTableRequest) (*BrowseTableResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BrowseTable not implemented")
+}
+func (UnimplementedDatastoreServiceServer) StreamDatastoreLogs(*StreamDatastoreLogsRequest, grpc.ServerStreamingServer[StreamDatastoreLogsResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamDatastoreLogs not implemented")
 }
 func (UnimplementedDatastoreServiceServer) mustEmbedUnimplementedDatastoreServiceServer() {}
 func (UnimplementedDatastoreServiceServer) testEmbeddedByValue()                          {}
@@ -658,6 +691,17 @@ func _DatastoreService_BrowseTable_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DatastoreService_StreamDatastoreLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamDatastoreLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DatastoreServiceServer).StreamDatastoreLogs(m, &grpc.GenericServerStream[StreamDatastoreLogsRequest, StreamDatastoreLogsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DatastoreService_StreamDatastoreLogsServer = grpc.ServerStreamingServer[StreamDatastoreLogsResponse]
+
 // DatastoreService_ServiceDesc is the grpc.ServiceDesc for DatastoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -730,6 +774,11 @@ var DatastoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "DownloadDump",
 			Handler:       _DatastoreService_DownloadDump_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamDatastoreLogs",
+			Handler:       _DatastoreService_StreamDatastoreLogs_Handler,
 			ServerStreams: true,
 		},
 	},

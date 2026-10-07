@@ -2,6 +2,7 @@ package agentcli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -13,10 +14,13 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
-// datastore lists the datastores of the node and dumps and restores their databases, locally
-// e.g. while the master is unreachable.
+// maxLogLines is the most past lines of a datastore's log that the agent sends.
+const maxLogLines = 1000
+
+// datastore lists the datastores of the node, dumps and restores their databases, locally
+// e.g. while the master is unreachable, and follows their logs.
 func (c cli) datastore() *cobra.Command {
-	cmd := &cobra.Command{Use: "datastore", Short: "Back up and restore the databases of the networks of this node"}
+	cmd := &cobra.Command{Use: "datastore", Short: "Back up and restore the databases of the networks of this node, and follow their logs"}
 	var label string
 	backup := &cobra.Command{
 		Use:   "backup <datastore-id> [database]...",
@@ -34,6 +38,26 @@ func (c cli) datastore() *cobra.Command {
 		},
 	}
 	backup.Flags().StringVar(&label, "label", "", "describes the backup, e.g. before an update")
+	var lines int
+	logs := &cobra.Command{
+		Use:   "logs <datastore-id>",
+		Short: "Follow the log of a datastore until Ctrl+C, with passwords hidden",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if lines < 0 {
+				return errors.New("--lines can't be negative")
+			}
+			return c.long(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
+				req := &noryxv1.StreamDatastoreLogsRequest{Id: args[0], Tail: uint32(min(lines, maxLogLines))} //nolint:gosec // 0 to maxLogLines
+				stream, err := noryxv1.NewDatastoreServiceClient(conn).StreamDatastoreLogs(ctx, req)
+				if err != nil {
+					return err
+				}
+				return printLines(stream, cmd.OutOrStdout())
+			})
+		},
+	}
+	logs.Flags().IntVarP(&lines, "lines", "n", 100, fmt.Sprintf("number of past lines shown first, up to %d", maxLogLines))
 	cmd.AddCommand(
 		&cobra.Command{
 			Use:   "list",
@@ -94,6 +118,7 @@ func (c cli) datastore() *cobra.Command {
 				})
 			},
 		},
+		logs,
 	)
 	return cmd
 }

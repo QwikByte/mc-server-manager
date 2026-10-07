@@ -1,4 +1,5 @@
-// Package httpapi contains the JSON and download helpers shared by the REST handlers of the master.
+// Package httpapi contains the JSON, download and log stream helpers shared by the REST handlers
+// of the master.
 package httpapi
 
 import (

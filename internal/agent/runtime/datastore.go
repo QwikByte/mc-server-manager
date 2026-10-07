@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"iter"
+	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
@@ -73,4 +75,8 @@ type Datastores interface {
 	// the order of its primary key if it has one, as text with long values cut short. It only
 	// reads, with names that noryxv1.TableName matches.
 	Browse(ctx context.Context, id, name, schema, table string, offset uint64, limit uint32) (*noryxv1.BrowseTableResponse, error)
+	// DatastoreLogs yields the last tail lines of the log of a datastore's container written
+	// after the time after, if it isn't zero, then follows the log until the container stops
+	// or ctx is cancelled. The lines are as the engine wrote them, with any passwords.
+	DatastoreLogs(ctx context.Context, id string, tail int, after time.Time) iter.Seq2[LogLine, error]
 }
