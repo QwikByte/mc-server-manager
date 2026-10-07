@@ -1,0 +1,125 @@
+# Installation and operation
+
+Installing, updating and removing Noryx, and where it keeps its files.
+
+## Supported systems
+
+Releases contain packages for Debian, Ubuntu and their derivatives (`.deb`), Fedora, RHEL, Rocky Linux, AlmaLinux and
+openSUSE (`.rpm`) and Arch Linux, each for x86_64 and arm64. Only current Linux systems with systemd and OpenSSL 3 are
+supported, e.g. Debian 12, Ubuntu 22.04, RHEL, Rocky Linux and AlmaLinux 9, openSUSE Leap 16 and newer. The installer
+picks the package, checks the signature of the release and the package's checksum and sets everything up. Running it
+again updates, and `--version vX.Y.Z` installs a certain release. While another installation of packages runs, e.g. the
+automatic updates of a new server, it waits up to 10 minutes and says so. It asks questions only when started from a
+file as below; piped to `sudo bash`, it uses the defaults instead, because `sudo-rs`, the `sudo` of newer Ubuntu
+releases, doesn't pass on what is typed then.
+
+## Master
+
+The master serves the panel:
+
+```sh
+curl -fsSLO https://github.com/QwikByte/noryx/releases/latest/download/install.sh && sudo bash install.sh master
+```
+
+It asks for the host name or IP address under which the nodes reach this machine (`--public-host`), for the IP address
+and port the panel listens at (`--panel-addr`, `127.0.0.1:8080` by default, `0.0.0.0:<port>` for all interfaces, ports
+from 1024 on), and for the password of the first administrator, `admin` unless `--admin` names another (piped, it
+generates one and writes it to `/etc/noryx/admin-password`, which only root can read). The password needs at least 12
+characters and isn't shown while you type it. These options only apply to a new installation; later, both addresses can
+be changed in the panel's settings.
+
+Open port 9443 for the nodes. For plugins and mods, the master needs HTTPS access to `api.modrinth.com` and
+`cdn.modrinth.com`.
+
+### HTTPS
+
+Browsers only sign in over HTTPS or at `localhost`. Until the panel serves HTTPS, open it through an SSH tunnel, e.g.
+`ssh -L 8080:127.0.0.1:8080 <user>@<master>` and `http://localhost:8080`. Then either turn on HTTPS under [**Settings →
+General**](administration.md#general): a certificate of Let's Encrypt for a domain, or a self-signed one, which also
+works for IP addresses but makes browsers warn. Or serve the panel with a reverse proxy, e.g. with
+[Caddy](https://caddyserver.com) and this `Caddyfile`, which also gets the certificate:
+
+```
+panel.example.com {
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+Then add `--trusted-proxy 127.0.0.1` to `NORYX_MASTER_OPTS` in `/etc/noryx/master.env`, so that the master takes the
+address of each client from the proxy's `X-Forwarded-For` header. Otherwise all clients share the proxy's address, and
+with it the budget of the sign-in rate limit, and the log shows only the proxy's address.
+
+## Nodes
+
+Add a node in the panel under **Nodes**. It shows a command that installs the agent in the master's version, offers to
+install Docker if it's missing (`--install-docker` doesn't ask), connects the agent with a join token and starts it:
+
+```sh
+curl -fsSLO https://github.com/QwikByte/noryx/releases/download/<version>/install.sh && sudo bash install.sh agent --join <join-token>
+```
+
+Allow port 7443 only from the master's IP address. For the [private network](networks.md#private-network) of the nodes,
+open UDP port 51820 (or the one in its settings) between the nodes.
+
+## Everything on one machine
+
+`sudo bash install.sh all` installs master and agent, registers the machine as node and connects its agent, which then
+only accepts connections from the machine itself.
+
+## Updates
+
+The master looks for a new release every 6 hours. Administrators then see a notice in the panel with the release notes
+and install it with **Install now**: the master installs the release, restarts on it, and then updates every agent to
+its version, also the one on its own machine. Running services restart; Minecraft servers keep running. Agents that were
+offline are listed with a button to update them later. The check can be turned off in the settings, e.g. for a master
+without internet access. While GitHub's API limits the requests of the master's IP address (60 an hour, shared with
+everything behind the same address), the master reads only the version from the release page, and the panel links to the
+release notes on GitHub. On the command line, `… | sudo bash -s -- update` updates what is installed; update the master
+first, then the nodes.
+
+## Files and logs
+
+| Where                                           | What                                                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/etc/noryx/master.env`, `/etc/noryx/agent.env` | Options of the services, e.g. listen addresses or a log file; `systemctl restart` applies them |
+| `/var/lib/noryx-master`, `/var/lib/noryx-agent` | Database and CA of the master; credentials, server data and backups of the agent               |
+| `journalctl -u noryx-master`, `-u noryx-agent`  | What the services log; `--log-format json` in the options suits log collectors                 |
+
+## Commands
+
+### On the master's host
+
+Commands run as the master's user `noryx`: `sudo -u noryx noryx-master logs` shows the log, `… user add <name>` creates
+an administrator, e.g. after losing access, `… node add <name> <agent-address> --public-enroll-addr <host:port>` adds a
+node and prints its join token for scripts, and `… backup <file>` saves the master's database and CA (see [Backing up
+the master](automation.md#backing-up-the-master)).
+
+### On a node
+
+`sudo noryx-agent status` checks the node, `server logs <id>` follows a console and `logs -f` the agent's own log.
+`backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is unreachable too.
+`storage add ssd /mnt/ssd/noryx` allows another directory for server data, e.g. on a faster disk; new servers can then
+be created there from the panel, and backup jobs can keep their backups there. `overlay allow` lets the panel add the
+node to the private network of the nodes, `overlay deny` takes that back, and `overlay status` shows its address and
+peers.
+
+## Removing
+
+`apt remove`, `dnf remove` or `pacman -R` with `noryx-master` or `noryx-agent` stops and removes a program but keeps its
+data. Delete `/var/lib/noryx-master`, `/var/lib/noryx-agent` and `/etc/noryx` to remove that too. The Minecraft servers
+of a node keep running in Docker; delete them in the panel before.
+
+## Installing by hand and verifying releases
+
+Each release also has `.tar.gz` archives with the static binary, its systemd unit and its options, for other
+distributions: the unit expects the binary in `/usr/bin`, the options in `/etc/noryx` and, for the master, a system user
+`noryx`. `checksums.txt` lists the SHA-256 checksums of all files, and
+`gh attestation verify <file> --repo QwikByte/noryx` proves that a file was built by the release workflow.
+`checksums.txt.sig` is the signature of the checksums, which the installer checks with the release key. To check files
+by hand, e.g. `install.sh` before the first installation, download `checksums.txt` and `checksums.txt.sig` too:
+
+```sh
+printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA18ilyBW0qkWpfEqFR+rW5eQeGC3Sif4OiD8RKpEry5s=\n-----END PUBLIC KEY-----\n' > noryx-release.pem
+openssl pkeyutl -verify -pubin -inkey noryx-release.pem -rawin -in checksums.txt -sigfile checksums.txt.sig
+sha256sum -c --ignore-missing checksums.txt
+```

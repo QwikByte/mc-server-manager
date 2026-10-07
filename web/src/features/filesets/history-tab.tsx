@@ -85,7 +85,7 @@ function VersionChanges({ set, version, previous }: { set: FileSet; version: num
 }
 
 /** The files that differ between two states of a set, each with its changes. */
-export function FilesDiff({ before, after }: { before: SetFile[]; after: SetFile[] }) {
+function FilesDiff({ before, after }: { before: SetFile[]; after: SetFile[] }) {
   const paths = [...new Set([...before, ...after].map((f) => f.path))].sort()
   const changed = paths.filter((p) => {
     const a = before.find((f) => f.path === p)

@@ -1,5 +1,5 @@
 /** The permissions of the panel, as the master's access package defines them; its tests check that both agree. */
-export const permissionIds = [
+const permissionIds = [
   "nodes.view",
   "nodes.edit",
   "nodes.certificates",

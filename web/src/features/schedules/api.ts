@@ -30,7 +30,7 @@ export interface Task<S> {
 export type TaskInput<S> = Pick<Task<S>, "name" | "enabled" | "schedule" | "targets" | "settings">
 
 /** The time zone of the browser, which new schedules start with. */
-export const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 export const defaultSchedule: Schedule = { days: [], times: ["04:00"], timeZone: localTimeZone }
 
