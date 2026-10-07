@@ -154,7 +154,7 @@ func TestLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []string{"deu", "DE", "de-DE", "../en"} {
+	for _, bad := range []string{"deu", "DE", "de-XX", "xx", "../en"} {
 		if err := svc.SetLanguage(ctx, user.ID, bad); err == nil {
 			t.Errorf("language %q accepted", bad)
 		}

@@ -11,10 +11,12 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/web"
 )
 
 const (
@@ -30,13 +32,12 @@ var (
 	errInvalidSetup = httpapi.Errorf(http.StatusNotFound, "This setup link is invalid, expired or used already. Ask for a new one.")
 
 	usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
-	languagePattern = regexp.MustCompile(`^([a-z]{2})?$`)
 )
 
 type User struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
-	// Language is the language of the panel the user chose, e.g. de; empty follows the browser.
+	// Language is the language of the panel the user chose, e.g. de or pt-BR; empty follows the browser.
 	Language string `json:"language,omitempty"`
 }
 
@@ -293,10 +294,10 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	return user, err
 }
 
-// SetLanguage stores the language of the panel a user chose, e.g. de, or empty for the browser's.
+// SetLanguage stores the language of the panel a user chose, one of web.Languages, or empty for the browser's.
 func (s *Service) SetLanguage(ctx context.Context, id int64, language string) error {
-	if !languagePattern.MatchString(language) {
-		return httpapi.Errorf(http.StatusBadRequest, "Choose a language by its two-letter code, e.g. de, or none to follow the browser.")
+	if language != "" && !slices.Contains(web.Languages, language) {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose one of the panel's languages, e.g. de, or none to follow the browser.")
 	}
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET language = ? WHERE id = ?`, language, id)
 	return err
