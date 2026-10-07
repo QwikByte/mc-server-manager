@@ -76,7 +76,8 @@ function ModpackSection({ nodeId, server, pack }: { nodeId: string; server: Serv
     <section className="surface space-y-5 rounded-2xl px-5 py-5 sm:px-8" aria-label={t("Modpack")}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <PluginIcon src={pack.project.icon} />
-        <div className="min-w-0 flex-1">
+        {/* Wide enough for the version, so that the note of a newer one moves below on phones. */}
+        <div className="min-w-40 flex-1">
           <h2 className="heading text-base">{t("Modpack")}</h2>
           <p className="truncate text-sm text-muted-foreground">
             {t("{{pack}}, version {{number}}", { pack: pack.project.title, number: pack.number })}
