@@ -324,6 +324,17 @@ func (c *Client) Download(ctx context.Context, f File) ([]byte, error) {
 	return data, nil
 }
 
+// ProjectOf returns the project of a file on the CDN, from its address
+// data/<project>/versions/<version>/<file>, or "".
+func (c *Client) ProjectOf(fileURL string) string {
+	rest, ok := strings.CutPrefix(fileURL, c.cdn+"data/")
+	project, rest, _ := strings.Cut(rest, "/")
+	if !ok || !strings.HasPrefix(rest, "versions/") || !ValidProjectID(project) {
+		return ""
+	}
+	return project
+}
+
 // IconName returns the name of a project icon on the CDN, e.g. AABBCCDD/icon.png, or ""
 // for icons elsewhere.
 func (c *Client) IconName(iconURL string) string {

@@ -177,7 +177,7 @@ func serve(ctx context.Context, cfg config) error {
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
-			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
+			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
 			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
@@ -297,14 +297,14 @@ func API(s Services) *http.ServeMux {
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations, s.FileSets).Register(m)
 	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
 	plugin.NewHandler(s.Plugins, s.Operations).Register(m)
-	modpack.NewHandler(s.Modpacks).Register(m)
+	modpack.NewHandler(s.Modpacks, s.Plugins, s.Operations).Register(m)
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
 	datastore.NewHandler(s.Datastores, s.Operations).Register(m)

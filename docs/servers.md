@@ -86,7 +86,8 @@ agent creates the container again with the same data; the old container is only 
 server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it changed,
 creates the container again the same way. The old image is removed once no server uses it. New servers get the newest
 image too: creating one pulls it, which downloads its changes if it was updated since. Deleting servers keeps their
-images.
+images. Servers created from a modpack show it in their settings, where they move to [another version of
+it](library.md#modpacks).
 
 The **stop timeout** is how long a server may take to save its worlds when it stops or restarts before it is killed:
 from 30 seconds to 10 minutes, 1 minute unless changed, e.g. longer for a large modded world. The **time zone**, one of
@@ -128,7 +129,7 @@ unhealthy and healthy again. It still counts as running: its console, restarts, 
 
 A server can be duplicated on its node: the copy gets all files, worlds and settings under a new name and port, and
 starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
-players stay connected. The copy doesn't take over the original's place in a network.
+players stay connected. The copy keeps the original's modpack, but doesn't take over its place in a network.
 
 ## Moving to another node
 

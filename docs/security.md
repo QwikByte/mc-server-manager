@@ -118,8 +118,12 @@ The master downloads only from Modrinth's CDN, up to 256 MB, and only uses a fil
 Modrinth's API lists; from Hangar, only from its CDN and with the SHA-256 hash its API lists, and versions that only
 link elsewhere can't be installed. Floodgate only comes from GeyserMC's download server, with the SHA-256 hash its API
 lists. A modpack is checked the same way, and each of its files against the SHA-512 hash in the pack; packs with files
-elsewhere than on Modrinth's CDN or with paths that leave the server's folder are refused before a server is created,
-and the agent confines the files like those of the file manager. The version of a mod loader ends up in a variable of
+elsewhere than on Modrinth's CDN or with paths that leave the server's folder are refused before a server is created or
+moves to another version of its pack, and the agent confines the files like those of the file manager. To tell which
+files of a pack changed on a server, the agent hashes them only if they are regular files without secrets, not through
+links, so a hash tells nothing about a secret, and an update never replaces or removes such files. A compromised server
+can only make its own files look changed or unchanged. Updating a pack needs the permissions to change the server's
+settings and to manage its plugins and mods, as it does both. The version of a mod loader ends up in a variable of
 the server image, so the agent only accepts letters, digits, `.`, `_`, `+` and `-`. The agent decides the folder from
 the server type and only accepts plain `.jar` file names in it. Project icons are fetched by the master, so the browser
 never contacts Modrinth or Hangar and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the

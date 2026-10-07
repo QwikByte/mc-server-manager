@@ -106,3 +106,27 @@ files servers need (not those for players only) and writes them into the new ser
 itself (`overrides`, then `server-overrides`), except `server.properties` and `eula.txt`. Afterwards it is a server like
 any other: the **Mods** tab recognises the mods and updates them. A server that didn't get all files of its pack is
 deleted again. Creating servers from modpacks needs the permission to manage plugins and mods on the node.
+
+The master remembers the pack and version a server was created from, and the files the pack wrote with their SHA-512
+hashes. The **Modpack** section of the server's **Settings** tab shows them, marks a newer release, and moves the server
+to another version of its pack for the same mod loader, newer or older: **Update modpack** or **Change version**. This
+runs as an [operation](panel.md#operations), which can be cancelled while the master downloads and checks the version
+and compares it with what the server has, which the agent hashes. Then:
+
+1. The server stops if it runs, and is backed up with its worlds, mods and configuration and the folders of the pack's
+   files, as "Before modpack" and the version.
+2. What the new version doesn't change stays as it is, whatever happened to it on the server.
+3. Mods follow the pack: new ones are added, changed ones replaced and dropped ones removed, also other versions of
+   their projects installed by hand on the **Mods** tab. A mod that you removed stays removed.
+4. The other files of the pack are written or removed only if the server has them as the pack wrote them, or doesn't
+   have them. Files that changed on the server since, or that the pack didn't write, stay as they are and are listed
+   afterwards, as are files with secrets of the server.
+5. If the new version changes the Minecraft or loader version of the pack, the server gets the new one, which creates
+   its container again. Otherwise a version set in the server's settings stays.
+6. The server starts again if it ran before.
+
+If the backup fails, nothing changes, and a server that ran starts again. If something fails after it, the server stays
+stopped, as it may be updated in part, and the error names the backup to restore. Copies of a server and servers that
+move to another node keep their pack. Servers created before the master remembered packs have none, and their mods are
+updated on the **Mods** tab. Updating needs the permissions to change the server's settings and to manage its plugins
+and mods, and an agent of this version.

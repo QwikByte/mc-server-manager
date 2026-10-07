@@ -18,3 +18,17 @@ func TestEveryServerTypeHasLoaders(t *testing.T) {
 		t.Error("Quilt doesn't load mods")
 	}
 }
+
+func TestProjectOf(t *testing.T) {
+	c := New(DefaultAPI, DefaultCDN)
+	for url, want := range map[string]string{
+		DefaultCDN + "data/AANobbMI/versions/IZskON6d/sodium.jar": "AANobbMI",
+		DefaultCDN + "data/AANobbMI/icon.png":                     "",
+		DefaultCDN + "data/../versions/IZskON6d/sodium.jar":       "",
+		"https://example.com/data/AANobbMI/versions/x/sodium.jar": "",
+	} {
+		if got := c.ProjectOf(url); got != want {
+			t.Errorf("ProjectOf(%q) = %q, want %q", url, got, want)
+		}
+	}
+}

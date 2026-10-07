@@ -1,13 +1,18 @@
-// Package modpack creates servers from Modrinth modpacks. The master downloads a pack and the
-// files its servers need from Modrinth's CDN, checks each against its SHA-512 hash and writes
-// them into the data of a new server, which then is a Fabric, Quilt, Forge or NeoForge server
-// like any other, with the Minecraft and loader version of the pack.
+// Package modpack creates servers from Modrinth modpacks and moves them to other versions of
+// their pack. The master downloads a pack and the files its servers need from Modrinth's CDN,
+// checks each against its SHA-512 hash and writes them into the data of a server, which then
+// is a Fabric, Quilt, Forge or NeoForge server like any other, with the Minecraft and loader
+// version of the pack. It remembers the files it wrote, to tell later which of them the
+// administrator changed.
 package modpack
 
 import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha512"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -55,17 +60,28 @@ var (
 	errNoPack = httpapi.Errorf(http.StatusBadRequest, "This isn't a version of a Modrinth modpack.")
 	// Versions end up in variables of the server image, like those the agent accepts.
 	versionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
+	sha512Pattern  = regexp.MustCompile(`^[0-9a-f]{128}$`)
 )
 
 // Pack is a version of a modpack, downloaded and checked, with what its servers run.
 type Pack struct {
-	Type          noryxv1.ServerType
-	GameVersion   string
-	LoaderVersion string
-	// files are downloaded and named by their path in the server's data; overrides are files
-	// of the pack itself, those of server-overrides last, as they replace the others.
-	files     []modrinth.File
-	overrides []*zip.File
+	Project, Version string // IDs on Modrinth
+	Number           string // the version number
+	Type             noryxv1.ServerType
+	GameVersion      string
+	LoaderVersion    string
+	// files are what the pack writes into a server's data, each path once: downloads, and
+	// files of the pack itself, those of server-overrides replacing the others.
+	files []file
+}
+
+// file is a file of a pack: a download, or with zip set one of the pack itself.
+type file struct {
+	path     string
+	sha512   string
+	project  string // the Modrinth project of a download, if its address tells
+	download modrinth.File
+	zip      *zip.File
 }
 
 // index is the modrinth.index.json of a pack, see
@@ -94,12 +110,16 @@ type Nodes interface {
 }
 
 type Service struct {
+	db       *sql.DB
 	nodes    Nodes
 	modrinth *modrinth.Client
+
+	mu       sync.Mutex
+	updating map[string]bool // servers whose pack is being updated, by node and server ID
 }
 
-func NewService(nodes Nodes, client *modrinth.Client) *Service {
-	return &Service{nodes: nodes, modrinth: client}
+func NewService(db *sql.DB, nodes Nodes, client *modrinth.Client) *Service {
+	return &Service{db: db, nodes: nodes, modrinth: client, updating: map[string]bool{}}
 }
 
 // Resolve downloads a version of a modpack and checks that servers can run it.
@@ -120,7 +140,11 @@ func (s *Service) Resolve(ctx context.Context, project, version string) (*Pack, 
 	if err != nil {
 		return nil, errNoPack
 	}
-	return s.parse(archive)
+	p, err := s.parse(archive)
+	if err == nil {
+		p.Project, p.Version, p.Number = v.ProjectID, v.ID, v.VersionNumber
+	}
+	return p, err
 }
 
 func (s *Service) parse(archive *zip.Reader) (*Pack, error) {
@@ -145,30 +169,46 @@ func (s *Service) parse(archive *zip.Reader) (*Pack, error) {
 	case len(idx.Files) > maxFiles:
 		return nil, httpapi.Errorf(http.StatusBadRequest, "The modpack has more than %d files.", maxFiles)
 	}
+	byPath := map[string]int{}
+	add := func(f file) {
+		if i, ok := byPath[f.path]; ok {
+			p.files[i] = f
+			return
+		}
+		byPath[f.path] = len(p.files)
+		p.files = append(p.files, f)
+	}
 	for _, f := range idx.Files {
 		if f.Env != nil && f.Env.Server == "unsupported" || slices.Contains(skipped, f.Path) {
 			continue
 		}
+		hash := strings.ToLower(f.Hashes.SHA512)
 		switch {
 		case !validPath(f.Path):
 			return nil, httpapi.Errorf(http.StatusBadRequest, "The modpack has a file at the invalid path %q.", f.Path)
 		case len(f.Downloads) == 0 || !s.modrinth.OnCDN(f.Downloads[0]):
 			return nil, httpapi.Errorf(http.StatusBadRequest, "%s of the modpack isn't on Modrinth's CDN, the only place the master downloads from.", f.Path)
+		case !sha512Pattern.MatchString(hash):
+			return nil, httpapi.Errorf(http.StatusBadRequest, "%s of the modpack has no valid SHA-512 hash.", f.Path)
 		}
-		file := modrinth.File{URL: f.Downloads[0], Filename: f.Path, Size: f.FileSize}
-		file.Hashes.SHA512 = f.Hashes.SHA512
-		p.files = append(p.files, file)
+		d := modrinth.File{URL: f.Downloads[0], Filename: f.Path, Size: f.FileSize}
+		d.Hashes.SHA512 = hash
+		add(file{path: f.Path, sha512: hash, project: s.modrinth.ProjectOf(d.URL), download: d})
 	}
 	for _, dir := range []string{"overrides/", "server-overrides/"} {
 		for _, f := range archive.File {
 			name, ok := strings.CutPrefix(f.Name, dir)
 			switch {
 			case !ok || !f.Mode().IsRegular() || slices.Contains(skipped, name): // folders and links are left out
+				continue
 			case !validPath(name):
 				return nil, httpapi.Errorf(http.StatusBadRequest, "The modpack has a file at the invalid path %q.", f.Name)
-			default:
-				p.overrides = append(p.overrides, f)
 			}
+			hash, err := hashOf(f)
+			if err != nil {
+				return nil, err
+			}
+			add(file{path: name, sha512: hash, zip: f})
 		}
 	}
 	return p, nil
@@ -188,18 +228,52 @@ func readJSON(archive *zip.Reader, name string, v any) error {
 	return json.NewDecoder(io.LimitReader(f, maxIndexBytes)).Decode(v)
 }
 
-// Install writes the files of a pack into the data of a server, a few downloads at a time,
-// and counts them in the operation of ctx.
+// hashOf returns the SHA-512 hash of a file of the pack itself.
+func hashOf(f *zip.File) (string, error) {
+	h := sha512.New()
+	err := extract(f, func(r io.Reader, _ int64) error {
+		if _, err := io.Copy(h, r); err != nil {
+			return errNoPack
+		}
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil)), err
+}
+
+// extract reads a file of the pack itself, whose size the archive may tell wrongly.
+func extract(f *zip.File, read func(io.Reader, int64) error) error {
+	if f.UncompressedSize64 > modrinth.MaxFileSize {
+		return httpapi.Errorf(http.StatusBadRequest, "%s of the modpack is larger than %d MB.", f.Name, modrinth.MaxFileSize>>20)
+	}
+	r, err := f.Open()
+	if err != nil {
+		return errNoPack
+	}
+	defer r.Close()
+	size := int64(f.UncompressedSize64) //nolint:gosec // limited above
+	return read(io.LimitReader(r, size), size)
+}
+
+// Install writes the files of a pack into the data of a new server, counting them in the
+// operation of ctx, and remembers the pack.
 func (s *Service) Install(ctx context.Context, nodeID, serverID string, p *Pack) error {
 	conn, err := s.nodes.Conn(ctx, nodeID)
-	if err != nil {
+	if err == nil {
+		err = s.write(ctx, noryxv1.NewFileServiceClient(conn), serverID, p.files)
+	}
+	if err == nil {
+		err = s.remember(ctx, nodeID, serverID, p, p.record())
+	}
+	return err
+}
+
+// write writes files of a pack into the data of a server, a few downloads at a time, and
+// counts them in the operation of ctx.
+func (s *Service) write(ctx context.Context, c noryxv1.FileServiceClient, serverID string, list []file) error {
+	if err := mkdirs(ctx, c, serverID, list); err != nil {
 		return err
 	}
-	c := noryxv1.NewFileServiceClient(conn)
-	if err := p.mkdirs(ctx, c, serverID); err != nil {
-		return err
-	}
-	total, done := int64(len(p.files)+len(p.overrides)), atomic.Int64{}
+	total, done := int64(len(list)), atomic.Int64{}
 	operation.Count(ctx, 0, total, "files")
 	write := func(ctx context.Context, name string, content io.Reader, size int64) error {
 		header := &noryxv1.WriteFileHeader{ServerId: serverID, Path: name, Overwrite: true, Size: size}
@@ -212,7 +286,7 @@ func (s *Service) Install(ctx context.Context, nodeID, serverID string, p *Pack)
 
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	queue := make(chan modrinth.File)
+	queue := make(chan file)
 	var wg sync.WaitGroup
 	for range downloads {
 		wg.Go(func() {
@@ -220,9 +294,9 @@ func (s *Service) Install(ctx context.Context, nodeID, serverID string, p *Pack)
 				if ctx.Err() != nil {
 					continue // after a failure, the others are left out
 				}
-				data, err := s.modrinth.Download(ctx, f)
+				data, err := s.modrinth.Download(ctx, f.download)
 				if err == nil {
-					err = write(ctx, f.Filename, bytes.NewReader(data), int64(len(data)))
+					err = write(ctx, f.path, bytes.NewReader(data), int64(len(data)))
 				}
 				if err != nil {
 					cancel(err)
@@ -230,31 +304,33 @@ func (s *Service) Install(ctx context.Context, nodeID, serverID string, p *Pack)
 			}
 		})
 	}
-	for _, f := range p.files {
-		queue <- f
+	for _, f := range list {
+		if f.zip == nil {
+			queue <- f
+		}
 	}
 	close(queue)
 	wg.Wait()
 	if err := context.Cause(ctx); err != nil {
 		return err
 	}
-	for _, f := range p.overrides {
-		if err := extract(ctx, f, write); err != nil {
+	for _, f := range list {
+		if f.zip == nil {
+			continue
+		}
+		err := extract(f.zip, func(r io.Reader, size int64) error { return write(ctx, f.path, r, size) })
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// mkdirs creates the folders of the files of a pack, which the agent only writes into
-// folders that exist.
-func (p *Pack) mkdirs(ctx context.Context, c noryxv1.FileServiceClient, serverID string) error {
+// mkdirs creates the folders of files, which the agent only writes into folders that exist.
+func mkdirs(ctx context.Context, c noryxv1.FileServiceClient, serverID string, list []file) error {
 	dirs := map[string]bool{}
-	for _, f := range p.files {
-		dirs[path.Dir(f.Filename)] = true
-	}
-	for _, f := range p.overrides {
-		dirs[path.Dir(name(f))] = true
+	for _, f := range list {
+		dirs[path.Dir(f.path)] = true
 	}
 	delete(dirs, ".")
 	for dir := range dirs {
@@ -264,20 +340,4 @@ func (p *Pack) mkdirs(ctx context.Context, c noryxv1.FileServiceClient, serverID
 		}
 	}
 	return nil
-}
-
-// name returns the path in the server's data of a file of the pack itself.
-func name(f *zip.File) string { return f.Name[strings.IndexByte(f.Name, '/')+1:] }
-
-// extract writes a file of the pack itself, whose size the archive may tell wrongly.
-func extract(ctx context.Context, f *zip.File, write func(context.Context, string, io.Reader, int64) error) error {
-	if f.UncompressedSize64 > modrinth.MaxFileSize {
-		return httpapi.Errorf(http.StatusBadRequest, "%s of the modpack is larger than %d MB.", f.Name, modrinth.MaxFileSize>>20)
-	}
-	r, err := f.Open()
-	if err != nil {
-		return errNoPack
-	}
-	defer r.Close()
-	return write(ctx, name(f), io.LimitReader(r, int64(f.UncompressedSize64)), int64(f.UncompressedSize64)) //nolint:gosec // limited above
 }
