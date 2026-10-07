@@ -155,6 +155,8 @@ type view struct {
 	// Overlay tells that the node publishes the port only in the private network of the
 	// nodes, for the node of the server's proxy.
 	Overlay bool `json:"overlay,omitempty"`
+	// Unhealthy tells that a running server's health check fails, e.g. as it hangs.
+	Unhealthy bool `json:"unhealthy,omitempty"`
 	// RefusedJVMOptions are JVM options set before the agent refused them, which the server
 	// still starts with until they are removed.
 	RefusedJVMOptions []string `json:"refusedJvmOptions,omitempty"`
@@ -188,7 +190,7 @@ func toView(s *noryxv1.Server) view {
 	return view{
 		ID: s.GetId(), Name: s.GetName(), Version: s.GetVersion(), MemoryMB: s.GetMemoryMb(), MemoryLimitMB: noryxv1.ContainerMemoryMB(s.GetMemoryMb()), Port: s.GetPort(),
 		Type: s.GetType().Slug(), State: s.GetState().Slug(), Storage: s.GetStorage(), Crashes: s.GetCrashes(), ExitCode: s.GetExitCode(),
-		BedrockPort: s.GetBedrockPort(), RefusedJVMOptions: s.GetRefusedJvmOptions(), Overlay: s.GetOverlay(),
+		BedrockPort: s.GetBedrockPort(), RefusedJVMOptions: s.GetRefusedJvmOptions(), Overlay: s.GetOverlay(), Unhealthy: s.GetUnhealthy(),
 		settings: settings{
 			Java: s.GetJava(), LoaderVersion: s.GetLoaderVersion(), RestartPolicy: s.GetRestartPolicy().Slug(), AikarFlags: s.GetAikarFlags(),
 			JVMOptions: append([]string{}, s.GetJvmOptions()...), CPULimit: float64(s.GetCpuMillis()) / 1000,

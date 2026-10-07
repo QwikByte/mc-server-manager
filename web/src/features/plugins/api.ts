@@ -155,6 +155,7 @@ export const pluginsQuery = (ref: ServerRef) =>
   queryOptions({
     queryKey: ["plugins", ref.nodeId, ref.serverId],
     queryFn: () => api<PluginListing>(base(ref)),
+    refetchInterval: 30_000, // e.g. other users or file sets change them
   })
 
 /**

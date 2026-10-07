@@ -57,7 +57,9 @@ components show them with `t("…")`, or `<Trans>` for texts with markup, and `m
 components. `npm run i18n` in `web` lists them in `web/src/locales/en.json` and adds new ones to the other languages,
 e.g. `de.json`, untranslated: they are empty there and show in English until someone translates them. `make lint` fails
 while the files are out of date or a component shows a text without `t`. A new language is a copy of `en.json` with the
-texts translated and its code added to `locales` in `web/i18next.config.ts`; the language menu offers it then.
+texts translated, named after its code with a script or region if it needs one, e.g. `pt-BR.json`. Add the code to
+`locales` in `web/i18next.config.ts` and to `Languages` in `web/languages.go`, which the master accepts as users'
+languages; the language menu offers it then.
 
 ## Releasing
 

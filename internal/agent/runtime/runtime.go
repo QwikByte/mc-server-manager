@@ -106,6 +106,8 @@ type Server struct {
 	// stopped because of a crash.
 	Crashes  int
 	ExitCode int
+	// Unhealthy is set while a running server's health check fails, e.g. as it hangs.
+	Unhealthy bool
 }
 
 // Forwarding is how a proxy forwards its players to the game servers of its network.

@@ -1,5 +1,5 @@
 import { type InfiniteData, infiniteQueryOptions, keepPreviousData, queryOptions, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { api } from "@/lib/api"
 
 export type Level = "debug" | "info" | "warn" | "error"
@@ -82,28 +82,57 @@ export const statsQuery = (filter: LogFilter) =>
 export const exportUrl = (filter: LogFilter, format: "csv" | "jsonl") => `/api/logs/export?${filterQuery(filter, { format })}`
 
 /**
- * Calls onEntry with every new entry that matches the filter while enabled. The browser
- * reconnects on its own and continues after the last entry it got.
+ * Calls onEntry with every new entry that matches the filter while enabled, and tells whether
+ * the stream is down. It reconnects and continues after the last entry it got: the browser
+ * does after a lost connection and when the master ends the stream every few minutes, which
+ * takes it 5 seconds; after an answer that isn't a stream, e.g. from a proxy while the master
+ * restarts, the browser gives up, and this connects anew.
  */
 export function useLogStream(filter: LogFilter, onEntry: (entry: LogEntry) => void, enabled = true) {
   const handler = useRef(onEntry)
+  const [down, setDown] = useState(false)
   useEffect(() => {
     handler.current = onEntry
   })
   const query = filterQuery({ ...filter, since: undefined, until: undefined })
   useEffect(() => {
     if (!enabled) return
-    const source = new EventSource(`/api/logs/stream?${query}`)
-    source.onmessage = (event: MessageEvent<string>) => handler.current(JSON.parse(event.data) as LogEntry)
-    return () => source.close()
+    let source: EventSource
+    let last = ""
+    let downSoon: ReturnType<typeof setTimeout> | undefined
+    let again: ReturnType<typeof setTimeout> | undefined
+    const connect = () => {
+      source = new EventSource(`/api/logs/stream?${query}${last && `&after=${last}`}`)
+      source.onopen = () => {
+        clearTimeout(downSoon)
+        downSoon = undefined
+        setDown(false)
+      }
+      source.onmessage = (event: MessageEvent<string>) => {
+        last = event.lastEventId
+        handler.current(JSON.parse(event.data) as LogEntry)
+      }
+      source.onerror = () => {
+        // Down only if it isn't back after the browser's usual 5 seconds.
+        downSoon ??= setTimeout(() => setDown(true), 8_000)
+        if (source.readyState === EventSource.CLOSED) again = setTimeout(connect, 5_000)
+      }
+    }
+    connect()
+    return () => {
+      clearTimeout(downSoon)
+      clearTimeout(again)
+      source.close()
+    }
   }, [query, enabled])
+  return enabled && down
 }
 
-/** Adds new entries to the top of the list of a filter as they are logged. */
+/** Adds new entries to the top of the list of a filter as they are logged, and tells whether their stream is down. */
 export function useLiveLogs(filter: LogFilter, enabled: boolean) {
   const queryClient = useQueryClient()
   const statsAt = useRef(0)
-  useLogStream(
+  return useLogStream(
     filter,
     (entry) => {
       queryClient.setQueryData<InfiniteData<LogEntry[], string>>(logsQuery(filter).queryKey, (data) => {

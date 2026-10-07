@@ -8,7 +8,7 @@ import { toneDots } from "@/components/tone"
 import { msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { type Server, type ServerState, usePendingAction } from "./api"
-import { serverStates, states, statusOf } from "./server-types"
+import { serverStates, serverType, states, statusOf } from "./server-types"
 
 const pendingStates = {
   start: { tone: "warning", label: msg("Starting…"), pulse: true },
@@ -47,9 +47,38 @@ export function StateBar({ servers, className }: { servers: { state: ServerState
   )
 }
 
-/** Tells that a server crashes, or stopped because it crashed, and where to find out why. */
-export function CrashNotice({ server }: { server: Server }) {
+/**
+ * Tells that a server crashes, stopped because it crashed, or runs but fails its health check,
+ * and where to find out why.
+ */
+export function CrashNotice({ server, nodeId, canReadFiles }: { server: Server; nodeId: string; canReadFiles: boolean }) {
   const { state, crashes, exitCode } = server
+  // Game servers write a report of each crash of Minecraft itself.
+  const reports = canReadFiles && !serverType(server.type).proxy && (
+    <Trans
+      i18nKey="Its <link>crash reports</link> may tell more."
+      components={{
+        link: (
+          <Link
+            to="/nodes/$nodeId/servers/$serverId/files"
+            params={{ nodeId, serverId: server.id }}
+            search={{ path: "crash-reports" }}
+            className="font-medium underline underline-offset-4"
+          />
+        ),
+      }}
+    />
+  )
+  if (state === "running" && server.unhealthy) {
+    return (
+      <Callout tone="warning" icon={WarningIcon} role="alert" className="mb-6" title={t("{{name}} is unhealthy", { name: server.name })}>
+        <p>
+          {t("It runs, but its health check fails, e.g. as it hangs or doesn't answer players. The console shows what it does; if it doesn't recover, restart it.")}{" "}
+          {reports}
+        </p>
+      </Callout>
+    )
+  }
   if (crashes === 0 || (state !== "crashing" && state !== "stopped")) return null
 
   return (
@@ -83,7 +112,8 @@ export function CrashNotice({ server }: { server: Server }) {
           exitCode === 137 && t("Exit code 137 means the server was killed, often because it ran out of memory."),
         ]
           .filter(Boolean)
-          .join(" ")}
+          .join(" ")}{" "}
+        {reports}
       </p>
     </Callout>
   )

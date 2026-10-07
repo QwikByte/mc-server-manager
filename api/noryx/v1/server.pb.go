@@ -311,7 +311,10 @@ type Server struct {
 	RefusedJvmOptions []string `protobuf:"bytes,18,rep,name=refused_jvm_options,json=refusedJvmOptions,proto3" json:"refused_jvm_options,omitempty"`
 	// The node publishes the port of the backend only at its address in the private network of
 	// the nodes, for the node of its proxy.
-	Overlay       bool `protobuf:"varint,19,opt,name=overlay,proto3" json:"overlay,omitempty"`
+	Overlay bool `protobuf:"varint,19,opt,name=overlay,proto3" json:"overlay,omitempty"`
+	// A running server whose health check fails, e.g. one that hangs. Actions treat it like any
+	// running server.
+	Unhealthy     bool `protobuf:"varint,20,opt,name=unhealthy,proto3" json:"unhealthy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -475,6 +478,13 @@ func (x *Server) GetRefusedJvmOptions() []string {
 func (x *Server) GetOverlay() bool {
 	if x != nil {
 		return x.Overlay
+	}
+	return false
+}
+
+func (x *Server) GetUnhealthy() bool {
+	if x != nil {
+		return x.Unhealthy
 	}
 	return false
 }
@@ -2144,7 +2154,7 @@ var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\xe8\x04\n" +
+	"\x15noryx/v1/server.proto\x12\bnoryx.v1\"\x86\x05\n" +
 	"\x06Server\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12(\n" +
@@ -2168,7 +2178,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x0eloader_version\x18\x10 \x01(\tR\rloaderVersion\x12!\n" +
 	"\fbedrock_port\x18\x11 \x01(\rR\vbedrockPort\x12.\n" +
 	"\x13refused_jvm_options\x18\x12 \x03(\tR\x11refusedJvmOptions\x12\x18\n" +
-	"\aoverlay\x18\x13 \x01(\bR\aoverlay\"\x14\n" +
+	"\aoverlay\x18\x13 \x01(\bR\aoverlay\x12\x1c\n" +
+	"\tunhealthy\x18\x14 \x01(\bR\tunhealthy\"\x14\n" +
 	"\x12ListServersRequest\"A\n" +
 	"\x13ListServersResponse\x12*\n" +
 	"\aservers\x18\x01 \x03(\v2\x10.noryx.v1.ServerR\aservers\"\xc3\x04\n" +

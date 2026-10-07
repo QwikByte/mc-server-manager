@@ -5,6 +5,7 @@ package files
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/access"
@@ -97,7 +100,29 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.Attachment(w, path.Base(p))
 	w.Header().Set("Content-Length", strconv.FormatInt(first.GetSize(), 10))
+	setETag(w, first.GetVersion())
 	httpapi.Relay(w, first, stream)
+}
+
+// setETag tells the version of a file, which an upload can expect with If-Match. Agents of
+// older versions don't tell it.
+func setETag(w http.ResponseWriter, v *noryxv1.FileVersion) {
+	if v != nil {
+		w.Header().Set("ETag", fmt.Sprintf(`"%d-%d"`, v.GetModifiedUnixNano(), v.GetSize()))
+	}
+}
+
+// ifMatch is the version of a file that an upload expects, from an ETag of setETag.
+func ifMatch(r *http.Request) (*noryxv1.FileVersion, error) {
+	tag := r.Header.Get("If-Match")
+	if tag == "" {
+		return nil, nil
+	}
+	var v noryxv1.FileVersion
+	if _, err := fmt.Sscanf(tag, `"%d-%d"`, &v.ModifiedUnixNano, &v.Size); err != nil {
+		return nil, httpapi.Errorf(http.StatusBadRequest, "If-Match must be the ETag of the file.")
+	}
+	return &v, nil
 }
 
 func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
@@ -125,30 +150,39 @@ func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
 	httpapi.Relay(w, first, stream)
 }
 
+// upload creates or replaces a file. With If-Match, it only replaces the version of the file
+// that the ETag of a download named, and answers 412 if the file changed since.
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context()) // cancelling discards the partial file
 	defer cancel()
-	c, err := h.client(ctx, r)
-	var file *noryxv1.FileInfo
+	expected, err := ifMatch(r)
+	var c noryxv1.FileServiceClient
 	if err == nil {
-		file, err = Write(ctx, c, &noryxv1.WriteFileHeader{
+		c, err = h.client(ctx, r)
+	}
+	var res *noryxv1.WriteFileResponse
+	if err == nil {
+		res, err = Write(ctx, c, &noryxv1.WriteFileHeader{
 			ServerId: r.PathValue("id"), Path: r.URL.Query().Get("path"), Overwrite: r.URL.Query().Get("overwrite") == "true",
-			Size: max(r.ContentLength, 0),
+			Size: max(r.ContentLength, 0), Expected: expected,
 		}, http.MaxBytesReader(w, r.Body, maxUploadBytes))
 	}
 	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.As(err, &tooLarge):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusRequestEntityTooLarge, "Files can have up to %d GB.", maxUploadBytes>>30))
+	case expected != nil && status.Code(err) == codes.FailedPrecondition:
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusPreconditionFailed, "%s", status.Convert(err).Message()))
 	case err != nil:
 		httpapi.WriteError(w, r, err)
 	default:
-		httpapi.WriteJSON(w, http.StatusCreated, toView(file))
+		setETag(w, res.GetVersion())
+		httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetFile()))
 	}
 }
 
 // Write creates or replaces a file of a server, as header describes it, with content.
-func Write(ctx context.Context, c noryxv1.FileServiceClient, header *noryxv1.WriteFileHeader, content io.Reader) (*noryxv1.FileInfo, error) {
+func Write(ctx context.Context, c noryxv1.FileServiceClient, header *noryxv1.WriteFileHeader, content io.Reader) (*noryxv1.WriteFileResponse, error) {
 	stream, err := c.WriteFile(ctx)
 	if err != nil {
 		return nil, err
@@ -168,8 +202,7 @@ func Write(ctx context.Context, c noryxv1.FileServiceClient, header *noryxv1.Wri
 	if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return nil, err
 	}
-	res, err := stream.CloseAndRecv()
-	return res.GetFile(), err
+	return stream.CloseAndRecv()
 }
 
 // Copy writes the file of a server, as the file manager shows it, into a file of another

@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
@@ -34,8 +35,12 @@ const (
 	maxRedacted = 1 << 20
 )
 
-// errSecret refuses access to the files that only hold secrets, and moves of those with secrets.
-var errSecret = status.Error(codes.PermissionDenied, "This file holds secrets of the server, such as the RCON password, which the panel doesn't show.")
+var (
+	// errSecret refuses access to the files that only hold secrets, and moves of those with secrets.
+	errSecret = status.Error(codes.PermissionDenied, "This file holds secrets of the server, such as the RCON password, which the panel doesn't show.")
+	// errChanged refuses to replace a file that changed since it was read.
+	errChanged = status.Error(codes.FailedPrecondition, "The file changed on the server since it was opened.")
+)
 
 type Service struct {
 	noryxv1.UnimplementedFileServiceServer
@@ -110,7 +115,7 @@ func (s *Service) ReadFile(req *noryxv1.ReadFileRequest, stream noryxv1.FileServ
 		data = secrets.Redact(name, data)
 		r, size = bytes.NewReader(data), int64(len(data))
 	}
-	res := &noryxv1.ReadFileResponse{Size: size}
+	res := &noryxv1.ReadFileResponse{Size: size, Version: version(info)}
 	return sendChunks(r, func(data []byte) error {
 		res.Data = data
 		err := stream.Send(res)
@@ -147,13 +152,20 @@ func (s *Service) WriteFile(stream noryxv1.FileService_WriteFileServer) error {
 	if err := storage.Fits(top, header.GetSize()); err != nil {
 		return toStatus(err)
 	}
+	// The file is replaced right after the content is written, and checked just before.
 	err = dir.Replace(name, header.GetOverwrite(), func(w io.Writer) error {
 		if !secrets.Redacted(name) {
-			return receive(stream, &spaceChecked{w: w, dir: top}, MaxFileSize)
+			if err := receive(stream, &spaceChecked{w: w, dir: top}, MaxFileSize); err != nil {
+				return err
+			}
+			return unchanged(dir, name, header.GetExpected())
 		}
 		// The secrets the panel showed as placeholders stay as they are.
 		var data bytes.Buffer
 		if err := receive(stream, &data, maxRedacted); err != nil {
+			return err
+		}
+		if err := unchanged(dir, name, header.GetExpected()); err != nil {
 			return err
 		}
 		current, err := dir.ReadOptional(name)
@@ -169,7 +181,19 @@ func (s *Service) WriteFile(stream noryxv1.FileService_WriteFileServer) error {
 	if err != nil {
 		return toStatus(err)
 	}
-	return stream.SendAndClose(&noryxv1.WriteFileResponse{File: fileInfo(info)})
+	return stream.SendAndClose(&noryxv1.WriteFileResponse{File: fileInfo(info), Version: version(info)})
+}
+
+// unchanged refuses to replace a file that no longer has the expected version, if any.
+func unchanged(dir *datadir.Dir, name string, expected *noryxv1.FileVersion) error {
+	if expected == nil {
+		return nil
+	}
+	info, err := dir.Stat(name)
+	if errors.Is(err, fs.ErrNotExist) || err == nil && !proto.Equal(version(info), expected) {
+		return errChanged
+	}
+	return err
 }
 
 func (s *Service) ArchiveDirectory(req *noryxv1.ArchiveDirectoryRequest, stream noryxv1.FileService_ArchiveDirectoryServer) error {
@@ -280,6 +304,10 @@ func clean(p string) (string, error) {
 		return "", status.Error(codes.InvalidArgument, "invalid path")
 	}
 	return name, nil
+}
+
+func version(info fs.FileInfo) *noryxv1.FileVersion {
+	return &noryxv1.FileVersion{ModifiedUnixNano: info.ModTime().UnixNano(), Size: info.Size()}
 }
 
 func fileInfo(info fs.FileInfo) *noryxv1.FileInfo {

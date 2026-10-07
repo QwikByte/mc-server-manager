@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QwikByte/noryx/internal/buildinfo"
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/ratelimit"
@@ -306,7 +307,12 @@ func (h *Handler) setLanguage(w http.ResponseWriter, r *http.Request) {
 	httpapi.WriteJSON(w, http.StatusOK, user)
 }
 
-// Require rejects requests without a valid session.
+// VersionHeader tells signed-in users the master's version, so that their panel reloads once
+// it changes, e.g. after an update.
+const VersionHeader = "Noryx-Version"
+
+// Require rejects requests without a valid session. Answers to the others tell the master's
+// version in VersionHeader.
 func (h *Handler) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(cookieName)
@@ -322,6 +328,7 @@ func (h *Handler) Require(next http.Handler) http.Handler {
 			httpapi.WriteError(w, r, err)
 			return
 		}
+		w.Header().Set(VersionHeader, buildinfo.Version)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, user)))
 	})
 }

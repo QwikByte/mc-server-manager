@@ -1,6 +1,7 @@
-import { notifyManager, QueryCache, QueryClient } from "@tanstack/react-query"
+import { MutationCache, notifyManager, QueryCache, QueryClient } from "@tanstack/react-query"
 import { createRootRouteWithContext, createRoute, createRouter, lazyRouteComponent, Outlet, redirect } from "@tanstack/react-router"
 import { AppShell } from "@/components/app-shell"
+import { ErrorPage } from "@/components/error-page"
 import { HubLayout } from "@/components/hub-layout"
 import { automation, home, library } from "@/components/navigation"
 import { NotFound } from "@/components/not-found"
@@ -13,25 +14,27 @@ import { validateLogSearch } from "@/features/logs/search"
 import { validatePlayerSearch } from "@/features/players/search"
 import type { Kind } from "@/features/plugins/api"
 import { validateServerSearch } from "@/features/servers/browse"
-import { ApiError } from "@/lib/api"
+import { ApiError, onOutdated } from "@/lib/api"
 
 // Queries and mutations tell their state before the next click is handled, instead of in a
 // timer that a click can come before: a button disabled while its mutation is pending can't
 // send it twice, e.g. on a double click.
 notifyManager.setScheduler(queueMicrotask)
 
+// An expired session sends the user back to the sign-in page, and from there back to where they
+// were, after a query or a change. Not if the panel is already on its way there, e.g. because
+// signing in is checked before a page opens, or the change was signing in.
+function signInAgain(error: Error) {
+  const { pathname, href } = router.latestLocation
+  if (error instanceof ApiError && error.status === 401 && pathname !== "/login" && pathname !== "/setup") {
+    queryClient.clear()
+    void router.navigate({ to: "/login", search: { redirect: href } })
+  }
+}
+
 export const queryClient = new QueryClient({
-  // An expired session sends the user back to the sign-in page, unless the panel is already
-  // on its way there, e.g. because signing in is checked before a page opens.
-  queryCache: new QueryCache({
-    onError: (error, query) => {
-      const { pathname, href } = router.latestLocation
-      if (error instanceof ApiError && error.status === 401 && query.queryKey[0] !== "me" && pathname !== "/login") {
-        queryClient.clear()
-        void router.navigate({ to: "/login", search: { redirect: href } })
-      }
-    },
-  }),
+  queryCache: new QueryCache({ onError: (error, query) => query.queryKey[0] !== "me" && signInAgain(error) }),
+  mutationCache: new MutationCache({ onError: signInAgain }),
   // Answers of the master are final; only network failures are worth retrying.
   defaultOptions: { queries: { retry: (count, error) => !(error instanceof ApiError) && count < 2 } },
 })
@@ -402,6 +405,18 @@ export const router = createRouter({
   ]),
   context: { queryClient },
   defaultPreload: "intent",
+  defaultErrorComponent: ErrorPage,
+})
+
+/** Whether leaving the page would lose something, e.g. unsaved changes or uploads, so that the browser asks first. */
+function leavingLoses() {
+  return router.history._getBlockers().some(({ enableBeforeUnload: asks = true }) => (typeof asks === "function" ? asks() : asks))
+}
+
+// The panel is part of the master. Once the master runs another version, e.g. after an update,
+// the panel reloads to get the new one, as soon as that loses nothing.
+onOutdated(() => {
+  if (!leavingLoses()) location.reload()
 })
 
 declare module "@tanstack/react-router" {

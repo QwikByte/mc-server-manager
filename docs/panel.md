@@ -5,10 +5,10 @@ How the admin panel is organised, and what works the same on all of its pages.
 ## Overview
 
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use, the
-networks, the servers with the most players, and what needs attention: crashing servers, offline nodes, nodes with more
-memory assigned than they can give or almost full storage, and proxies that are stopped while their servers run. It
-counts like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned against what
-the online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
+networks, the servers with the most players, and what needs attention: crashing and unhealthy servers, offline nodes,
+nodes with more memory assigned than they can give or almost full storage, and proxies that are stopped while their
+servers run. It counts like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned
+against what the online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
 
 The Overview is made of widgets: key figures, what needs attention, the nodes with their CPU of the last 24 hours, the
 load of all nodes over the last 24 hours, pinned servers, networks, the servers with the most players, the latest

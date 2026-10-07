@@ -28,7 +28,7 @@ export async function importFiles(client: QueryClient, server: ServerFiles, pick
       skipped++
     } else {
       try {
-        files.push({ path: item.path, content: await readText(server, item.path), onlyIfMissing: false })
+        files.push({ path: item.path, content: (await readText(server, item.path)).text, onlyIfMissing: false })
       } catch (e) {
         if (!(e instanceof BinaryFileError)) throw e
         skipped++

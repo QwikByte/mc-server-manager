@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -56,6 +57,34 @@ func TestFiles(t *testing.T) {
 	}
 	if got := api.do("GET", base+"/content"+q("plugins/Example/config.yml"), nil, http.StatusOK, nil); got != "motd: hello\n" {
 		t.Fatalf("content = %q", got)
+	}
+
+	// An editor saves only the version it opened, which the ETag names, unless told to overwrite.
+	put := func(etag, content string) (int, string) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, panel.URL+base+"/content"+q("plugins/Example/config.yml")+"&overwrite=true", strings.NewReader(content))
+		check(t, err)
+		req.Header.Set("If-Match", etag)
+		res, err := http.DefaultClient.Do(req)
+		check(t, err)
+		res.Body.Close()
+		return res.StatusCode, res.Header.Get("ETag")
+	}
+	res, err = http.Get(panel.URL + base + "/content" + q("plugins/Example/config.yml"))
+	check(t, err)
+	res.Body.Close()
+	opened := res.Header.Get("ETag")
+	code, saved := put(opened, "motd: edited\n")
+	if code != http.StatusCreated || saved == "" || saved == opened {
+		t.Fatalf("save: status %d, ETag %q after %q", code, saved, opened)
+	}
+	if code, _ := put(opened, "motd: lost\n"); code != http.StatusPreconditionFailed {
+		t.Fatalf("save of the version opened before: status %d", code)
+	}
+	if code, _ := put("garbage", "motd: lost\n"); code != http.StatusBadRequest {
+		t.Fatalf("save with a made-up ETag: status %d", code)
+	}
+	if code, _ := put(saved, "motd: hello\n"); code != http.StatusCreated {
+		t.Fatalf("save of the saved version: status %d", code)
 	}
 
 	// Rename, then download the folder as a ZIP archive.

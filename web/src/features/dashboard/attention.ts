@@ -53,6 +53,14 @@ export function problemsOf(
         detail: [s.nodeName, exit].filter(Boolean).join(" · "),
         link,
       })
+    } else if (s.unhealthy) {
+      add({
+        key: `unhealthy/${s.id}`,
+        tone: "warning",
+        title: t("{{name}} is unhealthy", { name: s.name }),
+        detail: [s.nodeName, t("It runs, but its health check fails, e.g. as it hangs.")].filter(Boolean).join(" · "),
+        link,
+      })
     }
     if (s.refusedJvmOptions?.length) {
       add({

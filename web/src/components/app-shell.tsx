@@ -4,6 +4,7 @@ import { Link, Outlet, useLocation, useMatches } from "@tanstack/react-router"
 import { t } from "i18next"
 import { LayoutGroup, motion } from "motion/react"
 import { type ReactElement, useEffect, useId, useState } from "react"
+import { ConnectionBanner } from "@/components/connection-banner"
 import { Logo } from "@/components/logo"
 import { navigation } from "@/components/navigation"
 import { StatusDot } from "@/components/status"
@@ -120,6 +121,7 @@ export function AppShell() {
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-10 md:py-9">
         <div className="mx-auto max-w-6xl">
+          <ConnectionBanner />
           {access.admin && <UpdateBanner />}
           <Page />
         </div>

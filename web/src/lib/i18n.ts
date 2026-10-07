@@ -28,10 +28,23 @@ export function chosenLanguage() {
   }
 }
 
-/** The language the panel shows for a choice: the chosen one, else the browser's first one the panel has, else English. */
+/** The language of a tag without its script or region, e.g. pt for pt-BR. */
+const base = (tag: string) => tag.split("-")[0].toLowerCase()
+
+/**
+ * The language the panel shows for a choice: the chosen one, else the first of the browser's
+ * languages the panel has, fully (pt-BR) or by its language alone (pt, then pt-PT), else English.
+ */
 function resolve(choice: string) {
   if (languages.includes(choice)) return choice
-  return navigator.languages.map((l) => l.split("-")[0]).find((l) => languages.includes(l)) ?? "en"
+  for (const tag of navigator.languages) {
+    const match =
+      languages.find((l) => l.toLowerCase() === tag.toLowerCase()) ??
+      languages.find((l) => l === base(tag)) ??
+      languages.find((l) => base(l) === base(tag))
+    if (match) return match
+  }
+  return "en"
 }
 
 /** Chooses a language, "" for the browser's, and reloads the panel if it shows another one. */
@@ -48,8 +61,13 @@ export function chooseLanguage(choice: string) {
 // The language the panel shows, chosen before anything renders.
 const language = resolve(chosenLanguage())
 
-/** The locale of dates and numbers: the panel's language, in the browser's region for it if there is one, e.g. de-AT. */
-export const locale = navigator.languages.find((l) => l.split("-")[0] === language && valid(l)) ?? language
+/**
+ * The locale of dates and numbers: the panel's language, in the browser's region for it if there
+ * is one, e.g. de-AT. A language with its own script or region, e.g. pt-BR, keeps it.
+ */
+export const locale = language.includes("-")
+  ? language
+  : (navigator.languages.find((l) => base(l) === language && valid(l)) ?? language)
 
 /** Whether Intl takes a locale; some browsers report ones it doesn't, e.g. en-US@posix. */
 function valid(l: string) {

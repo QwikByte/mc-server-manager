@@ -28,9 +28,10 @@ export interface PlayerResult extends ServerRef {
 export interface Listed {
   name: string
   uuid?: string
-  /** Why, since when and by whom the player is banned, of the newest ban. */
+  /** Why, since when, until when and by whom the player is banned, of the newest ban; until only for temporary ones. */
   reason?: string
   since?: string
+  until?: string
   source?: string
   /** The servers whose list has the player. */
   servers: ServerRef[]
@@ -58,6 +59,7 @@ export const playerListsQuery = (network?: string) =>
   queryOptions({
     queryKey: ["players", "lists", network ?? "all"],
     queryFn: () => api<PlayerLists>(network ? `/players/lists?network=${encodeURIComponent(network)}` : "/players/lists"),
+    refetchInterval: 30_000, // the lists change in the game and through plugins too
   })
 
 export interface PlayerChange {

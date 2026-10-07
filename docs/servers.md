@@ -22,7 +22,10 @@ commands once they were created again, e.g. by saving their settings.
 
 The file manager of a server browses its data, uploads files by drag and drop (up to 16 GB each, streamed through the
 master, as long as 1 GB stays free on the node, like for backups), edits configuration files in the browser and
-downloads files or whole folders as ZIP archives.
+downloads files or whole folders as ZIP archives. If something changed or deleted a file while it was open in the
+editor, e.g. a plugin, a file set or another user, saving shows the difference to the file on the server and offers to
+load that version or to overwrite it. Agents tell the editor the version of a file by when it was modified and its
+size; with agents of older versions, saving overwrites the file as before.
 
 Secrets such as the RCON password and the forwarding secret of a network never reach the panel. The file manager hides
 files that only hold secrets (`.rcon-cli.env`, `.rcon-cli.yaml`, `forwarding.secret`, Floodgate's `key.pem`) and shows
@@ -47,10 +50,15 @@ with; **Update image** in its settings pulls the newest one and, if it changed, 
 way. The old image is removed once no server uses it. New servers get the newest image too: creating one pulls it, which
 downloads its changes if it was updated since. Deleting servers keeps their images.
 
-## Crashes
+## Crashes and health
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
-crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever.
+crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever. Each
+crash is a warning in the log, which the bell counts, and the notice on the server's page links to its crash reports.
+
+The images check the health of their server. A server that runs but fails its health check, e.g. as it hangs, shows as
+**unhealthy** on its card and page and under what needs attention on the overview; the log tells when it becomes
+unhealthy and healthy again. It still counts as running: its console, restarts, stops and schedules work as usual.
 
 ## Copies
 

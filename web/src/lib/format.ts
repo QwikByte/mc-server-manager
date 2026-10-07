@@ -2,12 +2,14 @@ import { locale } from "./i18n"
 
 const units = ["B", "KiB", "MiB", "GiB", "TiB"]
 
-/** Formats a size in bytes using binary units, e.g. "31.3 GiB" or "512 B". */
+const sizeFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 })
+
+/** Formats a size in bytes using binary units in the viewer's locale, e.g. "31.3 GiB", "31,3 GiB" or "512 B". */
 export function formatBytes(bytes: number): string {
   let value = bytes
   let unit = 0
   for (; value >= 1024 && unit < units.length - 1; unit++) value /= 1024
-  return `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unit]}`
+  return `${sizeFormat.format(value)} ${units[unit]}`
 }
 
 /** Formats a size in mebibytes, e.g. 2048 → "2 GiB", 512 → "512 MiB". */
@@ -44,11 +46,12 @@ export function formatElapsed(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`
 }
 
-/** Formats how long ago a time was in the viewer's locale, e.g. "3 minutes ago". */
+/** Formats how long ago a time was in the viewer's locale, e.g. "3 minutes ago" or "yesterday". */
 export function formatAgo(iso: string, now = Date.now()): string {
   const seconds = Math.round((Date.parse(iso) - now) / 1000)
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
   if (Math.abs(seconds) < 60) return rtf.format(seconds, "second")
   if (Math.abs(seconds) < 3600) return rtf.format(Math.round(seconds / 60), "minute")
-  return rtf.format(Math.round(seconds / 3600), "hour")
+  if (Math.abs(seconds) < 86_400) return rtf.format(Math.round(seconds / 3600), "hour")
+  return rtf.format(Math.round(seconds / 86_400), "day")
 }

@@ -40,7 +40,7 @@ const (
 // keeps the secret wherever it still says so.
 type FileServiceClient interface {
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
-	// ReadFile sends a file in chunks. The first message carries the file size.
+	// ReadFile sends a file in chunks. The first message carries the file size and version.
 	ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadFileResponse], error)
 	// WriteFile creates or replaces a file. The first message names the file, the others
 	// carry its content. The file only appears once it has been written completely.
@@ -165,7 +165,7 @@ func (c *fileServiceClient) DeleteFile(ctx context.Context, in *DeleteFileReques
 // keeps the secret wherever it still says so.
 type FileServiceServer interface {
 	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
-	// ReadFile sends a file in chunks. The first message carries the file size.
+	// ReadFile sends a file in chunks. The first message carries the file size and version.
 	ReadFile(*ReadFileRequest, grpc.ServerStreamingServer[ReadFileResponse]) error
 	// WriteFile creates or replaces a file. The first message names the file, the others
 	// carry its content. The file only appears once it has been written completely.

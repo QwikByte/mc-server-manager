@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { locale, msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { type LogEntry, type LogFilter, logsQuery, useLiveLogs } from "./api"
+import { type LogEntry, type LogFilter, logsQuery } from "./api"
 import { categoryLabel, formatEntryTime, levels } from "./meta"
 
 /** Labels of attributes that the master and the agents add to entries. */
@@ -37,13 +37,12 @@ export function LogList({
   onFilter,
 }: {
   filter: LogFilter
-  /** Adds new entries as they are logged. */
+  /** Whether new entries show up as they are logged, which the page streams with useLiveLogs. */
   live: boolean
   /** Narrows the filter, e.g. to the server of an entry. */
   onFilter?: (change: LogFilter) => void
 }) {
   const { data, error, isPending, isPlaceholderData, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery(logsQuery(filter))
-  useLiveLogs(filter, live)
   if (isPending) {
     return (
       <div className="grid gap-2">
