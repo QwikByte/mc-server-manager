@@ -10,8 +10,10 @@ import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
 import { PropertyField } from "@/features/properties/property-field"
-import { checkValue } from "@/features/properties/schema"
+import { checkValue, iconMatches } from "@/features/properties/schema"
+import { ServerIcon } from "@/features/properties/server-icon"
 import { useServer } from "@/features/servers/api"
 import { type ProxySettings, proxySettingsQuery, type ServerRef, type SettingValue, useUpdateProxySettings } from "./api"
 import { definition, groups, order } from "./proxy-schema"
@@ -58,6 +60,7 @@ function fromText(current: SettingValue, text: string): SettingValue {
 function ProxySettingsForm({ proxy, bungee, running, data }: { proxy: ServerRef; bungee: boolean; running: boolean; data: ProxySettings }) {
   const [changes, setChanges] = useState<Record<string, string>>({})
   const [search, setSearch] = useState("")
+  const { can } = useAccess()
   const update = useUpdateProxySettings(proxy)
   const count = Object.keys(changes).length
   const setting = (key: string) => definition(bungee, key, data.settings[key])
@@ -92,6 +95,7 @@ function ProxySettingsForm({ proxy, bungee, running, data }: { proxy: ServerRef;
   const keys = Object.keys(data.settings)
     .filter((key) => !term || [key, t(setting(key).label), t(setting(key).description)].some((s) => s.toLowerCase().includes(term)))
     .sort(order(bungee))
+  const icon = can("files.write", proxy.nodeId, proxy.serverId) && iconMatches(term)
 
   return (
     <div className="pb-24">
@@ -106,14 +110,16 @@ function ProxySettingsForm({ proxy, bungee, running, data }: { proxy: ServerRef;
           onChange={(e) => setSearch(e.target.value)}
         />
       </InputGroup>
-      {keys.length === 0 && <p className="text-sm text-muted-foreground">{t("No setting matches your search.")}</p>}
+      {keys.length === 0 && !icon && <p className="text-sm text-muted-foreground">{t("No setting matches your search.")}</p>}
       {groups.map((group) => {
         const inGroup = keys.filter((key) => setting(key).group === group)
-        if (inGroup.length === 0) return null
+        const withIcon = icon && group === "Server list"
+        if (inGroup.length === 0 && !withIcon) return null
         return (
           <section key={group} className="surface mb-6 rounded-xl p-5 sm:p-6" aria-label={t(group)}>
             <h2 className="heading mb-5 text-base">{t(group)}</h2>
             <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
+              {withIcon && <ServerIcon {...proxy} />}
               {inGroup.map((key) => (
                 <PropertyField
                   key={key}

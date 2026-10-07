@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -5,6 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { gameVersionsQuery } from "@/features/plugins/api"
 import { formatMegabytes } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import type { RestartPolicy } from "./api"
@@ -26,6 +28,29 @@ const restartPolicies: [RestartPolicy, string, string][] = [
   ["on_crash", msg("After a crash"), msg("Starts again when it crashes, up to 5 times in a row.")],
   ["never", msg("Only manually"), msg("Starts only when you start it.")],
 ]
+
+/** The Minecraft version of a game server, with the releases as suggestions; empty is the latest. */
+export function VersionField({ id, value, onChange }: { id: string; value: string; onChange: (version: string) => void }) {
+  const { data: releases = [] } = useQuery(gameVersionsQuery)
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{t("Minecraft version")}</FieldLabel>
+      <Input
+        id={id}
+        list={`${id}-releases`}
+        autoComplete="off"
+        placeholder={t("Latest")}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <datalist id={`${id}-releases`}>
+        {releases.map((release) => (
+          <option key={release} value={release} />
+        ))}
+      </datalist>
+    </Field>
+  )
+}
 
 /** Chooses the memory of a server. freeMb, if the node limits it, leaves out what doesn't fit. */
 export function MemoryField({

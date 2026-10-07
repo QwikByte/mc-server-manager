@@ -97,6 +97,7 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	if len(lists.Servers) != 1 || lists.Servers[0].Ref != lobby {
 		t.Fatalf("lists of the moderator = %+v", lists.Servers)
 	}
+	mod.do("GET", "/api/players/lists?node="+lobby.NodeID+"&server="+lobby.ServerID, nil, http.StatusOK, nil)
 	mod.do("GET", "/api/players/lists?node="+survival.NodeID+"&server="+survival.ServerID, nil, http.StatusForbidden, nil)
 
 	// Nor the details of the node, which only those who may see the node get.

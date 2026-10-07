@@ -60,6 +60,13 @@ export function ServerUsagePage() {
       format: formatRate,
       nice: niceBytes,
     },
+    {
+      title: t("Data"),
+      // 0 until the agent measured it.
+      series: [{ label: t("Data"), tone: "series-1", value: (p) => p.diskBytes || null }],
+      format: (v) => formatBytes(Math.round(v)),
+      nice: niceBytes,
+    },
   ]
   return (
     <>

@@ -38,11 +38,13 @@ import { type Template, templatesQuery } from "@/features/templates/api"
 import { formatBytes } from "@/lib/format"
 import { freeMemoryMb, type NewServer, serversQuery, useCreateServer } from "./api"
 import { defaults, modpack, serverType, suggestPort, usedPorts } from "./server-types"
-import { MemoryField } from "./settings-fields"
+import { MemoryField, VersionField } from "./settings-fields"
 import { EndOfLifeNotice, SoftwareOptions } from "./software"
+import { type World, worldChanges, worldOf } from "./world"
+import { WorldFields } from "./world-fields"
 
 // Node, port and storage stay unset until chosen, so that the suggestions apply.
-type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string; nodeId?: string; templateId?: string; modpack?: ModpackChoice }
+type Form = Omit<NewServer, "port" | "storage"> & { port?: number; storage?: string; nodeId?: string; templateId?: string; modpack?: ModpackChoice; world: World }
 
 const none = "none"
 
@@ -50,7 +52,7 @@ function blank(template?: Template): Form {
   const basics = template
     ? { type: template.type, version: template.version === "LATEST" ? "" : template.version, memoryMb: template.memoryMb }
     : { type: "paper", version: "", memoryMb: defaults("paper").memoryMb }
-  return { name: "", acceptEula: false, templateId: template?.id, ...basics }
+  return { name: "", acceptEula: false, templateId: template?.id, world: worldOf(template?.properties), ...basics }
 }
 
 /** What a template adds to a new server, e.g. "Java 21 · 3 properties · LuckPerms". */
@@ -140,6 +142,7 @@ export function CreateServerDialog({
       const { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties } = template
       Object.assign(server, { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties })
     }
+    if (!proxy) server.properties = { ...server.properties, ...worldChanges(form.world, template?.properties) }
     const open = (id: string) => navigate({ to: "/nodes/$nodeId/servers/$serverId", params: { nodeId, serverId: id } })
     operation.run((onStart) => create.mutateAsync({ nodeId, server, plugins: template?.plugins.map((p) => p.id), onStart }), {
       title,
@@ -275,15 +278,7 @@ export function CreateServerDialog({
                   </Select>
                 </Field>
                 {!proxy && !fromModpack && (
-                  <Field>
-                    <FieldLabel htmlFor="server-version">{t("Minecraft version")}</FieldLabel>
-                    <Input
-                      id="server-version"
-                      placeholder={t("Latest")}
-                      value={form.version}
-                      onChange={(e) => setForm({ ...form, version: e.target.value })}
-                    />
-                  </Field>
+                  <VersionField id="server-version" value={form.version} onChange={(version) => setForm({ ...form, version })} />
                 )}
               </div>
               <EndOfLifeNotice type={form.type} />
@@ -327,6 +322,7 @@ export function CreateServerDialog({
                   </Select>
                 </Field>
               )}
+              {!proxy && <WorldFields value={form.world} onChange={(world) => setForm({ ...form, world })} />}
               {!proxy && (
                 <Field orientation="horizontal">
                   <Checkbox

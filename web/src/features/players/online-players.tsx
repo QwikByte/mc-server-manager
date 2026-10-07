@@ -38,8 +38,6 @@ export function OnlinePlayers({
   sorting: Sorting<OnlineSort>
   onAct: (dialog: PlayerDialog) => void
 }) {
-  const { can } = useAccess()
-  const scopesFor = useScopes()
   if (players.length === 0) {
     return <EmptyState icon={UsersThreeIcon} title={t("No players online")} description={t("Players show up here while they play.")} />
   }
@@ -69,11 +67,6 @@ export function OnlinePlayers({
           </TableHeader>
           <TableBody>
             {sorted.slice(0, shown).map(({ name, server, network }) => {
-              const actions = menu
-                .map((action) => ({ action, scopes: scopesFor(action, { server, network }) }))
-                .filter((a) => a.scopes.length > 0)
-              const from = network?.backends.find((b) => key(b) === key(refOf(server)))?.name
-              const sends = network && network.backends.length > 1 && can("players.manage", network.proxy.nodeId, network.proxy.serverId)
               return (
                 <TableRow key={`${name}@${serverKey(server)}`}>
                   <TableCell className="pl-4">
@@ -106,36 +99,7 @@ export function OnlinePlayers({
                     )}
                   </TableCell>
                   <TableCell className="pr-3 text-right">
-                    {(actions.length > 0 || sends) && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm" aria-label={t("Actions for {{name}}", { name })}>
-                            <DotsThreeIcon weight="bold" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-60">
-                          {sends && (
-                            <DropdownMenuItem onSelect={() => onAct({ send: name, network, from })}>
-                              <PaperPlaneTiltIcon />
-                              {t("Send to another server…")}
-                            </DropdownMenuItem>
-                          )}
-                          {actions.map(({ action, scopes }) => {
-                            const { icon: Icon, label, destructive } = playerActions[action]
-                            return (
-                              <DropdownMenuItem
-                                key={action}
-                                variant={destructive ? "destructive" : "default"}
-                                onSelect={() => onAct({ action, name, scopes })}
-                              >
-                                <Icon />
-                                {label()}
-                              </DropdownMenuItem>
-                            )
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
+                    <PlayerMenu player={{ name, server, network }} onAct={onAct} />
                   </TableCell>
                 </TableRow>
               )
@@ -149,5 +113,41 @@ export function OnlinePlayers({
         </p>
       )}
     </>
+  )
+}
+
+/** What can be done to a player online: send them to another server of the network, kick, ban and more. */
+export function PlayerMenu({ player: { name, server, network }, onAct }: { player: OnlinePlayer; onAct: (dialog: PlayerDialog) => void }) {
+  const { can } = useAccess()
+  const scopesFor = useScopes()
+  const actions = menu.map((action) => ({ action, scopes: scopesFor(action, { server, network }) })).filter((a) => a.scopes.length > 0)
+  const from = network?.backends.find((b) => key(b) === key(refOf(server)))?.name
+  const sends = network && network.backends.length > 1 && can("players.manage", network.proxy.nodeId, network.proxy.serverId)
+  if (actions.length === 0 && !sends) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={t("Actions for {{name}}", { name })}>
+          <DotsThreeIcon weight="bold" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        {sends && (
+          <DropdownMenuItem onSelect={() => onAct({ send: name, network, from })}>
+            <PaperPlaneTiltIcon />
+            {t("Send to another server…")}
+          </DropdownMenuItem>
+        )}
+        {actions.map(({ action, scopes }) => {
+          const { icon: Icon, label, destructive } = playerActions[action]
+          return (
+            <DropdownMenuItem key={action} variant={destructive ? "destructive" : "default"} onSelect={() => onAct({ action, name, scopes })}>
+              <Icon />
+              {label()}
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

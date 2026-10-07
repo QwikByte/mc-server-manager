@@ -414,3 +414,6 @@ export function checkValue(kind: Kind, value: string): string | undefined {
   if (kind.min !== undefined && n < kind.min) return t("The minimum is {{min}}.", { min: kind.min })
   if (kind.max !== undefined && n > kind.max) return t("The maximum is {{max}}.", { max: kind.max })
 }
+
+/** Whether a search of the settings finds the server icon, which sits next to the MOTD. */
+export const iconMatches = (term: string) => !term || ["server-icon.png", t("Server icon")].some((s) => s.toLowerCase().includes(term))

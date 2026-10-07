@@ -10,8 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { SortableHead, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAccess } from "@/features/access/use-access"
 import type { Network, ServerRef } from "@/features/networks/api"
-import { findServer } from "@/features/networks/servers"
-import { allServersQuery } from "@/features/servers/api"
+import { findServer, refOf } from "@/features/networks/servers"
+import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import { type Sorting, sortBy } from "@/lib/sort"
@@ -52,23 +52,28 @@ const kinds: Record<
   },
 }
 
-/** Who is banned, whitelisted or operator on the game servers of a network or on all, joined by player. */
+/**
+ * Who is banned, whitelisted or operator on the game servers of a network or on all, joined by
+ * player, or on one server, which may be part of network.
+ */
 export function PlayerListTab({
   kind,
   network,
+  server,
   query,
   sorting,
   onAct,
 }: {
   kind: ListKind
   network?: Network
+  server?: NodeServer
   query: string
   sorting: Sorting<ListSort>
   onAct: (dialog: PlayerDialog) => void
 }) {
   const { can } = useAccess()
   const scopesFor = useScopes()
-  const { data, isPending, error } = useQuery(playerListsQuery(network?.id))
+  const { data, isPending, error } = useQuery(playerListsQuery(server ? { server: refOf(server) } : { network: network?.id }))
   const { data: servers } = useQuery(allServersQuery)
   if (isPending) return <Skeleton className="h-64 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
@@ -84,18 +89,20 @@ export function PlayerListTab({
   const nameOf = (ref: ServerRef) => findServer(servers, ref)?.name ?? ref.serverId
   const failed = data.servers.filter((s) => s.error)
   const pending = data.servers.flatMap((s) => s.pending.map((p) => ({ ...p, server: nameOf(s) })))
-  const addScopes = scopesFor(add, { network })
+  const addScopes = scopesFor(add, { server, network })
   const allowed = (refs: ServerRef[]) => refs.filter((r) => needs(remove).every((p) => can(p, r.nodeId, r.serverId)))
   const AddIcon = playerActions[add].icon
 
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {t("Lists of {{count}} game servers", { count: total, defaultValue_one: "Lists of {{count}} game server" })}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {kind === "whitelisted" && <WhitelistSwitch lists={data} network={network} onAct={onAct} />}
+        {!server && (
+          <p className="text-sm text-muted-foreground">
+            {t("Lists of {{count}} game servers", { count: total, defaultValue_one: "Lists of {{count}} game server" })}
+          </p>
+        )}
+        <div className="ml-auto flex flex-wrap gap-2">
+          {kind === "whitelisted" && <WhitelistSwitch lists={data} network={network} server={server} onAct={onAct} />}
           {addScopes.length > 0 && (
             <Button variant="outline" onClick={() => onAct({ action: add, scopes: addScopes })}>
               <AddIcon />
@@ -150,7 +157,11 @@ export function PlayerListTab({
               <TableRow className="hover:bg-transparent">
                 <SortableHead sorting={sorting} column="name" className="pl-4">{t("Player")}</SortableHead>
                 {kind === "banned" && <TableHead className="max-md:hidden">{t("Reason")}</TableHead>}
-                <SortableHead sorting={sorting} column="servers">{t("Servers")}</SortableHead>
+                {!server && (
+                  <SortableHead sorting={sorting} column="servers">
+                    {t("Servers")}
+                  </SortableHead>
+                )}
                 <TableHead className="w-0">
                   <span className="sr-only">{t("Actions")}</span>
                 </TableHead>
@@ -163,7 +174,7 @@ export function PlayerListTab({
                   entry={entry}
                   total={total}
                   banned={kind === "banned"}
-                  names={entry.servers.map(nameOf)}
+                  names={server ? undefined : entry.servers.map(nameOf)}
                   onRemove={
                     allowed(entry.servers).length > 0
                       ? () =>
@@ -196,7 +207,8 @@ function ListRow({
   entry: Listed
   total: number
   banned: boolean
-  names: string[]
+  /** The servers whose list has the player, unless the list is of one server. */
+  names?: string[]
   onRemove?: () => void
   remove: (typeof playerActions)[PlayerAction]
 }) {
@@ -224,11 +236,13 @@ function ListRow({
           )}
         </TableCell>
       )}
-      <TableCell title={names.slice(0, 20).join(", ")} className="tabular-nums">
-        {entry.servers.length === total
-          ? t("All {{count}} servers", { count: total, defaultValue_one: "The only server" })
-          : t("{{done}} of {{count}} servers", { done: entry.servers.length, count: total })}
-      </TableCell>
+      {names && (
+        <TableCell title={names.slice(0, 20).join(", ")} className="tabular-nums">
+          {entry.servers.length === total
+            ? t("All {{count}} servers", { count: total, defaultValue_one: "The only server" })
+            : t("{{done}} of {{count}} servers", { done: entry.servers.length, count: total })}
+        </TableCell>
+      )}
       <TableCell className="pr-3 text-right">
         {onRemove && (
           <Button variant="ghost" size="sm" onClick={onRemove} aria-label={remove.label()}>
@@ -242,15 +256,29 @@ function ListRow({
 }
 
 /** Whether the whitelist is on, and switching it on or off on all servers. */
-function WhitelistSwitch({ lists, network, onAct }: { lists: PlayerLists; network?: Network; onAct: (dialog: PlayerDialog) => void }) {
+function WhitelistSwitch({
+  lists,
+  network,
+  server,
+  onAct,
+}: {
+  lists: PlayerLists
+  network?: Network
+  server?: NodeServer
+  onAct: (dialog: PlayerDialog) => void
+}) {
   const scopesFor = useScopes()
   const on = lists.servers.filter((s) => s.whitelistEnabled).length
   const next: PlayerAction = on === lists.servers.length ? "whitelist_off" : "whitelist_on"
-  const scopes = scopesFor(next, { network })
+  const scopes = scopesFor(next, { server, network })
   return (
     <>
       <span className="self-center text-sm text-muted-foreground">
-        {t("Whitelist active on {{done}} of {{count}} servers", { done: on, count: lists.servers.length })}
+        {server
+          ? on
+            ? t("The whitelist is on")
+            : t("The whitelist is off")
+          : t("Whitelist active on {{done}} of {{count}} servers", { done: on, count: lists.servers.length })}
       </span>
       {scopes.length > 0 && (
         <Button variant="outline" onClick={() => onAct({ action: next, scopes })}>

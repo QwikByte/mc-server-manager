@@ -10,6 +10,18 @@ Paper, Purpur, Folia, Leaf, Fabric, Quilt, Forge, NeoForge) and [itzg/mc-proxy](
 (Velocity, BungeeCord; Waterfall only for existing proxies, see [Networks](networks.md#proxies-and-forwarding)).
 Container labels are the agent's only state, so servers keep running while an agent restarts.
 
+## Creating and deleting
+
+**Create server** asks for the node, name, software, Minecraft version, memory, port and storage location. The field of
+the Minecraft version suggests the releases that Modrinth lists, as do the settings and templates; empty means the
+latest. A game server can get a seed, a game mode, a difficulty and a world type under **World**, which start as its
+template has them, or as Minecraft's defaults. They are written to `server.properties` before the first start, and the
+agent checks them like other properties. Deleting a server with all its worlds asks for its name first.
+
+The page of a server shows the address players join at, with a button to copy it: the host of its node's address with
+the server's port, or its proxy's for a server of a network. Without the permissions to see that node and the networks,
+it shows only the port.
+
 ## Console
 
 Each server has a live console in the panel: its output streams in as it happens, and commands go to game servers
@@ -38,7 +50,10 @@ server, though, and can read them.
 
 `server.properties` can be edited as a form: grouped settings with switches, choices and validated numbers, a MOTD
 editor with colour codes and preview, and a search. Only properties of the server's Minecraft version are shown,
-comments in the file are kept, and properties the manager relies on (container port, RCON) are locked.
+comments in the file are kept, and properties the manager relies on (container port, RCON) are locked. Next to the
+MOTD, an image becomes the server's icon in the server list: the browser scales it to 64×64 pixels and writes it as
+`server-icon.png`, which the server shows after its next start. The configuration of proxies offers the icon too. It
+needs the permission to change files.
 
 ## Settings and images
 

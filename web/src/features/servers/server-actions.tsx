@@ -176,6 +176,7 @@ export function ServerActions({
             description={t("This stops the server and permanently deletes it with all worlds, plugins and settings. This can't be undone.")}
             action={t("Delete server")}
             destructive
+            confirmText={server.name}
             onConfirm={() => run("delete", t("Deleted {{name}}", { name: server.name }), onDeleted)}
           />
         )}

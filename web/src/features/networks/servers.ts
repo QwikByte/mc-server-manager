@@ -67,6 +67,9 @@ export function hostOf(address?: string) {
   return host.replace(/^\[|\]$/g, "")
 }
 
+/** The address players join at, e.g. 203.0.113.10:25565, or [2001:db8::10]:25565 for an IPv6 address. */
+export const joinAddress = (host: string, port: number) => `${host.includes(":") ? `[${host}]` : host}:${port}`
+
 /** The network each server is in, as its proxy or behind it; none without the permission to see networks. */
 export function useNetworkOf() {
   const { data: networks } = useQuery({ ...networksQuery, enabled: useAccess().can("networks.view") })

@@ -3,7 +3,8 @@
 The **Players** page lists the players online on all game servers, with their server and network, to search and act on;
 [`Ctrl+K`](panel.md#search) finds them too. Its other tabs join the ban list, whitelist and operators of all servers or
 of a network, with how many servers have each player, and the changes that wait for stopped servers. Temporary bans,
-which Paper's ban list and plugins such as EssentialsX write, show when they end, and those that ended are marked.
+which Paper's ban list and plugins such as EssentialsX write, show when they end, and those that ended are marked. The
+**Players** tab of a game server shows the same for that server alone, with the same actions.
 **Players online** on a network's page opens the page for that network.
 The headers of the tables sort them, by player, server and network or by player and number of servers; the address keeps
 the order. **Export CSV** downloads a tab as shown, searched and sorted, for spreadsheets: the players online with their

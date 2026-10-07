@@ -64,6 +64,11 @@ func TestPlayers(t *testing.T) {
 	if len(lists.Servers) != 2 {
 		t.Fatalf("all game servers = %+v", lists.Servers)
 	}
+	api.do("GET", "/api/players/lists?node="+game.NodeID+"&server="+game.ServerID, nil, http.StatusOK, &lists)
+	if len(lists.Servers) != 1 || lists.Servers[0].Ref != game || len(lists.Servers[0].Pending) != 1 || len(lists.Banned) != 0 {
+		t.Fatalf("lists of one server = %+v", lists)
+	}
+	api.do("GET", "/api/players/lists?server="+game.ServerID, nil, http.StatusBadRequest, nil)
 
 	// Bedrock players are whitelisted with their ID from GeyserMC, as the servers behind the
 	// proxy can't look them up: the file of a running server changes, and it reloads it.

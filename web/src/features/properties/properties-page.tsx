@@ -14,7 +14,8 @@ import { useAccess } from "@/features/access/use-access"
 import { type Server, useServer, useServerAction } from "@/features/servers/api"
 import { propertiesQuery, type ServerProperties, useUpdateProperties } from "./api"
 import { PropertyField } from "./property-field"
-import { check, definition, definitions, groups } from "./schema"
+import { check, definition, definitions, groups, iconMatches } from "./schema"
+import { ServerIcon } from "./server-icon"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/properties")
 const order = Object.keys(definitions)
@@ -64,6 +65,7 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
   const keys = Object.keys(data.properties)
     .filter((key) => !term || [key, t(definition(key).label), t(definition(key).description)].some((s) => s.toLowerCase().includes(term)))
     .sort((a, b) => (order.indexOf(a) + 1 || order.length + 1) - (order.indexOf(b) + 1 || order.length + 1) || a.localeCompare(b))
+  const icon = can("files.write", nodeId, server.id) && iconMatches(term)
 
   function save(andRestart: boolean) {
     update.mutate(changes, {
@@ -93,14 +95,16 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
           onChange={(e) => setSearch(e.target.value)}
         />
       </InputGroup>
-      {keys.length === 0 && <p className="text-sm text-muted-foreground">{t("No setting matches your search.")}</p>}
+      {keys.length === 0 && !icon && <p className="text-sm text-muted-foreground">{t("No setting matches your search.")}</p>}
       {groups.map((group) => {
         const inGroup = keys.filter((key) => definition(key).group === group)
-        if (inGroup.length === 0) return null
+        const withIcon = icon && group === "Server list"
+        if (inGroup.length === 0 && !withIcon) return null
         return (
           <section key={group} className="surface mb-6 rounded-xl p-5 sm:p-6" aria-label={t(group)}>
             <h2 className="heading mb-5 text-base">{t(group)}</h2>
             <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
+              {withIcon && <ServerIcon nodeId={nodeId} serverId={server.id} />}
               {inGroup.map((key) => (
                 <PropertyField
                   key={key}

@@ -106,7 +106,10 @@ func (h *Handler) lists(w http.ResponseWriter, r *http.Request) {
 		}
 	case q.Has("server"):
 		ref := network.Ref{NodeID: q.Get("node"), ServerID: q.Get("server")}
-		if !visible(ref) {
+		switch {
+		case ref.NodeID == "" || ref.ServerID == "":
+			err = httpapi.Errorf(http.StatusBadRequest, "Choose a node and a server.")
+		case !visible(ref):
 			err = access.Denied(access.ServersView)
 		}
 		servers = []network.Ref{ref}

@@ -22,9 +22,9 @@ while the agents can't tell them, e.g. agents of older versions. Server cards sh
 ### History
 
 The master records the latest measurement of every agent each minute and keeps it for a week. Charts show the last 24
-hours (averages of 5 minutes) or 7 days (averages of 30 minutes), with the most players of each step, and a table shows
-the same values. Gaps are times in which a server didn't run or its node couldn't be reached. The history of a server
-moves and goes away with it.
+hours (averages of 5 minutes) or 7 days (averages of 30 minutes), with the most players and the largest size of the data
+of each step, and a table shows the same values. Gaps are times in which a server didn't run or its node couldn't be
+reached. The history of a server moves and goes away with it.
 
 ## Logs
 
