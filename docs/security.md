@@ -61,6 +61,28 @@ of Let's Encrypt or `--tls-cert`, the master tells browsers to use HTTPS only (H
 self-signed one, which would lock browsers out once it changes; behind a reverse proxy, set it there. The master may
 listen at ports below 1024 (`CAP_NET_BIND_SERVICE`), e.g. 443 and 80, and has no other privileges.
 
+## API tokens
+
+Scripts authenticate with personal API tokens: `noryx_` and 128 random bits, a prefix that lets secret scanners
+recognise them. A token only counts in the `Authorization: Bearer` header with this prefix, never in a URL or as a
+cookie, so other credentials of a reverse proxy there leave the session alone. The master stores only its SHA-256 hash
+and shows a token once, as it is created, which needs the password and, with two-factor authentication, a code; the
+panel and the log name it by a random ID of its own and its name, never by the token or its hash. Each request gets the
+permissions its user has at that moment, limited to those of the token and the ones they require, so a token never has
+more than its user, and one with fewer never what only administrators may do. Tokens of disabled users stop working,
+also if they are enabled again, and those of deleted users are deleted. Changing the password, setting one with a setup
+link and turning on two-factor authentication revoke the user's tokens, as they end the other sessions: whoever knew the
+old password may have created them. A requirement of two-factor authentication applies to the tokens of the users it
+covers until they set it up. Tokens only work on the routes that state their permissions to `access.Mux`; the routes of
+the user's own account (`/api/auth/` and `/api/preferences`) refuse them, so a token can't sign in to the panel, change
+the password or two-factor authentication, end sessions or create and revoke tokens. A wrong token takes an attempt from
+the client's budget of sign-ins, and a client without attempts left can't use tokens either. Pages of other sites can't
+use a token in a browser: the master allows no cross-origin requests, so browsers don't send the header, and the
+cross-origin request protection still refuses their changes; that of the session cookie stays as it is. Operations that
+a token started are the token's, so that a token with fewer permissions can't cancel those of its user or of other
+tokens without the permission they need. The log names the token besides the user in the entries of what it did, and a
+token notes the address and time of its last use at most once a minute.
+
 ## Networks
 
 Velocity's modern forwarding signs the forwarded player data with a random secret per network, which is stored in the
@@ -201,7 +223,8 @@ permissions they have themselves, within their own scope, and only manage users 
 do, so no one can raise their own permissions.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
 change with the user who made it, also denied attempts. An operation in progress can only be cancelled by the user who
-started it, or by one who has the permissions it needed on what it is about, and only while it is at steps that stop
+started it, in the panel or with the same API token, or by one who has the permissions it needed on what it is about,
+and only while it is at steps that stop
 safely: restoring a backup, moving a server, stopping or restarting one once it no longer warns its players, and
 restarting servers one after the other always finish.
 A warning before a stop or restart by hand is the console command `say`, so a message of one's own needs the permission

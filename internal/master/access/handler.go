@@ -40,6 +40,7 @@ func (h *Handler) Register(m Mux) {
 	m.Handle("GET /api/access/permissions", SignedIn, func(w http.ResponseWriter, _ *http.Request) {
 		httpapi.WriteJSON(w, http.StatusOK, Catalog)
 	})
+	m.Handle("GET /api/openapi.json", SignedIn, m.describe)
 	m.Handle("GET /api/groups", Everywhere(UsersView), func(w http.ResponseWriter, r *http.Request) {
 		groups, err := h.svc.Groups(r.Context())
 		write(w, r, http.StatusOK, groups, err)

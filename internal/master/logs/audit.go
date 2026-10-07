@@ -157,7 +157,7 @@ func (s *Store) Audit() access.Wrapper {
 			start := time.Now()
 			attrs := append(target(r, pattern, names), a.category, slog.String("ip", auth.ClientIP(r)))
 			if user, ok := auth.UserFrom(r.Context()); ok {
-				attrs = append(attrs, slog.String(logging.KeyUser, user.Username))
+				attrs = append(attrs, user.LogAttrs()...)
 			}
 			ctx, notes := logging.WithNotes(r.Context())
 			rec := &recorder{ResponseWriter: w}

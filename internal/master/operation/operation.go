@@ -84,7 +84,8 @@ type Task func(ctx context.Context) (result any, err error)
 
 type entry struct {
 	Operation
-	userID   int64
+	owner    owner
+	starter  []slog.Attr // names who started it in the log
 	visible  func(access.Grants) bool
 	category slog.Attr
 	err      error
@@ -119,7 +120,7 @@ func (o *Operations) Run(w http.ResponseWriter, r *http.Request, spec Spec, task
 			ID: strings.ToLower(rand.Text()), Kind: spec.Kind, Subject: spec.Subject, NodeID: spec.NodeID, ServerID: spec.ServerID,
 			NetworkID: spec.NetworkID, User: user.Username, Steps: slices.Clone(spec.Steps), StartedAt: time.Now(),
 		},
-		userID: user.ID, visible: spec.Visible, category: spec.Category, done: make(chan struct{}), cancel: cancel,
+		owner: ownerOf(user), starter: user.LogAttrs(), visible: spec.Visible, category: spec.Category, done: make(chan struct{}), cancel: cancel,
 	}
 	if spec.Cancel != nil {
 		e.mayCancel = func(g access.Grants) (access.Permission, bool) { return spec.Cancel(r, g) }
@@ -138,7 +139,7 @@ func (o *Operations) Run(w http.ResponseWriter, r *http.Request, spec Spec, task
 		}
 	}
 	o.mu.Lock()
-	finished, view := e.FinishedAt != nil, e.view(user.ID, access.From(r.Context()))
+	finished, view := e.FinishedAt != nil, e.view(e.owner, access.From(r.Context()))
 	e.answered = !finished
 	o.mu.Unlock()
 	switch {
@@ -191,7 +192,10 @@ func (o *Operations) finish(e *entry, result any, err error) {
 	if !answered {
 		return
 	}
-	attrs := []any{e.category, logging.KeyUser, e.User, "operation", e.ID, "kind", e.Kind, "subject", e.Subject}
+	attrs := []any{e.category, "operation", e.ID, "kind", e.Kind, "subject", e.Subject}
+	for _, a := range e.starter {
+		attrs = append(attrs, a)
+	}
 	if e.NodeID != "" {
 		attrs = append(attrs, logging.KeyNode, e.NodeID)
 	}
@@ -208,28 +212,43 @@ func (o *Operations) finish(e *entry, result any, err error) {
 	}
 }
 
-// view returns a copy of an operation for a user, while o.mu is held.
-func (e *entry) view(userID int64, grants access.Grants) Operation {
+// owner is who started an operation: a user in the panel, or with one of the user's API
+// tokens, which may have fewer permissions than the user and so doesn't own the others.
+type owner struct {
+	user  int64
+	token string
+}
+
+func ownerOf(user auth.User) owner {
+	o := owner{user: user.ID}
+	if user.Token != nil {
+		o.token = user.Token.ID
+	}
+	return o
+}
+
+// view returns a copy of an operation for whom, while o.mu is held.
+func (e *entry) view(whom owner, grants access.Grants) Operation {
 	op := e.Operation
 	op.Steps = slices.Clone(e.Steps)
-	op.Cancellable = !e.Cancelled && e.checkCancel(userID, grants) == nil
+	op.Cancellable = !e.Cancelled && e.checkCancel(whom, grants) == nil
 	return op
 }
 
-// sees reports whether a user sees an operation: one the user started, or one of others
-// about what the user may see.
-func (e *entry) sees(userID int64, grants access.Grants) bool {
-	return e.userID == userID || e.visible(grants)
+// sees reports whether whom sees an operation: one whom started, or one of others about
+// what whom may see.
+func (e *entry) sees(whom owner, grants access.Grants) bool {
+	return e.owner == whom || e.visible(grants)
 }
 
-// checkCancel returns why a user can't cancel an operation, or nil, while o.mu is held.
-func (e *entry) checkCancel(userID int64, grants access.Grants) error {
+// checkCancel returns why whom can't cancel an operation, or nil, while o.mu is held.
+func (e *entry) checkCancel(whom owner, grants access.Grants) error {
 	switch {
 	case e.FinishedAt != nil:
 		return httpapi.Errorf(http.StatusConflict, "The operation has ended already.")
 	case e.mayCancel == nil:
 		return httpapi.Errorf(http.StatusConflict, "The operation can't be cancelled, as what it does now must finish once it began.")
-	case e.userID == userID:
+	case e.owner == whom:
 		return nil
 	}
 	if p, ok := e.mayCancel(grants); !ok {
@@ -239,14 +258,15 @@ func (e *entry) checkCancel(userID int64, grants access.Grants) error {
 }
 
 // List returns the operations a user may see, the newest first: those the user started,
-// and those of others about what the user may see.
-func (o *Operations) List(userID int64, grants access.Grants) []Operation {
+// and those of others about what the user may see. Those that an API token started are the
+// token's, not its user's.
+func (o *Operations) List(user auth.User, grants access.Grants) []Operation {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	ops := []Operation{}
+	whom, ops := ownerOf(user), []Operation{}
 	for _, e := range slices.Backward(o.ops) {
-		if e.sees(userID, grants) {
-			ops = append(ops, e.view(userID, grants))
+		if e.sees(whom, grants) {
+			ops = append(ops, e.view(whom, grants))
 		}
 	}
 	return ops
@@ -256,23 +276,24 @@ func (o *Operations) List(userID int64, grants access.Grants) []Operation {
 // or one whom its Spec allows. It stops at its next step that can stop, and calls to agents
 // stop with it; then it ends as cancelled. Cancelling it again changes nothing. The log
 // entry of ctx notes what it is.
-func (o *Operations) Cancel(ctx context.Context, id string, userID int64, grants access.Grants) (Operation, error) {
+func (o *Operations) Cancel(ctx context.Context, id string, user auth.User, grants access.Grants) (Operation, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	i := slices.IndexFunc(o.ops, func(e *entry) bool { return e.ID == id && e.sees(userID, grants) })
+	whom := ownerOf(user)
+	i := slices.IndexFunc(o.ops, func(e *entry) bool { return e.ID == id && e.sees(whom, grants) })
 	if i < 0 {
 		return Operation{}, httpapi.Errorf(http.StatusNotFound, "Operation not found.")
 	}
 	e := o.ops[i]
 	logging.Note(ctx, e.category, slog.String("kind", e.Kind), slog.String("subject", e.Subject), slog.String("started_by", e.User))
-	if err := e.checkCancel(userID, grants); err != nil {
+	if err := e.checkCancel(whom, grants); err != nil {
 		return Operation{}, err
 	}
 	if !e.Cancelled {
 		e.Cancelled = true
 		e.cancel(errCancelled)
 	}
-	return e.view(userID, grants), nil
+	return e.view(whom, grants), nil
 }
 
 // CheckIdle refuses to cut off operations in progress, e.g. by restarting the master.

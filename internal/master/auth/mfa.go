@@ -73,7 +73,7 @@ func (s *Service) SetUpMFA(ctx context.Context, user User) (MFASetup, error) {
 
 // EnableMFA turns on two-factor authentication once a code shows that the app has the
 // secret of the setup, and returns the recovery codes. Other sessions than the one
-// identified by keep end, as they started without a code.
+// identified by keep end and the API tokens are revoked, as they started without a code.
 func (s *Service) EnableMFA(ctx context.Context, id int64, password, code, keep string) ([]string, error) {
 	if err := s.confirmPassword(ctx, id, password); err != nil {
 		return nil, err
@@ -101,6 +101,9 @@ func (s *Service) EnableMFA(ctx context.Context, id int64, password, code, keep 
 		}
 		if err == nil {
 			_, err = tx.ExecContext(ctx, endOtherSessions, id, hashToken(keep))
+		}
+		if err == nil {
+			err = revokeTokens(ctx, tx, id)
 		}
 		return err
 	})

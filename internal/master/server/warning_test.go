@@ -16,6 +16,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
@@ -63,14 +64,14 @@ func TestWarning(t *testing.T) {
 		op = post(admin, "/api/servers/actions", `{"action": "stop", "servers": [{"nodeId": "n1", "serverId": "s1"}, {"nodeId": "n1", "serverId": "p1"}],
 			"warning": {"minutes": 2, "message": "Bye in {minutes} min"}}`, http.StatusAccepted)
 		synctest.Wait()
-		if _, err := ops.Cancel(admin, op.ID, 0, access.Admin()); err != nil {
+		if _, err := ops.Cancel(admin, op.ID, auth.User{}, access.Admin()); err != nil {
 			t.Fatal(err)
 		}
 		synctest.Wait()
 		if got := agent.taken(); !slices.Equal(got, []string{"ListServers", "SendCommand s1 say Bye in 2 min"}) {
 			t.Fatalf("calls %q", got)
 		}
-		if ops := ops.List(0, access.Admin()); !ops[0].Cancelled || ops[0].FinishedAt == nil || ops[0].Steps[ops[0].Step] != "warn" {
+		if ops := ops.List(auth.User{}, access.Admin()); !ops[0].Cancelled || ops[0].FinishedAt == nil || ops[0].Steps[ops[0].Step] != "warn" {
 			t.Fatalf("cancelled operation = %+v", ops[0])
 		}
 
