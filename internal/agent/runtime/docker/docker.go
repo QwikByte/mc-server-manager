@@ -177,7 +177,10 @@ func (d *Docker) Create(ctx context.Context, spec runtime.Spec) error {
 	if err := os.Mkdir(path, 0o750); err != nil {
 		return err
 	}
-	return d.createContainer(ctx, spec, home(spec))
+	if err := d.createContainer(ctx, spec, home(spec)); err != nil {
+		return errors.Join(err, os.Remove(path)) // still empty
+	}
+	return nil
 }
 
 // dataPath returns the host directory with the data of a server.
