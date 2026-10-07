@@ -72,7 +72,10 @@ export async function request(path: string, init: RequestInit = {}): Promise<Res
 export async function read<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T
   if (!res.ok) throw await responseError(res)
-  return (await res.json().catch(() => ({}))) as T
+  // A body that broke off, e.g. as the page reloads, fails the request instead of reading as {}, which lists and
+  // other answers aren't.
+  const text = await res.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
 /** Calls the master's REST API. */
