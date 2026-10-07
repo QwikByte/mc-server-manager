@@ -257,7 +257,7 @@ function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server
           {create.isPending ? t("Backing up…") : t("Back up now")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl" {...guard(create.isPending)}>
+      <DialogContent className="sm:max-w-2xl" {...guard(create.isPending)}>
         <form onSubmit={submit} className="grid gap-6">
           <DialogHeader>
             <DialogTitle>{t("Back up {{name}}", { name: server.name })}</DialogTitle>

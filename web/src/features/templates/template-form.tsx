@@ -221,7 +221,7 @@ function AddPlugins({
           {kind === "mods" ? t("Add mods") : t("Add plugins")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{kind === "mods" ? t("Add mods to the template") : t("Add plugins to the template")}</DialogTitle>
           <DialogDescription>

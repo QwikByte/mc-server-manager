@@ -361,7 +361,7 @@ function AddDialog({ server, serverRef, words, installed }: { server: Server; se
           {words.add}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{words.addTitle}</DialogTitle>
           <DialogDescription>{words.addDescription}</DialogDescription>
