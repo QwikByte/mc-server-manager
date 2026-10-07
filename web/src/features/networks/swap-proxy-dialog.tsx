@@ -15,7 +15,7 @@ import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
 import { type Forwarding, maintenanceQuery, type Network, networksQuery, type ServerRef, useSwapProxy } from "./api"
 import { FirewallConfirmation, ForwardingChoice } from "./forwarding"
-import { availableServers, findServer, hostOf, isBungee, key, proxyTypes, refOf, routeOf } from "./servers"
+import { availableServers, findServer, hostOf, isBungee, joinAddress, key, proxyTypes, refOf, routeOf } from "./servers"
 
 /** Opens the dialog that gives a network another proxy, e.g. where its proxy reached its end of life. */
 export function ChangeProxyButton({ network }: { network: Network }) {
@@ -176,7 +176,7 @@ function SwapEffects({
     proxy.state !== "stopped"
       ? t("{{new}} restarts to load what it takes over.", { new: proxy.name })
       : old && old.state !== "stopped" && t("{{new}} starts once the servers are configured.", { new: proxy.name }),
-    host && t("Players join at {{address}} from now on.", { address: `${host}:${proxy.port}` }),
+    host && t("Players join at {{address}} from now on.", { address: joinAddress(host, proxy.port) }),
     old &&
       old.nodeId === proxy.nodeId &&
       old.port !== proxy.port &&
