@@ -125,6 +125,7 @@ export const statusesQuery = queryOptions({
   queryKey: ["filesets", "status"],
   queryFn: () => api<Record<string, ServerStatus[]>>("/filesets/status"),
   staleTime: 30_000,
+  refetchInterval: 30_000, // the files on the servers change on their own too
 })
 
 export const fileSetQuery = (id: string) =>
@@ -138,6 +139,7 @@ export const statusQuery = (id: string) =>
     queryKey: ["filesets", id, "status"],
     queryFn: () => api<ServerStatus[]>(`/filesets/${id}/status`),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 
 export const versionQuery = (id: string, version: number) =>

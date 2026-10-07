@@ -34,6 +34,7 @@ const (
 var (
 	formatting = regexp.MustCompile(`§.`)
 	tpsPattern = regexp.MustCompile(`TPS from last 1m, 5m, 15m: \*?([0-9.]+)`)
+	listCounts = regexp.MustCompile(`There are (\d+)(?: of a max of |/)(\d+) players`)
 )
 
 // Service measures the usage every few seconds and serves the latest measurement.
@@ -194,10 +195,15 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 		return stats
 	}
 	stats.OfflineMode = !srv.BehindProxy && st.offlineMode(ctx, rt, srv.ID)
-	// The ping lists only some players, the console all of them.
-	if out, ok := st.command(ctx, rt, srv.ID, now, "minecraft:list"); ok && stats.Players != nil {
-		if names, ok := listed(out); ok {
-			stats.Players.Names = names
+	// The ping lists only some players, the console all of them. The console also counts them
+	// when the ping fails: servers behind a proxy only listen within the network of their proxy.
+	if out, ok := st.command(ctx, rt, srv.ID, now, "minecraft:list"); ok {
+		switch players, ok := listed(out); {
+		case !ok:
+		case stats.Players == nil:
+			stats.Players = players
+		default:
+			stats.Players.Names = players.GetNames()
 		}
 	}
 	// Folia tells the ticks per second of each region instead.
@@ -230,19 +236,28 @@ func (st *serverState) command(ctx context.Context, rt runtime.Runtime, id strin
 }
 
 // listed returns the players in the output of the list command: "There are 2 of a max of
-// 20 players online: Alex, Steve", or before Minecraft 1.13 with the names on a new line.
-func listed(out string) ([]string, bool) {
-	_, names, ok := strings.Cut(out, ":")
+// 20 players online: Alex, Steve", or before Minecraft 1.13 "There are 2/20 players online:"
+// with the names on a new line. Without the numbers, it counts the names.
+func listed(out string) (*noryxv1.Players, bool) {
+	head, names, ok := strings.Cut(out, ":")
 	if !ok {
 		return nil, false // e.g. an unknown command
 	}
-	list := []string{}
+	players := &noryxv1.Players{Names: []string{}}
 	for _, name := range strings.FieldsFunc(names, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
-		if noryxv1.ValidPlayerName(name) && len(list) < maxListed {
-			list = append(list, name)
+		if !noryxv1.ValidPlayerName(name) {
+			continue
+		}
+		if players.Online++; len(players.Names) < maxListed {
+			players.Names = append(players.Names, name)
 		}
 	}
-	return list, true
+	if m := listCounts.FindStringSubmatch(head); m != nil {
+		online, _ := strconv.ParseUint(m[1], 10, 32)
+		limit, _ := strconv.ParseUint(m[2], 10, 32)
+		players.Online, players.Max = uint32(online), uint32(limit)
+	}
+	return players, true
 }
 
 // offlineMode reports whether a running game server is in offline mode, as its

@@ -87,6 +87,7 @@ export const backupsQuery = (nodeId: string, serverId: string) =>
   queryOptions({
     queryKey: ["nodes", nodeId, "servers", serverId, "backups"],
     queryFn: () => api<Backup[]>(base(nodeId, serverId)),
+    refetchInterval: 30_000, // e.g. backup jobs add some
   })
 
 export const downloadUrl = (nodeId: string, serverId: string, id: string) => `/api${base(nodeId, serverId)}/${id}/download`

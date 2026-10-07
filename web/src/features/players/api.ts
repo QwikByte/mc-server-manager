@@ -59,6 +59,7 @@ export const playerListsQuery = (network?: string) =>
   queryOptions({
     queryKey: ["players", "lists", network ?? "all"],
     queryFn: () => api<PlayerLists>(network ? `/players/lists?network=${encodeURIComponent(network)}` : "/players/lists"),
+    refetchInterval: 30_000, // the lists change in the game and through plugins too
   })
 
 export interface PlayerChange {

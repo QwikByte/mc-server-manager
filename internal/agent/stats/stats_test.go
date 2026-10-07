@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 )
@@ -66,18 +68,53 @@ func TestTPS(t *testing.T) {
 
 func TestListed(t *testing.T) {
 	for out, want := range map[string]string{
-		"There are 3 of a max of 20 players online: Alex, Steve, .Bedrock_1": "Alex,Steve,.Bedrock_1",
-		"There are 0 of a max of 20 players online: ":                        "",
-		"There are 2/20 players online:\nAlex, [Admin] Steve":                "Alex,Steve",
-		"There are 2 of a max of 20 players online: @a, Alex":                "Alex",
+		"There are 3 of a max of 20 players online: Alex, Steve, .Bedrock_1": "3/20 Alex,Steve,.Bedrock_1",
+		"There are 0 of a max of 20 players online: ":                        "0/20 ",
+		"There are 2/20 players online:\nAlex, [Admin] Steve":                "2/20 Alex,Steve",
+		"There are 2 of a max of 20 players online: @a, Alex":                "2/20 Alex",
+		"Players online: Alex, Steve":                                        "2/0 Alex,Steve",
 	} {
-		if names, ok := listed(out); !ok || strings.Join(names, ",") != want {
-			t.Errorf("listed(%q) = %q, %v; want %q", out, names, ok, want)
+		if p, ok := listed(out); !ok || fmt.Sprintf("%d/%d %s", p.GetOnline(), p.GetMax(), strings.Join(p.GetNames(), ",")) != want {
+			t.Errorf("listed(%q) = %v, %v; want %q", out, p, ok, want)
 		}
 	}
 	if _, ok := listed("Unknown or incomplete command, see below for error"); ok {
 		t.Error("an unknown command lists players")
 	}
+}
+
+// A server whose port isn't published on the node, as it is behind a proxy, can't be pinged:
+// its console tells its players.
+func TestPlayersBehindProxy(t *testing.T) {
+	rt := consoleRuntime{out: "There are 2 of a max of 50 players online: Alex, Steve"}
+	srv := runtime.Server{Spec: runtime.Spec{ID: "game", Type: noryxv1.ServerType_SERVER_TYPE_PAPER, Port: unusedPort(t), BehindProxy: true},
+		State: noryxv1.ServerState_SERVER_STATE_RUNNING}
+	var st serverState
+	players := st.measure(t.Context(), rt, srv, time.Now()).GetPlayers()
+	if players.GetOnline() != 2 || players.GetMax() != 50 || strings.Join(players.GetNames(), ",") != "Alex,Steve" {
+		t.Fatalf("players = %v", players)
+	}
+}
+
+// consoleRuntime runs a server that answers every command on its console with out.
+type consoleRuntime struct {
+	runtime.Runtime
+	out string
+}
+
+func (r consoleRuntime) Usage(context.Context, string) (runtime.Usage, error) { return runtime.Usage{}, nil }
+
+func (r consoleRuntime) SendCommand(context.Context, string, string) (string, error) { return r.out, nil }
+
+// unusedPort is a port at which nothing listens.
+func unusedPort(t *testing.T) uint32 {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	return uint32(port) //nolint:gosec // ports are 16 bits
 }
 
 func TestHost(t *testing.T) {

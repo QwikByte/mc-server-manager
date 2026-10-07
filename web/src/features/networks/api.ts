@@ -59,15 +59,19 @@ export interface NewNetwork {
   servers: ServerRef[]
 }
 
+// Networks refresh while they are shown, as their problems change on their own, e.g. a proxy
+// that is out of date, and other users change them.
 export const networksQuery = queryOptions({
   queryKey: ["networks"],
   queryFn: () => api<Network[]>("/networks"),
+  refetchInterval: 15_000,
 })
 
 export const networkQuery = (id: string) =>
   queryOptions({
     queryKey: ["networks", id],
     queryFn: () => api<Network>(`/networks/${id}`),
+    refetchInterval: 15_000,
   })
 
 export function useCreateNetwork() {
@@ -154,6 +158,7 @@ export const maintenanceQuery = (id: string) =>
     queryKey: ["networks", id, "maintenance"],
     queryFn: () => api<Maintenance>(`/networks/${id}/maintenance`),
     staleTime: 10_000,
+    refetchInterval: 15_000, // it can be changed in the game too
   })
 
 /** Turns maintenance of a network on or off. */
