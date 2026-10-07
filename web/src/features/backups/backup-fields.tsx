@@ -10,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { ServerFiles } from "@/features/files/api"
 import { PickDialog } from "@/features/files/path-picker"
 import { msg } from "@/lib/i18n"
-import { pathsError, type Selection } from "./api"
+import { type JobSettings, pathsError, type Selection } from "./api"
 
-const choices: [key: keyof Omit<Selection, "paths">, label: string, description: string][] = [
+const choices: [key: keyof Omit<Selection, "paths" | "exclude">, label: string, description: string][] = [
   ["everything", msg("Everything"), msg("The whole folder of the server, including the server software.")],
   ["worlds", msg("Worlds"), msg("All worlds, including those added later.")],
   ["plugins", msg("Plugins and mods"), msg("With their settings.")],
@@ -47,16 +47,54 @@ export function SelectionField({ value, server, onChange }: { value: Selection; 
           })}
         </div>
       </FieldSet>
-      {!value.everything && <PathsField paths={value.paths} server={server} onChange={(paths) => onChange({ ...value, paths })} />}
+      {!value.everything && (
+        <PathsField
+          id="selection-path"
+          label={t("More files and folders")}
+          description={t("Choose them on a server, or type a path. Paths a server doesn't have are skipped.")}
+          pick={t("Files and folders to back up")}
+          example="plugins/LuckPerms"
+          paths={value.paths}
+          server={server}
+          onChange={(paths) => onChange({ ...value, paths })}
+        />
+      )}
+      <PathsField
+        id="selection-exclude"
+        label={t("Leave out")}
+        description={t("Folders that are big and easy to replace, like the tiles of a map plugin or logs. Restoring leaves them as they are.")}
+        pick={t("Files and folders to leave out")}
+        example="plugins/dynmap/web/tiles"
+        paths={value.exclude ?? []}
+        server={server}
+        onChange={(exclude) => onChange({ ...value, exclude })}
+      />
     </>
   )
 }
 
-// An example in an empty field, which needs no translation.
-const examplePath = "plugins/LuckPerms"
-
-/** Further files and folders to back up: picked on a server, or typed for those other servers have. */
-function PathsField({ paths, server, onChange }: { paths: string[]; server?: ServerFiles; onChange: (paths: string[]) => void }) {
+/** Files and folders of a selection: picked on a server, or typed for those other servers have. */
+function PathsField({
+  id,
+  label,
+  description,
+  pick,
+  example,
+  paths,
+  server,
+  onChange,
+}: {
+  id: string
+  label: string
+  description: string
+  /** The title of the dialog to pick them in. */
+  pick: string
+  /** An example in the empty field, which needs no translation. */
+  example: string
+  paths: string[]
+  server?: ServerFiles
+  onChange: (paths: string[]) => void
+}) {
   const [browsing, setBrowsing] = useState(false)
   const [typed, setTyped] = useState("")
   const error = pathsError(paths)
@@ -67,9 +105,9 @@ function PathsField({ paths, server, onChange }: { paths: string[]; server?: Ser
   }
   return (
     <Field data-invalid={!!error}>
-      <FieldLabel htmlFor="selection-path">{t("More files and folders")}</FieldLabel>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       {paths.length > 0 && (
-        <ul aria-label={t("More files and folders")} className="flex flex-wrap gap-1.5">
+        <ul aria-label={label} className="flex flex-wrap gap-1.5">
           {paths.map((p) => (
             <li key={p} className="flex items-center gap-1 rounded-md bg-muted py-0.5 pr-0.5 pl-2 font-mono text-xs">
               {p}
@@ -91,9 +129,9 @@ function PathsField({ paths, server, onChange }: { paths: string[]; server?: Ser
           {t("Browse…")}
         </Button>
         <Input
-          id="selection-path"
+          id={id}
           className="h-8 max-w-64 font-mono text-xs"
-          placeholder={examplePath}
+          placeholder={example}
           aria-invalid={!!error}
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
@@ -105,14 +143,10 @@ function PathsField({ paths, server, onChange }: { paths: string[]; server?: Ser
           }}
         />
       </div>
-      {error ? (
-        <FieldError>{error}</FieldError>
-      ) : (
-        <FieldDescription>{t("Choose them on a server, or type a path. Paths a server doesn't have are skipped.")}</FieldDescription>
-      )}
+      {error ? <FieldError>{error}</FieldError> : <FieldDescription>{description}</FieldDescription>}
       {browsing && (
         <PickDialog
-          title={t("Files and folders to back up")}
+          title={pick}
           description={!server && t("Browse one of the servers; the others are backed up with the same paths.")}
           server={server}
           action={t("Add")}
@@ -121,6 +155,45 @@ function PathsField({ paths, server, onChange }: { paths: string[]; server?: Ser
         />
       )}
     </Field>
+  )
+}
+
+type Retention = "keep" | "keepDays" | "keepWeeks" | "keepMonths"
+
+const retention: [key: Retention, label: string][] = [
+  ["keep", msg("Newest")],
+  ["keepDays", msg("Daily")],
+  ["keepWeeks", msg("Weekly")],
+  ["keepMonths", msg("Monthly")],
+]
+
+/** Chooses which backups a job keeps: its newest ones, and the newest of each of the last days, weeks and months. */
+export function RetentionField({ value, onChange }: { value: JobSettings; onChange: (change: Partial<JobSettings>) => void }) {
+  return (
+    <FieldSet>
+      <FieldLegend variant="label">{t("Backups to keep")}</FieldLegend>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {retention.map(([key, label]) => (
+          <Field key={key}>
+            <FieldLabel htmlFor={`job-${key}`}>{t(label)}</FieldLabel>
+            <Input
+              id={`job-${key}`}
+              type="number"
+              min={0}
+              max={1000}
+              className="font-mono"
+              value={value[key] ?? 0}
+              onChange={(e) => onChange({ [key]: e.target.valueAsNumber || 0 } as Partial<JobSettings>)}
+            />
+          </Field>
+        ))}
+      </div>
+      <FieldDescription>
+        {t(
+          "Per server and datastore, the job keeps its newest backups, and the newest of each of the last days, weeks and months that have backups, in its time zone. It deletes the others; with 0 everywhere, it keeps all. Backups made by hand and kept ones are never deleted.",
+        )}
+      </FieldDescription>
+    </FieldSet>
   )
 }
 

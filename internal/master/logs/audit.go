@@ -86,6 +86,8 @@ var actions = map[string]action{
 	"DELETE " + routeServer + "/plugins/{file}":                {logging.Plugins, "Remove plugin"},
 	"POST " + routeBackups:                                     {logging.Backups, "Back up server"},
 	"POST " + routeBackups + "/{backup}/restore":               {logging.Backups, "Restore backup"},
+	"POST " + routeBackups + "/{backup}/restore-into":          {logging.Backups, "Restore backup into another server"},
+	"PATCH " + routeBackups + "/{backup}":                      {logging.Backups, "Change backup"},
 	"DELETE " + routeBackups + "/{backup}":                     {logging.Backups, "Delete backup"},
 	"GET " + routeBackups + "/{backup}/download":               {logging.Backups, "Download backup"},
 	"POST /api/backup-jobs":                                    {logging.Backups, "Create backup job"},

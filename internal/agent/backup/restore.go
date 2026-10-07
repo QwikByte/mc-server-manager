@@ -5,123 +5,192 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/network"
+	"github.com/QwikByte/noryx/internal/agent/secrets"
 
 	"github.com/QwikByte/noryx/internal/agent/progress"
 )
 
-// stage extracts a backup into a temporary folder of the data directory, which the caller
-// removes unless its name is empty. Nothing of the server changes yet, so it can keep
-// running meanwhile.
-func stage(ctx context.Context, dir *datadir.Dir, b Archive) (string, error) {
-	zr, err := zip.OpenReader(b.Path())
-	if err != nil {
-		return "", err
+// chosen returns the files and folders that restoring a backup replaces: those asked for,
+// each of which the backup must hold, or all of the backup.
+func chosen(zr *zip.Reader, b Archive, requested []string) ([]string, error) {
+	if len(requested) == 0 {
+		return b.Paths, nil
 	}
-	defer zr.Close()
-	var size int64
+	if len(requested) > noryxv1.MaxBackupPaths {
+		return nil, status.Errorf(codes.InvalidArgument, "Choose at most %d files or folders.", noryxv1.MaxBackupPaths)
+	}
+	var paths []string
+	for _, p := range requested {
+		name, ok := datadir.Name(p)
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "The path %q is invalid.", p)
+		}
+		// A path around those of the backup would remove what the backup doesn't hold.
+		if !slices.ContainsFunc(b.Paths, within(name)) || !slices.ContainsFunc(zr.File, func(f *zip.File) bool { return within(entry(f))(name) }) {
+			return nil, status.Errorf(codes.NotFound, "The backup doesn't hold %s.", p)
+		}
+		paths = append(paths, name)
+	}
+	return datadir.Outermost(paths), nil
+}
+
+// entry returns the name of a file or folder of an archive in the data directory.
+func entry(f *zip.File) string { return filepath.FromSlash(strings.TrimSuffix(f.Name, "/")) }
+
+// list returns the files and folders in a folder of an archive, folders first, and whether
+// the archive has the folder.
+func list(zr *zip.Reader, folder string, hidden secrets.Files) ([]*noryxv1.FileInfo, bool) {
+	prefix := folder + string(filepath.Separator)
+	if folder == "." {
+		prefix = ""
+	}
+	byName := map[string]*noryxv1.FileInfo{}
+	found := folder == "."
 	for _, f := range zr.File {
-		size += int64(f.UncompressedSize64) //nolint:gosec // archives are written by the agent itself
+		name := entry(f)
+		rel, ok := strings.CutPrefix(name, prefix)
+		if !ok || rel == "" {
+			found = found || name == folder
+			continue
+		}
+		found = true
+		child, _, deeper := strings.Cut(rel, string(filepath.Separator))
+		if !deeper && !f.FileInfo().IsDir() && hidden.Hidden(name) {
+			continue
+		}
+		e := byName[child]
+		if e == nil {
+			e = &noryxv1.FileInfo{Name: child, ModifiedUnix: f.Modified.Unix()}
+			byName[child] = e
+		}
+		e.Directory = e.Directory || deeper || f.FileInfo().IsDir()
+		e.Size += int64(f.UncompressedSize64) //nolint:gosec // a size that fits on a disk
+	}
+	files := slices.Collect(maps.Values(byName))
+	slices.SortFunc(files, func(a, b *noryxv1.FileInfo) int {
+		switch {
+		case a.GetDirectory() && !b.GetDirectory():
+			return -1
+		case b.GetDirectory() && !a.GetDirectory():
+			return 1
+		}
+		return strings.Compare(a.GetName(), b.GetName())
+	})
+	return files, found
+}
+
+// stage extracts what a backup holds of paths into a temporary folder of the data directory,
+// which the caller removes unless its name is empty. Nothing of the server changes yet, so it
+// can keep running meanwhile.
+func stage(ctx context.Context, dir *datadir.Dir, zr *zip.Reader, paths []string) (string, error) {
+	files := slices.DeleteFunc(slices.Clone(zr.File), func(f *zip.File) bool { return !slices.ContainsFunc(paths, within(entry(f))) })
+	var size int64
+	for _, f := range files {
+		size += int64(f.UncompressedSize64) //nolint:gosec // a size that fits on a disk
 	}
 	progress.Step(ctx, "restore", size)
 	tmp := datadir.TempName(".")
-	return tmp, dir.ExtractZip(ctx, &zr.Reader, tmp)
+	return tmp, dir.ExtractZip(ctx, &zip.Reader{File: files}, tmp)
 }
 
-// keep makes the staged backup of a server keep what a backup must not bring back as it was:
-// the files that held secrets of file sets, as their sets may no longer target the server,
-// and the secrets and forwarding settings of its network, as it may have left the network
-// or joined another since. It changes only the staged backup, which swap moves into place,
-// so it runs while the server is stopped; if it fails, the server stays as it is.
-func keep(dir *datadir.Dir, typ noryxv1.ServerType, b Archive, staged string) error {
-	files := fileset.Read(dir).Marked()
-	for _, name := range network.SecretFiles(typ) {
-		files = append(files, filepath.FromSlash(name))
-	}
-	if err := keepFiles(dir, b, staged, files); err != nil {
-		return err
-	}
+// kept returns the files and folders that restoring a backup leaves as they are: what the
+// backup left out, and the files of the server with secrets of its own, of its network and
+// of file sets. A backup must not bring back the secret of a network the server left since,
+// nor one of a set that no longer targets it, nor the manifest of file sets, which would
+// hide less; a backup of another server holds none of them.
+func kept(dir *datadir.Dir, b Archive) []string {
+	return slices.Concat(b.Exclude, fileset.Read(dir).Secrets().Paths())
+}
+
+// keep gives the staged backup of a server the forwarding settings of its network as they
+// are, as it may have left the network or joined another since, and its secrets wherever a
+// backup of another server says "<hidden>". It changes only the staged backup, which swap
+// moves into place, so it runs while the server is stopped; if it fails, the server stays
+// as it is.
+func keep(dir *datadir.Dir, typ noryxv1.ServerType, staged string) error {
 	restored, err := dir.Sub(staged)
 	if err != nil {
 		return err
 	}
 	defer restored.Close()
+	if err := secrets.Fill(dir, restored); err != nil {
+		return err
+	}
 	return network.KeepForwarding(dir, restored, typ)
 }
 
-// keepFiles links files into the staged backup as they are now, and removes those that are
-// missing now from it, if the backup has them.
-func keepFiles(dir *datadir.Dir, b Archive, staged string, files []string) error {
-	for _, m := range files {
-		if !slices.ContainsFunc(b.Paths, func(p string) bool { return p == "." || m == p || strings.HasPrefix(m, p+string(filepath.Separator)) }) {
-			continue // the backup doesn't touch it
-		}
-		target := filepath.Join(staged, m)
-		if err := dir.RemoveAll(target); err != nil {
+// swap replaces paths of the data directory with their staged state, also removing what the
+// staged state lacks, except for the paths kept, which stay as they are.
+func swap(dir *datadir.Dir, staged string, paths, kept []string) error {
+	for _, k := range kept { // so that no folder brings them back
+		if err := dir.RemoveAll(filepath.Join(staged, k)); err != nil {
 			return err
 		}
-		if _, err := dir.Lstat(m); errors.Is(err, fs.ErrNotExist) {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if err := dir.MkdirAll(filepath.Dir(target)); err != nil {
-			return err
-		}
-		if err := dir.Link(m, target); err != nil {
+	}
+	for _, p := range paths {
+		if err := replace(dir, staged, p, kept); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// swap replaces the files and folders of a backup with their staged state. Those that
-// didn't exist when the backup was made are removed, except for the current manifest of file
-// sets, which keeps the files hidden that held secrets.
-func swap(dir *datadir.Dir, b Archive, staged string) error {
-	paths := b.Paths
-	if slices.Equal(paths, []string{"."}) {
-		current, err := names(dir, ".")
+// replace replaces a path with its staged state. A folder with paths kept in it is replaced
+// entry by entry.
+func replace(dir *datadir.Dir, staged, p string, kept []string) error {
+	if slices.Contains(kept, p) {
+		return nil
+	}
+	if p == "." || slices.ContainsFunc(kept, func(k string) bool { return k != p && within(k)(p) && exists(dir, k) }) {
+		current, err := names(dir, p)
 		if err != nil {
 			return err
 		}
-		restored, err := names(dir, staged)
-		if err != nil {
-			return err
+		restored, _ := names(dir, filepath.Join(staged, p)) // none where the backup has no folder
+		all := slices.Concat(current, restored)
+		slices.Sort(all)
+		for _, name := range slices.Compact(all) { // a second removal would hit the restored entry
+			if err := replace(dir, staged, filepath.Join(p, name), kept); err != nil {
+				return err
+			}
 		}
-		paths = append(current, restored...)
-		slices.Sort(paths)
-		paths = slices.Compact(paths) // a second removal would hit the restored entry
+		return nil
 	}
-	paths = slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return p == fileset.ManifestFile })
-	for _, p := range paths {
-		if err := dir.RemoveAll(p); err != nil {
-			return err
-		}
-		from := filepath.Join(staged, p)
-		if _, err := dir.Lstat(from); errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err := dir.MkdirAll(filepath.Dir(p)); err != nil {
-			return err
-		}
-		if err := dir.Rename(from, p); err != nil {
-			return err
-		}
+	if err := dir.RemoveAll(p); err != nil {
+		return err
 	}
-	return nil
+	from := filepath.Join(staged, p)
+	if _, err := dir.Lstat(from); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := dir.MkdirAll(filepath.Dir(p)); err != nil {
+		return err
+	}
+	return dir.Rename(from, p)
+}
+
+func exists(dir *datadir.Dir, name string) bool {
+	_, err := dir.Lstat(name)
+	return err == nil
 }
 
 // names lists a folder of the data directory, without temporary files.
 func names(dir *datadir.Dir, folder string) ([]string, error) {
-	entries, err := fs.ReadDir(dir.FS(), folder)
+	entries, err := fs.ReadDir(dir.FS(), filepath.ToSlash(folder))
 	var list []string
 	for _, e := range entries {
 		if !datadir.IsTemp(e.Name()) {

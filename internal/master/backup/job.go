@@ -25,10 +25,7 @@ import (
 // TaskKind identifies backup jobs among the scheduled tasks.
 const TaskKind = "backup"
 
-const (
-	maxKeep       = 1000
-	maxDatastores = 50
-)
+const maxDatastores = 50
 
 var (
 	locationPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
@@ -42,8 +39,27 @@ type JobSettings struct {
 	Datastores []string `json:"datastores"`
 	// Location is the storage location on each node; empty means the default one.
 	Location string `json:"location"`
-	// Keep is the number of backups of the job kept per server; 0 keeps all.
-	Keep uint32 `json:"keep"`
+	// Keep is the number of the newest backups of the job kept per server and datastore.
+	// KeepDays, KeepWeeks and KeepMonths keep the newest of each of the last days, weeks and
+	// months with backups, in the job's time zone, too. All 0 keeps all.
+	Keep       uint32 `json:"keep"`
+	KeepDays   uint32 `json:"keepDays"`
+	KeepWeeks  uint32 `json:"keepWeeks"`
+	KeepMonths uint32 `json:"keepMonths"`
+}
+
+// retention returns which backups the job keeps, with days beginning in a time zone.
+func (s JobSettings) retention(timeZone string) *noryxv1.BackupRetention {
+	return &noryxv1.BackupRetention{Last: s.Keep, Days: s.KeepDays, Weeks: s.KeepWeeks, Months: s.KeepMonths, TimeZone: timeZone}
+}
+
+// keep is what agents of older versions, which only keep the newest backups, keep: all if
+// the job keeps backups by age, as they would delete those it keeps.
+func (s JobSettings) keep() uint32 {
+	if s.KeepDays > 0 || s.KeepWeeks > 0 || s.KeepMonths > 0 {
+		return 0
+	}
+	return s.Keep
 }
 
 // Datastore is a datastore of a network, which backup jobs dump.
@@ -82,8 +98,8 @@ func (Jobs) Check(raw json.RawMessage) (json.RawMessage, error) {
 		msg = "Choose up to 50 datastores."
 	case s.Location != "" && !locationPattern.MatchString(s.Location):
 		msg = "Choose a storage location of the nodes."
-	case s.Keep > maxKeep:
-		msg = "Keep at most 1000 backups per server, or 0 for all."
+	case s.retention("").Problem() != "":
+		msg = s.retention("").Problem()
 	default:
 		return json.Marshal(s)
 	}
@@ -116,7 +132,11 @@ func (j Jobs) Run(ctx context.Context, t schedule.Task, servers schedule.Servers
 	byNode := map[string][]func() error{}
 	for _, srv := range list {
 		byNode[srv.NodeID] = append(byNode[srv.NodeID], func() error {
-			return srv.Report(t, logging.Backups, "Back up server", j.backUp(ctx, srv, t, s))
+			b, err := j.BackUp(ctx, srv.NodeID, srv.GetId(), t)
+			if err == nil && b == nil {
+				err = schedule.Skipped("It has none of the selected data yet, e.g. as it never started.")
+			}
+			return srv.Report(t, logging.Backups, "Back up server", err)
 		})
 	}
 	for _, ds := range datastores {
@@ -149,7 +169,7 @@ func (j Jobs) dump(ctx context.Context, ds Datastore, t schedule.Task, s JobSett
 	conn, err := j.nodes.Conn(ctx, ds.NodeID)
 	if err == nil {
 		_, err = noryxv1.NewDatastoreServiceClient(conn).CreateDump(ctx, &noryxv1.CreateDumpRequest{
-			Id: ds.ID, Label: t.Name, Location: s.Location, JobId: t.ID, Keep: s.Keep,
+			Id: ds.ID, Label: t.Name, Location: s.Location, JobId: t.ID, Keep: s.keep(), Retention: s.retention(t.Schedule.TimeZone),
 		})
 	}
 	attrs := []any{logging.Backups, "task", t.Name, "datastore", ds.ID, "datastore_name", ds.Name, logging.KeyNode, ds.NodeID, logging.KeyNodeName, ds.NodeName}
@@ -164,19 +184,24 @@ func (j Jobs) dump(ctx context.Context, ds Datastore, t schedule.Task, s JobSett
 	return fmt.Errorf("%s on %s: %s", ds.Name, ds.NodeName, httpapi.Message(err))
 }
 
-func (j Jobs) backUp(ctx context.Context, srv schedule.Server, t schedule.Task, s JobSettings) error {
+// BackUp backs up a server with the settings of a backup job, as the job does: its label,
+// what it selects and leaves out, its storage location, and which of its backups it keeps,
+// so older ones of the server may be deleted. A server without any of the selected data yet,
+// e.g. one that never started, is skipped: there is no backup then.
+func (j Jobs) BackUp(ctx context.Context, nodeID, serverID string, t schedule.Task) (*noryxv1.Backup, error) {
+	var s JobSettings
+	if err := json.Unmarshal(t.Settings, &s); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, backupTimeout)
 	defer cancel()
-	conn, err := j.nodes.Conn(ctx, srv.NodeID)
+	conn, err := j.nodes.Conn(ctx, nodeID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	res, err := noryxv1.NewBackupServiceClient(conn).CreateBackup(ctx, &noryxv1.CreateBackupRequest{
-		ServerId: srv.GetId(), Label: t.Name, Selection: s.Selection.proto(), Location: s.Location, JobId: t.ID, Keep: s.Keep,
-		SkipWithoutData: true,
+		ServerId: serverID, Label: t.Name, Selection: s.Selection.proto(), Location: s.Location, JobId: t.ID,
+		Keep: s.keep(), Retention: s.retention(t.Schedule.TimeZone), SkipWithoutData: true,
 	})
-	if err == nil && res.GetBackup() == nil {
-		return schedule.Skipped("It has none of the selected data yet, e.g. as it never started.")
-	}
-	return err
+	return res.GetBackup(), err
 }

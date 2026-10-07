@@ -8,8 +8,6 @@ import { ErrorCallout } from "@/components/callout"
 import { FormSection } from "@/components/form-section"
 import { PageHeader } from "@/components/page-header"
 import { usePageName } from "@/components/page-title"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { DatastoresField } from "@/features/datastores/datastores-field"
@@ -17,7 +15,7 @@ import { nodesQuery } from "@/features/nodes/api"
 import type { TaskInput } from "@/features/schedules/api"
 import { TaskForm } from "@/features/schedules/task-form"
 import { emptyJob, type JobSettings, jobs } from "./api"
-import { LocationField, SelectionField } from "./backup-fields"
+import { LocationField, RetentionField, SelectionField } from "./backup-fields"
 
 const route = getRouteApi("/_app/backups/$jobId")
 
@@ -104,21 +102,7 @@ function JobForm({
           <SelectionField value={settings.selection} onChange={(selection) => set({ selection })} />
           <DatastoresField value={settings.datastores ?? []} onChange={(datastores) => set({ datastores })} />
           <LocationField locations={locations} value={settings.location} onChange={(location) => set({ location })} />
-          <Field>
-            <FieldLabel htmlFor="job-keep">{t("Backups to keep")}</FieldLabel>
-            <Input
-              id="job-keep"
-              type="number"
-              min={0}
-              max={1000}
-              className="w-full font-mono sm:w-32"
-              value={settings.keep}
-              onChange={(e) => set({ keep: e.target.valueAsNumber || 0 })}
-            />
-            <FieldDescription>
-              {t("Per server and datastore; older backups of this job are deleted. 0 keeps all of them. Backups made by hand are never deleted.")}
-            </FieldDescription>
-          </Field>
+          <RetentionField value={settings} onChange={set} />
         </FormSection>
       )}
     </TaskForm>

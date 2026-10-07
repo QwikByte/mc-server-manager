@@ -185,10 +185,21 @@ server keeps FabricProxy-Lite, which turns players away until it is removed in t
 
 The agent keeps backups outside of the servers' folders, accessible to itself only (mode `0700`), so a compromised
 server can't read or tamper with them. The master can only choose among the storage locations the node's administrator
-allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry to the server's folder, and
-backups never contain symbolic links. Downloads are attachments like those of the file manager and hide the secrets the
-same way; the backups on the node keep them, so restoring works. Restoring keeps the secrets of file sets and networks
-as they are, see [File sets](#file-sets) and [Networks](#networks).
+allowed, and backup IDs and paths are validated by the agent, also the paths a backup leaves out and those a restore
+chooses, which must be in the backup. Restoring confines every entry to the server's folder, and backups never contain
+symbolic links. Downloads are attachments like those of the file manager and hide the secrets the same way; the backups
+on the node keep them, so restoring works. Restoring keeps the files that only hold secrets, such as the server's
+console password, and the secrets of file sets and networks as they are, see [File sets](#file-sets) and
+[Networks](#networks); the manifest of file sets is never backed up or restored. Restoring into another server is a
+copy like a duplicate: the master relays the backup between the agents with the original's secrets hidden, as in a
+download, so the other server gets none of them, nor the original's files with secrets of file sets; the agent puts the
+other server's own secrets wherever the backup says `<hidden>`, and keeps its network's secret and forwarding settings.
+It needs the permission to see the backups of the original and to restore backups of the other server, and only goes
+between game servers or between proxies. Like moving a server, it brings whatever the backup holds, e.g. plugins, which
+a compromised node could have changed like the data of its servers. Marking a backup to keep needs the permission to
+back up the server, and letting its job delete it again the one to delete backups. The master refuses restoring chosen
+paths, into another server or with a backup first on nodes whose agent would ignore that, e.g. restore all of a backup
+instead.
 
 ## Permissions
 

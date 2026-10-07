@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package noryx.v1;
 
+import "noryx/v1/file.proto";
+
 option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 
 // BackupService is served by every agent and keeps backups of its servers on the node, in
@@ -13,10 +15,14 @@ service BackupService {
   // CreateBackup archives the selected data of a server. A running game server writes its
   // worlds to disk first and pauses saving meanwhile, so players stay connected.
   rpc CreateBackup(CreateBackupRequest) returns (CreateBackupResponse);
-  // RestoreBackup replaces the files and folders in a backup with their backed up state.
-  // A running server is stopped meanwhile and started again.
+  // RestoreBackup replaces the files and folders in a backup, or some of them, with their
+  // backed up state. A running server is stopped meanwhile and started again.
   rpc RestoreBackup(RestoreBackupRequest) returns (RestoreBackupResponse);
   rpc DeleteBackup(DeleteBackupRequest) returns (DeleteBackupResponse);
+  // UpdateBackup changes the label of a backup and whether its job keeps it.
+  rpc UpdateBackup(UpdateBackupRequest) returns (UpdateBackupResponse);
+  // ListBackupFiles lists a folder of a backup's archive, to choose what to restore.
+  rpc ListBackupFiles(ListBackupFilesRequest) returns (ListBackupFilesResponse);
   // DownloadBackup sends the archive in chunks. The first message carries its size, if known.
   rpc DownloadBackup(DownloadBackupRequest) returns (stream DownloadBackupResponse);
   // ImportBackup adds a backup of a server that came from another node. The header
@@ -36,6 +42,21 @@ message BackupSelection {
   bool config = 4;
   // Further files or folders, relative to the data directory. Missing ones are skipped.
   repeated string paths = 5;
+  // Files or folders inside the others that are left out, e.g. the tiles of a map plugin.
+  // Restoring the backup leaves them as they are. Agents of older versions archive them.
+  repeated string exclude = 6;
+}
+
+// BackupRetention tells which backups of a job are kept: the newest ones, and the newest of
+// each of the last days, weeks (from Monday) and months that have backups. A backup that
+// any of them keeps stays; all zero keeps all.
+message BackupRetention {
+  uint32 last = 1;
+  uint32 days = 2;
+  uint32 weeks = 3;
+  uint32 months = 4;
+  // IANA time zone in which days, weeks and months begin, e.g. the job's; empty for UTC.
+  string time_zone = 5;
 }
 
 message Backup {
@@ -50,6 +71,10 @@ message Backup {
   repeated string paths = 6;
   // Job that made the backup; empty if it was made by hand.
   string job_id = 7;
+  // Files and folders inside the paths that the backup left out.
+  repeated string exclude = 8;
+  // Kept backups are never deleted by their job.
+  bool kept = 9;
 }
 
 message ListBackupsRequest {
@@ -68,11 +93,14 @@ message CreateBackupRequest {
   string location = 4;
   string job_id = 5;
   // Backups of the job to keep for the server, 0 for all. Older ones are deleted once the
-  // new backup exists. Backups made by hand are never deleted this way.
+  // new backup exists. Backups made by hand, and kept ones, are never deleted this way.
+  // Ignored if retention is set, which agents of older versions ignore.
   uint32 keep = 6;
   // Whether a server without any of the selected data, e.g. one that never started, is
   // skipped: the response has no backup then. Otherwise that is an error.
   bool skip_without_data = 7;
+  // Which backups of the job are kept, instead of keep.
+  BackupRetention retention = 8;
 }
 
 message CreateBackupResponse {
@@ -82,9 +110,18 @@ message CreateBackupResponse {
 message RestoreBackupRequest {
   string server_id = 1;
   string backup_id = 2;
+  // Files and folders of the backup to restore, relative to the data directory; empty for
+  // all it holds. Each must be in the backup. Agents of older versions restore all.
+  repeated string paths = 3;
+  // Backs up what the restore replaces first, as a backup made by hand in the storage
+  // location of the restored one.
+  bool snapshot_first = 4;
 }
 
-message RestoreBackupResponse {}
+message RestoreBackupResponse {
+  // The backup that snapshot_first made; none if the server had none of the paths.
+  Backup snapshot = 1;
+}
 
 message DeleteBackupRequest {
   string server_id = 1;
@@ -92,6 +129,33 @@ message DeleteBackupRequest {
 }
 
 message DeleteBackupResponse {}
+
+message UpdateBackupRequest {
+  string server_id = 1;
+  string backup_id = 2;
+  // Only what is set changes.
+  optional string label = 3;
+  optional bool kept = 4;
+}
+
+message UpdateBackupResponse {
+  Backup backup = 1;
+}
+
+message ListBackupFilesRequest {
+  string server_id = 1;
+  string backup_id = 2;
+  // Folder in the backup, relative to the data directory; empty for its top.
+  string path = 3;
+}
+
+message ListBackupFilesResponse {
+  // Folders first, then files, each sorted by name; a folder's size is that of all in it.
+  // Files that only hold secrets aren't listed.
+  repeated FileInfo files = 1;
+  // Set if the folder has more entries than the agent lists.
+  bool truncated = 2;
+}
 
 message DownloadBackupRequest {
   string server_id = 1;

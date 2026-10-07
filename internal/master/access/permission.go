@@ -127,9 +127,9 @@ var Catalog = []Area{
 	}},
 	{"Backups", []Info{
 		scoped(BackupsView, "See and download backups", "Downloads contain all backed up files, without secrets such as the RCON password.", ServersView),
-		scoped(BackupsCreate, "Back up servers", "", BackupsView),
-		scoped(BackupsRestore, "Restore backups", "Replaces the backed up data; a running server restarts.", BackupsView),
-		scoped(BackupsDelete, "Delete backups", "", BackupsView),
+		scoped(BackupsCreate, "Back up servers", "Also change the labels of backups, and keep backups of jobs from being deleted.", BackupsView),
+		scoped(BackupsRestore, "Restore backups", "Replaces the backed up data; a running server restarts. Also restore backups of other servers one may see into these.", BackupsView),
+		scoped(BackupsDelete, "Delete backups", "Also let jobs delete backups that were kept.", BackupsView),
 	}},
 	{"Networks, databases, templates and file sets", []Info{
 		global(NetworksView, "See networks", ""),

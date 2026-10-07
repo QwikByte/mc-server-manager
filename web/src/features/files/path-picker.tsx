@@ -26,23 +26,25 @@ export interface Picked {
 const crumb = "rounded px-1 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
 
 /**
- * Browses the folders of a server. With picked, files and folders can be ticked, and what is in
- * a ticked folder counts as ticked; without, only folders show and the one shown is the choice.
+ * Browses the folders of a server, or those list lists, e.g. of a backup. With picked, files and folders can be ticked,
+ * and what is in a ticked folder counts as ticked; without, only folders show and the one shown is the choice.
  */
 export function PathPicker({
   server,
+  list = (path) => filesQuery(server, path),
   folder,
   onFolder,
   picked,
   onPick,
 }: {
   server: ServerFiles
+  list?: (folder: string) => ReturnType<typeof filesQuery>
   folder: string
   onFolder: (path: string) => void
   picked?: Picked[]
   onPick?: (picked: Picked[]) => void
 }) {
-  const { data, isPending, error } = useQuery(filesQuery(server, folder))
+  const { data, isPending, error } = useQuery(list(folder))
   const segments = folder ? folder.split("/") : []
   // A server without the folder, e.g. one a set's file is in, shows the nearest one it has.
   const missing = error instanceof ApiError && error.status === 404 && folder !== ""
