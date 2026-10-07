@@ -619,8 +619,11 @@ func validIPv4(s string) bool {
 	return err == nil && addr.Is4()
 }
 
-// plain removes colours and formatting so that console output reads as plain text.
-func plain(text string) string { return formatting.ReplaceAllString(text, "") }
+// plain removes colours and formatting so that console output reads as plain text, and
+// replaces invalid UTF-8, which gRPC can't send in a string.
+func plain(text string) string {
+	return strings.ToValidUTF8(formatting.ReplaceAllString(text, ""), "�")
+}
 
 func (s *Service) apply(ctx context.Context, id string, op func(context.Context, string) error) error {
 	if !runtime.ValidID(id) {
