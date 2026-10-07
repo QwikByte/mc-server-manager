@@ -49,6 +49,8 @@ message ListedPlayer {
   string reason = 3;
   int64 created_unix = 4;
   string source = 5;
+  // When a temporary ban ends, e.g. one of a plugin; 0 for bans without an end.
+  int64 expires_unix = 6;
 }
 
 message PlayerChange {

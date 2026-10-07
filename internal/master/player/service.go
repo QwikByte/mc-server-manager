@@ -77,9 +77,11 @@ func (s *Service) Change(ctx context.Context, c *noryxv1.PlayerChange, servers [
 type Listed struct {
 	Name string `json:"name"`
 	UUID string `json:"uuid,omitempty"`
-	// Reason, Since and Source tell about the newest ban.
+	// Reason, Since, Until and Source tell about the newest ban; Until is when it ends, if
+	// it is temporary.
 	Reason string     `json:"reason,omitempty"`
 	Since  *time.Time `json:"since,omitempty"`
+	Until  *time.Time `json:"until,omitempty"`
 	Source string     `json:"source,omitempty"`
 	// Servers are those whose list has the player.
 	Servers []network.Ref `json:"servers"`
@@ -159,7 +161,11 @@ func (j *joined) add(ref network.Ref, players []*noryxv1.ListedPlayer) {
 		l := &j.list[i]
 		l.Servers = append(l.Servers, ref)
 		if since := time.Unix(p.GetCreatedUnix(), 0); p.GetCreatedUnix() > 0 && (l.Since == nil || since.After(*l.Since)) {
-			l.Since, l.Reason, l.Source = &since, p.GetReason(), p.GetSource()
+			l.Since, l.Reason, l.Source, l.Until = &since, p.GetReason(), p.GetSource(), nil
+			if p.GetExpiresUnix() > 0 {
+				until := time.Unix(p.GetExpiresUnix(), 0)
+				l.Until = &until
+			}
 		}
 	}
 }

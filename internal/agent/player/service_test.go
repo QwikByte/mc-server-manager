@@ -135,7 +135,10 @@ func TestGetPlayerLists(t *testing.T) {
 	rt := &fakeRuntime{dir: t.TempDir()}
 	rt.add(t, up, paper, running)
 	files := map[string]string{
-		bannedFile:          `[{"uuid":"u1","name":"Alex","created":"2026-05-01 10:00:00 +0200","source":"Server","expires":"forever","reason":"Cheating"}]`,
+		bannedFile: `[{"uuid":"u1","name":"Alex","created":"2026-05-01 10:00:00 +0200","source":"Server","expires":"forever","reason":"Cheating"},
+			{"uuid":"u3","name":"Kai","created":"2026-05-01 10:00:00 +0200","source":"Essentials","expires":"2026-05-08 10:00:00 +0200","reason":"Spam"},
+			{"uuid":"u4","name":"Bo","created":"2026-05-01 10:00:00 +0200","source":"Plugin","expires":"next week","reason":"Grief"},
+			{"uuid":"u5","name":"Lu","expires":"2026-05-08T10:00:00Z"}]`,
 		whitelistFile:       `[{"uuid":"u2","name":"Steve"},{"uuid":"u1","name":"Alex"}]`,
 		opsFile:             `[{"uuid":"u2","name":"Steve","level":4,"bypassesPlayerLimit":false}]`,
 		"server.properties": "white-list=true\n",
@@ -150,8 +153,14 @@ func TestGetPlayerLists(t *testing.T) {
 		t.Fatal(err)
 	}
 	ban := lists.GetBanned()[0]
-	if len(lists.GetBanned()) != 1 || ban.GetName() != "Alex" || ban.GetReason() != "Cheating" || ban.GetCreatedUnix() != 1777622400 {
+	if len(lists.GetBanned()) != 4 || ban.GetName() != "Alex" || ban.GetReason() != "Cheating" || ban.GetCreatedUnix() != 1777622400 {
 		t.Errorf("banned = %v", lists.GetBanned())
+	}
+	// A temporary ban ends at its time; other values than Minecraft's times count as forever.
+	for i, want := range []int64{0, 1778227200, 0, 0} {
+		if got := lists.GetBanned()[i].GetExpiresUnix(); got != want {
+			t.Errorf("ban of %s expires at %d, want %d", lists.GetBanned()[i].GetName(), got, want)
+		}
 	}
 	if len(lists.GetWhitelisted()) != 2 || lists.GetOperators()[0].GetName() != "Steve" || !lists.GetWhitelistEnabled() {
 		t.Errorf("lists = %v", lists)

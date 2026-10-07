@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { EmptyState } from "@/components/empty-state"
+import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -10,8 +11,9 @@ import { useAccess } from "@/features/access/use-access"
 import type { Network, ServerRef } from "@/features/networks/api"
 import { findServer } from "@/features/networks/servers"
 import { allServersQuery } from "@/features/servers/api"
-import { formatDate } from "@/lib/format"
+import { formatDate, formatDateTime } from "@/lib/format"
 import { msg } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 import { needs, playerActions } from "./actions"
 import { type Listed, type PlayerAction, type PlayerLists, playerListsQuery } from "./api"
 import type { PlayerDialog } from "./players-page"
@@ -173,13 +175,27 @@ function ListRow({
   onRemove?: () => void
   remove: (typeof playerActions)[PlayerAction]
 }) {
+  // A temporary ban that ended stays in the list until the server lets the player join again.
+  const ended = entry.until !== undefined && Date.parse(entry.until) <= Date.now()
   return (
-    <TableRow>
-      <TableCell className="pl-4 font-mono font-medium">{entry.name}</TableCell>
+    <TableRow className={cn(ended && "text-muted-foreground")}>
+      <TableCell className="pl-4 font-mono font-medium">
+        {entry.name}
+        {banned && entry.until && (
+          <Pill tone={ended ? "neutral" : "warning"} className="ml-2 font-sans">
+            {ended ? t("Ended") : t("Temporary")}
+          </Pill>
+        )}
+      </TableCell>
       {banned && (
         <TableCell className="max-w-80 whitespace-normal text-muted-foreground max-md:hidden">
           {entry.reason}
           {entry.since && <span className="block text-xs">{t("Since {{date}}", { date: formatDate(entry.since) })}</span>}
+          {entry.until && (
+            <span className="block text-xs">
+              {ended ? t("Ended {{date}}", { date: formatDateTime(entry.until) }) : t("Until {{date}}", { date: formatDateTime(entry.until) })}
+            </span>
+          )}
         </TableCell>
       )}
       <TableCell title={names.slice(0, 20).join(", ")} className="tabular-nums">

@@ -218,9 +218,11 @@ type ListedPlayer struct {
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Uuid  string                 `protobuf:"bytes,2,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	// Why, since when and by whom a player is banned; empty in the other lists.
-	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	CreatedUnix   int64  `protobuf:"varint,4,opt,name=created_unix,json=createdUnix,proto3" json:"created_unix,omitempty"`
-	Source        string `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	Reason      string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	CreatedUnix int64  `protobuf:"varint,4,opt,name=created_unix,json=createdUnix,proto3" json:"created_unix,omitempty"`
+	Source      string `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	// When a temporary ban ends, e.g. one of a plugin; 0 for bans without an end.
+	ExpiresUnix   int64 `protobuf:"varint,6,opt,name=expires_unix,json=expiresUnix,proto3" json:"expires_unix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -288,6 +290,13 @@ func (x *ListedPlayer) GetSource() string {
 		return x.Source
 	}
 	return ""
+}
+
+func (x *ListedPlayer) GetExpiresUnix() int64 {
+	if x != nil {
+		return x.ExpiresUnix
+	}
+	return 0
 }
 
 type PlayerChange struct {
@@ -479,13 +488,14 @@ const file_noryx_v1_player_proto_rawDesc = "" +
 	"\vwhitelisted\x18\x02 \x03(\v2\x16.noryx.v1.ListedPlayerR\vwhitelisted\x124\n" +
 	"\toperators\x18\x03 \x03(\v2\x16.noryx.v1.ListedPlayerR\toperators\x12+\n" +
 	"\x11whitelist_enabled\x18\x04 \x01(\bR\x10whitelistEnabled\x120\n" +
-	"\apending\x18\x05 \x03(\v2\x16.noryx.v1.PlayerChangeR\apending\"\x89\x01\n" +
+	"\apending\x18\x05 \x03(\v2\x16.noryx.v1.PlayerChangeR\apending\"\xac\x01\n" +
 	"\fListedPlayer\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04uuid\x18\x02 \x01(\tR\x04uuid\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12!\n" +
 	"\fcreated_unix\x18\x04 \x01(\x03R\vcreatedUnix\x12\x16\n" +
-	"\x06source\x18\x05 \x01(\tR\x06source\"~\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\x12!\n" +
+	"\fexpires_unix\x18\x06 \x01(\x03R\vexpiresUnix\"~\n" +
 	"\fPlayerChange\x12.\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x16.noryx.v1.PlayerActionR\x06action\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/network"
@@ -43,13 +44,18 @@ func TestPlayers(t *testing.T) {
 		api.do("POST", "/api/players/actions", invalid, http.StatusBadRequest, nil)
 	}
 
-	// The lists of a network join those of its servers, with the changes that wait.
+	// The lists of a network join those of its servers, with the changes that wait, and tell
+	// when temporary bans end.
 	check(t, os.WriteFile(filepath.Join(a.runtime.dir, lobby.ServerID, "banned-players.json"),
-		[]byte(`[{"uuid":"u1","name":"Alex","created":"2026-05-01 10:00:00 +0000","source":"Server","expires":"forever","reason":"Cheating"}]`), 0o600))
+		[]byte(`[{"uuid":"u1","name":"Alex","created":"2026-05-01 10:00:00 +0000","source":"Server","expires":"forever","reason":"Cheating"},
+			{"uuid":"u2","name":"Kai","created":"2026-05-01 10:00:00 +0000","source":"Essentials","expires":"2026-05-08 10:00:00 +0000","reason":"Spam"}]`), 0o600))
 	var lists player.Lists
 	api.do("GET", "/api/players/lists?network="+n.ID, nil, http.StatusOK, &lists)
-	if len(lists.Banned) != 1 || lists.Banned[0].Reason != "Cheating" || !slices.Equal(lists.Banned[0].Servers, []network.Ref{lobby}) {
+	if len(lists.Banned) != 2 || lists.Banned[0].Reason != "Cheating" || !slices.Equal(lists.Banned[0].Servers, []network.Ref{lobby}) || lists.Banned[0].Until != nil {
 		t.Fatalf("banned = %+v", lists.Banned)
+	}
+	if until := lists.Banned[1].Until; until == nil || !until.Equal(time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("temporary ban ends at %v", until)
 	}
 	if s := lists.Servers; len(s) != 2 || len(s[0].Pending) != 0 || len(s[1].Pending) != 1 || s[1].Pending[0].Action != "ban" {
 		t.Fatalf("servers = %+v", s)

@@ -25,18 +25,20 @@ const (
 	// they move and are backed up with it.
 	pendingFile = "noryx-pending-players.json"
 
-	createdLayout = "2006-01-02 15:04:05 -0700"
+	createdLayout = "2006-01-02 15:04:05 -0700" // of the times in the lists
 	maxFileBytes  = 8 << 20
 	maxListed     = 10_000
 	maxPending    = 1000
 )
 
-// entry is a player in a list of Minecraft; only bans have the time, source and reason.
+// entry is a player in a list of Minecraft; only bans have the times, source and reason.
+// Expires is "forever", or when a temporary ban ends, which Paper and plugins write.
 type entry struct {
 	UUID    string `json:"uuid"`
 	Name    string `json:"name"`
 	Created string `json:"created"`
 	Source  string `json:"source"`
+	Expires string `json:"expires"`
 	Reason  string `json:"reason"`
 }
 
@@ -51,6 +53,10 @@ func readList(dir *datadir.Dir, name string) ([]*noryxv1.ListedPlayer, error) {
 		p := &noryxv1.ListedPlayer{Name: e.Name, Uuid: e.UUID, Reason: e.Reason, Source: e.Source}
 		if created, err := time.Parse(createdLayout, e.Created); err == nil {
 			p.CreatedUnix = created.Unix()
+		}
+		// Any other value than such a time counts as forever, as it does for Minecraft.
+		if expires, err := time.Parse(createdLayout, e.Expires); err == nil {
+			p.ExpiresUnix = expires.Unix()
 		}
 		list = append(list, p)
 	}
