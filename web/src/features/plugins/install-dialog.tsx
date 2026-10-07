@@ -196,6 +196,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
                 {same ? (
                   <VersionMenu
                     project={hit.id}
+                    title={hit.title}
                     type={chosen[0].type}
                     version={chosen[0].version}
                     current={pinned?.id}

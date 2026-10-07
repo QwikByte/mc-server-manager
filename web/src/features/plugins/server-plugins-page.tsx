@@ -2,15 +2,21 @@ import {
   ArrowCircleUpIcon,
   CaretDownIcon,
   CheckIcon,
+  DotsThreeIcon,
   DownloadSimpleIcon,
+  FolderOpenIcon,
   MagnifyingGlassIcon,
+  NotepadIcon,
   PlusIcon,
+  PowerIcon,
+  PushPinIcon,
+  PushPinSlashIcon,
   PuzzlePieceIcon,
   TrashIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { getRouteApi } from "@tanstack/react-router"
+import { getRouteApi, Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
@@ -23,6 +29,7 @@ import { Segmented } from "@/components/segmented"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -32,6 +39,7 @@ import { type Server, useServer } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
 import { formatBytes } from "@/lib/format"
 import { locale } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 import {
   fallback,
   type InstalledPlugin,
@@ -44,7 +52,9 @@ import {
   type SearchHit,
   useChangePlugins,
   useInstallPlugins,
+  useUpdatePlugins,
 } from "./api"
+import { ChangesDialog } from "./changes-dialog"
 import { ChannelPill } from "./channel-pill"
 import { PluginIcon } from "./plugin-icon"
 import { PluginSearch } from "./plugin-search"
@@ -108,7 +118,9 @@ export function ServerPluginsPage() {
   const words = texts(kind, server.type)
   const count = data.plugins.length
   const installed = data.plugins.flatMap((p) => (p.project ? [p.project.id] : []))
-  const updates = data.plugins.flatMap((p) => (p.update && p.project ? [p.project] : []))
+  const updates = data.plugins.filter((p) => p.update && p.project)
+  // Update all leaves out the projects the server keeps at their version, and turned-off ones.
+  const updatable = new Set(updates.filter((p) => !p.pinned && !p.disabled).map((p) => p.project!.id)).size
   const foreign = data.plugins.filter((p) => !p.project).length
   const needle = input.trim().toLowerCase()
   const shown = data.plugins
@@ -127,7 +139,7 @@ export function ServerPluginsPage() {
       actions={
         manage && (
           <div className="flex flex-wrap gap-2">
-            {updates.length > 0 && <UpdateAllButton projects={updates} serverRef={ref} words={words} />}
+            {updatable > 0 && <UpdateAllButton count={updatable} serverRef={ref} words={words} />}
             <UploadButton serverRef={ref} />
             <AddDialog server={server} serverRef={ref} words={words} installed={installed} />
           </div>
@@ -183,7 +195,14 @@ export function ServerPluginsPage() {
           ) : (
             <ul className="surface divide-y rounded-xl">
               {shown.map((plugin) => (
-                <PluginRow key={plugin.fileName} plugin={plugin} server={server} serverRef={ref} manage={manage} elsewhere={words.elsewhere} />
+                <PluginRow
+                  key={`${plugin.disabled ? "off/" : ""}${plugin.fileName}`}
+                  plugin={plugin}
+                  server={server}
+                  serverRef={ref}
+                  manage={manage}
+                  elsewhere={words.elsewhere}
+                />
               ))}
             </ul>
           )}
@@ -224,24 +243,35 @@ function PluginRow({
   /** What files from elsewhere are called. */
   elsewhere: string
 }) {
-  const change = useChangePlugins(serverRef)
   const install = useInstallOn(serverRef)
   const { project, update } = plugin
 
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
-      <PluginIcon src={project?.icon} />
+    <li className={cn("flex items-center gap-3 px-4 py-3", plugin.disabled && "bg-muted/30")}>
+      <PluginIcon src={project?.icon} className={cn(plugin.disabled && "opacity-50 grayscale")} />
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 truncate text-sm font-semibold">
           {project ? (
-            <a href={projectUrl(project)} target="_blank" rel="noreferrer" className="truncate hover:underline">
+            <a
+              href={projectUrl(project)}
+              target="_blank"
+              rel="noreferrer"
+              className={cn("truncate hover:underline", plugin.disabled && "text-muted-foreground")}
+            >
               {project.title}
             </a>
           ) : (
-            <span className="truncate">{plugin.fileName}</span>
+            <span className={cn("truncate", plugin.disabled && "text-muted-foreground")}>{plugin.fileName}</span>
           )}
           {plugin.version && manage && project ? (
-            <VersionMenu project={project.id} type={server.type} version={server.version} current={plugin.versionId} onPick={(v) => install.run(project, v)}>
+            <VersionMenu
+              project={project.id}
+              title={project.title}
+              type={server.type}
+              version={server.version}
+              current={plugin.versionId}
+              onPick={(v) => install.run(project, v)}
+            >
               <Button
                 variant="ghost"
                 size="xs"
@@ -257,69 +287,234 @@ function PluginRow({
             plugin.version && <span className="truncate font-mono text-xs font-normal text-muted-foreground">{plugin.version}</span>
           )}
           <ChannelPill channel={plugin.channel} />
+          {plugin.pinned && (
+            <span title={t("Kept at this version")} className="shrink-0 text-muted-foreground">
+              <PushPinIcon className="size-3.5" weight="fill" aria-hidden />
+              <span className="sr-only">{t("Kept at this version")}</span>
+            </span>
+          )}
+          {plugin.disabled && <Pill tone="neutral">{t("Off")}</Pill>}
         </p>
         <p className="truncate text-xs text-muted-foreground">
           {project ? plugin.fileName : elsewhere} · {formatBytes(plugin.size)}
         </p>
       </div>
-      {update && !manage && <Pill tone="info">{t("Update to {{version}}", { version: update })}</Pill>}
-      {update && manage && project && (
-        <Button size="sm" variant="outline" disabled={install.pending} onClick={() => install.run(project)}>
-          <ArrowCircleUpIcon />
-          <span className="max-sm:sr-only">{t("Update to {{version}}", { version: update })}</span>
-        </Button>
-      )}
-      {manage && (
-        <ConfirmDialog
-          trigger={
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label={t("Remove {{name}}", { name: plugin.fileName })}
-              title={t("Remove")}
-              disabled={change.isPending}
-              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            >
-              <TrashIcon />
-            </Button>
-          }
-          title={t("Remove {{name}}?", { name: project?.title ?? plugin.fileName })}
-          description={t("This deletes {{file}}. Its configuration in the server's folder is kept.", { file: plugin.fileName })}
-          action={t("Remove")}
-          destructive
-          onConfirm={() =>
-            change.mutate(
-              { action: "remove", fileName: plugin.fileName },
-              { onSuccess: () => toast.success(t("Removed {{name}}", { name: plugin.fileName })), onError: (e) => toast.error(e.message) },
-            )
-          }
-        />
-      )}
+      {update && project && <UpdateButton plugin={plugin} project={project} server={server} manage={manage} pending={install.pending} onUpdate={() => install.run(project)} />}
+      <PluginMenu plugin={plugin} serverRef={serverRef} manage={manage} />
     </li>
   )
 }
 
-// Installations stay below the limit of projects at once, which includes the projects they require.
-const batch = 25
+/** Updates a project to its newest suitable release, and tells what changed since the installed version. */
+function UpdateButton({
+  plugin,
+  project,
+  server,
+  manage,
+  pending,
+  onUpdate,
+}: {
+  plugin: InstalledPlugin
+  project: Project
+  server: Server
+  manage: boolean
+  pending: boolean
+  onUpdate: () => void
+}) {
+  const [changes, setChanges] = useState(false)
+  const label = t("Update to {{version}}", { version: plugin.update })
+  return (
+    <div className="flex shrink-0 items-center">
+      {manage ? (
+        <Button size="sm" variant="outline" className="rounded-r-none" disabled={pending} onClick={onUpdate}>
+          <ArrowCircleUpIcon />
+          <span className="max-sm:sr-only">{label}</span>
+        </Button>
+      ) : (
+        <Pill tone="info" className="max-sm:hidden">
+          {label}
+        </Pill>
+      )}
+      <Button
+        size="icon-sm"
+        variant={manage ? "outline" : "ghost"}
+        className={cn(manage && "-ml-px rounded-l-none")}
+        aria-label={t("What changed in {{name}} up to {{version}}", { name: project.title, version: plugin.update })}
+        title={t("What changed")}
+        onClick={() => setChanges(true)}
+      >
+        <NotepadIcon />
+      </Button>
+      <ChangesDialog
+        open={changes}
+        onOpenChange={setChanges}
+        title={t("What changed in {{name}} up to {{version}}", { name: project.title, version: plugin.update })}
+        project={project.id}
+        type={server.type}
+        version={server.version}
+        from={plugin.versionId}
+        to={plugin.updateId}
+        current={plugin.versionId}
+        footer={
+          manage && (
+            <Button
+              disabled={pending}
+              onClick={() => {
+                setChanges(false)
+                onUpdate()
+              }}
+            >
+              <ArrowCircleUpIcon />
+              {label}
+            </Button>
+          )
+        }
+      />
+    </div>
+  )
+}
 
-/** Updates all projects with a newer release, in batches. */
-function UpdateAllButton({ projects, serverRef, words }: { projects: Project[]; serverRef: ServerRef; words: Words }) {
-  const install = useInstallPlugins()
-  async function updateAll() {
-    for (let i = 0; i < projects.length; i += batch) {
-      failIfAny(await install.mutateAsync({ projects: projects.slice(i, i + batch).map((p) => p.id), servers: [serverRef] }))
-    }
+/**
+ * The other actions on a plugin: keeping its version, turning it off or on, its settings in the file manager and
+ * removing it. Turning off or removing a plugin that others require asks first.
+ */
+function PluginMenu({ plugin, serverRef, manage }: { plugin: InstalledPlugin; serverRef: ServerRef; manage: boolean }) {
+  const { can } = useAccess()
+  const change = useChangePlugins(serverRef)
+  const [confirm, setConfirm] = useState<"off" | "remove">()
+  const { project, requiredBy = [] } = plugin
+  const title = name(plugin)
+  const settings = plugin.settings && can("files.read", serverRef.nodeId, serverRef.serverId) ? plugin.settings : undefined
+  if (!manage && !settings) return null
+
+  const done = (message: string) => ({ onSuccess: () => toast.success(message), onError: (e: Error) => toast.error(e.message) })
+  const turn = (on: boolean) =>
+    change.mutate(
+      { action: on ? "enable" : "disable", fileName: plugin.fileName },
+      done(
+        on
+          ? t("Turned on {{name}}. Restart the server to load it.", { name: title })
+          : t("Turned off {{name}}. Restart the server so that it no longer runs.", { name: title }),
+      ),
+    )
+  const needed = requiredBy.length > 0 && (
+    <span className="mt-2 block font-medium text-warning">{t("{{names}} need it and may stop working without it.", { names: requiredBy.join(", ") })}</span>
+  )
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="shrink-0 text-muted-foreground"
+            disabled={change.isPending}
+            aria-label={t("More actions for {{name}}", { name: title })}
+            title={t("More actions")}
+          >
+            <DotsThreeIcon weight="bold" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60">
+          {settings && (
+            <DropdownMenuItem asChild>
+              <Link to="/nodes/$nodeId/servers/$serverId/files" params={serverRef} search={{ path: settings }}>
+                <FolderOpenIcon />
+                {t("Open its settings")}
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {manage && project && (
+            <DropdownMenuItem
+              onSelect={() =>
+                change.mutate(
+                  { action: plugin.pinned ? "unpin" : "pin", project: project.id },
+                  done(
+                    plugin.pinned
+                      ? t("Update all updates {{name}} again.", { name: title })
+                      : t("{{name}} stays at {{version}}. Update all leaves it out.", { name: title, version: plugin.version }),
+                  ),
+                )
+              }
+            >
+              {plugin.pinned ? <PushPinSlashIcon /> : <PushPinIcon />}
+              {plugin.pinned ? t("Update it with the others again") : t("Keep this version")}
+            </DropdownMenuItem>
+          )}
+          {manage && (
+            <DropdownMenuItem onSelect={() => (plugin.disabled ? turn(true) : requiredBy.length > 0 ? setConfirm("off") : turn(false))}>
+              <PowerIcon />
+              {plugin.disabled ? t("Turn on") : t("Turn off…")}
+            </DropdownMenuItem>
+          )}
+          {manage && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => setConfirm("remove")}>
+                <TrashIcon />
+                {t("Remove…")}
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {confirm === "off" && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => !open && setConfirm(undefined)}
+          title={t("Turn off {{name}}?", { name: title })}
+          description={
+            <>
+              {t("The server keeps the file, but no longer loads it once it restarts.")}
+              {needed}
+            </>
+          }
+          action={t("Turn off")}
+          onConfirm={() => turn(false)}
+        />
+      )}
+      {confirm === "remove" && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => !open && setConfirm(undefined)}
+          title={t("Remove {{name}}?", { name: title })}
+          description={
+            <>
+              {t("This deletes {{file}}. Its configuration in the server's folder is kept.", { file: plugin.fileName })}
+              {needed}
+            </>
+          }
+          action={t("Remove")}
+          destructive
+          onConfirm={() =>
+            change.mutate({ action: "remove", fileName: plugin.fileName, disabled: plugin.disabled }, done(t("Removed {{name}}", { name: plugin.fileName })))
+          }
+        />
+      )}
+    </>
+  )
+}
+
+/** Updates all plugins or mods with a newer release, except those kept at their version and turned-off ones. */
+function UpdateAllButton({ count, serverRef, words }: { count: number; serverRef: ServerRef; words: Words }) {
+  const update = useUpdatePlugins(serverRef)
+  function updateAll() {
+    const id = toast.loading(t("Updating all…"))
+    update.mutate(undefined, {
+      onSuccess: (result) => {
+        const updated = result.installed.length
+        const kept = result.pinned?.length ? t("Kept at their version: {{names}}", { names: result.pinned.join(", ") }) : undefined
+        if (result.error) toast.warning(updated > 0 ? words.updated(updated) : t("Nothing was updated."), { id, description: result.error })
+        else toast.success(updated > 0 ? words.updated(updated) : t("Nothing was updated."), { id, description: kept })
+      },
+      onError: (e) => toast.error(e.message, { id }),
+    })
   }
   return (
-    <Button
-      variant="outline"
-      disabled={install.isPending}
-      onClick={() =>
-        toast.promise(updateAll(), { loading: t("Updating all…"), success: words.updated(projects.length), error: (e: Error) => e.message })
-      }
-    >
+    <Button variant="outline" disabled={update.isPending} onClick={updateAll}>
       <ArrowCircleUpIcon />
-      {t("Update all ({{number}})", { number: projects.length })}
+      {t("Update all ({{number}})", { number: count })}
     </Button>
   )
 }
@@ -395,7 +590,7 @@ function InstallButton({ hit, server, serverRef, installed }: { hit: SearchHit; 
         <DownloadSimpleIcon />
         {install.pending ? t("Installing…") : t("Install")}
       </Button>
-      <VersionMenu project={hit.id} type={server.type} version={server.version} onPick={(v) => install.run(hit, v)}>
+      <VersionMenu project={hit.id} title={hit.title} type={server.type} version={server.version} onPick={(v) => install.run(hit, v)}>
         <Button
           size="icon-sm"
           variant="outline"

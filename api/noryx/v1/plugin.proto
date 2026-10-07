@@ -7,13 +7,17 @@ option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 // PluginService is served by every agent and manages the plugins of a server, or the
 // mods of a modded one. The agent chooses the folder by the server type: plugins/ for
 // Paper, Purpur and proxies, mods/ for Fabric, Forge and NeoForge. Vanilla servers
-// load neither. Servers load plugins when they start.
+// load neither. Servers load plugins when they start. Turned-off plugins are kept in the
+// folder .disabled of the plugin folder, which no server loads.
 service PluginService {
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
   // InstallPlugin writes a plugin file. The first message names it, the others carry
   // its content. A file with the same name is replaced once the new one is complete.
   rpc InstallPlugin(stream InstallPluginRequest) returns (InstallPluginResponse);
   rpc RemovePlugin(RemovePluginRequest) returns (RemovePluginResponse);
+  // EnablePlugin turns a plugin file off, by moving it into the folder of turned-off
+  // plugins, or on again. A file of the same name where it goes is never replaced.
+  rpc EnablePlugin(EnablePluginRequest) returns (EnablePluginResponse);
 }
 
 message PluginFile {
@@ -24,10 +28,18 @@ message PluginFile {
   string sha512 = 3;
   // Hex-encoded SHA-256 of the file, which identifies it on Hangar.
   string sha256 = 4;
+  // The file is turned off: it is in the folder of turned-off plugins.
+  bool disabled = 5;
+  // Folder of the plugin's settings in the plugin folder, e.g. LuckPerms, if it has one:
+  // the name it gives itself in its plugin.yml, paper-plugin.yml, bungee.yml or
+  // velocity-plugin.json. See ValidPluginFolder.
+  string settings = 6;
 }
 
 message ListPluginsRequest {
   string server_id = 1;
+  // Lists the turned-off files too, which older masters don't know.
+  bool include_disabled = 2;
 }
 
 message ListPluginsResponse {
@@ -48,6 +60,8 @@ message InstallPluginHeader {
   string file_name = 2;
   // File of another version of the plugin, which is removed once the new one is written.
   string replaces = 3;
+  // Writes the file into the folder of turned-off plugins, where replaces is too.
+  bool disabled = 4;
 }
 
 message InstallPluginResponse {
@@ -57,6 +71,17 @@ message InstallPluginResponse {
 message RemovePluginRequest {
   string server_id = 1;
   string file_name = 2;
+  // Removes a turned-off file.
+  bool disabled = 3;
 }
 
 message RemovePluginResponse {}
+
+message EnablePluginRequest {
+  string server_id = 1;
+  string file_name = 2;
+  // Turns the file on; otherwise off.
+  bool enabled = 3;
+}
+
+message EnablePluginResponse {}

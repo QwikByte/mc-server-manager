@@ -82,8 +82,20 @@ software and Minecraft version, installs the projects it requires, and replaces 
 Where no release suits a server, it installs the newest beta or alpha and the panel warns about it. Another version that
 suits the server, betas and alphas included, can be chosen instead, also to downgrade a project. Installed files are
 recognised by their hash, so the tab shows their project, version (marked as beta or alpha) and available updates, also
-for files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once.
-Own `.jar` files can be uploaded too. Servers load changes when they restart. On the **Plugins** page, the game servers
+for files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once to
+the newest release that suits the server, never to a beta or alpha. Own `.jar` files can be uploaded too. Servers load
+changes when they restart.
+
+**What changed** next to an update shows the changelogs of the versions after the installed one up to the update, and in
+the version menu those of the newest suitable versions, as their authors wrote them on Modrinth or Hangar.
+**Keep this version** keeps a project at its version, e.g. because a newer one breaks its configuration: **Update all**
+leaves it out, while choosing another version in its menu still works. A plugin or mod can be turned off instead of
+removed: its file moves into the folder `.disabled` of the plugin folder, e.g. `plugins/.disabled/`, which no server
+loads, and back when it is turned on again. Turned-off files are listed as off, can be removed, are updated in that
+folder and are left out of **Update all**. Before a project is turned off or removed, the tab names the turned-on
+projects that require it, as Modrinth and Hangar list their dependencies. **Open its settings** opens the folder of a
+plugin's settings in the file manager, e.g. `plugins/LuckPerms/`, named by its `plugin.yml`, `paper-plugin.yml`,
+`bungee.yml` or `velocity-plugin.json`. On the **Plugins** page, the game servers
 or the proxy of a network are chosen at once, and more than 100 servers are installed on in batches of 100, one after
 the other. Installing on many servers handles at most 8 of a node at a time and tells what it installed on each;
 **Retry the failed ones** installs the same again where it failed.

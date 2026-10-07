@@ -121,8 +121,14 @@ lists. A modpack is checked the same way, and each of its files against the SHA-
 elsewhere than on Modrinth's CDN or with paths that leave the server's folder are refused before a server is created,
 and the agent confines the files like those of the file manager. The version of a mod loader ends up in a variable of
 the server image, so the agent only accepts letters, digits, `.`, `_`, `+` and `-`. The agent decides the folder from
-the server type and only accepts plain `.jar` file names in it. Project icons are fetched by the master, so the browser
-never contacts Modrinth or Hangar and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the
+the server type and only accepts plain `.jar` file names in it. Turned-off plugins stay in the server's data, in the
+folder `.disabled` of the plugin folder, which backups of the plugins include; the agent confines it like the plugin
+folder, never replaces a file when it moves one, and refuses a link in its place. To link a plugin to the folder of its
+settings, the agent reads the name from the plugin's jar, which the server could have written: at most 4 MiB of the jar
+and 64 KiB of its `plugin.yml` or the like, and only a name of letters, digits, spaces, `_`, `.` and `-` that doesn't
+start with a dot and is a folder of the plugin folder. Changelogs are Markdown of the projects' authors, which the panel
+renders without HTML and without loading images. Project icons are fetched by the master, so the browser never contacts
+Modrinth or Hangar and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the
 master sends their gamertag to GeyserMC's global API, and the agent only accepts the IDs Floodgate gives Bedrock
 players.
 

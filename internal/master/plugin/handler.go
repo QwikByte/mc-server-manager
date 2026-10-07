@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"maps"
 	"net/http"
 	"regexp"
@@ -24,6 +25,9 @@ const (
 	// installTimeout covers downloading and sending the files to all servers.
 	installTimeout = 10 * time.Minute
 	maxServers     = 100
+	// everywhereTimeout covers updating the plugins of up to maxEverywhere servers.
+	everywhereTimeout = 30 * time.Minute
+	maxEverywhere     = 500
 )
 
 var gameVersion = regexp.MustCompile(`^[A-Za-z0-9._-]{0,32}$`)
@@ -37,18 +41,24 @@ func NewHandler(svc *Service, ops *operation.Operations) *Handler {
 	return &Handler{svc: svc, ops: ops}
 }
 
-// Register adds the routes. Searching Modrinth needs no permission; installing on many
-// servers at once checks the permission for each of them.
+// Register adds the routes. Searching Modrinth needs no permission; actions on many servers
+// at once check the permission for each of them.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/plugins/search", access.SignedIn, h.search)
 	mux.Handle("GET /api/plugins/game-versions", access.SignedIn, h.gameVersions)
 	mux.Handle("GET /api/plugins/projects/{project}/versions", access.SignedIn, h.versions)
+	mux.Handle("GET /api/plugins/projects/{project}/changes", access.SignedIn, h.changes)
 	mux.Handle("GET /api/plugins/icons/{project}/{file}", access.SignedIn, h.icon)
 	mux.Handle("POST /api/plugins/install", access.SignedIn, h.install)
+	mux.Handle("POST /api/plugins/update", access.SignedIn, h.update)
 	const base = "/api/nodes/{node}/servers/{id}/plugins"
 	mux.Handle("GET "+base, access.OnServer(access.ServersView), h.list)
 	mux.Handle("PUT "+base+"/{file}", access.OnServer(access.Plugins), h.upload)
 	mux.Handle("DELETE "+base+"/{file}", access.OnServer(access.Plugins), h.remove)
+	mux.Handle("POST "+base+"/{file}/enable", access.OnServer(access.Plugins), h.enable(true))
+	mux.Handle("POST "+base+"/{file}/disable", access.OnServer(access.Plugins), h.enable(false))
+	mux.Handle("PUT "+base+"/pins/{project}", access.OnServer(access.Plugins), h.pin(true))
+	mux.Handle("DELETE "+base+"/pins/{project}", access.OnServer(access.Plugins), h.pin(false))
 }
 
 type hit struct {
@@ -136,6 +146,21 @@ func (h *Handler) versions(w http.ResponseWriter, r *http.Request) {
 	write(w, r, http.StatusOK, versions, err)
 }
 
+// changes tells what changed in the versions of a project for a server type and Minecraft
+// version, after the version from up to the version to.
+func (h *Handler) changes(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+	q := r.URL.Query()
+	from, to := q.Get("from"), q.Get("to")
+	if !gameVersion.MatchString(q.Get("version")) || from != "" && !ValidProjectID(from) || to != "" && !ValidProjectID(to) {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "invalid version"))
+		return
+	}
+	changes, err := h.svc.Changes(ctx, r.PathValue("project"), noryxv1.ParseServerType(q.Get("type")), q.Get("version"), from, to)
+	write(w, r, http.StatusOK, changes, err)
+}
+
 // icon serves a project icon from Modrinth's CDN, so the browser doesn't contact Modrinth.
 func (h *Handler) icon(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
@@ -156,12 +181,69 @@ func (h *Handler) icon(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data) //nolint:gosec // an image of a fixed type, sandboxed, see above
 }
 
+// many are the servers of an action on many servers.
+type many struct {
+	Servers []Ref `json:"servers"`
+}
+
+func (m *many) check(limit int) error {
+	if len(m.Servers) == 0 || len(m.Servers) > limit || len(slices.Compact(slices.SortedFunc(slices.Values(m.Servers), compareRefs))) != len(m.Servers) {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", limit)
+	}
+	return nil
+}
+
+// action is an action on many servers that runs as an operation.
+type action struct {
+	kind, subject string
+	timeout       time.Duration
+	// partly leaves out the servers whose plugins the user may not manage and tells so, rather
+	// than refusing the request.
+	partly bool
+	run    func(ctx context.Context, servers []Ref) []Result
+}
+
+// run runs an action on the servers of a request as an operation.
+func (h *Handler) run(w http.ResponseWriter, r *http.Request, m many, limit int, a action) {
+	grants := access.From(r.Context())
+	allowed := slices.DeleteFunc(slices.Clone(m.Servers), func(s Ref) bool { return !grants.On(access.Plugins, s.NodeID, s.ServerID) })
+	err := m.check(limit)
+	if err == nil && (len(allowed) == 0 || !a.partly && len(allowed) < len(m.Servers)) {
+		err = access.Denied(access.Plugins)
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	logging.Note(r.Context(), slog.Int("servers", len(m.Servers)))
+	spec := operation.Spec{
+		Kind: a.kind, Subject: a.subject, Steps: []string{"plugins"}, Status: http.StatusOK, Timeout: a.timeout, Category: logging.Plugins,
+		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, m.Servers) },
+		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
+			return access.Plugins, onAll(g, access.Plugins, allowed)
+		},
+	}
+	if len(m.Servers) == 1 {
+		spec.NodeID, spec.ServerID = m.Servers[0].NodeID, m.Servers[0].ServerID
+	}
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		results := a.run(ctx, allowed)
+		denied := httpapi.Message(access.Denied(access.Plugins))
+		for _, ref := range m.Servers {
+			if !slices.Contains(allowed, ref) {
+				results = append(results, Result{Ref: ref, Installed: []Installed{}, Error: denied})
+			}
+		}
+		return map[string]any{"results": results}, nil
+	})
+}
+
 func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Projects []string `json:"projects"`
 		// Versions are the IDs of the versions chosen for projects, by project ID.
 		Versions map[string]string `json:"versions"`
-		Servers  []Ref             `json:"servers"`
+		many
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
@@ -170,7 +252,6 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	badVersion := func(project string) bool {
 		return !slices.Contains(req.Projects, project) || !ValidProjectID(req.Versions[project])
 	}
-	grants := access.From(r.Context())
 	switch err := checkProjects(req.Projects); {
 	case err != nil:
 		httpapi.WriteError(w, r, err)
@@ -178,26 +259,26 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	case slices.ContainsFunc(slices.Collect(maps.Keys(req.Versions)), badVersion):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose versions only for the projects to install."))
 		return
-	case len(req.Servers) == 0 || len(req.Servers) > maxServers || len(slices.Compact(slices.SortedFunc(slices.Values(req.Servers), compareRefs))) != len(req.Servers):
-		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", maxServers))
-		return
-	case !onAll(grants, access.Plugins, req.Servers):
-		httpapi.WriteError(w, r, access.Denied(access.Plugins))
-		return
 	}
-	spec := operation.Spec{
-		Kind: "plugins.install", Subject: strconv.Itoa(len(req.Servers)), Steps: []string{"plugins"}, Status: http.StatusOK,
-		Timeout: installTimeout, Category: logging.Plugins,
-		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, req.Servers) },
-		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
-			return access.Plugins, onAll(g, access.Plugins, req.Servers)
+	h.run(w, r, req.many, maxServers, action{
+		kind: "plugins.install", subject: strconv.Itoa(len(req.Servers)), timeout: installTimeout,
+		run: func(ctx context.Context, servers []Ref) []Result {
+			return h.svc.Install(ctx, req.Projects, req.Versions, servers)
 		},
+	})
+}
+
+// update updates all plugins and mods of servers to the newest suitable release; see
+// Service.Update.
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
+	var req many
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
 	}
-	if len(req.Servers) == 1 {
-		spec.NodeID, spec.ServerID = req.Servers[0].NodeID, req.Servers[0].ServerID
-	}
-	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
-		return map[string]any{"results": h.svc.Install(ctx, req.Projects, req.Versions, req.Servers)}, nil
+	h.run(w, r, req, maxEverywhere, action{
+		kind: "plugins.update", subject: strconv.Itoa(len(req.Servers)), timeout: everywhereTimeout, partly: true,
+		run: func(ctx context.Context, servers []Ref) []Result { return h.svc.Update(ctx, servers, nil) },
 	})
 }
 
@@ -235,10 +316,30 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
 	write(w, r, http.StatusCreated, p, err)
 }
 
+// remove deletes a plugin file, a turned-off one with ?disabled=true.
 func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
-	write(w, r, http.StatusNoContent, nil, h.svc.Remove(ctx, ref(r), r.PathValue("file")))
+	write(w, r, http.StatusNoContent, nil, h.svc.Remove(ctx, ref(r), r.PathValue("file"), r.URL.Query().Get("disabled") == "true"))
+}
+
+// enable turns a plugin file on or off.
+func (h *Handler) enable(on bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+		defer cancel()
+		write(w, r, http.StatusNoContent, nil, h.svc.Enable(ctx, ref(r), r.PathValue("file"), on))
+	}
+}
+
+// pin keeps a project of a server at its version, or lets updates of all plugins update it again.
+func (h *Handler) pin(pinned bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+		defer cancel()
+		logging.Note(r.Context(), slog.String("project", r.PathValue("project")))
+		write(w, r, http.StatusNoContent, nil, h.svc.Pin(ctx, ref(r), r.PathValue("project"), pinned))
+	}
 }
 
 func ref(r *http.Request) Ref { return Ref{NodeID: r.PathValue("node"), ServerID: r.PathValue("id")} }
