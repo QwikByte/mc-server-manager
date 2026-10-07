@@ -9,16 +9,22 @@ import { ErrorCallout } from "@/components/callout"
 import { FormSection } from "@/components/form-section"
 import { PageHeader } from "@/components/page-header"
 import { usePageName } from "@/components/page-title"
+import { Segmented } from "@/components/segmented"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import { useAccess } from "@/features/access/use-access"
 import type { TaskInput } from "@/features/schedules/api"
 import { TaskForm } from "@/features/schedules/task-form"
 import { actions, emptyPolicy, type PolicyAction, type PolicySettings, policies, warns } from "./api"
 
 const route = getRouteApi("/_app/policies/$policyId")
+
+/** The usual numbers of servers that restart at a time, and the one a schedule has. */
+const batches = (rolling: number) =>
+  [...new Set([1, 2, 5, 10, rolling])].sort((a, b) => a - b).map((b) => ({ value: String(b), label: String(b) }))
 
 export function PolicyPage() {
   const manage = useAccess().can("policies.manage")
@@ -154,6 +160,32 @@ function PolicyForm({
                 />
                 <FieldDescription>{t("Shown in the chat; {minutes} becomes the minutes left. Proxies get no warning.")}</FieldDescription>
               </Field>
+            </div>
+          )}
+          {settings.action === "restart" && (
+            <div className="grid gap-4">
+              <Field orientation="horizontal">
+                <Switch id="policy-rolling" checked={!!settings.rolling} onCheckedChange={(on) => set({ rolling: on ? 1 : 0 })} />
+                <FieldContent>
+                  <FieldLabel htmlFor="policy-rolling">{t("Server by server in networks")}</FieldLabel>
+                  <FieldDescription>
+                    {t(
+                      "After the warnings, the game servers of networks restart a few at a time, and their players move to another server of the network first. Their proxies restart after them, other servers at once.",
+                    )}
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+              {!!settings.rolling && (
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <span>{t("Servers at a time")}</span>
+                  <Segmented
+                    label={t("Servers at a time")}
+                    value={String(settings.rolling)}
+                    onChange={(batch) => set({ rolling: Number(batch) })}
+                    options={batches(settings.rolling)}
+                  />
+                </div>
+              )}
             </div>
           )}
           {settings.action === "command" && (

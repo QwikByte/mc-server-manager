@@ -25,7 +25,8 @@ const (
 	pollInterval = 2 * time.Second
 	// moveWait gives players a moment to move to another server before theirs restarts.
 	moveWait = 3 * time.Second
-	maxBatch = 50
+	// MaxBatch is the most servers that restart at a time in a rolling restart.
+	MaxBatch = 50
 	// groupAllowance is what a group of servers needs in a rolling restart besides the longest
 	// stop timeout among them: a minute to move the players and ask the nodes, two to start, as
 	// configureTimeout allows, and readyTimeout to run again.
@@ -43,8 +44,8 @@ var running = noryxv1.ServerState_SERVER_STATE_RUNNING
 // restart, e.g. those whose files changed. Once it began, it can't be cancelled, and it takes
 // as long as its servers need, also beyond the deadline of ctx; see rollingTimeout.
 func (s *Service) RollingRestart(ctx context.Context, n Network, batch int, only ...Ref) error {
-	if batch < 1 || batch > maxBatch {
-		return httpapi.Errorf(http.StatusBadRequest, "Restart from 1 to %d servers at a time.", maxBatch)
+	if batch < 1 || batch > MaxBatch {
+		return httpapi.Errorf(http.StatusBadRequest, "Restart from 1 to %d servers at a time.", MaxBatch)
 	}
 	ctx = context.WithoutCancel(ctx)
 	operation.Step(ctx, "servers")

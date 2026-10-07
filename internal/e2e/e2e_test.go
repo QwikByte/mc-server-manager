@@ -264,9 +264,10 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	moves := server.NewMoves()
 	overlays := overlay.NewService(m.db, nodes)
 	datastores := datastore.NewStore(m.db, nodes, overlays)
-	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes)}, moves.Busy)
+	networks := network.NewService(m.db, nodes, plugins, overlays, datastores)
+	tasks := schedule.NewService(m.db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
-	networks, tags := network.NewService(m.db, nodes, plugins, overlays, datastores), tag.NewStore(m.db)
+	tags := tag.NewStore(m.db)
 	fileSets := fileset.NewService(m.db, nodes, networks, tags, moves)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes, Overlay: overlays,

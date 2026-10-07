@@ -11,6 +11,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/player"
+	"github.com/QwikByte/noryx/internal/master/schedule"
 )
 
 func TestPlayers(t *testing.T) {
@@ -214,4 +215,22 @@ func TestRollingRestart(t *testing.T) {
 	}
 	api.do("POST", move, map[string]any{"server": games[2]}, http.StatusConflict, nil) // it doesn't run
 	api.do("POST", move, map[string]any{"server": proxy}, http.StatusBadRequest, nil)
+
+	// A schedule restarts the game servers of the network server by server, the lobby last,
+	// then the proxy; the server outside of networks restarts at once.
+	var task schedule.Task
+	api.do("POST", "/api/policies", map[string]any{
+		"name": "Nightly", "enabled": true, "settings": map[string]any{"action": "restart", "rolling": 1},
+		"schedule": map[string]any{"times": []string{"04:00"}, "timeZone": "UTC"}, "targets": []map[string]string{{"nodeId": a.node.ID}},
+	}, http.StatusCreated, &task)
+	commands := len(a.runtime.commandsTo(proxy.ServerID))
+	run(t, api, "/api/policies/"+task.ID)
+	got = a.runtime.restarted()[4:]
+	inNetwork := slices.DeleteFunc(slices.Clone(got), func(id string) bool { return id == solo.ServerID })
+	if want := []string{games[0].ServerID, games[1].ServerID, lobby.ServerID, proxy.ServerID}; len(got) != 5 || !slices.Equal(inNetwork, want) {
+		t.Fatalf("restarts = %q", got)
+	}
+	if got := a.runtime.commandsTo(proxy.ServerID)[commands:]; !slices.Equal(got, []string{"send Alex lobby"}) {
+		t.Fatalf("proxy commands = %q", got)
+	}
 }

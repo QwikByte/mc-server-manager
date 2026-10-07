@@ -13,6 +13,11 @@ export interface PolicySettings {
   message: string
   /** The console command of the command action. */
   command: string
+  /**
+   * Unless 0, a restart restarts the running game servers of networks this many at a time, so that their players
+   * move to other servers first.
+   */
+  rolling?: number
 }
 
 export const policies = taskApi<PolicySettings>("/policies")
@@ -43,11 +48,13 @@ export const emptyPolicy: TaskInput<PolicySettings> = {
   settings: { action: "restart", warnings: [10, 5, 1], message: "", command: "" },
 }
 
-/** Describes what a policy does, e.g. "Restart with warnings 10, 5, 1 min before". */
+/** Describes what a policy does, e.g. "Restart with warnings 10, 5, 1 min before, server by server in networks". */
 export function describePolicy(s: PolicySettings): string {
   if (s.action === "command") return t("Runs “{{command}}”", { command: s.command })
   const action = t(actions[s.action].label)
-  return warns(s.action) && s.warnings.length > 0
-    ? t("{{action}} with warnings {{minutes}} min before", { action, minutes: s.warnings.join(", ") })
-    : action
+  const described =
+    warns(s.action) && s.warnings.length > 0
+      ? t("{{action}} with warnings {{minutes}} min before", { action, minutes: s.warnings.join(", ") })
+      : action
+  return s.action === "restart" && s.rolling ? t("{{described}}, server by server in networks", { described }) : described
 }

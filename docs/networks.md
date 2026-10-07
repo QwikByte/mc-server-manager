@@ -106,7 +106,8 @@ The menu of a running server in the network's list of servers restarts that one 
 its players move to the server players join first, or another running one, and the proxy keeps running. **Send players
 elsewhere** only moves its players, e.g. before working on the server. Restarting server by server, all servers or one,
 needs the permission to restart the proxy and each server that restarts; sending players elsewhere needs the permission
-to manage the players of the proxy, like [sending one player](players.md#actions).
+to manage the players of the proxy, like [sending one player](players.md#actions). [Schedules](automation.md#schedules)
+restart the servers of networks server by server too, if chosen.
 
 ## Maintenance
 
