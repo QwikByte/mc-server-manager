@@ -1,6 +1,7 @@
+import { t } from "i18next"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
-import { type Operation, useLiveOperation } from "./api"
+import { isCancelled, type Operation, useLiveOperation } from "./api"
 import { LiveToast } from "./operation-progress"
 
 /** What a notification says about an operation that ended well, with a link to what it made. */
@@ -52,7 +53,11 @@ export function useOperation() {
         if (!background.current) then?.(result)
       },
       // A dialog in the foreground shows the error itself.
-      (e: Error) => notification.current !== undefined && toast.error(e.message, { id: notification.current, description: title }),
+      (e: Error) => {
+        if (notification.current === undefined) return
+        if (isCancelled(e)) toast.info(t("Cancelled"), { id: notification.current, description: title })
+        else toast.error(e.message, { id: notification.current, description: title })
+      },
     )
   }
 

@@ -189,7 +189,7 @@ export function usePreview(id: string) {
 export function useApply(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ onStart, ...body }: { version: number; restart: boolean; batch: number } & Followed) =>
+    mutationFn: ({ onStart, ...body }: { version: number; restart: boolean; batch: number; servers?: ServerRef[] } & Followed) =>
       operate<{ results: Result[] }>(`/filesets/${id}/apply`, { body }, onStart),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["filesets"] }),
   })

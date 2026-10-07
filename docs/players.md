@@ -15,7 +15,8 @@ and who banned them.
 
 Kick, ban (with a reason), pardon, add to and remove from the whitelist, make operator and take it away, and turn the
 whitelist on or off. A change goes to the player's server, the network or all servers, as chosen; bans go to the network
-first. Kicks leave the server: Velocity sends kicked players to another server of the network, BungeeCord disconnects
+first. The notification tells on which servers a change failed and offers to try it again there. Kicks leave the
+server: Velocity sends kicked players to another server of the network, BungeeCord disconnects
 them. **Send to another server** moves a player within the network through the proxy (`send`). The agent reads the
 proxy's answer, so the panel tells if the player isn't online or the proxy has no `send`. Velocity only answers if it
 can't send, so the agent waits a second for that answer; rolling restarts don't wait. Players named `all` or `current`,

@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import type { ServerRef } from "@/features/networks/api"
 import { findServer } from "@/features/networks/servers"
 import { OperationStatus } from "@/features/operations/operation-status"
+import { retryAction } from "@/features/operations/retry"
 import { type Done, guard, useOperation } from "@/features/operations/use-operation"
 import { allServersQuery } from "@/features/servers/api"
 import { playerActions } from "./actions"
@@ -75,21 +76,22 @@ export function PlayerActionDialog({
     return {
       message: failed.length === results.length ? t("Nothing changed") : info.done(player),
       description: lines.filter(Boolean).join(" "),
+      // The dialog is closed by then, so a notification follows the retry.
+      action: retryAction(results, (servers) => run(servers, true)),
       warning: failed.length > 0,
     }
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    const servers = scopes[scope].servers
+  function run(servers: ServerRef[], notify = false) {
     operation.run(
       (onStart) => change.mutateAsync({ action, name: global ? undefined : player, reason: reason.trim() || undefined, servers, onStart }),
-      {
-        title,
-        done,
-        then: onClose,
-      },
+      { title, done, then: onClose, notify },
     )
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    run(scopes[scope].servers)
   }
 
   return (

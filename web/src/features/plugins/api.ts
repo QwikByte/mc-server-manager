@@ -2,7 +2,7 @@ import { infiniteQueryOptions, keepPreviousData, queryOptions, useMutation, useQ
 import { t } from "i18next"
 import type { ServerRef } from "@/features/networks/api"
 import { serverType } from "@/features/servers/server-types"
-import { type Operation, operate } from "@/features/operations/api"
+import { isCancelled, type Operation, operate } from "@/features/operations/api"
 import { api, responseError } from "@/lib/api"
 
 /** A plugin or mod on Modrinth, or a plugin on Hangar. */
@@ -192,9 +192,12 @@ export function useInstallPlugins() {
           )
           results.push(...res.results)
         } catch (e) {
-          // Once a batch went through, a failed one is told with the results, as an error on each of its servers.
+          // Once a batch went through, a failed one is told with the results, as an error on each of its servers;
+          // a cancelled one also ends the batches after it.
           if (i === 0) throw e
-          results.push(...batch.map((s) => ({ ...s, installed: [], error: (e as Error).message })))
+          const failed = isCancelled(e) ? servers.slice(i) : batch
+          results.push(...failed.map((s) => ({ ...s, installed: [], error: (e as Error).message })))
+          if (isCancelled(e)) break
         }
       }
       return results

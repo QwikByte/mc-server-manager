@@ -108,6 +108,13 @@ func NewHandler(nodes Nodes, networks Networks, tags Tags, plugins Plugins, modp
 	return &Handler{nodes: nodes, networks: networks, tags: tags, plugins: plugins, modpacks: modpacks, ops: ops, moves: moves, sets: sets, refs: refs}
 }
 
+// What creating a server and copying one need, also to cancel them. The copy contains all
+// files of the server.
+var (
+	createNeed    = access.OnNode(access.ServersCreate, "node")
+	duplicateNeed = access.All(createNeed, access.OnServer(access.FilesRead))
+)
+
 // Register adds the routes. The lists only contain the servers the user may see.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/servers", access.SignedIn, h.listAll)
@@ -115,7 +122,7 @@ func (h *Handler) Register(mux access.Mux) {
 	// Bulk requests check the permission for each server they name.
 	mux.Handle("POST /api/servers/actions", access.SignedIn, h.bulk)
 	mux.Handle("POST /api/servers/tags", access.SignedIn, h.changeTags)
-	mux.Handle("POST /api/nodes/{node}/servers", access.OnNode(access.ServersCreate, "node"), h.create)
+	mux.Handle("POST /api/nodes/{node}/servers", createNeed, h.create)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart),
 		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
 			_, err := c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
@@ -136,8 +143,7 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/update-image", access.OnServer(access.ServersSettings), h.updateImage)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}/notes", access.OnServer(access.ServersSettings), h.setNotes)
 	// The copy contains all files of the server.
-	mux.Handle("POST /api/nodes/{node}/servers/{id}/duplicate",
-		access.All(access.OnNode(access.ServersCreate, "node"), access.OnServer(access.FilesRead)), h.duplicate)
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/duplicate", duplicateNeed, h.duplicate)
 	// Moving takes the server away from where it is and copies all its files.
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/move", access.All(access.OnServer(access.ServersDelete), access.OnServer(access.FilesRead)), h.move)
 	mux.Handle("GET /api/moves", access.SignedIn, h.listMoves)
@@ -371,7 +377,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	spec := operation.Spec{
 		Kind: "server.create", Subject: req.Name, NodeID: nodeID, Steps: steps, Status: http.StatusCreated,
-		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, ""),
+		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, ""), Cancel: createNeed,
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
 		defer release()
@@ -404,12 +410,18 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		logging.Note(ctx, slog.String(logging.KeyServer, id), slog.String(logging.KeyServerName, res.GetServer().GetName()))
 		if pack != nil {
 			operation.Step(ctx, "mods")
-			if err := h.modpacks.Install(ctx, nodeID, id, pack); err != nil {
-				return nil, errors.Join(err, h.agent(context.WithoutCancel(ctx), nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
-					_, err := c.DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: id})
-					return err
-				}))
-			}
+			err = h.modpacks.Install(ctx, nodeID, id, pack)
+		}
+		// A server without all of its modpack is deleted, as is one whose creation was
+		// cancelled. Once it is complete, it stays: installing its plugins can't be cancelled.
+		if err == nil {
+			err = operation.Keep(ctx)
+		}
+		if err != nil {
+			return nil, errors.Join(err, h.agent(context.WithoutCancel(ctx), nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
+				_, err := c.DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: id})
+				return err
+			}))
 		}
 		created := struct {
 			view
@@ -466,7 +478,7 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 	}
 	spec := operation.Spec{
 		Kind: "server.duplicate", Subject: req.Name, NodeID: nodeID, ServerID: id, Steps: steps, Status: http.StatusCreated,
-		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
+		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id), Cancel: duplicateNeed,
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
 		defer release()
@@ -481,6 +493,8 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		copied := res.GetServer()
 		operation.Target(ctx, nodeID, copied.GetId())
 		logging.Note(ctx, slog.String("copy", copied.GetName()), slog.String("copy_id", copied.GetId()))
+		// The copy exists, also if the operation was cancelled meanwhile.
+		ctx = context.WithoutCancel(ctx)
 		if err := h.tags.Copy(ctx, tag.Server{NodeID: nodeID, ServerID: id}, tag.Server{NodeID: nodeID, ServerID: copied.GetId()}); err != nil {
 			slog.Warn("The copy of a server didn't get its tags and notes", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, copied.GetId(), "err", err)
 		}
@@ -489,7 +503,8 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 }
 
 // update changes the settings of a server as an operation: the agent creates its container
-// again, after downloading another image for another Java version.
+// again, after downloading another image for another Java version. Like updateImage, it
+// can't be cancelled, which could cut off replacing the container.
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     string `json:"name"`

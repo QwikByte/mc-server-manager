@@ -51,7 +51,9 @@ whether the server's copy changed. It names the servers that get the secrets for
 files atomically as the server's user, removes those the set no longer has unless they changed on the server, at most 8
 servers of a node at a time, and leaves moving servers alone. It can then restart the running servers whose files
 changed, the game servers of a network a few at a time like a rolling restart, as most plugins only read their
-configuration when they start.
+configuration when they start. The results tell how it went on each server, and **Retry the failed ones** applies the
+same version again to the servers where it failed. Applying can be cancelled while it writes the files, but not once it
+restarts servers.
 
 ### State
 
@@ -82,7 +84,8 @@ recognised by their hash, so the tab shows their project, version (marked as bet
 for files uploaded by hand; it searches, filters (updates, not from Modrinth) and sorts them, and updates all at once.
 Own `.jar` files can be uploaded too. Servers load changes when they restart. On the **Plugins** page, the game servers
 or the proxy of a network are chosen at once, and more than 100 servers are installed on in batches of 100, one after
-the other.
+the other. Installing on many servers handles at most 8 of a node at a time and tells what it installed on each;
+**Retry the failed ones** installs the same again where it failed.
 
 ### Hangar
 

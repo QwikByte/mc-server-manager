@@ -177,7 +177,9 @@ the permissions again; the console and the log connect again on their own and co
 permissions they have themselves, within their own scope, and only manage users who have no more permissions than they
 do, so no one can raise their own permissions.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
-change with the user who made it, also denied attempts.
+change with the user who made it, also denied attempts. An operation in progress can only be cancelled by the user who
+started it, or by one who has the permissions it needed on what it is about, and only while it is at steps that stop
+safely: restoring a backup, moving a server and restarting servers one after the other always finish.
 
 ## Terminal
 

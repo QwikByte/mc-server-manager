@@ -46,6 +46,7 @@ var actions = map[string]action{
 	"POST /api/update/agents":                                  {logging.Nodes, "Update agents"},
 	"POST /api/update/agents/{node}":                           {logging.Nodes, "Update agent"},
 	"POST /api/terminal":                                       {logging.Terminal, "Run terminal command"},
+	"POST /api/operations/{id}/cancel":                         {logging.System, "Cancel operation"}, // noted in the operation's category
 	"GET /api/logs/export":                                     {logging.System, "Export log"},
 	"POST /api/nodes":                                          {logging.Nodes, "Add node"},
 	"PUT /api/nodes/{id}":                                      {logging.Nodes, "Change node"},

@@ -14,7 +14,7 @@ type Handler struct{ ops *Operations }
 func NewHandler(ops *Operations) *Handler { return &Handler{ops: ops} }
 
 // Register adds the routes. Users see the operations they started, and those of others
-// about what they may see.
+// about what they may see. Cancelling checks the permission of the operation's route.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/operations", access.SignedIn, func(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteJSON(w, http.StatusOK, h.visible(r))
@@ -27,6 +27,15 @@ func (h *Handler) Register(mux access.Mux) {
 			return
 		}
 		httpapi.WriteJSON(w, http.StatusOK, ops[i])
+	})
+	mux.Handle("POST /api/operations/{id}/cancel", access.SignedIn, func(w http.ResponseWriter, r *http.Request) {
+		user, _ := auth.UserFrom(r.Context())
+		op, err := h.ops.Cancel(r.Context(), r.PathValue("id"), user.ID, access.From(r.Context()))
+		if err != nil {
+			httpapi.WriteError(w, r, err)
+			return
+		}
+		httpapi.WriteJSON(w, http.StatusAccepted, op)
 	})
 }
 

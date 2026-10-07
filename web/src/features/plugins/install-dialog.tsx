@@ -22,6 +22,8 @@ import { key, refOf } from "@/features/networks/servers"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { displayVersion, serverType } from "@/features/servers/server-types"
 import { OperationStatus } from "@/features/operations/operation-status"
+import { mergeResults } from "@/features/operations/retry"
+import { RetryButton } from "@/features/operations/retry-button"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { fallback, type InstallResult, maxServers, type ProjectVersion, type SearchHit, supports, useInstallPlugins } from "./api"
 import { ChannelPill } from "./channel-pill"
@@ -67,13 +69,16 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
   const parts = Math.ceil(chosen.length / maxServers)
 
   const versions = pinned && { [hit.id]: pinned.id }
+  // The results of a retry take the place of those of the servers it tried again.
+  const [earlier, setEarlier] = useState<InstallResult[]>()
+  const results = install.data && mergeResults(earlier, install.data)
 
-  function start() {
+  function start(servers = chosen.map(refOf)) {
     operation.run(
       (onStart) =>
         install.mutateAsync({
           projects: [hit.id],
-          servers: chosen.map(refOf),
+          servers,
           versions,
           onStart: (op, batch) => {
             setPart(batch + 1)
@@ -109,6 +114,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
       operation.reset()
       setSelected([])
       setPinned(undefined)
+      setEarlier(undefined)
     }
   }
 
@@ -132,6 +138,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
             onBack={() => {
               operation.reset()
               install.reset()
+              setEarlier(undefined)
             }}
           />
         ) : (
@@ -143,8 +150,8 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
                 <DialogDescription>{t("The newest release that suits each server is installed, with what it requires.")}</DialogDescription>
               </div>
             </DialogHeader>
-            {install.data ? (
-              <Results results={install.data} servers={servers} versions={versions} />
+            {results ? (
+              <Results results={results} servers={servers} versions={versions} />
             ) : suitable.length === 0 ? (
               <p className="py-4 text-sm text-muted-foreground">{t("None of your servers can run {{name}}.", { name: hit.title })}</p>
             ) : (
@@ -209,13 +216,22 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
             )}
             {install.error && <FieldError>{install.error.message}</FieldError>}
             <DialogFooter>
+              {results && (
+                <RetryButton
+                  results={results}
+                  onRetry={(failed) => {
+                    setEarlier(results)
+                    start(failed)
+                  }}
+                />
+              )}
               <DialogClose asChild>
                 <Button variant="outline" disabled={install.isPending}>
                   {install.data ? t("Done") : t("Cancel")}
                 </Button>
               </DialogClose>
               {!install.data && (
-                <Button disabled={chosen.length === 0 || install.isPending} onClick={start}>
+                <Button disabled={chosen.length === 0 || install.isPending} onClick={() => start()}>
                   {install.isPending
                     ? t("Installing…")
                     : t("Install on {{count}} servers", { count: chosen.length, defaultValue_one: "Install on {{count}} server" })}

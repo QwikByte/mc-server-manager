@@ -181,15 +181,16 @@ func (h *Handler) install(w http.ResponseWriter, r *http.Request) {
 	case len(req.Servers) == 0 || len(req.Servers) > maxServers || len(slices.Compact(slices.SortedFunc(slices.Values(req.Servers), compareRefs))) != len(req.Servers):
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose up to %d different servers.", maxServers))
 		return
-	case slices.ContainsFunc(req.Servers, func(s Ref) bool { return !grants.On(access.Plugins, s.NodeID, s.ServerID) }):
+	case !onAll(grants, access.Plugins, req.Servers):
 		httpapi.WriteError(w, r, access.Denied(access.Plugins))
 		return
 	}
 	spec := operation.Spec{
 		Kind: "plugins.install", Subject: strconv.Itoa(len(req.Servers)), Steps: []string{"plugins"}, Status: http.StatusOK,
 		Timeout: installTimeout, Category: logging.Plugins,
-		Visible: func(g access.Grants) bool {
-			return !slices.ContainsFunc(req.Servers, func(s Ref) bool { return !g.On(access.ServersView, s.NodeID, s.ServerID) })
+		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, req.Servers) },
+		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
+			return access.Plugins, onAll(g, access.Plugins, req.Servers)
 		},
 	}
 	if len(req.Servers) == 1 {
@@ -210,6 +211,11 @@ func checkProjects(projects []string) error {
 
 func compareRefs(a, b Ref) int {
 	return strings.Compare(a.NodeID+"/"+a.ServerID, b.NodeID+"/"+b.ServerID)
+}
+
+// onAll reports whether the grants allow p on all servers.
+func onAll(g access.Grants, p access.Permission, servers []Ref) bool {
+	return !slices.ContainsFunc(servers, func(s Ref) bool { return !g.On(p, s.NodeID, s.ServerID) })
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

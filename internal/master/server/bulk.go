@@ -87,12 +87,14 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 	h.ops.Run(w, r, operation.Spec{
 		Kind: "servers." + req.Action, Subject: strconv.Itoa(len(req.Servers)), Steps: []string{"servers"},
 		Status: http.StatusOK, Timeout: bulkTimeout, Category: logging.Servers,
-		Visible: func(g access.Grants) bool {
-			return !slices.ContainsFunc(req.Servers, func(s tag.Server) bool { return !g.On(access.ServersView, s.NodeID, s.ServerID) })
+		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, req.Servers) },
+		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
+			return action.need, onAll(g, action.need, req.Servers)
 		},
 	}, func(ctx context.Context) (any, error) {
 		results := make([]bulkResult, len(req.Servers))
-		operation.Each(ctx, nodes, func(i int) {
+		failed := func(i int, err error) { results[i] = bulkResult{Server: req.Servers[i], Error: httpapi.Message(err)} }
+		operation.Each(ctx, nodes, func(ctx context.Context, i int) {
 			s := req.Servers[i]
 			results[i].Server = s
 			err := h.moves.Check(s.ServerID)
@@ -103,11 +105,16 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if err != nil {
-				results[i].Error = httpapi.Message(err)
+				failed(i, err)
 			}
-		})
+		}, failed)
 		return map[string]any{"results": results}, nil
 	})
+}
+
+// onAll reports whether the grants allow p on all servers.
+func onAll(g access.Grants, p access.Permission, servers []tag.Server) bool {
+	return !slices.ContainsFunc(servers, func(s tag.Server) bool { return !g.On(p, s.NodeID, s.ServerID) })
 }
 
 // changeTags adds and removes tags of servers, all or none of them.

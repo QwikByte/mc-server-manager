@@ -1,16 +1,17 @@
-import { CheckCircleIcon, CircleIcon, CircleNotchIcon, XCircleIcon } from "@phosphor-icons/react"
+import { CheckCircleIcon, CircleIcon, CircleNotchIcon, ProhibitIcon, XCircleIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { formatElapsed } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 import { type Operation, useLiveOperation } from "./api"
+import { CancelButton } from "./cancel-button"
 import { amountOf, shareOf, stepOf } from "./labels"
 
-type StepState = "done" | "current" | "failed" | "pending"
+type StepState = "done" | "current" | "failed" | "cancelled" | "pending"
 
 function stateOf(op: Operation, i: number): StepState {
-  if (op.error && i === op.step) return "failed"
+  if (op.error && i === op.step) return op.cancelled ? "cancelled" : "failed"
   if ((op.finishedAt && !op.error) || i < op.step) return "done"
   return i === op.step && !op.finishedAt ? "current" : "pending"
 }
@@ -19,6 +20,7 @@ const icons: Record<StepState, { icon: typeof CircleIcon; className: string; lab
   done: { icon: CheckCircleIcon, className: "text-success", label: msg("Done") },
   current: { icon: CircleNotchIcon, className: "animate-spin text-primary motion-reduce:animate-none", label: msg("In progress") },
   failed: { icon: XCircleIcon, className: "text-destructive", label: msg("Failed") },
+  cancelled: { icon: ProhibitIcon, className: "text-muted-foreground", label: msg("Cancelled") },
   pending: { icon: CircleIcon, className: "text-muted-foreground/50", label: msg("To do") },
 }
 
@@ -76,7 +78,7 @@ export function OperationProgress({ op }: { op: Operation }) {
       <p className="text-xs text-muted-foreground tabular-nums">
         {op.finishedAt ? t("Took {{time}}", { time: formatElapsed(elapsed) }) : t("Running for {{time}}", { time: formatElapsed(elapsed) })}
       </p>
-      {op.error && (
+      {op.error && !op.cancelled && (
         <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/20 ring-inset">
           {op.error}
         </p>
@@ -101,13 +103,14 @@ export function OperationLine({ op }: { op: Operation }) {
   )
 }
 
-/** Shows the progress of an operation in a notification. */
+/** Shows the progress of an operation in a notification, which can cancel it. */
 export function LiveToast({ id, title }: { id: string; title: string }) {
   const op = useLiveOperation(id)
   return (
     <div className="grid w-full gap-2">
       <p className="font-medium">{title}</p>
       {op && <OperationLine op={op} />}
+      {op && <CancelButton op={op} size="sm" className="justify-self-end" />}
     </div>
   )
 }

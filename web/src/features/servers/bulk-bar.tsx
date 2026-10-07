@@ -7,6 +7,9 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
+import type { ServerRef } from "@/features/networks/api"
+import { key } from "@/features/networks/servers"
+import { retryAction } from "@/features/operations/retry"
 import { useOperation } from "@/features/operations/use-operation"
 import { type BulkAction, type NodeServer, serverKey, useBulkAction } from "./api"
 import { TagsDialog } from "./tags"
@@ -32,9 +35,12 @@ export function BulkBar({ selected, onClear }: { selected: NodeServer[]; onClear
     selected.filter((s) => (s.state !== "stopped") === actions[kind].running && can(actions[kind].permission, s.nodeId, s.id))
   const taggable = selected.filter((s) => can("servers.settings", s.nodeId, s.id))
 
-  function run(action: BulkAction) {
-    const servers = targets(action.action)
+  function run(action: BulkAction, servers = targets(action.action)) {
     const names = new Map(servers.map((s) => [serverKey(s), s.name]))
+    const retry = (failed: ServerRef[]) => {
+      const keys = new Set(failed.map(key))
+      run(action, servers.filter((s) => keys.has(serverKey(s))))
+    }
     operation.run((onStart) => bulk.mutateAsync({ ...action, servers, onStart }), {
       title: progress[action.action](servers.length),
       notify: true,
@@ -45,8 +51,9 @@ export function BulkBar({ selected, onClear }: { selected: NodeServer[]; onClear
           message: t("{{failed}} of {{count}} servers failed", { failed: failed.length, count: results.length }),
           description: failed
             .slice(0, 5)
-            .map((r) => `${names.get(`${r.nodeId}/${r.serverId}`)}: ${r.error}`)
+            .map((r) => `${names.get(key(r))}: ${r.error}`)
             .join("; "),
+          action: retryAction(results, retry),
           warning: true,
         }
       },

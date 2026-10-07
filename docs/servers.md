@@ -131,7 +131,7 @@ a view can be shared or bookmarked; where it doesn't say, the view, sort and gro
 lists and all their browsers. **Export CSV** downloads the servers as listed, with their node, network, type, version,
 port, state, tags and what running servers use, for spreadsheets. Selected servers start, restart or stop together, run
 a console command such as `save-all`, or get and lose tags; an action applies to the selected servers in a fitting state
-on which the user may do it, at most 8 at a time on each node, and the panel tells which failed.
+on which the user may do it, at most 8 at a time on each node, and the panel tells which failed and offers to try those again.
 
 Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
 keeps them; they follow a server that moves, copies get them, and they go with a deleted server. Changing them needs the

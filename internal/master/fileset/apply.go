@@ -85,6 +85,8 @@ type ApplyRequest struct {
 	// network Batch at a time.
 	Restart bool `json:"restart"`
 	Batch   int  `json:"batch"`
+	// Servers, if set, limit applying to these of its servers, e.g. to those where it failed.
+	Servers []tag.Server `json:"servers,omitempty"`
 }
 
 // target is a server that applying a set touches, as the survey found it.
@@ -172,7 +174,7 @@ func (s *Service) Preview(ctx context.Context, id string, version int64, allowed
 		p.Contents[key] = content
 		return key
 	}
-	operation.Each(ctx, nodesOf(list), func(i int) {
+	operation.Each(ctx, nodesOf(list), func(ctx context.Context, i int) {
 		t := list[i]
 		p.Servers[i] = PreviewServer{ServerStatus: t.ServerStatus, Files: []PreviewFile{}}
 		err := s.problem(t)
@@ -207,7 +209,7 @@ func (s *Service) Preview(ctx context.Context, id string, version int64, allowed
 			p.Servers[i].FirstSecrets = p.Servers[i].FirstSecrets || c.GetSecret() && written && !had
 			p.Servers[i].Files = append(p.Servers[i].Files, f)
 		}
-	})
+	}, nil)
 	return p, nil
 }
 
@@ -260,7 +262,8 @@ func (s *Service) read(ctx context.Context, ref tag.Server, path string) (string
 // Apply applies the version of a set that was previewed to the servers it is for, and takes
 // it off those it is no longer for, after allowed checked each. Moving servers and those of
 // nodes that can't be reached are left out. It can restart the running servers whose files
-// changed: the game servers of a network a few at a time, so that it stays open.
+// changed: the game servers of a network a few at a time, so that it stays open. Once it
+// restarts servers, it can't be cancelled.
 func (s *Service) Apply(ctx context.Context, id string, req ApplyRequest, allowed func(tag.Server) error) ([]Result, error) {
 	switch {
 	case req.Restart && req.Batch == 0:
@@ -272,18 +275,31 @@ func (s *Service) Apply(ctx context.Context, id string, req ApplyRequest, allowe
 	if err != nil {
 		return nil, err
 	}
+	if len(req.Servers) > 0 {
+		chosen := map[tag.Server]bool{}
+		for _, ref := range req.Servers {
+			chosen[ref] = true
+		}
+		list = slices.DeleteFunc(list, func(t target) bool { return !chosen[tag.Server{NodeID: t.NodeID, ServerID: t.ServerID}] })
+		if len(list) == 0 {
+			return nil, httpapi.Errorf(http.StatusConflict, "The file set is no longer for these servers.")
+		}
+	}
 	operation.Step(ctx, "files")
 	results := make([]Result, len(list))
-	operation.Each(ctx, nodesOf(list), func(i int) {
-		t := list[i]
+	for i, t := range list {
 		results[i] = Result{ServerStatus: t.ServerStatus, Changes: []Change{}}
+	}
+	failed := func(i int, err error) { results[i].Error = httpapi.Message(err) }
+	operation.Each(ctx, nodesOf(list), func(ctx context.Context, i int) {
+		t := list[i]
 		err := s.problem(t)
 		var changes []*noryxv1.FileSetChange
 		if err == nil {
 			changes, err = s.call(ctx, set, t, false)
 		}
 		if err != nil {
-			results[i].Error = httpapi.Message(err)
+			failed(i, err)
 		}
 		for _, c := range changes {
 			results[i].Changes = append(results[i].Changes, change(c))
@@ -292,11 +308,15 @@ func (s *Service) Apply(ctx context.Context, id string, req ApplyRequest, allowe
 				noryxv1.FileSetAction_FILE_SET_ACTION_CREATED, noryxv1.FileSetAction_FILE_SET_ACTION_CHANGED, noryxv1.FileSetAction_FILE_SET_ACTION_REMOVED,
 			}, c.GetAction())
 		}
-	})
-	if req.Restart {
-		operation.Step(ctx, "restart")
-		s.restart(ctx, sv, results, req.Batch)
+	}, failed)
+	if !req.Restart {
+		return results, nil
 	}
+	if err := operation.Keep(ctx); err != nil {
+		return results, err // nothing restarts; the results tell which servers need it
+	}
+	operation.Step(ctx, "restart")
+	s.restart(ctx, sv, results, req.Batch)
 	return results, nil
 }
 
@@ -340,7 +360,7 @@ func (s *Service) restart(ctx context.Context, sv *survey, results []Result, bat
 		nodes[i] = ref.NodeID
 	}
 	errs := make([]error, len(rest))
-	operation.Each(ctx, nodes, func(i int) {
+	operation.Each(ctx, nodes, func(ctx context.Context, i int) {
 		ctx, cancel := context.WithTimeout(ctx, restartTimeout)
 		defer cancel()
 		conn, err := s.nodes.Conn(ctx, rest[i].NodeID)
@@ -348,7 +368,7 @@ func (s *Service) restart(ctx context.Context, sv *survey, results []Result, bat
 			_, err = noryxv1.NewServerServiceClient(conn).RestartServer(ctx, &noryxv1.RestartServerRequest{Id: rest[i].ServerID})
 		}
 		errs[i] = err
-	})
+	}, nil)
 	for i, ref := range rest {
 		done([]tag.Server{ref}, errs[i])
 	}

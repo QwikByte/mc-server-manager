@@ -87,6 +87,20 @@ that neither a closed browser nor a proxy in front of the master cuts it off. Th
 Agents tell the progress of their part, e.g. the bytes of a download, through `ProgressService`; agents of older
 versions only let the panel show the steps.
 
+Operations whose steps can stop safely show **Cancel** in their dialog, notification and list: creating and copying
+servers, backing up, installing plugins, applying file sets and the actions on players and on many servers at once
+(`POST /api/operations/{id}/cancel`). The operation stops at its next step that can stop, calls to the agents stop with
+it, and it ends as **cancelled**; one that was done before it noticed ends as done. A cancelled creation or copy of a
+server leaves no server; once a new server has its modpack, it stays, as installing its plugins can't be cancelled. An
+action on many servers begins no more servers, but finishes on those it began, so that e.g. no restart is cut short and
+leaves a server stopped. Applying a file set can be cancelled while it writes the files, but not once it restarts
+servers. Restoring backups, moving servers, changing their settings or image, and the actions on networks and
+datastores can't be cancelled, as they must finish once they began. Whoever started an operation may cancel it, and so
+may others who may do the same, e.g. back up the server; for a file set, those who may change the files of all servers.
+
+Actions on many servers tell how they ended on each: installing plugins, applying a file set, and the actions on players
+and on many servers at once. **Retry the failed ones** tries the same again on the servers where it failed.
+
 ## Languages
 
 The panel speaks English and German. It follows the browser until someone chooses a language in the menu of their name

@@ -1,7 +1,8 @@
 // Package operation runs long actions of the panel in the background, e.g. creating a server,
 // which may download its image first. The panel follows their steps and progress, and learns
 // how they ended, also if the browser went away meanwhile or a proxy in front of the master
-// gave up waiting. Operations live in memory: the master shows those of the last hour.
+// gave up waiting. Operations whose steps can stop safely can be cancelled. Operations live
+// in memory: the master shows those of the last hour.
 package operation
 
 import (
@@ -48,6 +49,11 @@ type Operation struct {
 	Result     any        `json:"result,omitempty"`
 	StartedAt  time.Time  `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	// Cancellable tells that the user it is shown to may cancel it now.
+	Cancellable bool `json:"cancellable,omitempty"`
+	// Cancelled tells that it was cancelled: it stops, or it stopped before it was done.
+	// One that was done before it noticed isn't.
+	Cancelled bool `json:"cancelled,omitempty"`
 }
 
 // Spec describes an operation to start.
@@ -61,9 +67,16 @@ type Spec struct {
 	Timeout time.Duration
 	// Visible tells whether users other than the one who started it may see it.
 	Visible func(access.Grants) bool
+	// Cancel, if set, lets it be cancelled until its task calls Keep: by the user who started
+	// it, and by others whose grants it allows the request that started it, like the
+	// permission of a route. Only operations whose steps stop safely set it.
+	Cancel access.Need
 	// Category is that of its entry in the log, if it ends after the request was answered.
 	Category slog.Attr
 }
+
+// errCancelled ends the operations that were cancelled.
+var errCancelled = &httpapi.Error{Status: http.StatusConflict, Message: "The operation was cancelled.", Code: "cancelled"}
 
 // Task does the work of an operation. Its context carries the operation, to report progress.
 type Task func(ctx context.Context) (result any, err error)
@@ -76,6 +89,11 @@ type entry struct {
 	err      error
 	answered bool // the request was answered before the operation ended
 	done     chan struct{}
+	cancel   context.CancelCauseFunc
+	// mayCancel tells whether users other than the one who started it may cancel it, and
+	// which permission they lack if not; nil once nobody may.
+	mayCancel func(access.Grants) (access.Permission, bool)
+	skipped   bool // Each left servers out, as it was cancelled
 }
 
 // Operations are the operations in progress and those that ended within the last hour.
@@ -93,17 +111,21 @@ func New(quick time.Duration) *Operations { return &Operations{quick: quick} }
 // operation ends within quick, otherwise with 202 Accepted and the operation, which goes on.
 func (o *Operations) Run(w http.ResponseWriter, r *http.Request, spec Spec, task Task) {
 	user, _ := auth.UserFrom(r.Context())
+	ctx, stop := context.WithTimeout(context.WithoutCancel(r.Context()), spec.Timeout)
+	ctx, cancel := context.WithCancelCause(ctx)
 	e := &entry{
 		Operation: Operation{
 			ID: strings.ToLower(rand.Text()), Kind: spec.Kind, Subject: spec.Subject, NodeID: spec.NodeID, ServerID: spec.ServerID,
 			NetworkID: spec.NetworkID, User: user.Username, Steps: slices.Clone(spec.Steps), StartedAt: time.Now(),
 		},
-		userID: user.ID, visible: spec.Visible, category: spec.Category, done: make(chan struct{}),
+		userID: user.ID, visible: spec.Visible, category: spec.Category, done: make(chan struct{}), cancel: cancel,
+	}
+	if spec.Cancel != nil {
+		e.mayCancel = func(g access.Grants) (access.Permission, bool) { return spec.Cancel(r, g) }
 	}
 	o.add(e)
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), spec.Timeout)
 	go func() {
-		defer cancel()
+		defer stop()
 		result, err := task(context.WithValue(ctx, key{}, &reporter{o, e}))
 		o.finish(e, result, err)
 	}()
@@ -115,7 +137,7 @@ func (o *Operations) Run(w http.ResponseWriter, r *http.Request, spec Spec, task
 		}
 	}
 	o.mu.Lock()
-	finished, view := e.FinishedAt != nil, e.view()
+	finished, view := e.FinishedAt != nil, e.view(user.ID, access.From(r.Context()))
 	e.answered = !finished
 	o.mu.Unlock()
 	switch {
@@ -151,14 +173,18 @@ func (o *Operations) add(e *entry) {
 }
 
 // finish records how an operation ended, and logs it if the request was answered before.
+// One that was cancelled ends as cancelled, unless it was done before it noticed.
 func (o *Operations) finish(e *entry, result any, err error) {
 	o.mu.Lock()
 	now := time.Now()
-	e.FinishedAt, e.Result, e.err = &now, result, err
+	if e.Cancelled = e.Cancelled && (err != nil || e.skipped); e.Cancelled {
+		err = errCancelled
+	}
+	e.FinishedAt, e.Result, e.err, e.mayCancel = &now, result, err, nil
 	if err != nil {
 		e.Error = httpapi.Message(err)
 	}
-	answered := e.answered
+	answered, cancelled := e.answered, e.Cancelled
 	o.mu.Unlock()
 	close(e.done)
 	if !answered {
@@ -171,18 +197,44 @@ func (o *Operations) finish(e *entry, result any, err error) {
 	if e.ServerID != "" {
 		attrs = append(attrs, logging.KeyServer, e.ServerID)
 	}
-	if err != nil {
+	switch {
+	case cancelled:
+		slog.Info("Operation cancelled", attrs...)
+	case err != nil:
 		slog.Warn("Operation failed", append(attrs, "err", e.Error)...)
-	} else {
+	default:
 		slog.Info("Operation finished", attrs...)
 	}
 }
 
-// view returns a copy of an operation, while o.mu is held.
-func (e *entry) view() Operation {
+// view returns a copy of an operation for a user, while o.mu is held.
+func (e *entry) view(userID int64, grants access.Grants) Operation {
 	op := e.Operation
 	op.Steps = slices.Clone(e.Steps)
+	op.Cancellable = !e.Cancelled && e.checkCancel(userID, grants) == nil
 	return op
+}
+
+// sees reports whether a user sees an operation: one the user started, or one of others
+// about what the user may see.
+func (e *entry) sees(userID int64, grants access.Grants) bool {
+	return e.userID == userID || e.visible(grants)
+}
+
+// checkCancel returns why a user can't cancel an operation, or nil, while o.mu is held.
+func (e *entry) checkCancel(userID int64, grants access.Grants) error {
+	switch {
+	case e.FinishedAt != nil:
+		return httpapi.Errorf(http.StatusConflict, "The operation has ended already.")
+	case e.mayCancel == nil:
+		return httpapi.Errorf(http.StatusConflict, "The operation can't be cancelled, as what it does now must finish once it began.")
+	case e.userID == userID:
+		return nil
+	}
+	if p, ok := e.mayCancel(grants); !ok {
+		return access.Denied(p)
+	}
+	return nil
 }
 
 // List returns the operations a user may see, the newest first: those the user started,
@@ -192,11 +244,34 @@ func (o *Operations) List(userID int64, grants access.Grants) []Operation {
 	defer o.mu.Unlock()
 	ops := []Operation{}
 	for _, e := range slices.Backward(o.ops) {
-		if e.userID == userID || e.visible(grants) {
-			ops = append(ops, e.view())
+		if e.sees(userID, grants) {
+			ops = append(ops, e.view(userID, grants))
 		}
 	}
 	return ops
+}
+
+// Cancel cancels an operation that a user sees, if the user may: the user who started it,
+// or one whom its Spec allows. It stops at its next step that can stop, and calls to agents
+// stop with it; then it ends as cancelled. Cancelling it again changes nothing. The log
+// entry of ctx notes what it is.
+func (o *Operations) Cancel(ctx context.Context, id string, userID int64, grants access.Grants) (Operation, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	i := slices.IndexFunc(o.ops, func(e *entry) bool { return e.ID == id && e.sees(userID, grants) })
+	if i < 0 {
+		return Operation{}, httpapi.Errorf(http.StatusNotFound, "Operation not found.")
+	}
+	e := o.ops[i]
+	logging.Note(ctx, e.category, slog.String("kind", e.Kind), slog.String("subject", e.Subject), slog.String("started_by", e.User))
+	if err := e.checkCancel(userID, grants); err != nil {
+		return Operation{}, err
+	}
+	if !e.Cancelled {
+		e.Cancelled = true
+		e.cancel(errCancelled)
+	}
+	return e.view(userID, grants), nil
 }
 
 // CheckIdle refuses to cut off operations in progress, e.g. by restarting the master.
@@ -252,6 +327,20 @@ func Count(ctx context.Context, done, total int64, unit string) {
 	if r := from(ctx); r != nil {
 		r.update(func(op *Operation) { op.Done, op.Total, op.Unit = done, total, unit })
 	}
+}
+
+// Keep makes the rest of the operation of ctx uncancellable, as it must finish once it
+// begins, e.g. restarting servers. It fails if the operation was cancelled already.
+func Keep(ctx context.Context) error {
+	if r := from(ctx); r != nil {
+		r.o.mu.Lock()
+		defer r.o.mu.Unlock()
+		if r.e.Cancelled {
+			return errCancelled
+		}
+		r.e.mayCancel = nil
+	}
+	return nil
 }
 
 // Target names the server an operation is about once it is known, e.g. a server it created.
