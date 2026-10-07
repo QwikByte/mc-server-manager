@@ -1,6 +1,6 @@
 import { t } from "i18next"
-import type { Schedule } from "./api"
-import { locale } from "@/lib/i18n"
+import type { Schedule, Step } from "./api"
+import { locale, msg } from "@/lib/i18n"
 
 /** Weekdays in the order of the week, Monday first. */
 export const weekdays = [1, 2, 3, 4, 5, 6, 0]
@@ -12,6 +12,12 @@ export const dayName = (day: number) =>
 /** A date as YYYY-MM-DD in the panel's language, e.g. "24 Dec 2026". */
 export const formatDay = (date: string) =>
   new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(Date.parse(`${date}T00:00:00Z`))
+
+/** A time of day as HH:MM with the panel's clock, e.g. "4:30 PM" or "16:30". */
+export function formatTimeOfDay(hm: string) {
+  const [hours, minutes] = hm.split(":").map(Number)
+  return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString(locale, { timeStyle: "short" })
+}
 
 /** Today as YYYY-MM-DD in the browser's time zone. */
 export const today = () => new Date().toLocaleDateString("sv")
@@ -44,7 +50,7 @@ export function describeSchedule(s: Schedule): string {
   const days = describeDays(s, and)
   return s.times.length > 4
     ? t("{{days}}, {{count}} times a day", { days, count: s.times.length })
-    : t("{{days}} at {{times}}", { days, times: and.format(s.times) })
+    : t("{{days}} at {{times}}", { days, times: and.format(s.times.map(formatTimeOfDay)) })
 }
 
 /** Whether the dates of a schedule all passed, after which its task turned itself off. */
@@ -52,3 +58,17 @@ export const datesPassed = (s: Schedule) => !!s.dates?.length && s.dates[s.dates
 
 /** Times of day every given number of hours, starting at midnight. */
 export const everyHours = (hours: number) => Array.from({ length: 24 / hours }, (_, i) => `${String(i * hours).padStart(2, "0")}:00`)
+
+/** The actions of steps, which the master names in English. */
+const stepActions = new Set<string>([
+  msg("Back up server"),
+  msg("Restart server"),
+  msg("Stop server"),
+  msg("Start server"),
+  msg("Send console commands"),
+  msg("Update image"),
+  msg("Update plugins"),
+])
+
+/** A step as the panel tells it, e.g. "Restart server · lobby". */
+export const describeStep = (step: Step) => `${stepActions.has(step.action) ? t(step.action) : step.action} · ${step.server}`

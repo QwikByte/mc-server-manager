@@ -18,6 +18,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
@@ -167,14 +168,14 @@ func TestTargets(t *testing.T) {
 	// Tasks need targets, unless their kind does without, and can't be enabled once their dates passed.
 	s := &Service{kinds: map[string]Kind{"fake": fakeKind{}}}
 	daily := Schedule{Times: []string{"04:00"}, TimeZone: "UTC"}
-	if _, err := s.build("fake", Input{Name: "x", Schedule: daily}); err == nil {
+	if _, err := s.build("fake", Input{Name: "x", Schedule: daily}, Author{}); err == nil {
 		t.Error("a task without targets was accepted")
 	}
 	past := Schedule{Dates: []string{"2020-01-01"}, Times: []string{"04:00"}, TimeZone: "UTC"}
-	if _, err := s.build("fake", Input{Name: "x", Enabled: true, Schedule: past, Targets: []Target{{NodeID: "n1"}}}); err == nil {
+	if _, err := s.build("fake", Input{Name: "x", Enabled: true, Schedule: past, Targets: []Target{{NodeID: "n1"}}}, Author{}); err == nil {
 		t.Error("an enabled task whose dates passed was accepted")
 	}
-	if _, err := s.build("fake", Input{Name: "x", Schedule: past, Targets: []Target{{NodeID: "n1"}}}); err != nil {
+	if _, err := s.build("fake", Input{Name: "x", Schedule: past, Targets: []Target{{NodeID: "n1"}}}, Author{}); err != nil {
 		t.Errorf("a paused task whose dates passed: %v", err)
 	}
 }
@@ -187,11 +188,11 @@ func TestResolve(t *testing.T) {
 			Backends: []network.Backend{{Ref: network.Ref{NodeID: "n1", ServerID: serverA}}, {Ref: network.Ref{NodeID: "n2", ServerID: serverC}}},
 		}},
 	}
-	run := &notes{}
+	run := &journal{}
 	sel := g.resolve([]Target{{Kind: KindServer, NodeID: "n3"}, {Kind: KindServer, NodeID: "n1", ServerID: serverB}, {Kind: KindTag, Value: "lobby"}, {Kind: KindTag, Value: "gone"}}, run)
 	want := selection{"n1": {serverA: false, serverB: true}, "n2": {serverB: false}, "n3": {"": false}}
-	if !equal(sel, want) || !slices.Equal(run.list, []string{"No server has the tag gone."}) {
-		t.Fatalf("resolved %v with notes %q, want %v", sel, run.list, want)
+	if !equal(sel, want) || !slices.Equal(run.notes, []string{"No server has the tag gone."}) {
+		t.Fatalf("resolved %v with notes %q, want %v", sel, run.notes, want)
 	}
 	for role, want := range map[string]selection{
 		"":          {"n1": {proxyP: false, serverA: false}, "n2": {serverC: false}},
@@ -224,19 +225,51 @@ func equal(a, b selection) bool {
 	return true
 }
 
-// fakeKind records its runs.
+// fakeKind records its runs, and touches their servers.
 type fakeKind struct{ runs chan []string }
+
+// fakeSettings are those of a fakeKind: the permissions it needs, whether it skips its
+// servers, and whether it waits until the task is withdrawn.
+type fakeSettings struct {
+	Needs []access.Permission `json:"needs"`
+	Skip  bool                `json:"skip"`
+	Wait  bool                `json:"wait"`
+}
 
 func (fakeKind) Check(settings json.RawMessage) (json.RawMessage, error) { return settings, nil }
 func (fakeKind) Lead(json.RawMessage) time.Duration                      { return 0 }
 func (fakeKind) Category() slog.Attr                                     { return logging.System }
-func (k fakeKind) Run(ctx context.Context, _ Task, servers Servers, _ time.Time) error {
+
+func (fakeKind) Needs(raw json.RawMessage) []access.Permission {
+	var s fakeSettings
+	_ = json.Unmarshal(raw, &s)
+	return s.Needs
+}
+
+func (k fakeKind) Run(ctx context.Context, t Task, servers Servers, _ time.Time) error {
+	var s fakeSettings
+	_ = json.Unmarshal(t.Settings, &s)
+	if s.Wait {
+		k.runs <- []string{"waiting"}
+		select {
+		case <-t.Withdrawn():
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	list, err := servers(ctx)
 	names := []string{}
 	for _, srv := range list {
 		names = append(names, srv.GetName())
+		var skipped error
+		if s.Skip {
+			skipped = Skipped("Players were online.")
+		}
+		_ = srv.ReportChange(t, logging.System, "Touch server", "touched", skipped)
 	}
-	k.runs <- names
+	if !s.Wait {
+		k.runs <- names
+	}
 	return err
 }
 
@@ -332,7 +365,7 @@ func TestService(t *testing.T) {
 	db := openDB(t)
 	kind := fakeKind{make(chan []string, 1)}
 	nodes := &fakeNodes{servers: map[string][]string{"n1": {serverA}}}
-	s := NewService(db, nodes, tag.NewStore(db), fakeNetworks{}, map[string]Kind{"fake": kind}, func(string) bool { return false })
+	s := NewService(db, nodes, tag.NewStore(db), fakeNetworks{}, access.NewService(db), map[string]Kind{"fake": kind}, func(string) bool { return false })
 	if err := s.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -340,18 +373,18 @@ func TestService(t *testing.T) {
 		Name: "Nightly", Enabled: true, Settings: json.RawMessage(`{}`),
 		Schedule: Schedule{Times: []string{"04:00"}, TimeZone: "UTC"}, Targets: []Target{{NodeID: "n1"}},
 	}
-	task, err := s.Create(t.Context(), "fake", in)
+	task, err := s.Create(t.Context(), "fake", in, Author{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if task.NextRun == nil || task.NextRun.UTC().Format("15:04") != "04:00" || task.Targets[0] != (Target{Kind: KindServer, NodeID: "n1"}) {
 		t.Fatalf("created %+v", task)
 	}
-	if _, err := s.Create(t.Context(), "fake", in); err == nil {
+	if _, err := s.Create(t.Context(), "fake", in, Author{}); err == nil {
 		t.Fatal("created a second task with the same name")
 	}
 	for _, missing := range []Target{{NodeID: "missing"}, {Kind: KindNetwork, Value: serverA}} {
-		if _, err := s.Create(t.Context(), "fake", Input{Name: "Other", Schedule: in.Schedule, Targets: []Target{missing}}); err == nil {
+		if _, err := s.Create(t.Context(), "fake", Input{Name: "Other", Schedule: in.Schedule, Targets: []Target{missing}}, Author{}); err == nil {
 			t.Fatalf("created a task for %v, which doesn't exist", missing)
 		}
 	}
@@ -359,7 +392,7 @@ func TestService(t *testing.T) {
 	// A run whose task can't be read, e.g. as the master stops, is left out.
 	stopped, stop := context.WithCancel(t.Context())
 	stop()
-	s.execute(stopped, task.ID, time.Now(), "")
+	s.execute(stopped, task.ID, time.Now(), "", nil)
 	select {
 	case <-kind.runs:
 		t.Fatal("a task ran that couldn't be read")
@@ -379,10 +412,10 @@ func TestService(t *testing.T) {
 	// Tags and networks name the servers they have at each run, also those they got later.
 	// Servers of nodes that are offline fail the run.
 	in.Targets = []Target{{Kind: KindTag, Value: "lobby"}, {Kind: KindNetwork, Value: networkID, Role: RoleServers}}
-	if task, err = s.Update(t.Context(), "fake", task.ID, in); err != nil {
+	if task, err = s.Update(t.Context(), "fake", task.ID, in, Author{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RunNow(t.Context(), "fake", task.ID, "alice"); err != nil {
+	if _, err := s.RunNow(t.Context(), "fake", task.ID, Author{Name: "alice"}); err != nil {
 		t.Fatal(err)
 	}
 	if servers, task = wait(t, s, task.ID, kind.runs); len(servers) != 0 || task.LastRun.Note != "No server has the tag lobby." || task.LastRun.StartedBy != "alice" {
@@ -395,7 +428,7 @@ func TestService(t *testing.T) {
 	nodes.add("n1", serverC)
 	s.networks = fakeNetworks{{ID: networkID, Proxy: network.Ref{NodeID: "n1", ServerID: proxyP},
 		Backends: []network.Backend{{Ref: network.Ref{NodeID: "n1", ServerID: serverC}}}}}
-	if _, err := s.RunNow(t.Context(), "fake", task.ID, ""); err != nil {
+	if _, err := s.RunNow(t.Context(), "fake", task.ID, Author{}); err != nil {
 		t.Fatal(err)
 	}
 	if servers, task = wait(t, s, task.ID, kind.runs); !slices.Equal(servers, []string{serverA, serverC}) || task.LastRun.Error != "node-n2: offline" {
@@ -424,7 +457,7 @@ func TestService(t *testing.T) {
 
 	// A deleted network is no longer a target, and a task without targets says so when it runs.
 	in.Targets = []Target{{Kind: KindNetwork, Value: networkID}}
-	if _, err := s.Update(t.Context(), "fake", task.ID, in); err != nil {
+	if _, err := s.Update(t.Context(), "fake", task.ID, in, Author{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`DELETE FROM networks`); err != nil {
@@ -433,10 +466,10 @@ func TestService(t *testing.T) {
 	if task, err = s.Get(t.Context(), "fake", task.ID); err != nil || len(task.Targets) != 0 {
 		t.Fatalf("targets after deleting the network: %+v, %v", task.Targets, err)
 	}
-	if _, err := s.Update(t.Context(), "fake", task.ID, in); err == nil {
+	if _, err := s.Update(t.Context(), "fake", task.ID, in, Author{}); err == nil {
 		t.Fatal("saved a task for a deleted network")
 	}
-	if _, err := s.RunNow(t.Context(), "fake", task.ID, ""); err != nil {
+	if _, err := s.RunNow(t.Context(), "fake", task.ID, Author{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, task = wait(t, s, task.ID, kind.runs); !strings.HasPrefix(task.LastRun.Note, "It has no targets left") {
@@ -445,7 +478,7 @@ func TestService(t *testing.T) {
 
 	// Deleted servers are no longer targets, and disabled tasks aren't scheduled.
 	in.Targets, in.Enabled = []Target{{NodeID: "n1", ServerID: serverA}}, false
-	if task, err = s.Update(t.Context(), "fake", task.ID, in); err != nil || task.NextRun != nil {
+	if task, err = s.Update(t.Context(), "fake", task.ID, in, Author{}); err != nil || task.NextRun != nil {
 		t.Fatalf("disabled task: %+v, %v", task, err)
 	}
 	if err := s.Forget(t.Context(), "n1", serverA); err != nil {
@@ -464,7 +497,7 @@ func TestService(t *testing.T) {
 func TestDates(t *testing.T) {
 	db := openDB(t)
 	kind := fakeKind{make(chan []string, 1)}
-	s := NewService(db, &fakeNodes{servers: map[string][]string{"n1": {serverA}}}, tag.NewStore(db), fakeNetworks{}, map[string]Kind{"fake": kind}, func(string) bool { return false })
+	s := NewService(db, &fakeNodes{servers: map[string][]string{"n1": {serverA}}}, tag.NewStore(db), fakeNetworks{}, access.NewService(db), map[string]Kind{"fake": kind}, func(string) bool { return false })
 	passed := Schedule{Days: []time.Weekday{}, Dates: []string{"2026-01-01"}, Times: []string{"04:00"}, TimeZone: "UTC"}
 	stored, err := json.Marshal(passed)
 	if err != nil {

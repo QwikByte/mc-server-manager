@@ -288,6 +288,14 @@ beyond those that apply everywhere anyway. There is one side effect: whoever may
 include its tags, can put it under a backup job or schedule by giving it a tag that one targets, or take it out of one
 by removing the tag; the panel says so where tags are edited. Runs that a user started by hand keep the user's name in
 the history of the job or schedule, which those see who may see it.
+Schedules that back up servers first, update their images or their plugins and mods need the permissions to back up
+servers, change their settings or manage their plugins and mods too, as these would need by hand, and on all servers,
+like the permission to manage schedules: their targets of nodes, tags and networks get new servers at any time. The
+user who saves such a schedule or runs it right away needs them, checked with the permissions of the request, so an API
+token with fewer permissions can't save one. The master records who saved a schedule last, and each run checks that
+this user, unless deleted or disabled, still has them, with the user's current permissions; otherwise the run fails
+before it acts. This is the same check as on saving, repeated with the permissions of the moment, rather than one per
+server, which wouldn't allow more: no permission on some servers can let a schedule back up or update all of them.
 
 ## Terminal
 

@@ -8,7 +8,7 @@ import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/co
 import { Input } from "@/components/ui/input"
 import { formatTimeZone } from "@/lib/format"
 import type { Schedule } from "./api"
-import { dayName, describeSchedule, everyHours, formatDay, today, weekdays } from "./describe"
+import { dayName, describeSchedule, everyHours, formatDay, formatTimeOfDay, today, weekdays } from "./describe"
 
 const repeats = [1, 3, 6, 12]
 const monthDays = Array.from({ length: 31 }, (_, i) => i + 1)
@@ -140,12 +140,12 @@ function TimesField({ value, onChange }: { value: string[]; onChange: (times: st
   return (
     <FieldSet>
       <FieldLegend variant="label">{t("Times")}</FieldLegend>
-      <Chips items={value} label={(at) => at} onRemove={(at) => onChange(value.filter((x) => x !== at))} />
+      <Chips items={value} label={formatTimeOfDay} onRemove={(at) => onChange(value.filter((x) => x !== at))} />
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="time"
           aria-label={t("Time of day")}
-          className="w-32 font-mono"
+          className="w-36 font-mono"
           value={time}
           onChange={(e) => setTime(e.target.value)}
         />

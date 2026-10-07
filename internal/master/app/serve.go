@@ -146,13 +146,17 @@ func serve(ctx context.Context, cfg config) error {
 	datastores := datastore.NewStore(db, nodes, overlays)
 	networks := network.NewService(db, nodes, plugins, overlays, datastores)
 	tags := tag.NewStore(db)
-	tasks := schedule.NewService(db, nodes, tags, networks, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
+	accessService := access.NewService(db)
+	usageStore := usage.NewStore(db, nodes, conf)
+	jobs := backup.NewJobs(nodes, datastores)
+	tasks := schedule.NewService(db, nodes, tags, networks, accessService, map[string]schedule.Kind{
+		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins),
+	}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
 	updates := update.New(nodes, conf, update.Options{DataDir: cfg.dataDir})
 	go updates.Run(ctx)
-	usageStore := usage.NewStore(db, nodes, conf)
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
 	fileSets := fileset.NewService(db, nodes, networks, tags, datastores, moves)
@@ -176,7 +180,7 @@ func serve(ctx context.Context, cfg config) error {
 	httpServer := &http.Server{
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
-			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
+			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
 			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,

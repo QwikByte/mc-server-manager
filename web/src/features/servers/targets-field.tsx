@@ -34,9 +34,12 @@ export function TargetsField({ value, onChange }: { value: Target[]; onChange: (
           <li key={node.id} className="rounded-xl p-4 ring-1 ring-foreground/8">
             <label className="flex cursor-pointer items-center gap-3">
               <Checkbox checked={whole} onCheckedChange={(on) => toggle({ nodeId: node.id, serverId: "" }, on === true)} />
-              <HardDrivesIcon className="size-4 text-info" weight="duotone" />
-              <span className="text-sm font-semibold">{node.name}</span>
-              <span className="text-xs text-muted-foreground">{t("All servers, including new ones")}</span>
+              <HardDrivesIcon className="size-4 shrink-0 text-info" weight="duotone" />
+              {/* The name stays whole; the description moves below it if the line is short. */}
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <span className="text-sm font-semibold whitespace-nowrap">{node.name}</span>
+                <span className="text-xs text-muted-foreground">{t("All servers, including new ones")}</span>
+              </span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2 pl-7">
               {onNode.map((s) => (

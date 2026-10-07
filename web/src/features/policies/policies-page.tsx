@@ -23,8 +23,11 @@ function NewPolicy() {
 }
 
 /** What running a policy now does, if it disrupts players. */
-function confirmRun({ action, warnings }: PolicySettings) {
+function confirmRun({ action, warnings, condition }: PolicySettings) {
   const minutes = Math.max(...warnings)
+  if (condition && (action === "restart" || action === "stop" || action === "image")) {
+    return t("It acts on its servers once nobody plays on them.")
+  }
   if (action === "restart")
     return warnings.length > 0
       ? t("Its running servers restart in {{minutes}} minutes, after warning the players.", { minutes })
@@ -33,6 +36,7 @@ function confirmRun({ action, warnings }: PolicySettings) {
     return warnings.length > 0
       ? t("Its running servers stop in {{minutes}} minutes, after warning the players.", { minutes })
       : t("Its running servers stop right away.")
+  if (action === "image") return t("Running servers whose image changed restart right away.")
 }
 
 export function PoliciesPage() {

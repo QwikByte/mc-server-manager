@@ -82,10 +82,38 @@ Schedules rule servers at set times, on the same [targets](#targets-and-times) a
   network instead of being kicked, and the network's proxy restarts after them, if it is among the servers. Other
   servers restart at the scheduled time.
 - **Stop** and **start**, e.g. for opening hours. Stopping warns the players like restarting.
-- **Console command**, e.g. a broadcast every evening.
+- **Console commands**, e.g. a broadcast every evening: up to 20, which each game server runs one after the other.
+- **Update image**, like **Update image** in a server's settings: each server gets the newest image of its software, and
+  a running one whose image changed restarts with it.
+- **Update plugins**: the plugins and mods of each server get their newest release that suits the server, never a beta
+  or alpha, as in the **Plugins** tab; projects kept at their version and turned-off files are left alone. The servers
+  load the new files when they restart next, e.g. with a restart schedule after it.
 
-Restarts and stops only concern running servers, starts only stopped ones. The header of a server's page shows the
-active schedules that cover it, also through its tags and network.
+Restarts and stops only concern running servers, starts only stopped ones, console commands only running game servers.
+The header of a server's page shows the active schedules that cover it, also through its tags and network.
+
+**Players.** A schedule can leave servers with players alone: **Only without players** acts only on the servers without
+players at the scheduled time, and **Once the players left** waits for each server's players to leave, up to a time
+limit of 1 to 360 minutes, and then leaves the server alone. Players aren't warned then, as nobody plays on the servers
+it acts on. The counts are those of the latest measurement of the node, which also shows on the server's page; a proxy
+counts the players of its whole network, and a server whose players can't be counted, e.g. as it is just starting, is
+left alone too. Waiting doesn't hold up other schedules or backup jobs, and it ends when the schedule is paused or
+deleted; a run of the same schedule that is due meanwhile is skipped. With **Server by server in networks**, the game
+servers of a network restart whatever their players, as these move to another server of the network first; the
+network's proxy, which disconnects everyone, follows the condition with the players of the whole network.
+
+**Back up first.** A restart, stop or update can back up each server first, as a [backup job](#backups) would: with a
+selection, the files left out, a storage location and which of its backups to keep, labelled with the schedule's name.
+A server that can't be backed up is left alone, and the run fails; one without any of the selected data yet, e.g. a new
+one, goes on without a backup. With warnings, the servers are backed up while the players are warned, and the action
+comes once all are backed up, at the scheduled time at the earliest. With a condition, each server is backed up once it
+is empty, just before the action. The game servers of networks that restart server by server are all backed up before
+their network's rolling restart begins.
+
+Backing up first and updates need the permissions they need by hand, everywhere: to back up servers, to change their
+settings for images, and to manage their plugins and mods. Whoever saves the schedule or runs it right away needs them,
+and so does each run the user who saved it last; the schedule's page names this user. Once that user lost one of
+them, or was disabled or deleted, the runs fail until someone who has them saves the schedule again.
 
 ## Targets and times
 
@@ -115,5 +143,7 @@ schedules; runs it misses while it is down are skipped, and one whose last day p
 the master starts. Both can be run right away, too.
 
 The page of each job and schedule shows its latest 50 runs: when they started and how long they took, who started them
-by hand, what failed and what they left out. The **Agenda** tab of the **Automation** lists what runs now and in the
-next 7 days, day by day in your time zone.
+by hand, what failed and what they left out, and each of their steps on a server, e.g. a backup and the restart after
+it, with what it changed, e.g. the plugins it updated. A run whose steps all left their servers out, e.g. as players
+were online, counts as skipped, not failed. The card of each job and schedule lists what its last run changed. The
+**Agenda** tab of the **Automation** lists what runs now and in the next 7 days, day by day in your time zone.

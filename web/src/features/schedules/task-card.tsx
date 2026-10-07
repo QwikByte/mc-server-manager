@@ -11,8 +11,11 @@ import { Button } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/format"
 import { msg } from "@/lib/i18n"
 import type { Task, TaskApi } from "./api"
-import { datesPassed, describeSchedule } from "./describe"
+import { datesPassed, describeSchedule, describeStep } from "./describe"
 import { TargetChips } from "./targets"
+
+/** The most changes of the last run that a card lists. */
+const maxChanges = 5
 
 function taskStatus(task: Task<unknown>): Status {
   if (task.running) return { tone: "warning", label: msg("Running"), pulse: true }
@@ -48,6 +51,7 @@ export function TaskCard<S>({
   manage: boolean
 }) {
   const run = taskApi.useRunTask()
+  const changes = task.lastRun?.steps?.filter((step) => step.change) ?? []
   const remove = taskApi.useDeleteTask()
   const start = () =>
     run.mutate(task.id, {
@@ -87,6 +91,18 @@ export function TaskCard<S>({
       {task.lastRun?.note && (
         <Callout title={t("Skipped in the last run")} className="py-3">
           <span className="whitespace-pre-line">{task.lastRun.note}</span>
+        </Callout>
+      )}
+      {changes.length > 0 && (
+        <Callout tone="success" title={t("Changed in the last run")} className="py-3">
+          <ul className="space-y-1 break-words">
+            {changes.slice(0, maxChanges).map((step) => (
+              <li key={`${step.node}/${step.server}/${step.action}`}>
+                <span className="font-medium">{describeStep(step)}</span>: {step.change}
+              </li>
+            ))}
+            {changes.length > maxChanges && <li>{t("and {{count}} more", { count: changes.length - maxChanges })}</li>}
+          </ul>
         </Callout>
       )}
       <p className="text-xs text-muted-foreground">

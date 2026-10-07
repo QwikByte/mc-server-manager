@@ -1,7 +1,6 @@
 package schedule
 
 import (
-	"cmp"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -14,14 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
 const (
 	maxTargets = 200
-	// maxRuns is how many runs of a task are kept.
-	maxRuns = 50
 
 	// Kinds of targets.
 	KindServer  = "server" // a server, or all servers of a node
@@ -30,10 +28,6 @@ const (
 	// Roles of the servers of a network that a target names; empty names all of them.
 	RoleServers = "servers"
 	RoleProxy   = "proxy"
-
-	// Outcomes of runs.
-	Succeeded = "succeeded"
-	Failed    = "failed"
 )
 
 var (
@@ -56,7 +50,33 @@ type Task struct {
 	NextRun   *time.Time `json:"nextRun,omitempty"`
 	Running   bool       `json:"running"`
 	CreatedAt time.Time  `json:"createdAt"`
+	// SavedBy is the user who saved the task last, whose permissions its runs need if its
+	// settings need more than the one to manage it, see Needing.
+	SavedBy   string `json:"savedBy,omitempty"`
 	kind      string
+	author    int64 // the ID of SavedBy, 0 if the user was deleted or is disabled
+	withdrawn <-chan struct{}
+}
+
+// Withdrawn is closed during a run once the task is deleted, or paused while it was enabled,
+// so that the run stops waiting, e.g. for players to leave.
+func (t Task) Withdrawn() <-chan struct{} { return t.withdrawn }
+
+// Author is the user who saves a task or runs it by hand, with the permissions of the request.
+type Author struct {
+	ID     int64
+	Name   string
+	Grants access.Grants
+}
+
+// allowed checks that the author has the permissions everywhere.
+func (a Author) allowed(perms []access.Permission) error {
+	for _, p := range perms {
+		if !a.Grants.Has(p) {
+			return access.Denied(p)
+		}
+	}
+	return nil
 }
 
 // Target names servers of a task: a server, all servers of a node (without ServerID), those
@@ -71,20 +91,6 @@ type Target struct {
 	Value string `json:"value,omitempty"`
 	// Role chooses the game servers or the proxy of a network; empty is all its servers.
 	Role string `json:"role,omitempty"`
-}
-
-// Run is a run of a task.
-type Run struct {
-	ID        int64     `json:"id"`
-	StartedAt time.Time `json:"startedAt"`
-	EndedAt   time.Time `json:"endedAt"`
-	// StartedBy is the user who started the run by hand; empty for its schedule.
-	StartedBy string `json:"startedBy,omitempty"`
-	// Outcome is succeeded or failed.
-	Outcome string `json:"outcome"`
-	Error   string `json:"error,omitempty"`
-	// Note tells what the run left out, e.g. servers without data to back up.
-	Note string `json:"note,omitempty"`
 }
 
 // Input is a new or changed task.
@@ -124,53 +130,41 @@ func (s *Service) Covering(ctx context.Context, kind string, srv tag.Server) ([]
 	return slices.DeleteFunc(tasks, func(t Task) bool { return !g.resolve(t.Targets, nil).covers(srv) }), nil
 }
 
-// Runs returns the kept runs of a task, newest first.
-func (s *Service) Runs(ctx context.Context, kind, id string) ([]Run, error) {
-	var exists bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ? AND kind = ?)`, id, kind).Scan(&exists); err != nil || !exists {
-		return nil, cmp.Or(err, errNotFound)
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+runColumns+` FROM task_runs r WHERE task_id = ? ORDER BY id DESC`, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	runs := []Run{}
-	for rows.Next() {
-		var r runRow
-		if err := rows.Scan(r.dest()...); err != nil {
-			return nil, err
-		}
-		runs = append(runs, *r.run())
-	}
-	return runs, rows.Err()
-}
-
-func (s *Service) Create(ctx context.Context, kind string, in Input) (Task, error) {
-	t, err := s.build(kind, in)
+// Create creates a task, which its author saved last.
+func (s *Service) Create(ctx context.Context, kind string, in Input, by Author) (Task, error) {
+	t, err := s.build(kind, in, by)
 	if err != nil {
 		return t, err
 	}
 	t.ID, t.CreatedAt = strings.ToLower(rand.Text()), time.Now()
 	return s.save(ctx, t, func(tx *sql.Tx, schedule, settings []byte) (sql.Result, error) {
-		return tx.ExecContext(ctx, `INSERT INTO tasks (id, kind, name, enabled, schedule, settings, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			t.ID, kind, t.Name, t.Enabled, schedule, settings, t.CreatedAt.Unix())
+		return tx.ExecContext(ctx, `INSERT INTO tasks (id, kind, name, enabled, schedule, settings, created_at, saved_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			t.ID, kind, t.Name, t.Enabled, schedule, settings, t.CreatedAt.Unix(), user(by))
 	})
 }
 
-func (s *Service) Update(ctx context.Context, kind, id string, in Input) (Task, error) {
-	t, err := s.build(kind, in)
+// Update changes a task, which its author saved last then.
+func (s *Service) Update(ctx context.Context, kind, id string, in Input, by Author) (Task, error) {
+	t, err := s.build(kind, in, by)
 	if err != nil {
 		return t, err
 	}
 	t.ID = id
 	return s.save(ctx, t, func(tx *sql.Tx, schedule, settings []byte) (sql.Result, error) {
-		return tx.ExecContext(ctx, `UPDATE tasks SET name = ?, enabled = ?, schedule = ?, settings = ? WHERE id = ? AND kind = ?`,
-			t.Name, t.Enabled, schedule, settings, id, kind)
+		return tx.ExecContext(ctx, `UPDATE tasks SET name = ?, enabled = ?, schedule = ?, settings = ?, saved_by = ? WHERE id = ? AND kind = ?`,
+			t.Name, t.Enabled, schedule, settings, user(by), id, kind)
 	})
 }
 
-// Delete removes a task. A run in progress finishes.
+// user is the ID of an author in the database, NULL for none, e.g. in tests.
+func user(by Author) any {
+	if by.ID == 0 {
+		return nil
+	}
+	return by.ID
+}
+
+// Delete removes a task. A run in progress finishes, but stops waiting.
 func (s *Service) Delete(ctx context.Context, kind, id string) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM tasks WHERE id = ? AND kind = ?`, id, kind)
 	if err != nil {
@@ -179,6 +173,9 @@ func (s *Service) Delete(ctx context.Context, kind, id string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return errNotFound
 	}
+	s.mu.Lock()
+	s.withdraw(id)
+	s.mu.Unlock()
 	s.plan(Task{ID: id}) // disabled, so it is no longer scheduled
 	return nil
 }
@@ -195,8 +192,9 @@ func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
 	return err
 }
 
-// build validates a task and lets its kind check its settings.
-func (s *Service) build(kind string, in Input) (Task, error) {
+// build validates a task and lets its kind check its settings, which its author needs the
+// permissions for.
+func (s *Service) build(kind string, in Input, by Author) (Task, error) {
 	t := Task{Name: strings.TrimSpace(in.Name), Enabled: in.Enabled, Schedule: in.Schedule, kind: kind}
 	k, ok := s.kinds[kind]
 	if !ok {
@@ -217,7 +215,9 @@ func (s *Service) build(kind string, in Input) (Task, error) {
 	case len(t.Targets) == 0 && (optional == nil || !optional.TargetsOptional(in.Settings)):
 		return t, errTargets
 	}
-	t.Settings, err = k.Check(in.Settings)
+	if t.Settings, err = k.Check(in.Settings); err == nil {
+		err = by.allowed(needs(k, t.Settings))
+	}
 	return t, err
 }
 
@@ -321,37 +321,17 @@ func constraint(err error, name string) error {
 	return err
 }
 
-// runColumns are the columns of a run in task_runs r, which runRow reads.
-const runColumns = "r.id, r.started_at, r.ended_at, r.started_by, r.outcome, r.error, r.note"
-
-// runRow reads a run, which may be missing, e.g. for a task that never ran.
-type runRow struct {
-	id, started, ended         sql.NullInt64
-	by, outcome, errMsg, notes sql.NullString
-}
-
-func (r *runRow) dest() []any {
-	return []any{&r.id, &r.started, &r.ended, &r.by, &r.outcome, &r.errMsg, &r.notes}
-}
-
-func (r *runRow) run() *Run {
-	if !r.id.Valid {
-		return nil
-	}
-	return &Run{
-		ID: r.id.Int64, StartedAt: time.Unix(r.started.Int64, 0), EndedAt: time.Unix(r.ended.Int64, 0),
-		StartedBy: r.by.String, Outcome: r.outcome.String, Error: r.errMsg.String, Note: r.notes.String,
-	}
-}
-
 // load reads the tasks of a kind, or one of them if id isn't empty, with their latest runs.
 func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 	// A run records its outcome before it ends, so reading which tasks run first ensures
 	// that a task that isn't running shows the outcome of its latest run.
 	running := s.runningTasks()
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT t.id, t.kind, t.name, t.enabled, t.schedule, t.settings, t.created_at, `+runColumns+`
-		FROM tasks t LEFT JOIN task_runs r ON r.id = (SELECT max(id) FROM task_runs WHERE task_id = t.id)
+		SELECT t.id, t.kind, t.name, t.enabled, t.schedule, t.settings, t.created_at,
+			coalesce(u.username, ''), iif(u.disabled, 0, coalesce(u.id, 0)), `+runColumns+`
+		FROM tasks t
+		LEFT JOIN users u ON u.id = t.saved_by
+		LEFT JOIN task_runs r ON r.id = (SELECT max(id) FROM task_runs WHERE task_id = t.id)
 		WHERE ? IN ('', t.kind) AND ? IN ('', t.id) ORDER BY t.name`, kind, id)
 	if err != nil {
 		return nil, err
@@ -364,13 +344,17 @@ func (s *Service) load(ctx context.Context, kind, id string) ([]Task, error) {
 		var schedule, settings string
 		var createdAt int64
 		var last runRow
-		if err := rows.Scan(append([]any{&t.ID, &t.kind, &t.Name, &t.Enabled, &schedule, &settings, &createdAt}, last.dest()...)...); err != nil {
+		dest := append([]any{&t.ID, &t.kind, &t.Name, &t.Enabled, &schedule, &settings, &createdAt, &t.SavedBy, &t.author}, last.dest()...)
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(schedule), &t.Schedule); err != nil {
 			return nil, err
 		}
-		t.Settings, t.CreatedAt, t.LastRun = json.RawMessage(settings), time.Unix(createdAt, 0), last.run()
+		t.Settings, t.CreatedAt = json.RawMessage(settings), time.Unix(createdAt, 0)
+		if t.LastRun, err = last.run(); err != nil {
+			return nil, err
+		}
 		t.NextRun, t.Running = s.nextRun(t.ID), running[t.ID]
 		index[t.ID] = len(tasks)
 		tasks = append(tasks, t)
