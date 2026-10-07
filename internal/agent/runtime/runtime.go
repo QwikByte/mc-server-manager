@@ -260,13 +260,16 @@ func PauseSaving(ctx context.Context, rt Runtime, srv Server) (resume func(), er
 		return func() {}, nil
 	}
 	progress.Step(ctx, "save", 0)
-	if _, err := rt.SendCommand(ctx, srv.ID, "save-off"); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNotReady, err)
-	}
 	resume = func() {
 		if _, err := rt.SendCommand(context.WithoutCancel(ctx), srv.ID, "save-on"); err != nil {
 			slog.Warn("Can't turn saving on again", logging.Servers, logging.KeyServer, srv.ID, "err", err)
 		}
+	}
+	if _, err := rt.SendCommand(ctx, srv.ID, "save-off"); err != nil {
+		if ctx.Err() != nil {
+			resume() // the server may have got it before the call was cancelled
+		}
+		return nil, fmt.Errorf("%w: %w", ErrNotReady, err)
 	}
 	if _, err := rt.SendCommand(ctx, srv.ID, "save-all flush"); err != nil {
 		resume()
