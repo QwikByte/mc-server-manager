@@ -107,9 +107,14 @@ export function useSettings() {
     mutationFn: (change: Settings) => api<Preferences>("/preferences/settings", { method: "PATCH", body: change }),
     onMutate: async (change) => {
       await queryClient.cancelQueries({ queryKey: key })
+      // What the change replaces comes back if it fails, before the panel applies it, e.g. reloads for another clock.
+      const settings = queryClient.getQueryData(key)?.settings ?? {}
+      const before: Settings = Object.fromEntries(Object.keys(change).map((k) => [k, settings[k as keyof Settings]]))
       queryClient.setQueryData(key, (p) => p && { ...p, settings: { ...p.settings, ...change } })
+      return { before }
     },
-    onError: (error) => {
+    onError: (error, _, context) => {
+      if (context) queryClient.setQueryData(key, (p) => p && { ...p, settings: { ...p.settings, ...context.before } })
       toast.error(error.message)
       void queryClient.invalidateQueries({ queryKey: key })
     },
