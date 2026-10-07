@@ -27,6 +27,9 @@ export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })
 }
 
+/** Formats an IANA time zone as people read it, e.g. "America/New York"; empty is UTC. */
+export const formatTimeZone = (zone: string) => (zone || "UTC").replaceAll("_", " ")
+
 /** Formats a duration in its largest whole unit in the viewer's locale, e.g. "3 days" or "5 minutes". */
 export function formatDuration(ms: number): string {
   const units = [

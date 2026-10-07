@@ -14,11 +14,11 @@ pauses saving while they are archived, so players stay connected.
 - **By hand.** The **Backups** tab of a server backs it up now, e.g. before an update, and lists, downloads, restores
   and deletes its backups.
 - **Jobs.** The **Backups** page schedules backup jobs for servers or whole nodes (including servers created later): on
-  chosen weekdays at one or more times of day in a time zone. A job keeps the newest backups per server and deletes
-  older ones; backups made by hand are never deleted that way. A job backs up one server per node at a time, and skips
-  servers without any of the selected data yet, e.g. new ones that never started: its last run lists them. A job can
-  also back up [datastores](databases.md) with all their databases, also without any server, one at a time per node
-  together with the servers there.
+  chosen weekdays at one or more times of day in a time zone, which a search finds by name or offset. A job keeps the
+  newest backups per server and deletes older ones; backups made by hand are never deleted that way. A job backs up one
+  server per node at a time, and skips servers without any of the selected data yet, e.g. new ones that never started:
+  its last run lists them. A job can also back up [datastores](databases.md) with all their databases, also without any
+  server, one at a time per node together with the servers there.
 - **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds and
   leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
   stopped while the files are swapped, and started again afterwards.

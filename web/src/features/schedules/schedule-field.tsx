@@ -1,14 +1,14 @@
 import { PlusIcon, XIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { useState } from "react"
+import { TimeZonePicker } from "@/components/time-zone-picker"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { formatTimeZone } from "@/lib/format"
 import type { Schedule } from "./api"
 import { dayName, describeSchedule, everyHours, weekdays } from "./describe"
 
-const timeZones = [...new Set(["UTC", ...Intl.supportedValuesOf("timeZone")])]
 const repeats = [1, 3, 6, 12]
 
 /** Edits when a task runs: the weekdays, the times of day and the time zone. */
@@ -90,20 +90,15 @@ export function ScheduleField({ value, onChange }: { value: Schedule; onChange: 
       </FieldSet>
       <Field>
         <FieldLabel htmlFor="schedule-zone">{t("Time zone")}</FieldLabel>
-        <Select value={value.timeZone} onValueChange={(timeZone) => set({ timeZone })}>
-          <SelectTrigger id="schedule-zone" className="w-full sm:w-72">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {timeZones.map((zone) => (
-              <SelectItem key={zone} value={zone}>
-                {zone.replaceAll("_", " ")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* The picker gives UTC as an empty zone, schedules need its name. */}
+        <TimeZonePicker
+          id="schedule-zone"
+          value={value.timeZone}
+          onChange={(zone) => set({ timeZone: zone || "UTC" })}
+          className="w-full sm:w-72"
+        />
         <FieldDescription>
-          {t("{{schedule}}, {{zone}} time.", { schedule: describeSchedule(value), zone: value.timeZone.replaceAll("_", " ") })}
+          {t("{{schedule}}, {{zone}} time.", { schedule: describeSchedule(value), zone: formatTimeZone(value.timeZone) })}
         </FieldDescription>
       </Field>
     </>
