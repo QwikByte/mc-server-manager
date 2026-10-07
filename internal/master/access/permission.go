@@ -99,7 +99,7 @@ var Catalog = []Area{
 		scoped(NodesView, "See nodes", "Their machines, agents and storage locations."),
 		scoped(NodesEdit, "Change nodes", "Name, agent address, default storage, port range and memory limit.", NodesView),
 		scoped(NodesCertificates, "Renew certificates", "Renew the certificate of a node before it is due.", NodesView),
-		scoped(NodesDelete, "Remove nodes", "The panel stops managing them; their servers keep running.", NodesView),
+		scoped(NodesDelete, "Remove nodes", "The panel stops managing them; their servers keep running. Taking their servers out of networks first also needs the permission to manage networks.", NodesView),
 		scoped(NodesEnroll, "Add nodes", "Add nodes and create join tokens for agents. Only in groups for all servers, as new nodes are outside other scopes.", NodesView),
 		global(OverlayManage, "Manage the private network", "Add nodes whose administrator allowed it to the private network of the nodes, remove them and rotate their keys, on the pages of the nodes one may see. Applies to all nodes, as members reach the ports of the others."),
 	}},
