@@ -6,13 +6,19 @@ How the admin panel is organised, and what works the same on all of its pages.
 
 The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use, the
 networks, the servers with the most players, and what needs attention: crashing and unhealthy servers, offline nodes,
-nodes with more memory assigned than they can give or almost full storage, and proxies that are stopped while their
-servers run. It counts like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned
-against what the online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
+nodes with more memory assigned than they can give or almost full storage, nodes whose certificate expires within two
+weeks, proxies that are stopped while their servers run, and backup jobs and schedules whose last run failed. It counts
+like the **Nodes** page: servers that run, not those that start or crash, and the memory assigned against what the
+online nodes can give their servers, after the reserve. Sizes are in binary units (MiB, GiB).
+
+A node's certificate is renewed a month before it expires while the node is online; one that stays offline until then
+has to be connected again with a new join token. The master remembers the expiry of an offline node's certificate as
+long as it runs; after a restart it learns it again once the node is online.
 
 The Overview is made of widgets: key figures, what needs attention, the nodes with their CPU of the last 24 hours, the
 load of all nodes over the last 24 hours, pinned servers, networks, the servers with the most players, the latest
-entries of the log and quick actions to create a server or a network or add a node. Each user only gets the widgets
+entries of the log, the next runs of backup jobs and schedules with those whose last run failed first, and quick
+actions to create a server or a network or add a node. Each user only gets the widgets
 their permissions allow. **Customize** arranges them: widgets are dragged by their handle to the place of another, or
 moved a place with the arrow keys on it, span one, two or all three columns, and are hidden and added again; **Reset**
 brings back the default layout. The master keeps the layout for each user, like the language, so it applies in all their

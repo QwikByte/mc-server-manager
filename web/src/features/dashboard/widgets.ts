@@ -1,4 +1,5 @@
 import {
+  CalendarCheckIcon,
   ChartBarIcon,
   ChartLineIcon,
   GraphIcon,
@@ -19,6 +20,7 @@ import { Figures } from "./figures"
 import { Attention, Networks, Nodes, Pinned, TopServers } from "./lists"
 import { QuickActions } from "./quick-actions"
 import { Resources } from "./resources"
+import { Schedules } from "./schedules"
 
 export interface WidgetDef {
   id: string
@@ -63,6 +65,14 @@ export const widgets: WidgetDef[] = [
     columns: 2,
     visible: (a) => a.canSomewhere("logs.view"),
     Component: RecentActivity,
+  },
+  {
+    id: "schedules",
+    title: msg("Schedules"),
+    icon: CalendarCheckIcon,
+    columns: 1,
+    visible: (a) => a.can("backupjobs.view") || a.can("policies.view"),
+    Component: Schedules,
   },
   {
     id: "actions",

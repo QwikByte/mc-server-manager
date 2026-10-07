@@ -100,8 +100,11 @@ type Service struct {
 	conns map[string]*grpc.ClientConn
 	// gen counts the changes and removals of connections, so that Conn doesn't store a
 	// connection to a node that changed while it was loaded.
-	gen     uint64
-	renewMu sync.Mutex // one certificate renewal at a time
+	gen uint64
+	// expiries are when the certificates the nodes last presented expire, so that they are
+	// known while a node is offline. The master forgets them when it restarts.
+	expiries map[string]time.Time
+	renewMu  sync.Mutex // one certificate renewal at a time
 	// enrolls throttles enrollments per client, as anyone who reaches the endpoint may try.
 	enrolls *ratelimit.Limiter
 }
@@ -111,7 +114,7 @@ const enrollBurst, enrollEvery = 5, 12 * time.Second
 
 func NewService(db *sql.DB, ca *pki.CA, cert *pki.Holder, config Config) *Service {
 	return &Service{
-		db: db, ca: ca, cert: cert, config: config, conns: make(map[string]*grpc.ClientConn),
+		db: db, ca: ca, cert: cert, config: config, conns: make(map[string]*grpc.ClientConn), expiries: map[string]time.Time{},
 		enrolls: ratelimit.New(enrollBurst, enrollEvery),
 	}
 }
@@ -300,6 +303,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		conn.Close()
 		delete(s.conns, id)
 	}
+	delete(s.expiries, id)
 	return err
 }
 

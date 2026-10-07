@@ -6,7 +6,8 @@ import { type Node, memoryCapacityMb } from "@/features/nodes/api"
 import type { Overlay } from "@/features/overlay/api"
 import { assignedMemoryMb, type NodeServer } from "@/features/servers/api"
 import type { useUsages } from "@/features/usage/api"
-import { formatMegabytes } from "@/lib/format"
+import { formatAgo, formatDate, formatMegabytes } from "@/lib/format"
+import { type AutomationTask, failed } from "./tasks"
 
 /** Something that needs an operator, with where to look into it. */
 export interface Problem {
@@ -19,11 +20,17 @@ export interface Problem {
     | { to: "/nodes/$nodeId"; params: { nodeId: string } }
     | { to: "/networks/$networkId"; params: { networkId: string } }
     | { to: "/networks/$networkId/databases"; params: { networkId: string } }
+    | AutomationTask["link"]
 }
 
 const full = 0.9
+/** How long before its certificate expires a node is listed. */
+const expiring = 14 * 86_400_000
 
-/** What needs attention across nodes, servers, networks and the private network of the nodes, the most urgent first. */
+/**
+ * What needs attention across nodes, servers, networks, the private network of the nodes, and backup jobs and schedules,
+ * the most urgent first.
+ */
 export function problemsOf(
   nodes: Node[],
   servers: NodeServer[],
@@ -31,6 +38,7 @@ export function problemsOf(
   usages: ReturnType<typeof useUsages>,
   overlay?: Overlay,
   datastores: Datastore[] = [],
+  tasks: AutomationTask[] = [],
 ): Problem[] {
   const problems: Problem[] = []
   const add = (p: Problem) => problems.push(p)
@@ -83,6 +91,28 @@ export function problemsOf(
   }
   for (const n of nodes) {
     const link = { to: "/nodes/$nodeId", params: { nodeId: n.id } } as const
+    // The master renews certificates of online nodes a month before they expire; an offline node has to be enrolled
+    // again once its certificate expired.
+    const left = n.certificateExpiresAt ? Date.parse(n.certificateExpiresAt) - Date.now() : Infinity
+    if (left < expiring) {
+      add({
+        key: `certificate/${n.id}`,
+        tone: left < 0 || n.status === "offline" ? "destructive" : "warning",
+        title:
+          left < 0
+            ? t("The certificate of {{name}} expired", { name: n.name })
+            : t("The certificate of {{name}} expires {{when}}", { name: n.name, when: formatAgo(n.certificateExpiresAt!) }),
+        detail:
+          left < 0
+            ? t("Connect it again with a new join token.")
+            : n.status === "offline"
+              ? t("Bring it online before {{date}}, or it has to be connected again with a new join token.", {
+                  date: formatDate(n.certificateExpiresAt!),
+                })
+              : t("Renew it on the node's page."),
+        link,
+      })
+    }
     if (n.status === "offline") {
       add({
         key: `offline/${n.id}`,
@@ -183,6 +213,15 @@ export function problemsOf(
         link,
       })
     }
+  }
+  for (const { task, link } of tasks.filter((a) => failed(a.task))) {
+    add({
+      key: `task/${link.to}/${task.id}`,
+      tone: "warning",
+      title: t("The last run of {{name}} failed", { name: task.name }),
+      detail: [formatAgo(task.lastRun!.at), task.lastRun!.error].join(" · "),
+      link,
+    })
   }
   // Offline nodes are a problem of their own.
   const nameOf = (id: string) => nodes.find((n) => n.id === id)?.name ?? id

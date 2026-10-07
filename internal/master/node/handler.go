@@ -78,9 +78,10 @@ type storageLocation struct {
 }
 
 // conceal leaves out what only users who may see the node get: where the master reaches
-// it, its system and agent, and where it keeps data. Using its servers doesn't need them.
+// it, its system, agent and certificate, and where it keeps data. Using its servers doesn't
+// need them.
 func (v *view) conceal() {
-	v.Address = ""
+	v.Address, v.CertificateExpiresAt = "", nil
 	if v.Info != nil {
 		v.Info.AgentVersion, v.Info.Hostname, v.Info.OS, v.Info.Runtime = "", "", "", ""
 		for i := range v.Info.Storage {
@@ -107,7 +108,12 @@ func (h *Handler) probe(ctx context.Context, n Node) view {
 	v.Status = "offline"
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
-	res, cert, err := h.svc.Status(ctx, n.ID)
+	res, _, err := h.svc.Status(ctx, n.ID)
+	// An offline node has to be enrolled again once its certificate expires, so its expiry
+	// stays known.
+	if expiry, ok := h.svc.CertificateExpiry(n.ID); ok {
+		v.CertificateExpiresAt = &expiry
+	}
 	if err != nil {
 		return v
 	}
@@ -116,7 +122,6 @@ func (h *Handler) probe(ctx context.Context, n Node) view {
 	for _, l := range res.GetStorage() {
 		v.Info.Storage = append(v.Info.Storage, storageLocation{l.GetName(), l.GetPath(), l.GetFreeBytes(), l.GetTotalBytes()})
 	}
-	v.CertificateExpiresAt = &cert.NotAfter
 	return v
 }
 

@@ -15,7 +15,7 @@ export function Panel({
 }: {
   title: string
   count?: number
-  more?: { to: "/nodes" | "/networks" | "/servers" | "/logs"; label: string }
+  more?: { to: "/nodes" | "/networks" | "/servers" | "/logs" | "/backups" | "/policies"; label: string }
   actions?: ReactNode
   children: ReactNode
 }) {

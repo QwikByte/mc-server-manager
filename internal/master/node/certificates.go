@@ -23,7 +23,7 @@ const (
 )
 
 // Status asks the agent for its machine info. It also returns the certificate the
-// agent presented, whose expiry drives the automatic renewal.
+// agent presented, whose expiry drives the automatic renewal, and remembers its expiry.
 func (s *Service) Status(ctx context.Context, id string) (*noryxv1.GetInfoResponse, *x509.Certificate, error) {
 	conn, err := s.Conn(ctx, id)
 	if err != nil {
@@ -38,7 +38,28 @@ func (s *Service) Status(ctx context.Context, id string) (*noryxv1.GetInfoRespon
 	if !ok || len(tlsInfo.State.PeerCertificates) == 0 {
 		return nil, nil, errors.New("the agent presented no certificate")
 	}
-	return info, tlsInfo.State.PeerCertificates[0], nil
+	cert := tlsInfo.State.PeerCertificates[0]
+	s.seen(id, cert)
+	return info, cert, nil
+}
+
+// CertificateExpiry returns when the certificate a node last presented expires, also while
+// the node is offline, unless the master didn't reach it since it started.
+func (s *Service) CertificateExpiry(id string) (time.Time, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	expiry, ok := s.expiries[id]
+	return expiry, ok
+}
+
+// seen remembers when a certificate of a node expires. Newer certificates expire later, so
+// a call that started before a renewal can't bring back the old expiry.
+func (s *Service) seen(id string, cert *x509.Certificate) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cert.NotAfter.After(s.expiries[id]) {
+		s.expiries[id] = cert.NotAfter
+	}
 }
 
 // RenewCertificate replaces the certificate of a node. The agent creates the new key,
@@ -65,7 +86,11 @@ func (s *Service) RenewCertificate(ctx context.Context, id string) (*x509.Certif
 	// TLS checks certificates only when connecting, so a fresh connection is needed
 	// to see the new one.
 	s.retire(id)
-	return x509.ParseCertificate(der)
+	cert, err := x509.ParseCertificate(der)
+	if err == nil {
+		s.seen(id, cert)
+	}
+	return cert, err
 }
 
 // MaintainCertificates renews every node certificate once less than a third of its
