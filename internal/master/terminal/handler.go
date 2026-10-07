@@ -13,6 +13,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
 
 	"github.com/spf13/cobra"
@@ -32,7 +34,13 @@ import (
 // MasterTarget is the target of the master's own commands; other targets are node IDs.
 const MasterTarget = "master"
 
-const maxCommandLen = 1000
+const (
+	maxCommandLen = 1000
+	// keepAlive is how often a running command sends an empty line, so that a reverse proxy
+	// in front of the master, which waits 60 seconds for data by default, doesn't give up on
+	// one that writes nothing, e.g. a stop that takes the server's stop timeout.
+	keepAlive = 20 * time.Second
+)
 
 // Nodes provides the nodes and the connections to their agents.
 type Nodes interface {
@@ -69,8 +77,8 @@ func (h *Handler) Register(mux access.Mux) {
 }
 
 // run runs a command line on a target and streams its output as JSON lines: {"output": …}
-// whenever the command writes, and finally {"done": true}, with "error" if it failed.
-// Cancelling the request stops the command, e.g. one that follows a console.
+// whenever the command writes, {} every keepAlive, and finally {"done": true}, with "error"
+// if it failed. Cancelling the request stops the command, e.g. one that follows a console.
 func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Target  string `json:"target"`
@@ -106,7 +114,9 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(out)
 	root.SetErr(out)
+	stop := out.keepAlive(keepAlive)
 	err = root.ExecuteContext(r.Context())
+	stop()
 	done := event{Done: true}
 	if err != nil {
 		done.Error = err.Error()
@@ -115,7 +125,7 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 		}
 		logging.Note(r.Context(), slog.String("err", done.Error))
 	}
-	out.send(done)
+	_ = out.send(done) // fails only if the browser went away
 }
 
 func parse(line string) ([]string, error) {
@@ -165,21 +175,46 @@ type event struct {
 
 // events sends the output of a command to the browser as soon as it is written.
 type events struct {
+	mu      sync.Mutex
 	enc     *json.Encoder
 	flusher *http.ResponseController
 	err     error // the first error, after which nothing is sent anymore
 }
 
 func (e *events) Write(p []byte) (int, error) {
-	e.send(event{Output: string(p)})
-	return len(p), e.err
+	return len(p), e.send(event{Output: string(p)})
 }
 
-func (e *events) send(ev event) {
+func (e *events) send(ev event) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.err == nil {
 		e.err = e.enc.Encode(ev)
 	}
 	if e.err == nil {
 		e.err = e.flusher.Flush()
+	}
+	return e.err
+}
+
+// keepAlive sends an empty event every interval until stop is called, which returns once it
+// sends no more.
+func (e *events) keepAlive(interval time.Duration) (stop func()) {
+	ticker, done, stopped := time.NewTicker(interval), make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(stopped)
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				_ = e.send(event{})
+			}
+		}
+	}()
+	return func() {
+		ticker.Stop()
+		close(done)
+		<-stopped
 	}
 }

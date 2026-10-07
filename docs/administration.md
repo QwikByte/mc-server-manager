@@ -36,7 +36,9 @@ Administrators update an agent that is older than the master there with **Update
 
 The **Terminal** runs the commands of `noryx-agent` (`status`, `server …`, `backup …`, `datastore …`) on any node, and
 the master's own commands: `status`, `node list`, `node renew <node>` and `logs`. `help` lists them; output streams in
-as it happens, e.g. for `server logs <id>`, and Ctrl+C stops a command. A node's page opens its terminal directly.
+as it happens, e.g. for `server logs <id>`, and Ctrl+C stops a command. Commands that write nothing for a while, e.g.
+`server stop <id>` with a long stop timeout, keep the connection alive, so that a reverse proxy in front of the master
+doesn't cut them off. A node's page opens its terminal directly.
 Besides the permission to use the terminal, every command needs its own, e.g. `server restart <id>` the one to restart
 this server.
 
