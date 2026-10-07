@@ -1,5 +1,6 @@
 // Package tag keeps the tags of servers, e.g. lobby or bedwars, by which the panel finds and
-// groups them. Servers live on their agents, so the master keeps their tags.
+// groups them, and their notes, e.g. what a server is for. Servers live on their agents, so
+// the master keeps both.
 package tag
 
 import (
@@ -17,6 +18,7 @@ import (
 const (
 	MaxPerServer = 10
 	maxLength    = 24
+	maxNotes     = 500
 )
 
 // Server is a server on a node.
@@ -86,23 +88,76 @@ func (s *Store) Change(ctx context.Context, servers []Server, add, remove []stri
 	return tx.Commit()
 }
 
-// Copy gives a copy of a server the tags of the original.
+// Notes returns the notes of all servers that have some.
+func (s *Store) Notes(ctx context.Context) (map[Server]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT node_id, server_id, notes FROM server_notes`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	notes := map[Server]string{}
+	for rows.Next() {
+		var srv Server
+		var text string
+		if err := rows.Scan(&srv.NodeID, &srv.ServerID, &text); err != nil {
+			return nil, err
+		}
+		notes[srv] = text
+	}
+	return notes, rows.Err()
+}
+
+// SetNotes replaces the notes of a server; empty notes delete them. Notes are text of up to
+// maxNotes characters, which the panel shows as text only.
+func (s *Store) SetNotes(ctx context.Context, srv Server, notes string) error {
+	notes = strings.TrimSpace(strings.ReplaceAll(notes, "\r\n", "\n"))
+	if utf8.RuneCountInString(notes) > maxNotes || strings.ContainsFunc(notes, func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' }) {
+		return httpapi.Errorf(http.StatusBadRequest, "Notes are text of up to %d characters.", maxNotes)
+	}
+	var err error
+	if notes == "" {
+		_, err = s.db.ExecContext(ctx, `DELETE FROM server_notes WHERE node_id = ? AND server_id = ?`, srv.NodeID, srv.ServerID)
+	} else {
+		_, err = s.db.ExecContext(ctx, `INSERT INTO server_notes (node_id, server_id, notes) VALUES (?, ?, ?)
+			ON CONFLICT (node_id, server_id) DO UPDATE SET notes = excluded.notes`, srv.NodeID, srv.ServerID, notes)
+	}
+	return err
+}
+
+// Copy gives a copy of a server the tags and notes of the original.
 func (s *Store) Copy(ctx context.Context, from, to Server) error {
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO server_tags (node_id, server_id, tag)
-		SELECT ?, ?, tag FROM server_tags WHERE node_id = ? AND server_id = ?`, to.NodeID, to.ServerID, from.NodeID, from.ServerID)
-	return err
+	return s.exec(ctx, []any{to.NodeID, to.ServerID, from.NodeID, from.ServerID},
+		`INSERT OR IGNORE INTO server_tags (node_id, server_id, tag) SELECT ?, ?, tag FROM server_tags WHERE node_id = ? AND server_id = ?`,
+		`INSERT OR IGNORE INTO server_notes (node_id, server_id, notes) SELECT ?, ?, notes FROM server_notes WHERE node_id = ? AND server_id = ?`)
 }
 
-// Forget deletes the tags of a deleted server.
+// Forget deletes the tags and notes of a deleted server.
 func (s *Store) Forget(ctx context.Context, nodeID, serverID string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM server_tags WHERE node_id = ? AND server_id = ?`, nodeID, serverID)
-	return err
+	return s.exec(ctx, []any{nodeID, serverID},
+		`DELETE FROM server_tags WHERE node_id = ? AND server_id = ?`,
+		`DELETE FROM server_notes WHERE node_id = ? AND server_id = ?`)
 }
 
-// Move keeps the tags of a server that moved to another node.
+// Move keeps the tags and notes of a server that moved to another node.
 func (s *Store) Move(ctx context.Context, serverID, from, to string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE server_tags SET node_id = ? WHERE node_id = ? AND server_id = ?`, to, from, serverID)
-	return err
+	return s.exec(ctx, []any{to, from, serverID},
+		`UPDATE server_tags SET node_id = ? WHERE node_id = ? AND server_id = ?`,
+		`UPDATE server_notes SET node_id = ? WHERE node_id = ? AND server_id = ?`)
+}
+
+// exec runs statements with the same arguments, all or none of them.
+func (s *Store) exec(ctx context.Context, args []any, statements ...string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement, args...); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // Normalize trims and lowercases tags, and sorts them without duplicates. Tags consist of

@@ -83,6 +83,10 @@ type Spec struct {
 	// LoaderVersion selects the version of the mod loader of a modded server, e.g. one a
 	// modpack needs; empty means the newest.
 	LoaderVersion string `json:"loaderVersion,omitempty"`
+	// StopTimeout is how many seconds the server gets to stop gracefully; 0 means the default.
+	StopTimeout uint32 `json:"stopTimeout,omitempty"`
+	// TimeZone is the IANA time zone of the server, e.g. Europe/Berlin; empty means UTC.
+	TimeZone string `json:"timeZone,omitempty"`
 	// BedrockPort is the UDP port of Geyser on a proxy whose network lets Bedrock players
 	// join; 0 for none. The network sets it.
 	BedrockPort uint32 `json:"bedrockPort,omitempty"`
@@ -202,6 +206,7 @@ type Runtime interface {
 	List(ctx context.Context) ([]Server, error)
 	Create(ctx context.Context, spec Spec) error
 	Start(ctx context.Context, id string) error
+	// Stop stops a server gracefully, and kills it once its stop timeout is over.
 	Stop(ctx context.Context, id string) error
 	Remove(ctx context.Context, id string) error
 	// Logs yields the last tail console lines written after the time after, if it isn't

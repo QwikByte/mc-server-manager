@@ -37,8 +37,9 @@ import (
 
 const (
 	queryTimeout = 10 * time.Second
-	// configureTimeout covers recreating a running backend: a graceful stop and a start.
-	configureTimeout = 3 * time.Minute
+	// configureTimeout covers recreating a running backend: a graceful stop, which may take the
+	// longest stop timeout, and a start.
+	configureTimeout = 2*time.Minute + noryxv1.MaxStopTimeout
 
 	// Forwarding modes: Velocity's modern forwarding, or BungeeCord's, which Velocity calls legacy.
 	Modern = "modern"

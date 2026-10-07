@@ -104,7 +104,7 @@ export function filterServers(servers: NodeServer[], search: ServerSearch, facts
         .filter(([v]) => !isNone(v))
         .map(([, label]) => label),
     )
-    const text = [s.name, s.version, s.port, ...labels].join(" ").toLowerCase()
+    const text = [s.name, s.version, s.port, ...labels, s.notes].join(" ").toLowerCase()
     return (
       words.every((w) => text.includes(w)) && properties.every((p) => !search[p] || valuesOf(p, s, facts).some(([v]) => v === search[p]))
     )

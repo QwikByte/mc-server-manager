@@ -3,12 +3,14 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
 	"math"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,10 +27,13 @@ import (
 )
 
 const (
-	probeTimeout  = 3 * time.Second // for listing the servers of all nodes
-	queryTimeout  = 10 * time.Second
-	actionTimeout = 2 * time.Minute
+	probeTimeout = 3 * time.Second // for listing the servers of all nodes
+	queryTimeout = 10 * time.Second
+	// actionTimeout covers a graceful stop, which may take the longest stop timeout.
+	actionTimeout = 2*time.Minute + noryxv1.MaxStopTimeout
 	createTimeout = 10 * time.Minute // includes pulling the server image
+	// changeTimeout covers pulling the server image and recreating a running server's container.
+	changeTimeout = createTimeout + noryxv1.MaxStopTimeout
 )
 
 // Nodes provides the nodes and connections to their agents.
@@ -50,10 +55,14 @@ type Networks interface {
 	Reapply(ctx context.Context, serverID string) error
 }
 
-// Tags label servers, e.g. lobby, so that the panel finds and groups them.
+// Tags label servers, e.g. lobby, and notes describe them, so that the panel finds and groups
+// them.
 type Tags interface {
 	All(ctx context.Context) (map[tag.Server][]string, error)
 	Change(ctx context.Context, servers []tag.Server, add, remove []string) error
+	Notes(ctx context.Context) (map[tag.Server]string, error)
+	SetNotes(ctx context.Context, srv tag.Server, notes string) error
+	// Copy gives a copy of a server the tags and notes of the original.
 	Copy(ctx context.Context, from, to tag.Server) error
 }
 
@@ -125,6 +134,7 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("DELETE /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersDelete), h.delete)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersSettings), h.update)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/update-image", access.OnServer(access.ServersSettings), h.updateImage)
+	mux.Handle("PUT /api/nodes/{node}/servers/{id}/notes", access.OnServer(access.ServersSettings), h.setNotes)
 	// The copy contains all files of the server.
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/duplicate",
 		access.All(access.OnNode(access.ServersCreate, "node"), access.OnServer(access.FilesRead)), h.duplicate)
@@ -171,6 +181,10 @@ type settings struct {
 	AikarFlags    bool     `json:"aikarFlags"`
 	JVMOptions    []string `json:"jvmOptions"`
 	CPULimit      float64  `json:"cpuLimit"` // in cores, 0 means no limit
+	// StopTimeout is how many seconds the server gets to stop gracefully; 0 means the default.
+	StopTimeout uint32 `json:"stopTimeout"`
+	// TimeZone is an IANA time zone such as Europe/Berlin; empty means UTC.
+	TimeZone string `json:"timeZone"`
 }
 
 // check validates the settings that the agent can't, and converts the restart policy
@@ -194,14 +208,21 @@ func toView(s *noryxv1.Server) view {
 		settings: settings{
 			Java: s.GetJava(), LoaderVersion: s.GetLoaderVersion(), RestartPolicy: s.GetRestartPolicy().Slug(), AikarFlags: s.GetAikarFlags(),
 			JVMOptions: append([]string{}, s.GetJvmOptions()...), CPULimit: float64(s.GetCpuMillis()) / 1000,
+			StopTimeout: stopSeconds(s.GetStopTimeoutSeconds()), TimeZone: s.GetTimeZone(),
 		},
 	}
 }
 
-// listed is a server in a list, with its tags.
+// stopSeconds is the stop timeout of a server in seconds; 0, as older agents send it, means the default.
+func stopSeconds(seconds uint32) uint32 {
+	return cmp.Or(seconds, uint32(noryxv1.DefaultStopTimeout/time.Second))
+}
+
+// listed is a server in a list, with its tags and notes.
 type listed struct {
 	view
-	Tags []string `json:"tags"`
+	Tags  []string `json:"tags"`
+	Notes string   `json:"notes,omitempty"`
 }
 
 // nodeServer is a server with the node it runs on.
@@ -211,13 +232,27 @@ type nodeServer struct {
 	NodeName string `json:"nodeName"`
 }
 
-// visible returns the servers of a node the user may see, with their tags.
-func visible(r *http.Request, nodeID string, servers []*noryxv1.Server, tags map[tag.Server][]string) []listed {
+// labels are the tags and notes of servers.
+type labels struct {
+	tags  map[tag.Server][]string
+	notes map[tag.Server]string
+}
+
+func (h *Handler) labels(ctx context.Context) (l labels, err error) {
+	if l.tags, err = h.tags.All(ctx); err == nil {
+		l.notes, err = h.tags.Notes(ctx)
+	}
+	return l, err
+}
+
+// visible returns the servers of a node the user may see, with their tags and notes.
+func visible(r *http.Request, nodeID string, servers []*noryxv1.Server, l labels) []listed {
 	grants := access.From(r.Context())
 	views := []listed{}
 	for _, s := range servers {
 		if grants.On(access.ServersView, nodeID, s.GetId()) {
-			views = append(views, listed{toView(s), append([]string{}, tags[tag.Server{NodeID: nodeID, ServerID: s.GetId()}]...)})
+			ref := tag.Server{NodeID: nodeID, ServerID: s.GetId()}
+			views = append(views, listed{toView(s), append([]string{}, l.tags[ref]...), l.notes[ref]})
 		}
 	}
 	return views
@@ -226,9 +261,9 @@ func visible(r *http.Request, nodeID string, servers []*noryxv1.Server, tags map
 // listAll returns the servers of all reachable nodes, e.g. to choose the servers of a network.
 func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 	nodes, err := h.nodes.List(r.Context())
-	var tags map[tag.Server][]string
+	var l labels
 	if err == nil {
-		tags, err = h.tags.All(r.Context())
+		l, err = h.labels(r.Context())
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -252,7 +287,7 @@ func (h *Handler) listAll(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return // offline nodes are left out
 			}
-			for _, s := range visible(r, n.ID, res.GetServers(), tags) {
+			for _, s := range visible(r, n.ID, res.GetServers(), l) {
 				perNode[i] = append(perNode[i], nodeServer{s, n.ID, n.Name})
 			}
 		})
@@ -273,15 +308,15 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		res, err = c.ListServers(ctx, &noryxv1.ListServersRequest{})
 	}
-	var tags map[tag.Server][]string
+	var l labels
 	if err == nil {
-		tags, err = h.tags.All(ctx)
+		l, err = h.labels(ctx)
 	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, visible(r, r.PathValue("node"), res.GetServers(), tags))
+	httpapi.WriteJSON(w, http.StatusOK, visible(r, r.PathValue("node"), res.GetServers(), l))
 }
 
 // create creates a server as an operation, which downloads the server image if the node
@@ -343,7 +378,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			Name: req.Name, Type: noryxv1.ParseServerType(req.Type), Version: req.Version, MemoryMb: req.MemoryMB,
 			Port: req.Port, AcceptEula: req.AcceptEULA, Storage: req.Storage, Java: req.Java, RestartPolicy: policy,
 			AikarFlags: req.AikarFlags, JvmOptions: req.JVMOptions, CpuMillis: cpuMillis, Properties: req.Properties,
-			LoaderVersion: req.LoaderVersion,
+			LoaderVersion: req.LoaderVersion, StopTimeoutSeconds: req.StopTimeout, TimeZone: req.TimeZone,
 		}
 		var pack *modpack.Pack
 		if req.Modpack != nil {
@@ -446,7 +481,7 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		operation.Target(ctx, nodeID, copied.GetId())
 		logging.Note(ctx, slog.String("copy", copied.GetName()), slog.String("copy_id", copied.GetId()))
 		if err := h.tags.Copy(ctx, tag.Server{NodeID: nodeID, ServerID: id}, tag.Server{NodeID: nodeID, ServerID: copied.GetId()}); err != nil {
-			slog.Warn("The copy of a server didn't get its tags", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, copied.GetId(), "err", err)
+			slog.Warn("The copy of a server didn't get its tags and notes", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, copied.GetId(), "err", err)
 		}
 		return toView(copied), nil
 	})
@@ -484,7 +519,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	spec := operation.Spec{
 		Kind: "server.settings", Subject: req.Name, NodeID: nodeID, ServerID: id, Steps: []string{"image", "container"},
-		Status: http.StatusOK, Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
+		Status: http.StatusOK, Timeout: changeTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
 		defer release()
@@ -493,7 +528,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 			res, err = c.UpdateServer(ctx, &noryxv1.UpdateServerRequest{
 				Id: id, Name: req.Name, Version: req.Version, MemoryMb: req.MemoryMB, Port: req.Port,
 				Java: req.Java, RestartPolicy: policy, AikarFlags: req.AikarFlags, JvmOptions: req.JVMOptions, CpuMillis: cpuMillis,
-				LoaderVersion: req.LoaderVersion,
+				LoaderVersion: req.LoaderVersion, StopTimeoutSeconds: req.StopTimeout, TimeZone: req.TimeZone,
 			})
 			return err
 		})
@@ -510,6 +545,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 				updated.Warning = httpapi.Message(err)
 			}
 		}
+		// Older agents answer without the settings they don't know.
+		if updated.StopTimeout != stopSeconds(req.StopTimeout) || updated.TimeZone != req.TimeZone {
+			updated.Warning = strings.TrimSpace(updated.Warning + " The agent of the node is too old for a stop timeout and a time zone, so the server keeps 60 seconds and UTC. Update the agent first.")
+		}
 		return updated, nil
 	})
 }
@@ -520,7 +559,7 @@ func (h *Handler) updateImage(w http.ResponseWriter, r *http.Request) {
 	nodeID, id := r.PathValue("node"), r.PathValue("id")
 	spec := operation.Spec{
 		Kind: "server.image", NodeID: nodeID, ServerID: id, Steps: []string{"image", "container"}, Status: http.StatusOK,
-		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
+		Timeout: changeTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
 		var res *noryxv1.UpdateImageResponse
@@ -533,6 +572,30 @@ func (h *Handler) updateImage(w http.ResponseWriter, r *http.Request) {
 		}
 		return map[string]bool{"updated": res.GetUpdated()}, nil
 	})
+}
+
+// setNotes changes the notes of a server, which doesn't restart it.
+func (h *Handler) setNotes(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Notes string `json:"notes"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+	srv := tag.Server{NodeID: r.PathValue("node"), ServerID: r.PathValue("id")}
+	// The notes of a server that doesn't exist would stay.
+	_, err := h.find(ctx, srv.NodeID, srv.ServerID)
+	if err == nil {
+		err = h.tags.SetNotes(ctx, srv, req.Notes)
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // delete deletes a server with its data and backups, unless a network needs it.

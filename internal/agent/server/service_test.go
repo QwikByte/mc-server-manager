@@ -57,6 +57,17 @@ func TestCheckSettings(t *testing.T) {
 		{"loader version", func(s *runtime.Spec) { s.Type, s.LoaderVersion = noryxv1.ServerType_SERVER_TYPE_FORGE, "1.20.1-47.3.0" }, true},
 		{"loader version without loader", func(s *runtime.Spec) { s.LoaderVersion = "0.16.10" }, false},
 		{"loader version with shell syntax", func(s *runtime.Spec) { s.Type, s.LoaderVersion = noryxv1.ServerType_SERVER_TYPE_FABRIC, "$(id)" }, false},
+		{"longest stop timeout", func(s *runtime.Spec) { s.StopTimeout = 600 }, true},
+		{"shortest stop timeout", func(s *runtime.Spec) { s.StopTimeout = 30 }, true},
+		{"too short a stop timeout", func(s *runtime.Spec) { s.StopTimeout = 29 }, false},
+		{"too long a stop timeout", func(s *runtime.Spec) { s.StopTimeout = 601 }, false},
+		{"time zone", func(s *runtime.Spec) { s.TimeZone = "America/Argentina/Buenos_Aires" }, true},
+		{"time zone with an offset", func(s *runtime.Spec) { s.TimeZone = "Etc/GMT+5" }, true},
+		{"UTC", func(s *runtime.Spec) { s.TimeZone = "UTC" }, true},
+		{"unknown time zone", func(s *runtime.Spec) { s.TimeZone = "Mars/Olympus_Mons" }, false},
+		{"time zone of the agent", func(s *runtime.Spec) { s.TimeZone = "Local" }, false},
+		{"time zone file outside the database", func(s *runtime.Spec) { s.TimeZone = "../../../etc/localtime" }, false},
+		{"time zone with shell syntax", func(s *runtime.Spec) { s.TimeZone = "Europe/Berlin;id" }, false},
 	}
 	for _, tt := range tests {
 		spec := valid

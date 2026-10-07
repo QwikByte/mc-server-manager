@@ -22,9 +22,13 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
-// timeout limits commands that answer right away. Following logs, backing up and
-// restoring take as long as they need.
-const timeout = 2 * time.Minute
+// timeout limits commands that answer right away, and stopTimeout those that stop a server,
+// which gets its stop timeout to save its worlds. Following logs, backing up and restoring
+// take as long as they need.
+const (
+	timeout     = 2 * time.Minute
+	stopTimeout = timeout + noryxv1.MaxStopTimeout
+)
 
 // Agent calls fn with a connection to the running agent.
 type Agent func(ctx context.Context, fn func(grpc.ClientConnInterface) error) error
@@ -42,7 +46,12 @@ var errNoRuntime = errors.New("can't reach Docker on this node, see: systemctl s
 
 // call runs fn with the time limit of commands that answer right away.
 func (c cli) call(cmd *cobra.Command, fn func(context.Context, grpc.ClientConnInterface) error) error {
-	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+	return c.within(cmd, timeout, fn)
+}
+
+// within runs fn with a time limit.
+func (c cli) within(cmd *cobra.Command, limit time.Duration, fn func(context.Context, grpc.ClientConnInterface) error) error {
+	ctx, cancel := context.WithTimeout(cmd.Context(), limit)
 	defer cancel()
 	return message(c.agent(ctx, func(conn grpc.ClientConnInterface) error { return fn(ctx, conn) }))
 }
@@ -91,14 +100,14 @@ func (c cli) status() *cobra.Command {
 }
 
 func (c cli) server() *cobra.Command {
-	// lifecycle runs a request that only needs the server's ID.
-	lifecycle := func(use, short string, run func(context.Context, noryxv1.ServerServiceClient, string) error) *cobra.Command {
+	// lifecycle runs a request that only needs the server's ID, within limit.
+	lifecycle := func(use, short string, limit time.Duration, run func(context.Context, noryxv1.ServerServiceClient, string) error) *cobra.Command {
 		return &cobra.Command{
 			Use:   use + " <id>",
 			Short: short,
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				return c.call(cmd, func(ctx context.Context, conn grpc.ClientConnInterface) error {
+				return c.within(cmd, limit, func(ctx context.Context, conn grpc.ClientConnInterface) error {
 					return run(ctx, noryxv1.NewServerServiceClient(conn), args[0])
 				})
 			},
@@ -116,15 +125,15 @@ func (c cli) server() *cobra.Command {
 				})
 			},
 		},
-		lifecycle("start", "Start a server", func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
+		lifecycle("start", "Start a server", timeout, func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
 			_, err := s.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
 			return err
 		}),
-		lifecycle("stop", "Stop a server gracefully", func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
+		lifecycle("stop", "Stop a server gracefully", stopTimeout, func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
 			_, err := s.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
 			return err
 		}),
-		lifecycle("restart", "Stop a server gracefully and start it again", func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
+		lifecycle("restart", "Stop a server gracefully and start it again", stopTimeout, func(ctx context.Context, s noryxv1.ServerServiceClient, id string) error {
 			_, err := s.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
 			return err
 		}),

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata" // so that time zones are known on nodes without a database of them
 	"unicode"
 
 	"google.golang.org/grpc/codes"
@@ -82,6 +83,8 @@ var (
 	codeProperty   = regexp.MustCompile(`(?i)^(log4j|(java|javax|jdk|sun|com\.sun|jvmci|jna|logback|org\.apache\.logging)\.)`)
 	safeProperties = []string{"java.awt.headless", "java.net.preferIPv4Stack", "java.net.preferIPv6Addresses", "sun.stdout.encoding", "sun.stderr.encoding", "log4j2.formatMsgNoLookups"}
 	javaVersions   = []string{"", "8", "11", "17", "21", "25"}
+	// Names of IANA time zones, e.g. Europe/Berlin, America/Port-au-Prince or Etc/GMT+5.
+	timeZonePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_+/-]{0,63}$`)
 	// Terminal escape sequences and Minecraft formatting codes (§a, §l, ...).
 	formatting = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|§[0-9a-fk-orxA-FK-ORX]|\r`)
 )
@@ -142,6 +145,8 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 		JVMOptions:    req.GetJvmOptions(),
 		CPUMillis:     req.GetCpuMillis(),
 		LoaderVersion: req.GetLoaderVersion(),
+		StopTimeout:   req.GetStopTimeoutSeconds(),
+		TimeZone:      req.GetTimeZone(),
 	}
 	switch {
 	case !req.GetAcceptEula() && !req.GetType().Proxy():
@@ -240,6 +245,7 @@ func (s *Service) ImportServer(stream noryxv1.ServerService_ImportServerServer) 
 		ID: h.GetId(), Name: h.GetName(), Type: h.GetType(), Version: h.GetVersion(), MemoryMB: h.GetMemoryMb(), Port: h.GetPort(),
 		Storage: h.GetStorage(), Java: h.GetJava(), RestartPolicy: h.GetRestartPolicy(), AikarFlags: h.GetAikarFlags(),
 		JVMOptions: h.GetJvmOptions(), CPUMillis: h.GetCpuMillis(), LoaderVersion: h.GetLoaderVersion(),
+		StopTimeout: h.GetStopTimeoutSeconds(), TimeZone: h.GetTimeZone(),
 	}
 	_, knownType := noryxv1.ServerType_name[int32(spec.Type)]
 	switch {
@@ -311,6 +317,7 @@ func (s *Service) UpdateServer(ctx context.Context, req *noryxv1.UpdateServerReq
 	srv.Name, srv.Version, srv.MemoryMB, srv.Port = req.GetName(), cmp.Or(req.GetVersion(), "LATEST"), req.GetMemoryMb(), req.GetPort()
 	srv.Java, srv.RestartPolicy, srv.AikarFlags = req.GetJava(), req.GetRestartPolicy(), req.GetAikarFlags()
 	srv.JVMOptions, srv.CPUMillis, srv.LoaderVersion = req.GetJvmOptions(), req.GetCpuMillis(), req.GetLoaderVersion()
+	srv.StopTimeout, srv.TimeZone = req.GetStopTimeoutSeconds(), req.GetTimeZone()
 	release, err := s.check(ctx, srv.Spec)
 	if err != nil {
 		return nil, err
@@ -636,6 +643,7 @@ func (s *Service) apply(ctx context.Context, id string, op func(context.Context,
 // the number of CPU cores of the node, or 0 if unknown.
 func checkSettings(spec runtime.Spec, cpus uint32) string {
 	_, knownPolicy := noryxv1.RestartPolicy_name[int32(spec.RestartPolicy)]
+	stop := noryxv1.StopTimeout(spec.StopTimeout)
 	switch {
 	case !namePattern.MatchString(spec.Name):
 		return "Use 1-32 letters, digits, spaces, '.', '_' or '-' for the name."
@@ -661,6 +669,10 @@ func checkSettings(spec runtime.Spec, cpus uint32) string {
 		return "Give the server at least 0.1 CPU cores, or no limit."
 	case cpus > 0 && spec.CPUMillis > cpus*1000:
 		return fmt.Sprintf("The node has %d CPU cores.", cpus)
+	case stop < noryxv1.MinStopTimeout || stop > noryxv1.MaxStopTimeout:
+		return fmt.Sprintf("Give the server %.0f seconds to %.0f minutes to stop.", noryxv1.MinStopTimeout.Seconds(), noryxv1.MaxStopTimeout.Minutes())
+	case !validTimeZone(spec.TimeZone):
+		return "Choose a time zone such as Europe/Berlin, or none for UTC."
 	}
 	for _, option := range spec.JVMOptions {
 		if msg := checkJVMOption(option); msg != "" {
@@ -681,6 +693,16 @@ func checkJVMOption(option string) string {
 		return fmt.Sprintf("The JVM option %s can load or run code, so it can't be set here. Install agents as plugins or mods instead.", option)
 	}
 	return ""
+}
+
+// validTimeZone reports whether tz is empty, for UTC, or names an IANA time zone. It ends up
+// in a variable of the image, so it has no other characters than the names of zones.
+func validTimeZone(tz string) bool {
+	if tz == "" {
+		return true
+	}
+	_, err := time.LoadLocation(tz)
+	return err == nil && tz != "Local" && timeZonePattern.MatchString(tz)
 }
 
 // refusedOptions returns the JVM options of a server that are refused now, as they were set
@@ -722,7 +744,7 @@ func toProto(s runtime.Server) *noryxv1.Server {
 		Storage: cmp.Or(s.Storage, storage.Default), Java: s.Java, RestartPolicy: s.RestartPolicy, AikarFlags: s.AikarFlags,
 		JvmOptions: s.JVMOptions, CpuMillis: s.CPUMillis, Crashes: uint32(s.Crashes), ExitCode: int32(s.ExitCode), //nolint:gosec // small numbers
 		LoaderVersion: s.LoaderVersion, BedrockPort: s.BedrockPort, RefusedJvmOptions: refusedOptions(s.JVMOptions),
-		Overlay: s.Overlay != "", Unhealthy: s.Unhealthy,
+		Overlay: s.Overlay != "", Unhealthy: s.Unhealthy, StopTimeoutSeconds: s.StopTimeout, TimeZone: s.TimeZone,
 	}
 }
 

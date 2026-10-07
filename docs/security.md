@@ -36,7 +36,7 @@ attempts are rate limited per client address (IPv6 per /64 network) and per user
 user. A username has a larger budget than a client, so that a single client can't keep a user out. Client addresses come
 from the `X-Forwarded-For` or `X-Real-IP` header only for the reverse proxies named with `--trusted-proxy`. The CSV
 files of servers and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
-reasons as the export of the log does.
+reasons as the export of the log does. Notes of servers are plain text, which the panel shows as text only.
 
 ## Two-factor authentication
 
@@ -76,6 +76,9 @@ module paths, commands on errors, options read from files, class data archives, 
 and the system properties of Java, JNDI, logging libraries and JNA, which name classes, libraries or configurations to
 load (also from URLs), are refused. A server that got such an option before an update refused it keeps it until it is
 removed: the agent logs a warning when it starts, and the panel shows it on the server's page and the overview.
+Settings can't set other variables of the images, such as `CUSTOM_SERVER`, `PLUGINS` or `JVM_XX_OPTS`, which download or
+run code and would get around these checks: besides the variables of checked settings, a container only gets its time
+zone as `TZ`, once the agent found it among the IANA time zones it knows.
 
 ## File manager
 

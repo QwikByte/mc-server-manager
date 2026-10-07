@@ -52,7 +52,7 @@ know.
 
 ## Search
 
-**Ctrl+K** (⌘K) or `/` searches servers, also by tag, players online, networks, nodes and pages from anywhere in the
+**Ctrl+K** (⌘K) or `/` searches servers, also by tag and notes, players online, networks, nodes and pages from anywhere in the
 panel, and, once something is typed, templates, file sets, backup jobs, schedules and users; each only for those who may
 see them. Before anything is typed, it offers what was opened last: servers, networks, nodes, templates, file sets,
 backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user

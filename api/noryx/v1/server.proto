@@ -122,6 +122,11 @@ message Server {
   // A running server whose health check fails, e.g. one that hangs. Actions treat it like any
   // running server.
   bool unhealthy = 20;
+  // Seconds the server gets to stop gracefully, e.g. to save its worlds, before it is killed; 0
+  // for the default of 60, as older agents report it.
+  uint32 stop_timeout_seconds = 21;
+  // IANA time zone of the server, e.g. "Europe/Berlin"; empty for UTC.
+  string time_zone = 22;
 }
 
 message ListServersRequest {}
@@ -150,6 +155,8 @@ message CreateServerRequest {
   // Properties of server.properties for a game server, written before its first start.
   map<string, string> properties = 13;
   string loader_version = 14;
+  uint32 stop_timeout_seconds = 15;
+  string time_zone = 16;
 }
 
 message CreateServerResponse {
@@ -186,6 +193,12 @@ message UpdateServerRequest {
   repeated string jvm_options = 9;
   uint32 cpu_millis = 10;
   string loader_version = 11;
+  // Seconds the server gets to stop gracefully, from 30 to 600; 0, as older masters send it,
+  // means 60.
+  uint32 stop_timeout_seconds = 12;
+  // IANA time zone of the server, e.g. "Europe/Berlin", which its container gets as TZ; empty
+  // for UTC.
+  string time_zone = 13;
 }
 
 message UpdateServerResponse {

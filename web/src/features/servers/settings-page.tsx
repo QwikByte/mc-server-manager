@@ -14,7 +14,16 @@ import { useOperation } from "@/features/operations/use-operation"
 import { cn } from "@/lib/utils"
 import { freeMemoryMb, type Server, type ServerSettings, serversQuery, useServer, useUpdateImage, useUpdateServer } from "./api"
 import { isModded, serverType, splitOptions } from "./server-types"
-import { CpuLimitField, JavaFields, JvmOptionsField, MemoryField, RestartPolicyField, VersionField } from "./settings-fields"
+import {
+  CpuLimitField,
+  JavaFields,
+  JvmOptionsField,
+  MemoryField,
+  RestartPolicyField,
+  StopTimeoutField,
+  TimeZoneField,
+  VersionField,
+} from "./settings-fields"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/settings")
 
@@ -75,8 +84,8 @@ function UpdateImage({ nodeId, server }: { nodeId: string; server: Server }) {
 }
 
 function settingsOf(s: Server): ServerSettings {
-  const { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, loaderVersion } = s
-  return { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, loaderVersion }
+  const { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, loaderVersion, stopTimeout, timeZone } = s
+  return { name, version, memoryMb, port, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, loaderVersion, stopTimeout, timeZone }
 }
 
 function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
@@ -155,10 +164,12 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
             {modded && form.loaderVersion && ` ${t("Empty the loader version unless it suits the new Minecraft version.")}`}
           </FieldDescription>
         )}
+        <TimeZoneField value={form.timeZone} onChange={(timeZone) => set({ timeZone })} />
       </FormSection>
 
-      <FormSection title={t("Startup")}>
+      <FormSection title={t("Starting and stopping")}>
         <RestartPolicyField value={form.restartPolicy} onChange={(restartPolicy) => set({ restartPolicy })} />
+        <StopTimeoutField value={form.stopTimeout} onChange={(stopTimeout) => set({ stopTimeout })} />
       </FormSection>
 
       <FormSection title={t("Java")}>

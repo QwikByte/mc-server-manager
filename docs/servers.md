@@ -67,11 +67,18 @@ needs the permission to change files.
 
 The settings of a server can be changed after it was created: name, Minecraft version, the version of the mod loader of
 Fabric, Quilt, Forge and NeoForge servers (the newest unless set), memory, port, Java version (8, 11, 17, 21, 25 or the
-newest), when it starts on its own, Aikar's flags, JVM options and a CPU limit. The agent creates the container again
-with the same data; the old container is only removed once the new one exists. A server keeps the image it was created
-with; **Update image** in its settings pulls the newest one and, if it changed, creates the container again the same
-way. The old image is removed once no server uses it. New servers get the newest image too: creating one pulls it, which
-downloads its changes if it was updated since. Deleting servers keeps their images.
+newest), when it starts on its own, Aikar's flags, JVM options, a CPU limit, the stop timeout and the time zone. The
+agent creates the container again with the same data; the old container is only removed once the new one exists. A
+server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it changed,
+creates the container again the same way. The old image is removed once no server uses it. New servers get the newest
+image too: creating one pulls it, which downloads its changes if it was updated since. Deleting servers keeps their
+images.
+
+The **stop timeout** is how long a server may take to save its worlds when it stops or restarts before it is killed:
+from 30 seconds to 10 minutes, 1 minute unless changed, e.g. longer for a large modded world. The **time zone**, one of
+the IANA time zones such as `Europe/Berlin` chosen from a searchable list, sets the time of the server's log and of
+plugins that work with times; servers run in UTC unless one is chosen. Agents of earlier versions keep 1 minute and UTC,
+which saving the settings tells.
 
 ## Crashes and health
 
@@ -116,6 +123,11 @@ on which the user may do it, at most 8 at a time on each node, and the panel tel
 Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
 keeps them; they follow a server that moves, copies get them, and they go with a deleted server. Changing them needs the
 permission to change the server's settings, though it doesn't restart the server.
+
+Servers have **notes** too, e.g. what a test server is for or whom to ask about it: up to 500 characters of plain text,
+which the server's page shows and the search of the lists and **Ctrl+K** find. **Notes…** in the menu of a server
+changes them. The master keeps them like tags: they follow a server that moves, copies get them, and changing them needs
+the permission to change the server's settings but doesn't restart it.
 
 ## Node settings
 

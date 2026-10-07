@@ -112,6 +112,8 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
   const { players } = useOnlinePlayers(access.canSomewhere("servers.view"))
   const needle = query.trim().toLowerCase()
   const found = needle.length >= 2 ? players.filter((p) => p.name.toLowerCase().includes(needle)).slice(0, 8) : []
+  // Notes match as written, as fuzzy matching would find nearly every search in a longer text.
+  const inNotes = (s: NodeServer) => (needle.length >= 2 && s.notes?.toLowerCase().includes(needle) ? [needle] : [])
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   // "neustart" names "Neu starten" too.
   const named = actions.filter((a) => words.some((w) => w.length >= 3 && a.label().toLowerCase().replace(/\s/g, "").startsWith(w)))
@@ -127,7 +129,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         value: `server/${serverKey(s)}`,
         path: at("nodes", s.nodeId, "servers", s.id),
         label: s.name,
-        keywords: [serverType(s.type).label, s.nodeName, String(s.port), ...s.tags],
+        keywords: [serverType(s.type).label, s.nodeName, String(s.port), ...s.tags, ...inNotes(s)],
         icon: <IconTile {...serverLook(s.type)} size="sm" className="size-6 rounded-md [&>svg]:size-3.5" />,
         status: statusOf(s),
         detail: [...s.tags.map((tag) => `#${tag}`), s.nodeName].join(" · "),

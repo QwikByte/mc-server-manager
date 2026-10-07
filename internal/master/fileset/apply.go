@@ -22,6 +22,8 @@ import (
 const (
 	// applyTimeout covers writing the files of a server, also when it is large.
 	applyTimeout = 2 * time.Minute
+	// restartTimeout covers a graceful stop, which may take the longest stop timeout, and a start.
+	restartTimeout = 2*time.Minute + noryxv1.MaxStopTimeout
 	// maxBatch is the most game servers of a network that restart at a time, as for rolling restarts.
 	maxBatch = 50
 )
@@ -339,7 +341,7 @@ func (s *Service) restart(ctx context.Context, sv *survey, results []Result, bat
 	}
 	errs := make([]error, len(rest))
 	operation.Each(ctx, nodes, func(i int) {
-		ctx, cancel := context.WithTimeout(ctx, applyTimeout)
+		ctx, cancel := context.WithTimeout(ctx, restartTimeout)
 		defer cancel()
 		conn, err := s.nodes.Conn(ctx, rest[i].NodeID)
 		if err == nil {

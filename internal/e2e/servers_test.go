@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"errors"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -95,6 +96,63 @@ func TestBulkActionsAndTags(t *testing.T) {
 	api.do("DELETE", "/api/nodes/"+game.NodeID+"/servers/"+game.ServerID, nil, http.StatusNoContent, nil)
 	if tags, err := tag.NewStore(m.db).All(t.Context()); err != nil || len(tags) != 2 || !slices.Equal(tags[tag.Server{NodeID: b.node.ID, ServerID: copied.ID}], []string{"bedwars", "eu"}) {
 		t.Fatalf("tags = %v, %v", tags, err)
+	}
+}
+
+// The agent applies a stop timeout and a time zone it checked, and the master keeps the notes
+// of servers, which those who may see a server see in its lists.
+func TestStopTimeoutTimeZoneAndNotes(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	api := apiClient{t: t, url: m.panel(t).URL}
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	path := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID
+	type listed struct {
+		StopTimeout uint32
+		TimeZone    string
+		Notes       string
+	}
+	get := func() listed {
+		var servers []listed
+		api.do("GET", "/api/nodes/"+lobby.NodeID+"/servers", nil, http.StatusOK, &servers)
+		return servers[0]
+	}
+	if s := get(); s.StopTimeout != 60 || s.TimeZone != "" || s.Notes != "" {
+		t.Fatalf("new server = %+v", s)
+	}
+
+	settings := map[string]any{"name": "Lobby", "memoryMb": 1024, "port": 25565, "stopTimeout": 300, "timeZone": "Europe/Berlin"}
+	api.do("PUT", path, settings, http.StatusOK, nil)
+	if s, spec := get(), a.runtime.spec(lobby.ServerID); s.StopTimeout != 300 || s.TimeZone != "Europe/Berlin" || spec.StopTimeout != 300 || spec.TimeZone != "Europe/Berlin" {
+		t.Fatalf("server = %+v, spec = %+v", s, spec)
+	}
+	for key, value := range map[string]any{"stopTimeout": 20, "timeZone": "Local"} {
+		bad := maps.Clone(settings)
+		bad[key] = value
+		api.do("PUT", path, bad, http.StatusBadRequest, nil)
+	}
+
+	api.do("PUT", path+"/notes", map[string]any{"notes": " For the event in May.\nAsk Alex. "}, http.StatusNoContent, nil)
+	if s := get(); s.Notes != "For the event in May.\nAsk Alex." {
+		t.Fatalf("notes = %q", s.Notes)
+	}
+	api.do("PUT", path+"/notes", map[string]any{"notes": strings.Repeat("x", 501)}, http.StatusBadRequest, nil)
+	api.do("PUT", "/api/nodes/"+lobby.NodeID+"/servers/aaaaaaaaaaaaaaaaaaaaaaaaaa/notes", map[string]any{"notes": "x"}, http.StatusNotFound, nil)
+
+	// A copy gets the notes and settings of the original.
+	var copied struct {
+		ID string
+		listed
+	}
+	api.do("POST", path+"/duplicate", map[string]any{"name": "Lobby 2", "port": 25566}, http.StatusCreated, &copied)
+	notes, err := tag.NewStore(m.db).Notes(t.Context())
+	if err != nil || notes[tag.Server{NodeID: lobby.NodeID, ServerID: copied.ID}] != "For the event in May.\nAsk Alex." ||
+		copied.StopTimeout != 300 || copied.TimeZone != "Europe/Berlin" {
+		t.Fatalf("copy = %+v, notes = %q, %v", copied, notes, err)
+	}
+	api.do("PUT", path+"/notes", map[string]any{"notes": ""}, http.StatusNoContent, nil)
+	if s := get(); s.Notes != "" {
+		t.Fatalf("notes = %q", s.Notes)
 	}
 }
 

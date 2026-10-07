@@ -40,9 +40,8 @@ const (
 	serverImage = "itzg/minecraft-server"
 	proxyImage  = "itzg/mc-proxy"
 
-	stopTimeoutSeconds = 60 // time for the server to save its worlds
-	pidsLimit          = 1024
-	maxLineBytes       = 1 << 20
+	pidsLimit    = 1024
+	maxLineBytes = 1 << 20
 )
 
 // image describes how a server type maps onto the itzg images.
@@ -277,6 +276,9 @@ func containerOptions(spec runtime.Spec, path, netName string) (client.Container
 	if len(spec.JVMOptions) > 0 {
 		env = append(env, "JVM_OPTS="+strings.Join(spec.JVMOptions, " "))
 	}
+	if spec.TimeZone != "" {
+		env = append(env, "TZ="+spec.TimeZone)
+	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", img.port))
 	exposed := network.PortSet{port: {}}
 	published := network.PortMap{port: {{HostPort: strconv.Itoa(int(spec.Port))}}}
@@ -305,6 +307,8 @@ func containerOptions(spec runtime.Spec, path, netName string) (client.Container
 			ExposedPorts: exposed,
 			// Proxies read console commands from their standard input, as they have no RCON.
 			OpenStdin: spec.Type.Proxy(),
+			// Also when Docker stops the container by itself, e.g. as its daemon stops.
+			StopTimeout: new(stopSeconds(spec)),
 		},
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{netName: {}}},
 		HostConfig: &container.HostConfig{
@@ -331,9 +335,20 @@ func (d *Docker) Start(ctx context.Context, id string) error {
 	return notFound(err)
 }
 
+// Stop gives the server its stop timeout, which containers created by older agents don't
+// know, to save its worlds.
 func (d *Docker) Stop(ctx context.Context, id string) error {
-	_, err := d.cli.ContainerStop(ctx, containerName(id), client.ContainerStopOptions{Timeout: new(stopTimeoutSeconds)})
+	_, spec, err := d.inspect(ctx, id)
+	if err != nil {
+		return err
+	}
+	_, err = d.cli.ContainerStop(ctx, containerName(id), client.ContainerStopOptions{Timeout: new(stopSeconds(spec))})
 	return notFound(err)
+}
+
+// stopSeconds is the stop timeout of a server in seconds.
+func stopSeconds(spec runtime.Spec) int {
+	return int(noryxv1.StopTimeout(spec.StopTimeout) / time.Second)
 }
 
 func (d *Docker) Update(ctx context.Context, spec runtime.Spec) error {

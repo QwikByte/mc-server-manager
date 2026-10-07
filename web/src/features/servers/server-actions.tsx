@@ -4,6 +4,7 @@ import {
   CircleNotchIcon,
   CopyIcon,
   DotsThreeIcon,
+  NotePencilIcon,
   PlayIcon,
   StackIcon,
   StopIcon,
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils"
 import { type Server, type ServerAction, useMove, useServerAction } from "./api"
 import { DuplicateServerDialog } from "./duplicate-server-dialog"
 import { MoveServerDialog } from "./move-server-dialog"
+import { NotesDialog } from "./notes"
 import { serverType } from "./server-types"
 import { TagsDialog } from "./tags"
 
@@ -37,7 +39,7 @@ const pendingLabels: Record<ServerAction, (name: string) => string> = {
 }
 
 /**
- * Start or stop a server, copy it, move it, tag it, save it as a template and delete it after
+ * Start or stop a server, copy it, move it, tag it, change its notes, save it as a template and delete it after
  * confirmation. While it moves, it can't be changed. Compact actions only have icons, e.g. in a table.
  * With pin, they also pin it to the sidebar and the overview.
  */
@@ -56,7 +58,7 @@ export function ServerActions({
 }) {
   const mutation = useServerAction(nodeId)
   const move = useMove(server.id)
-  const [dialog, setDialog] = useState<"duplicate" | "move" | "template" | "tags">()
+  const [dialog, setDialog] = useState<"duplicate" | "move" | "template" | "tags" | "notes">()
   const running = server.state !== "stopped"
   const dialogProps = { nodeId, server, open: true, onOpenChange: (open: boolean) => !open && setDialog(undefined) }
 
@@ -137,6 +139,12 @@ export function ServerActions({
                   {t("Tags…")}
                 </DropdownMenuItem>
               )}
+              {tags && (
+                <DropdownMenuItem onSelect={() => setDialog("notes")}>
+                  <NotePencilIcon />
+                  {t("Notes…")}
+                </DropdownMenuItem>
+              )}
               {duplicate && (
                 <DropdownMenuItem onSelect={() => setDialog("duplicate")}>
                   <CopyIcon />
@@ -185,6 +193,7 @@ export function ServerActions({
       {dialog === "move" && <MoveServerDialog {...dialogProps} />}
       {dialog === "template" && <SaveTemplateDialog {...dialogProps} />}
       {dialog === "tags" && <TagsDialog servers={[{ ...server, nodeId }]} onOpenChange={dialogProps.onOpenChange} />}
+      {dialog === "notes" && <NotesDialog nodeId={nodeId} server={server} onOpenChange={dialogProps.onOpenChange} />}
     </div>
   )
 }

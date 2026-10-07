@@ -38,8 +38,14 @@ export interface Server {
   overlay?: boolean
   /** A running server whose health check fails, e.g. as it hangs; it is treated like any running one. */
   unhealthy?: boolean
+  /** Seconds the server gets to stop, e.g. to save its worlds, before it is killed. */
+  stopTimeout: number
+  /** IANA time zone such as Europe/Berlin; empty for UTC. */
+  timeZone: string
   /** Labels such as lobby, sorted; only in lists of servers. */
   tags: string[]
+  /** What the server is for, as plain text; only in lists of servers. */
+  notes?: string
 }
 
 export type RestartPolicy = "always" | "on_crash" | "never"
@@ -47,7 +53,18 @@ export type RestartPolicy = "always" | "on_crash" | "never"
 /** Settings of a server that can be changed after it was created. */
 export type ServerSettings = Pick<
   Server,
-  "name" | "version" | "memoryMb" | "port" | "java" | "restartPolicy" | "aikarFlags" | "jvmOptions" | "cpuLimit" | "loaderVersion"
+  | "name"
+  | "version"
+  | "memoryMb"
+  | "port"
+  | "java"
+  | "restartPolicy"
+  | "aikarFlags"
+  | "jvmOptions"
+  | "cpuLimit"
+  | "loaderVersion"
+  | "stopTimeout"
+  | "timeZone"
 >
 
 /** A server together with the node it runs on. */
@@ -275,6 +292,15 @@ export function useUpdateServer(nodeId: string, serverId: string) {
     /** warning tells what didn't follow the change, e.g. the proxy of the server's network. */
     mutationFn: ({ settings, onStart }: { settings: ServerSettings } & Followed) =>
       operate<Server & { warning?: string }>(`/nodes/${nodeId}/servers/${serverId}`, { method: "PUT", body: settings }, onStart),
+    onSettled: () => refreshServers(queryClient, nodeId),
+  })
+}
+
+/** Replaces the notes of a server, which doesn't restart it; empty notes delete them. */
+export function useSetNotes(nodeId: string, serverId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (notes: string) => api(`/nodes/${nodeId}/servers/${serverId}/notes`, { method: "PUT", body: { notes } }),
     onSettled: () => refreshServers(queryClient, nodeId),
   })
 }

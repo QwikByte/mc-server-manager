@@ -30,6 +30,7 @@ import { useServer } from "./api"
 import { Console } from "./console"
 import { JoinAddress } from "./join-address"
 import { MoveStatus } from "./move-status"
+import { ServerNotes } from "./notes"
 import { ServerActions } from "./server-actions"
 import { CrashNotice, RefusedOptionsNotice, ServerStateBadge } from "./server-state"
 import { displayVersion, memoryTitle, serverLook, serverType } from "./server-types"
@@ -151,6 +152,7 @@ export function ServerPage() {
           <CrashNotice server={server} nodeId={nodeId} canReadFiles={can("files.read", nodeId, serverId)} />
           <RefusedOptionsNotice server={server} nodeId={nodeId} canEdit={can("servers.settings", nodeId, serverId)} />
           <EndOfLifeNotice type={server.type} className="mb-6" />
+          <ServerNotes nodeId={nodeId} server={server} canEdit={can("servers.settings", nodeId, serverId)} />
           <Tabs label={t("Server")}>
             {tabs
               .map((tab) => ({ ...tab, label: tab.label(server.type) }))

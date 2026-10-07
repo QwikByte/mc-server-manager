@@ -62,6 +62,7 @@ var actions = map[string]action{
 	"POST /api/servers/tags":                                   {logging.Servers, "Change server tags"},
 	"PUT " + routeServer:                                       {logging.Servers, "Change server settings"},
 	"POST " + routeServer + "/update-image":                    {logging.Servers, "Update server image"},
+	"PUT " + routeServer + "/notes":                            {logging.Servers, "Change server notes"},
 	"DELETE " + routeServer:                                    {logging.Servers, "Delete server"},
 	"POST " + routeServer + "/start":                           {logging.Servers, "Start server"},
 	"POST " + routeServer + "/stop":                            {logging.Servers, "Stop server"},

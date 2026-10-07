@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	maxBulk     = 500
-	bulkTimeout = 10 * time.Minute
+	maxBulk = 500
+	// bulkTimeout covers stopping servers that take their longest stop timeout.
+	bulkTimeout = 10*time.Minute + noryxv1.MaxStopTimeout
 )
 
 // bulkAction is an action on many servers and the permission it needs on each.

@@ -38,8 +38,9 @@ const (
 	maxMinutes  = 60
 	maxMessage  = 200
 	maxCommand  = 1000
-	// actionTimeout covers a graceful stop, in which a server saves its worlds.
-	actionTimeout = 3 * time.Minute
+	// actionTimeout covers a graceful stop, in which a server saves its worlds, which may take
+	// the longest stop timeout.
+	actionTimeout = 2*time.Minute + noryxv1.MaxStopTimeout
 	// lateWarning is how late a warning may be sent, e.g. when the master just started.
 	lateWarning = time.Minute
 )
