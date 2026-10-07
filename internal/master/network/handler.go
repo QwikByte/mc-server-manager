@@ -29,7 +29,9 @@ func NewHandler(svc *Service, ops *operation.Operations, sets FileSets) *Handler
 	return &Handler{svc: svc, ops: ops, sets: sets}
 }
 
-// networkTimeout covers configuring all servers of a large network one after the other.
+// networkTimeout covers configuring all servers of a large network one after the other. The
+// actions on all servers of a network can't be cancelled and give each server its own time,
+// and a rolling restart as long as its servers need; see RollingRestart.
 const networkTimeout = time.Hour
 
 // run runs an action on a network as an operation, which those see who may see networks.

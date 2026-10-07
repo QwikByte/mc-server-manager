@@ -17,11 +17,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
-const (
-	maxBulk = 500
-	// bulkTimeout covers stopping servers that take their longest stop timeout.
-	bulkTimeout = 10*time.Minute + noryxv1.MaxStopTimeout
-)
+const maxBulk = 500
 
 // bulkAction is an action on many servers and the permission it needs on each.
 type bulkAction struct {
@@ -86,7 +82,7 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 	}
 	h.ops.Run(w, r, operation.Spec{
 		Kind: "servers." + req.Action, Subject: strconv.Itoa(len(req.Servers)), Steps: []string{"servers"},
-		Status: http.StatusOK, Timeout: bulkTimeout, Category: logging.Servers,
+		Status: http.StatusOK, Timeout: bulkTimeout(nodes), Category: logging.Servers,
 		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, req.Servers) },
 		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
 			return action.need, onAll(g, action.need, req.Servers)
@@ -110,6 +106,18 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 		}, failed)
 		return map[string]any{"results": results}, nil
 	})
+}
+
+// bulkTimeout is how long an action on the servers of nodes may take, 20 minutes at least:
+// each node handles operation.PerNode of its servers at a time, and each round may take as
+// long as a graceful stop with the longest stop timeout.
+func bulkTimeout(nodes []string) time.Duration {
+	count, rounds := map[string]int{}, 0
+	for _, n := range nodes {
+		count[n]++
+		rounds = max(rounds, (count[n]+operation.PerNode-1)/operation.PerNode)
+	}
+	return max(20*time.Minute, time.Duration(rounds)*actionTimeout)
 }
 
 // onAll reports whether the grants allow p on all servers.

@@ -3,6 +3,9 @@ package network
 import (
 	"slices"
 	"testing"
+	"time"
+
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
 func TestBackendName(t *testing.T) {
@@ -143,5 +146,19 @@ func TestSendCommand(t *testing.T) {
 		if command, alone := n.SendCommand(tt.player, "survival-2"); command != "send "+tt.player+" survival-2" || alone != tt.alone {
 			t.Errorf("%s: SendCommand(%q) = %q, %v", tt.proxy, tt.player, command, alone)
 		}
+	}
+}
+
+// A rolling restart gets for each group the longest stop timeout among its servers and the
+// time to start again, and an hour at least.
+func TestRollingTimeout(t *testing.T) {
+	a, b, c := Backend{Ref: Ref{"n1", "a"}}, Backend{Ref: Ref{"n1", "b"}}, Backend{Ref: Ref{"n2", "c"}}
+	listed := map[Ref]*noryxv1.Server{a.Ref: {StopTimeoutSeconds: 600}, b.Ref: {StopTimeoutSeconds: 30}} // c of an older agent
+	if got := rollingTimeout([][]Backend{{a, b}, {c}}, listed); got != time.Hour {
+		t.Errorf("a few servers: %s", got)
+	}
+	groups := slices.Repeat([][]Backend{{b, a}, {c}}, 5)
+	if got, want := rollingTimeout(groups, listed), 5*(10*time.Minute+time.Minute+2*groupAllowance); got != want {
+		t.Errorf("many servers: %s, want %s", got, want)
 	}
 }

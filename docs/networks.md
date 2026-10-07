@@ -96,7 +96,8 @@ The running game servers restart a few at a time (1, 2, 5 or 10) while the netwo
 their players to another running server with `send`, and the next servers restart once these run again. The servers
 players join first restart last and one at a time; the proxy keeps running, and a server that doesn't start again stops
 the restart. It also stops before servers whose players the proxy can't send, e.g. a BungeeCord or Waterfall proxy
-without its module `cmd_send`.
+without its module `cmd_send`. A rolling restart may take as long as its servers need: for each batch the longest
+[stop timeout](servers.md#settings-and-images) among them and 8 minutes to start and run again, an hour at least.
 
 ## Maintenance
 

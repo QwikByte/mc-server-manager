@@ -321,8 +321,10 @@ func (s *Service) Apply(ctx context.Context, id string, req ApplyRequest, allowe
 }
 
 // restart restarts the servers that need it to load their files: the game servers of each
-// network a batch at a time, then the others.
+// network a batch at a time, then the others. Restarts can't be cancelled, and each takes the
+// time it needs, also once rolling restarts of large networks outlasted the deadline of ctx.
 func (s *Service) restart(ctx context.Context, sv *survey, results []Result, batch int) {
+	ctx = context.WithoutCancel(ctx)
 	pending := map[tag.Server]*Result{}
 	for i, r := range results {
 		if r.Restart {
