@@ -1,17 +1,20 @@
 import type { QueryClient } from "@tanstack/react-query"
-import { BinaryFileError, filesQuery, join, readText, type ServerFiles } from "@/features/files/api"
+import { t } from "i18next"
+import { contentUrl, filesQuery, join, type ServerFiles } from "@/features/files/api"
 import type { Picked } from "@/features/files/path-picker"
+import { responseError } from "@/lib/api"
 import type { SetFile } from "./api"
+import { holdsCode, maxFileBytes, setFileOf } from "./binary"
 
 /** Limits of a set that the master checks, which importing keeps to. */
 export const maxFiles = 100
-const maxFileBytes = 1 << 20
 // Folders importing lists at most, so that picking a large one stays quick.
 const maxFolders = 50
 
 /**
- * Reads the text files among those picked and in the picked folders, at most max of them.
- * Binary and large files are skipped and counted, as are those beyond max.
+ * Reads the files among those picked and in the picked folders, at most max of them, as text
+ * or binary files. Large files and those with code are skipped and counted, as are those
+ * beyond max.
  */
 export async function importFiles(client: QueryClient, server: ServerFiles, picked: Picked[], max: number) {
   const files: SetFile[] = []
@@ -27,12 +30,11 @@ export async function importFiles(client: QueryClient, server: ServerFiles, pick
     } else if (files.length >= max || item.size > maxFileBytes) {
       skipped++
     } else {
-      try {
-        files.push({ path: item.path, content: (await readText(server, item.path)).text, onlyIfMissing: false })
-      } catch (e) {
-        if (!(e instanceof BinaryFileError)) throw e
-        skipped++
-      }
+      const res = await fetch(contentUrl(server, item.path))
+      if (!res.ok) throw await responseError(res, t("The file could not be loaded (status {{status}}).", { status: res.status }))
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      if (bytes.length > maxFileBytes || holdsCode(item.path, bytes)) skipped++
+      else files.push(setFileOf(item.path, bytes))
     }
   }
   return { files, skipped }

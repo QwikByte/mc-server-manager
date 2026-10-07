@@ -1,8 +1,8 @@
-import { ArrowSquareInIcon, CaretDownIcon, CaretRightIcon, FileIcon, FilePlusIcon, FolderIcon, LockKeyIcon } from "@phosphor-icons/react"
+import { ArrowSquareInIcon, CaretDownIcon, CaretRightIcon, FileIcon, FileImageIcon, FilePlusIcon, FolderIcon, LockKeyIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { placeholders, type SetFile } from "./api"
+import { hidden, placeholders, type SetFile } from "./api"
 
 /** A folder of the files of a set; a chain of folders without files of their own shows as one, e.g. plugins/LuckPerms. */
 interface Folder {
@@ -76,11 +76,15 @@ export function FileTree({
             className={`${row} aria-[current=true]:bg-primary/10 aria-[current=true]:text-foreground`}
             style={{ paddingLeft: 6 + depth * 14 + 18 }}
           >
-            <FileIcon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+            {file.data !== undefined ? (
+              <FileImageIcon aria-label={t("Binary file")} className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+            ) : (
+              <FileIcon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+            )}
             <span className="min-w-0 flex-1 truncate font-mono text-xs" title={file.path}>
               {file.path.split("/").pop()}
             </span>
-            {placeholders(file.content).some((p) => p.startsWith("secret:")) && (
+            {placeholders(file.content).some(hidden) && (
               <LockKeyIcon aria-label={t("Holds secrets")} className="size-3.5 shrink-0 text-warning" weight="fill" />
             )}
           </button>

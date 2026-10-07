@@ -155,7 +155,7 @@ func serve(ctx context.Context, cfg config) error {
 	usageStore := usage.NewStore(db, nodes, conf)
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
-	fileSets := fileset.NewService(db, nodes, networks, tags, moves)
+	fileSets := fileset.NewService(db, nodes, networks, tags, datastores, moves)
 	go fileSets.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}

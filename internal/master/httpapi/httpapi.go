@@ -107,7 +107,12 @@ func Message(err error) string {
 
 // ReadJSON decodes a size limited request body into v and rejects unknown fields.
 func ReadJSON(w http.ResponseWriter, r *http.Request, v any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	return ReadJSONUpTo(w, r, v, maxBodyBytes)
+}
+
+// ReadJSONUpTo is ReadJSON for bodies of up to limit bytes, e.g. with files.
+func ReadJSONUpTo(w http.ResponseWriter, r *http.Request, v any, limit int64) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		return Errorf(http.StatusBadRequest, "invalid request body: %v", err)

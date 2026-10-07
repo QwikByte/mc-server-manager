@@ -268,7 +268,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	tags := tag.NewStore(m.db)
 	tasks := schedule.NewService(m.db, nodes, tags, networks, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
-	fileSets := fileset.NewService(m.db, nodes, networks, tags, moves)
+	fileSets := fileset.NewService(m.db, nodes, networks, tags, datastores, moves)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: access.NewService(m.db), Settings: m.settings, Nodes: nodes, Overlay: overlays,
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,

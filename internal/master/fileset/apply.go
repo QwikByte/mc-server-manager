@@ -46,6 +46,8 @@ type PreviewFile struct {
 	ChangedOnServer bool `json:"changedOnServer,omitempty"`
 	// Unknown tells that the file before can't be shown, e.g. as it is too large.
 	Unknown bool `json:"unknown,omitempty"`
+	// Binary tells that the new file is binary, which the preview doesn't show.
+	Binary bool `json:"binary,omitempty"`
 }
 
 // PreviewServer is what applying a set does on a server.
@@ -97,8 +99,12 @@ type target struct {
 	applied  *noryxv1.AppliedFileSet
 }
 
+// Allowed checks that the user may apply a set to a server, and put passwords of databases
+// on it if passwords is set.
+type Allowed func(ref tag.Server, passwords bool) error
+
 // targets returns the servers that applying a set touches, after allowed checked each.
-func (s *Service) targets(ctx context.Context, id string, version int64, allowed func(tag.Server) error) (Set, *survey, []target, error) {
+func (s *Service) targets(ctx context.Context, id string, version int64, allowed Allowed) (Set, *survey, []target, error) {
 	set, err := s.store.get(ctx, id)
 	if err != nil {
 		return set, nil, nil, err
@@ -117,11 +123,11 @@ func (s *Service) targets(ctx context.Context, id string, version int64, allowed
 	var list []target
 	for _, st := range sv.status(set, values) {
 		ref := tag.Server{NodeID: st.NodeID, ServerID: st.ServerID}
-		if err := allowed(ref); err != nil {
+		t := target{ServerStatus: st, member: sv.member(ref), applied: sv.set(ref, id)}
+		t.rendered, _ = render(set, set.Files, values, t.member) // a problem is in the status
+		if err := allowed(ref, t.State != Left && t.rendered.passwords()); err != nil {
 			return set, nil, nil, err
 		}
-		t := target{ServerStatus: st, member: sv.member(ref), applied: sv.set(ref, id)}
-		t.rendered, _ = render(id, set.Files, values, t.member) // a problem is in the status
 		list = append(list, t)
 	}
 	if len(list) == 0 {
@@ -158,8 +164,8 @@ func (s *Service) call(ctx context.Context, set Set, t target, dry bool) ([]*nor
 }
 
 // Preview tells what applying a version of a set does on each server, after allowed checked
-// each. It shows no secrets.
-func (s *Service) Preview(ctx context.Context, id string, version int64, allowed func(tag.Server) error) (Preview, error) {
+// each. It shows no secrets and no passwords.
+func (s *Service) Preview(ctx context.Context, id string, version int64, allowed Allowed) (Preview, error) {
 	set, _, list, err := s.targets(ctx, id, version, allowed)
 	if err != nil {
 		return Preview{}, err
@@ -190,10 +196,11 @@ func (s *Service) Preview(ctx context.Context, id string, version int64, allowed
 		for _, c := range changes {
 			f, action := PreviewFile{Change: change(c)}, c.GetAction()
 			written := action == noryxv1.FileSetAction_FILE_SET_ACTION_CREATED || action == noryxv1.FileSetAction_FILE_SET_ACTION_CHANGED
-			if after, ok := t.rendered.shown(c.GetPath()); ok && written {
-				f.After = put(after)
+			after := t.rendered.file(c.GetPath())
+			if f.Binary = len(after.GetData()) > 0; after != nil && written && !f.Binary {
+				f.After = put(after.GetContent())
 			}
-			if action != noryxv1.FileSetAction_FILE_SET_ACTION_UNCHANGED && action != noryxv1.FileSetAction_FILE_SET_ACTION_CREATED {
+			if !f.Binary && action != noryxv1.FileSetAction_FILE_SET_ACTION_UNCHANGED && action != noryxv1.FileSetAction_FILE_SET_ACTION_CREATED {
 				var before string
 				var err error
 				if c.GetSecret() {
@@ -220,12 +227,12 @@ func (s *Service) applied(ctx context.Context, set Set, t target, path string) (
 	if err != nil {
 		return "", err
 	}
-	r, _ := render(set.ID, v.Files, nil, t.member)
-	content, ok := r.shown(path)
-	if !ok {
+	r, _ := render(set, v.Files, nil, t.member)
+	f := r.file(path)
+	if f == nil {
 		return "", errors.New("not in the version")
 	}
-	return content, nil
+	return f.GetContent(), nil
 }
 
 // read reads a file of a server, as the file manager shows it, up to the size of a file of a set.
@@ -264,7 +271,7 @@ func (s *Service) read(ctx context.Context, ref tag.Server, path string) (string
 // nodes that can't be reached are left out. It can restart the running servers whose files
 // changed: the game servers of a network a few at a time, so that it stays open. Once it
 // restarts servers, it can't be cancelled.
-func (s *Service) Apply(ctx context.Context, id string, req ApplyRequest, allowed func(tag.Server) error) ([]Result, error) {
+func (s *Service) Apply(ctx context.Context, id string, req ApplyRequest, allowed Allowed) ([]Result, error) {
 	switch {
 	case req.Restart && req.Batch == 0:
 		req.Batch = 1

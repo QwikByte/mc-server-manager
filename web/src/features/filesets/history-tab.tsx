@@ -84,13 +84,13 @@ function VersionChanges({ set, version, previous }: { set: FileSet; version: num
   return <FilesDiff before={before.data?.files ?? []} after={current.data?.files ?? []} />
 }
 
-/** The files that differ between two states of a set, each with its changes. */
+/** The files that differ between two states of a set, each with its changes; binary files only tell that they changed. */
 function FilesDiff({ before, after }: { before: SetFile[]; after: SetFile[] }) {
   const paths = [...new Set([...before, ...after].map((f) => f.path))].sort()
   const changed = paths.filter((p) => {
     const a = before.find((f) => f.path === p)
     const b = after.find((f) => f.path === p)
-    return a?.content !== b?.content || a?.onlyIfMissing !== b?.onlyIfMissing
+    return a?.content !== b?.content || a?.data !== b?.data || a?.onlyIfMissing !== b?.onlyIfMissing
   })
   if (changed.length === 0) return <p className="text-sm text-muted-foreground">{t("The files didn't change.")}</p>
   return (
@@ -105,7 +105,11 @@ function FilesDiff({ before, after }: { before: SetFile[]; after: SetFile[] }) {
               {!a && <Pill tone="success">{t("Added")}</Pill>}
               {!b && <Pill tone="destructive">{t("Removed")}</Pill>}
             </p>
-            <DiffView before={a?.content ?? ""} after={b?.content ?? ""} filename={path} label={t("Changes of {{path}}", { path })} />
+            {a?.data !== undefined || b?.data !== undefined ? (
+              <p className="text-sm text-muted-foreground">{t("A binary file, whose changes aren't shown.")}</p>
+            ) : (
+              <DiffView before={a?.content ?? ""} after={b?.content ?? ""} filename={path} label={t("Changes of {{path}}", { path })} />
+            )}
           </div>
         )
       })}

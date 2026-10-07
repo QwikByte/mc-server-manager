@@ -14,7 +14,18 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { msg } from "@/lib/i18n"
-import { type FileSet, fileSetQuery, type ServerStatus, type SetInput, type State, statusQuery, useDeleteFileSet, usedSecrets, useSaveFileSet } from "./api"
+import {
+  type FileSet,
+  fileSetQuery,
+  type ServerStatus,
+  type SetInput,
+  type State,
+  statusQuery,
+  useDeleteFileSet,
+  usedSecrets,
+  usedVariables,
+  useSaveFileSet,
+} from "./api"
 import { ApplyDialog } from "./apply-dialog"
 import { HistoryTab } from "./history-tab"
 import { states } from "./labels"
@@ -23,7 +34,7 @@ import { Workspace } from "./workspace"
 
 const route = getRouteApi("/_app/filesets/$fileSetId")
 
-const draftOf = ({ name, description, files, targets, version }: FileSet): SetInput => ({ name, description, files, targets, version })
+const draftOf = ({ name, description, files, targets, variables, version }: FileSet): SetInput => ({ name, description, files, targets, variables, version })
 
 const tabs = [
   { id: "files", label: msg("Files"), icon: FilesIcon },
@@ -201,7 +212,7 @@ function SetEditor({ set }: { set: FileSet }) {
   )
 }
 
-/** What a set needs: servers whose files are behind, secrets without a value, a target. Applying is its main action. */
+/** What a set needs: servers whose files are behind, secrets and variables without a value, a target. Applying is its main action. */
 function StatusBar({
   set,
   draft,
@@ -223,10 +234,12 @@ function StatusBar({
   for (const s of statuses ?? []) counts.set(s.state, (counts.get(s.state) ?? 0) + 1)
   const behind = statuses?.filter((s) => pending.includes(s.state)).length ?? 0
   const missing = usedSecrets(draft.files).filter((name) => !set.secrets.some((s) => s.name === name))
+  const valueless = usedVariables(draft.files).filter((name) => !draft.variables.some((v) => v.name === name && v.values.length > 0))
   const problems = [
     draft.targets.length === 0 && t("The set doesn't target any servers yet: add a target."),
     draft.files.length === 0 && t("The set has no files yet."),
     missing.length > 0 && t("Secrets without a value: {{names}}", { names: missing.join(", ") }),
+    valueless.length > 0 && t("Variables without a value: {{names}}", { names: valueless.join(", ") }),
   ].filter((p): p is string => Boolean(p))
 
   return (

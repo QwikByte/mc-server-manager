@@ -3,6 +3,7 @@ package fileset
 import (
 	"cmp"
 	"context"
+	"net/http"
 	"slices"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/datastore"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
@@ -36,6 +38,11 @@ type Tags interface {
 	All(ctx context.Context) (map[tag.Server][]string, error)
 }
 
+// Datastores tell how servers reach the databases of the datastores of their networks.
+type Datastores interface {
+	Connections(ctx context.Context) (datastore.Connections, error)
+}
+
 // Moves are the servers that move to another node, which are left alone meanwhile.
 type Moves interface {
 	Check(serverID string) error
@@ -47,20 +54,28 @@ type survey struct {
 	nodes    map[string]string // names by ID
 	servers  map[tag.Server]*noryxv1.Server
 	applied  map[tag.Server][]*noryxv1.AppliedFileSet
-	down     map[string]error // nodes that couldn't be asked
+	agents   map[string]*noryxv1.ListFileSetsResponse // what the agents told, by node
+	down     map[string]error                         // nodes that couldn't be asked
 	tags     map[tag.Server][]string
 	networks []network.Network
+	reach    datastore.Connections
 }
 
 // survey asks all nodes about their servers and the sets on them, all at the same time.
 func (s *Service) survey(ctx context.Context) (*survey, error) {
-	sv := &survey{nodes: map[string]string{}, servers: map[tag.Server]*noryxv1.Server{}, applied: map[tag.Server][]*noryxv1.AppliedFileSet{}, down: map[string]error{}}
+	sv := &survey{
+		nodes: map[string]string{}, servers: map[tag.Server]*noryxv1.Server{}, applied: map[tag.Server][]*noryxv1.AppliedFileSet{},
+		agents: map[string]*noryxv1.ListFileSetsResponse{}, down: map[string]error{},
+	}
 	nodes, err := s.nodes.List(ctx)
 	if err == nil {
 		sv.tags, err = s.tags.All(ctx)
 	}
 	if err == nil {
 		sv.networks, err = s.networks.List(ctx)
+	}
+	if err == nil {
+		sv.reach, err = s.datastores.Connections(ctx)
 	}
 	if err != nil {
 		return nil, err
@@ -80,7 +95,8 @@ func (s *Service) survey(ctx context.Context) (*survey, error) {
 			for _, srv := range servers {
 				sv.servers[tag.Server{NodeID: n.ID, ServerID: srv.GetId()}] = srv
 			}
-			for _, srv := range sets {
+			sv.agents[n.ID] = sets
+			for _, srv := range sets.GetServers() {
 				sv.applied[tag.Server{NodeID: n.ID, ServerID: srv.GetServerId()}] = srv.GetSets()
 			}
 		})
@@ -90,7 +106,7 @@ func (s *Service) survey(ctx context.Context) (*survey, error) {
 }
 
 // ask lists the servers of a node and the sets on them.
-func (s *Service) ask(ctx context.Context, nodeID string) ([]*noryxv1.Server, []*noryxv1.ServerFileSets, error) {
+func (s *Service) ask(ctx context.Context, nodeID string) ([]*noryxv1.Server, *noryxv1.ListFileSetsResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, nodeID)
@@ -105,7 +121,7 @@ func (s *Service) ask(ctx context.Context, nodeID string) ([]*noryxv1.Server, []
 	if err != nil {
 		return nil, nil, err
 	}
-	return servers.GetServers(), sets.GetServers(), nil
+	return servers.GetServers(), sets, nil
 }
 
 // targets returns the servers that targets name, sorted. Servers that a node listed must
@@ -160,17 +176,37 @@ func (sv *survey) holders(id string) []tag.Server {
 	return refs
 }
 
-// member returns what the variables of a server need.
+// member returns what the placeholders of a server need.
 func (sv *survey) member(ref tag.Server) member {
-	m := member{Server: ref, Name: sv.servers[ref].GetName(), Port: sv.servers[ref].GetPort()}
+	m := member{Server: ref, Name: sv.servers[ref].GetName(), Port: sv.servers[ref].GetPort(), Tags: sv.tags[ref]}
 	for _, n := range sv.networks {
+		if tag.Server(n.Proxy) == ref {
+			m.NetworkID = n.ID
+		}
 		for _, b := range n.Backends {
 			if tag.Server(b.Ref) == ref {
-				m.Network = b.Name
+				m.Network, m.NetworkID = b.Name, n.ID
 			}
 		}
 	}
+	networkID := m.NetworkID
+	m.connect = func(name, database string) (datastore.Connection, error) {
+		return sv.reach.Connect(networkID, ref.NodeID, name, database)
+	}
 	return m
+}
+
+// unable returns why the agent of a node can't write a set as it is for a server, or nil:
+// older agents know neither binary files nor the passwords of databases.
+func (sv *survey) unable(nodeID string, r rendered) error {
+	agent := sv.agents[nodeID]
+	switch {
+	case slices.ContainsFunc(r.files, func(f *noryxv1.FileSetFile) bool { return len(f.GetData()) > 0 }) && !agent.GetBinaryFiles():
+		return httpapi.Errorf(http.StatusNotImplemented, "Update the agent of %s to put binary files of sets on its servers.", sv.nodes[nodeID])
+	case r.passwords() && !agent.GetDatabasePasswords():
+		return httpapi.Errorf(http.StatusNotImplemented, "Update the agent of %s to put passwords of databases on its servers.", sv.nodes[nodeID])
+	}
+	return nil
 }
 
 func compareServers(a, b tag.Server) int {
@@ -200,7 +236,8 @@ type ServerStatus struct {
 	Version int64 `json:"version,omitempty"`
 	// Changed are the files that changed on the server since they were written.
 	Changed []string `json:"changed,omitempty"`
-	// Problem tells why the set can't be applied to the server, e.g. a secret without value.
+	// Problem tells why the set can't be applied to the server, e.g. a secret or variable
+	// without value, or a database it can't reach.
 	Problem string `json:"problem,omitempty"`
 }
 
@@ -222,7 +259,10 @@ func (sv *survey) status(set Set, values map[string]string) []ServerStatus {
 				st.Changed = append(st.Changed, f.GetPath())
 			}
 		}
-		r, err := render(set.ID, set.Files, values, sv.member(ref))
+		r, err := render(set, set.Files, values, sv.member(ref))
+		if err == nil && sv.down[ref.NodeID] == nil {
+			err = sv.unable(ref.NodeID, r)
+		}
 		if err != nil {
 			st.Problem = httpapi.Message(err)
 		}

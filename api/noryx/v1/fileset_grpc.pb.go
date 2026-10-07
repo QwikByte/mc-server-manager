@@ -29,8 +29,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // FileSetService is served by every agent and keeps the files of file sets on its servers:
-// text files that the master manages for groups of servers, e.g. the configuration of a
-// plugin. Each server records in its data which set wrote which file. Files that hold
+// files that the master manages for groups of servers, e.g. the configuration of a plugin or
+// an image. Each server records in its data which set wrote which file. Files that hold
 // secrets of a set are hidden like the RCON password, also after they left the set.
 type FileSetServiceClient interface {
 	// ApplyFileSet writes the files of a set to a server, with its secrets filled in, and
@@ -88,8 +88,8 @@ func (c *fileSetServiceClient) ListFileSets(ctx context.Context, in *ListFileSet
 // for forward compatibility.
 //
 // FileSetService is served by every agent and keeps the files of file sets on its servers:
-// text files that the master manages for groups of servers, e.g. the configuration of a
-// plugin. Each server records in its data which set wrote which file. Files that hold
+// files that the master manages for groups of servers, e.g. the configuration of a plugin or
+// an image. Each server records in its data which set wrote which file. Files that hold
 // secrets of a set are hidden like the RCON password, also after they left the set.
 type FileSetServiceServer interface {
 	// ApplyFileSet writes the files of a set to a server, with its secrets filled in, and

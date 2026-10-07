@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/auth"
@@ -15,9 +16,14 @@ import (
 	"github.com/QwikByte/noryx/internal/master/tag"
 )
 
-// applyOperationTimeout covers writing the files of a set on many servers. Restarting them
-// afterwards takes as long as the servers need.
-const applyOperationTimeout = time.Hour
+const (
+	// applyOperationTimeout covers writing the files of a set on many servers. Restarting
+	// them afterwards takes as long as the servers need.
+	applyOperationTimeout = time.Hour
+	// maxSetBody covers the files of a set as JSON, in which binary ones take a third more in
+	// base64 and text more with escapes.
+	maxSetBody = 4*noryxv1.MaxFileSetSize + 1<<20
+)
 
 type Handler struct {
 	svc *Service
@@ -29,18 +35,21 @@ func NewHandler(svc *Service, ops *operation.Operations) *Handler {
 }
 
 // Register adds the routes. Previewing and applying a set also need the permission to change
-// the files of every server it touches, as its files can configure plugins that run code.
+// the files of every server it touches, as its files can configure plugins that run code, and
+// the passwords of databases in a set need the permission to manage datastores, without which
+// they are never seen.
 func (h *Handler) Register(mux access.Mux) {
 	view, manage := access.Everywhere(access.FileSetsView), access.Everywhere(access.FileSetsManage)
+	datastores := func(r *http.Request) bool { return access.From(r.Context()).Has(access.DatastoresManage) }
 	mux.Handle("GET /api/filesets", view, func(w http.ResponseWriter, r *http.Request) {
 		list, err := h.svc.List(r.Context())
 		write(w, r, http.StatusOK, list, err)
 	})
 	mux.Handle("POST /api/filesets", manage, func(w http.ResponseWriter, r *http.Request) {
 		var in Input
-		if read(w, r, &in) {
+		if readSet(w, r, &in) {
 			logging.Note(r.Context(), slog.String("name", in.Name))
-			set, err := h.svc.Create(r.Context(), in, username(r))
+			set, err := h.svc.Create(r.Context(), in, username(r), datastores(r))
 			write(w, r, http.StatusCreated, set, err)
 		}
 	})
@@ -58,9 +67,9 @@ func (h *Handler) Register(mux access.Mux) {
 	})
 	mux.Handle("PUT /api/filesets/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
 		var in Input
-		if read(w, r, &in) {
+		if readSet(w, r, &in) {
 			logging.Note(r.Context(), slog.String("name", in.Name))
-			set, err := h.svc.Update(r.Context(), r.PathValue("id"), in, username(r))
+			set, err := h.svc.Update(r.Context(), r.PathValue("id"), in, username(r), datastores(r))
 			write(w, r, http.StatusOK, set, err)
 		}
 	})
@@ -118,6 +127,9 @@ func (h *Handler) Register(mux access.Mux) {
 		if len(req.Servers) > 0 {
 			logging.Note(r.Context(), slog.Int("servers", len(req.Servers)))
 		}
+		if used := passwords(set.Files, nil); len(used) > 0 {
+			logging.Note(r.Context(), slog.Any("database_passwords", used))
+		}
 		check := allowed(r, req.Restart)
 		steps := []string{"files"}
 		// Others may cancel it if they may do the same on all servers, as the servers of the
@@ -139,15 +151,18 @@ func (h *Handler) Register(mux access.Mux) {
 	})
 }
 
-// allowed returns the check that the user may change the files of a server, and restart it
-// if restart is set.
-func allowed(r *http.Request, restart bool) func(tag.Server) error {
+// allowed returns the check that the user may change the files of a server, restart it if
+// restart is set, and put passwords of databases on it, which they could read there.
+func allowed(r *http.Request, restart bool) Allowed {
 	grants := access.From(r.Context())
-	return func(ref tag.Server) error {
-		for _, p := range []access.Permission{access.FilesWrite, access.ServersRestart} {
-			if (p == access.FilesWrite || restart) && !grants.On(p, ref.NodeID, ref.ServerID) {
-				return access.Denied(p)
-			}
+	return func(ref tag.Server, passwords bool) error {
+		switch {
+		case !grants.On(access.FilesWrite, ref.NodeID, ref.ServerID):
+			return access.Denied(access.FilesWrite)
+		case restart && !grants.On(access.ServersRestart, ref.NodeID, ref.ServerID):
+			return access.Denied(access.ServersRestart)
+		case passwords && !grants.Has(access.DatastoresManage):
+			return errPasswords
 		}
 		return nil
 	}
@@ -172,6 +187,15 @@ func username(r *http.Request) string {
 // read reads the JSON body of a request into v, or answers with the error.
 func read(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := httpapi.ReadJSON(w, r, v); err != nil {
+		httpapi.WriteError(w, r, err)
+		return false
+	}
+	return true
+}
+
+// readSet reads a set from the JSON body of a request, which is larger than most.
+func readSet(w http.ResponseWriter, r *http.Request, in *Input) bool {
+	if err := httpapi.ReadJSONUpTo(w, r, in, maxSetBody); err != nil {
 		httpapi.WriteError(w, r, err)
 		return false
 	}

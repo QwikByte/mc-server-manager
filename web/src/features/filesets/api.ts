@@ -4,12 +4,30 @@ import { operate } from "@/features/operations/api"
 import type { Followed } from "@/features/servers/api"
 import { api } from "@/lib/api"
 
-/** A text file of a set, at a path relative to the folder of a server. */
+/** A file of a set, at a path relative to the folder of a server: text, or binary data in base64. */
 export interface SetFile {
   path: string
   content: string
+  /** The content of a binary file, e.g. an image, in base64; nothing is filled in. */
+  data?: string
   /** Only written to servers that don't have the file, for files that plugins rewrite. */
   onlyIfMissing: boolean
+}
+
+export type ValueKind = "server" | "network" | "tag" | "all"
+
+/** The value of a variable for a server, the servers of a network, those with a tag, or all servers. */
+export interface Value {
+  kind: ValueKind
+  /** The ID of the server or network, or the tag. */
+  scope?: string
+  value: string
+}
+
+/** A variable of a set, which files use as {{var:<name>}}; a server gets the first of its values that is for it. */
+export interface Variable {
+  name: string
+  values: Value[]
 }
 
 /** Servers a set is for: those with a tag, or the game servers or the proxy of a network. */
@@ -35,6 +53,7 @@ export interface FileSet {
   version: number
   files: SetFile[]
   targets: Target[]
+  variables: Variable[]
   secrets: Secret[]
   /** The kept versions, newest first, without their files. */
   versions: Version[]
@@ -56,6 +75,7 @@ export interface SetInput {
   description: string
   files: SetFile[]
   targets: Target[]
+  variables: Variable[]
   /** The version a change is based on; the master refuses it if someone saved a newer one. */
   version: number
 }
@@ -92,6 +112,8 @@ export interface PreviewFile extends Change {
   changedOnServer?: boolean
   /** What the server has can't be shown, e.g. as it is too large. */
   unknown?: boolean
+  /** The new file is binary, which the preview doesn't show. */
+  binary?: boolean
 }
 
 export interface PreviewServer extends ServerStatus {
@@ -195,15 +217,27 @@ export function useApply(id: string) {
   })
 }
 
-/** The secrets and variables a text uses, in order and each once. */
+/** Matches the placeholders of the files of sets, as the master does. */
+export const placeholderPattern = /\{\{((?:server|network)\.[^{}\s]*|(?:secret|var|datastore):[^{}\n]*)\}\}/g
+
+/** The placeholders a text uses, without their braces, in order and each once. */
 export function placeholders(content: string) {
   const found = new Set<string>()
-  for (const m of content.matchAll(/\{\{((?:server|network)\.[^{}\s]*|secret:[^{}\n]*)\}\}/g)) found.add(m[1])
+  for (const m of content.matchAll(placeholderPattern)) found.add(m[1])
   return [...found]
 }
 
-/** The names of the secrets the files of a set use. */
-export function usedSecrets(files: SetFile[]) {
-  const names = files.flatMap((f) => placeholders(f.content)).filter((p) => p.startsWith("secret:"))
-  return [...new Set(names.map((p) => p.slice("secret:".length)))].sort()
+/** Whether a placeholder stands for a value only the agents fill in: a secret, or the password of a database. */
+export const hidden = (placeholder: string) => placeholder.startsWith("secret:") || (placeholder.startsWith("datastore:") && placeholder.endsWith(".password"))
+
+/** The names of the placeholders of a kind, e.g. secret, that the files of a set use. */
+function used(files: SetFile[], kind: "secret" | "var") {
+  const names = files.flatMap((f) => placeholders(f.content)).filter((p) => p.startsWith(`${kind}:`))
+  return [...new Set(names.map((p) => p.slice(kind.length + 1)))].sort()
 }
+
+/** The names of the secrets the files of a set use. */
+export const usedSecrets = (files: SetFile[]) => used(files, "secret")
+
+/** The names of the variables the files of a set use. */
+export const usedVariables = (files: SetFile[]) => used(files, "var")
