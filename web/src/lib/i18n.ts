@@ -53,7 +53,7 @@ export function chooseLanguage(choice: string) {
     if (choice) localStorage.setItem(storageKey, choice)
     else localStorage.removeItem(storageKey)
   } catch {
-    // Only this page then shows the language.
+    return // the panel would show the same after reloading, again and again for a signed-in user
   }
   if (resolve(choice) !== language) location.reload()
 }
