@@ -131,7 +131,7 @@
 [data-accent="emerald"] {
   --primary: #047857;
   --primary-foreground: #ffffff;
-  --ring: #10b981;
+  --ring: #059669; /* 3.5:1 on the background, as focus needs 3:1 */
   --glow-1: rgb(16 185 129 / 0.13);
   &:is(.dark, .dark *) {
     --primary: #34d399;
