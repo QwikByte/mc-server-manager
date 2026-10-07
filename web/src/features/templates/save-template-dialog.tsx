@@ -16,7 +16,7 @@ import { formatMegabytes } from "@/lib/format"
 import { useSaveTemplate } from "./api"
 
 /**
- * Saves the settings, server.properties and the plugins from Modrinth or Hangar of a server as a template.
+ * Saves the settings, server.properties, tags and the plugins from Modrinth or Hangar of a server as a template.
  * Other plugin files, plugin configurations and worlds are left out.
  */
 export function SaveTemplateDialog({
@@ -55,6 +55,7 @@ export function SaveTemplateDialog({
       (type.addons.kind === "mods"
         ? t("{{count}} mods from Modrinth", { count, defaultValue_one: "{{count}} mod from Modrinth" })
         : t("{{count}} plugins from Modrinth or Hangar", { count, defaultValue_one: "{{count}} plugin from Modrinth or Hangar" })),
+    server.tags.length > 0 && t("The tags {{tags}}", { tags: server.tags.join(", ") }),
     type.addons &&
       others > 0 &&
       t("{{count}} other files are left out", { count: others, defaultValue_one: "{{count}} other file is left out" }),
@@ -78,7 +79,9 @@ export function SaveTemplateDialog({
         stopTimeout,
         timeZone,
         properties: props,
+        tags: server.tags,
         plugins: projects,
+        versions: {},
       },
       {
         onSuccess: (template) => {

@@ -203,13 +203,42 @@ func (s *Service) Install(ctx context.Context, projects []string, chosen map[str
 	return results
 }
 
-// InstallOn installs projects on a server, e.g. those of a template on a new server.
-func (s *Service) InstallOn(ctx context.Context, projects []string, nodeID, serverID string) error {
+// InstallOn installs projects on a server, e.g. those of a template on a new server, each in
+// the version kept for it by project ID, if any. A project whose kept version doesn't run on
+// the server is left out rather than installed in another version, and the error says so.
+func (s *Service) InstallOn(ctx context.Context, projects []string, kept map[string]string, nodeID, serverID string) error {
 	if err := checkProjects(projects); err != nil {
 		return err
 	}
-	if r := s.Install(ctx, projects, nil, []Ref{{nodeID, serverID}})[0]; r.Error != "" {
-		return errors.New(r.Error)
+	ref, failed := Ref{nodeID, serverID}, []string{}
+	if len(kept) > 0 {
+		_, srv, err := s.server(ctx, ref)
+		var t target
+		if err == nil {
+			t, err = s.target(ctx, srv.GetType(), srv.GetVersion())
+		}
+		if err != nil {
+			return err
+		}
+		run := &installation{Service: s, chosen: kept}
+		projects = slices.DeleteFunc(slices.Clone(projects), func(project string) bool {
+			if kept[project] == "" {
+				return false
+			}
+			_, err := run.pick(ctx, project, t)
+			if err != nil {
+				failed = append(failed, httpapi.Message(err))
+			}
+			return err != nil
+		})
+	}
+	if len(projects) > 0 {
+		if r := s.Install(ctx, projects, kept, []Ref{ref})[0]; r.Error != "" {
+			failed = append(failed, r.Error)
+		}
+	}
+	if len(failed) > 0 {
+		return httpapi.Errorf(http.StatusConflict, "%s", strings.Join(failed, " "))
 	}
 	return nil
 }

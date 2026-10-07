@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
@@ -133,6 +135,44 @@ func TestSetNotes(t *testing.T) {
 	}
 	if notes, err := tags.Notes(t.Context()); err != nil || len(notes) != 1 || notes[tag.Server{NodeID: "n1", ServerID: "s1"}] != "Test server, ask Alex" {
 		t.Fatalf("notes = %q, %v", notes, err)
+	}
+}
+
+// A new server gets its tags, e.g. those of its template, only from those who may change the
+// settings of the node's servers, and invalid tags are refused before it is created.
+func TestCreateWithTags(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO nodes (id, name, address, created_at) VALUES ('n1', 'n1', 'host:7443', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	tags := tag.NewStore(db)
+	h := NewHandler(fakeNodes{conn: olderAgent{}}, fakeNetworks{}, tags, nil, nil, operation.New(time.Second), NewMoves(), nil)
+	for _, tc := range []struct {
+		grants access.Grants
+		tags   string
+		code   int
+	}{
+		{access.Grants{}, `["Bedwars"]`, http.StatusForbidden},
+		{access.Admin(), `["two words"]`, http.StatusBadRequest},
+		{access.Admin(), `["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"]`, http.StatusBadRequest},
+		{access.Admin(), `["Bedwars", "minigames", "bedwars"]`, http.StatusCreated},
+	} {
+		body := `{"name": "Lobby", "type": "paper", "memoryMb": 1024, "port": 25565, "acceptEula": true, "tags": ` + tc.tags + `}`
+		req := httptest.NewRequestWithContext(access.WithGrants(t.Context(), tc.grants), http.MethodPost, "/api/nodes/n1/servers", strings.NewReader(body))
+		req.SetPathValue("node", "n1")
+		rec := httptest.NewRecorder()
+		h.create(rec, req)
+		if rec.Code != tc.code {
+			t.Errorf("tags %s: status %d, want %d: %s", tc.tags, rec.Code, tc.code, rec.Body)
+		}
+	}
+	got, err := tags.All(t.Context())
+	if want := map[tag.Server][]string{{NodeID: "n1", ServerID: "s1"}: {"bedwars", "minigames"}}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("tags = %v, %v, want %v", got, err, want)
 	}
 }
 

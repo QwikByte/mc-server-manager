@@ -72,9 +72,10 @@ type FileSets interface {
 	Left(ctx context.Context, servers []tag.Server)
 }
 
-// Plugins installs plugins and mods, e.g. those of a template on a new server.
+// Plugins installs plugins and mods, e.g. those of a template on a new server, in the versions
+// kept for them by project ID.
 type Plugins interface {
-	InstallOn(ctx context.Context, projects []string, nodeID, serverID string) error
+	InstallOn(ctx context.Context, projects []string, kept map[string]string, nodeID, serverID string) error
 }
 
 // Modpacks installs Modrinth modpacks on new servers.
@@ -316,9 +317,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 // create creates a server as an operation, which downloads the server image if the node
-// doesn't have it. Besides the basics, it takes the settings, server.properties and plugins
-// a template provides; plugins that can't be installed leave the server without them. A
-// modpack decides the type and the versions, and a server without all of it is deleted.
+// doesn't have it. Besides the basics, it takes the settings, server.properties, tags and
+// plugins a template provides; plugins that can't be installed leave the server without them.
+// A modpack decides the type and the versions, and a server without all of it is deleted.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name       string `json:"name"`
@@ -330,8 +331,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Storage    string `json:"storage"`
 		settings
 		Properties map[string]string `json:"properties"`
-		// Plugins are the IDs of Modrinth projects to install on the new server.
-		Plugins []string `json:"plugins"`
+		// Plugins are the IDs of projects of Modrinth or Hangar to install on the new server, and
+		// Versions the IDs of the versions to keep of some, by project ID, e.g. of a template.
+		Plugins  []string          `json:"plugins"`
+		Versions map[string]string `json:"versions"`
+		// Tags are given to the new server, e.g. those of its template.
+		Tags []string `json:"tags"`
 		// Modpack is a version of a Modrinth modpack to install on the new server.
 		Modpack *struct {
 			Project string `json:"project"`
@@ -345,8 +350,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.PathValue("node")
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
+	grants := access.From(r.Context())
 	policy, cpuMillis, err := req.check()
-	if err == nil && (len(req.Plugins) > 0 || req.Modpack != nil) && !access.From(r.Context()).On(access.Plugins, nodeID, "") {
+	var tags []string
+	if err == nil {
+		tags, err = newTags(grants, nodeID, req.Tags)
+	}
+	if err == nil && (len(req.Plugins) > 0 || req.Modpack != nil) && !grants.On(access.Plugins, nodeID, "") {
 		err = access.Denied(access.Plugins)
 	}
 	release := noRelease
@@ -419,14 +429,35 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			// Warning tells what the server didn't get, e.g. from an older agent.
 			Warning string `json:"warning,omitempty"`
 		}{view: toView(res.GetServer()), Warning: olderAgentWarning(req.StopTimeout, req.TimeZone, res.GetServer())}
+		if len(tags) > 0 {
+			logging.Note(ctx, slog.Any("tags", tags))
+			if err := h.tags.Change(ctx, []tag.Server{{NodeID: nodeID, ServerID: id}}, tags, nil); err != nil {
+				created.Warning = strings.TrimSpace("The server didn't get its tags: " + httpapi.Message(err) + " " + created.Warning)
+			}
+		}
 		if len(req.Plugins) > 0 {
 			operation.Step(ctx, "plugins")
-			if err := h.plugins.InstallOn(ctx, req.Plugins, nodeID, id); err != nil {
+			if err := h.plugins.InstallOn(ctx, req.Plugins, req.Versions, nodeID, id); err != nil {
 				created.PluginError = httpapi.Message(err)
 			}
 		}
 		return created, nil
 	})
+}
+
+// newTags checks the tags of a new server, which need the permission to change the settings of
+// the servers of its node, as tags of a server need the permission to change its settings.
+func newTags(grants access.Grants, nodeID string, tags []string) ([]string, error) {
+	tags, err := tag.Normalize(tags)
+	switch {
+	case err != nil:
+		return nil, err
+	case len(tags) > tag.MaxPerServer:
+		return nil, httpapi.Errorf(http.StatusBadRequest, "A server can have up to %d tags.", tag.MaxPerServer)
+	case len(tags) > 0 && !grants.On(access.ServersSettings, nodeID, ""):
+		return nil, access.Denied(access.ServersSettings)
+	}
+	return tags, nil
 }
 
 // duplicate copies a server with its data into a new server on the same node, as an

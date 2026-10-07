@@ -70,14 +70,9 @@ export function TagsDialog({ servers, onOpenChange }: { servers: TaggedServer[];
   const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string>()
   const change = useChangeTags()
-  const { data: all } = useQuery(allServersQuery)
   const count = (tag: string) => servers.filter((s) => s.tags.includes(tag)).length
   const shown = [...new Set([...servers.flatMap((s) => s.tags), ...add])].filter((tag) => !remove.includes(tag)).sort()
   const typed = typing.trim().toLowerCase()
-  const suggestions = [...new Set(all?.flatMap((s) => s.tags))]
-    .filter((tag) => !shown.includes(tag) && tag.startsWith(typed))
-    .sort()
-    .slice(0, 12)
   const tooMany = servers.some((s) => new Set([...s.tags.filter((tag) => !remove.includes(tag)), ...add]).size > maxTags)
 
   function addTag(tag: string) {
@@ -159,21 +154,7 @@ export function TagsDialog({ servers, onOpenChange }: { servers: TaggedServer[];
                 {t("Add")}
               </Button>
             </div>
-            {suggestions.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {suggestions.map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => addTag(tag)}
-                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground ring-1 ring-border outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <PlusIcon className="size-3" />
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            )}
+            <TagSuggestions typed={typed} except={shown} onPick={addTag} />
             {(error || tooMany) && <FieldError>{error ?? t("A server can have up to {{count}} tags.", { count: maxTags })}</FieldError>}
           </div>
           <DialogFooter>
@@ -188,5 +169,82 @@ export function TagsDialog({ servers, onOpenChange }: { servers: TaggedServer[];
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** The tags of servers that start with what is typed, except those given, to pick one. */
+function TagSuggestions({ typed, except, onPick }: { typed: string; except: string[]; onPick: (tag: string) => void }) {
+  const { data: all } = useQuery(allServersQuery)
+  const suggestions = [...new Set(all?.flatMap((s) => s.tags))]
+    .filter((tag) => !except.includes(tag) && tag.startsWith(typed))
+    .sort()
+    .slice(0, 12)
+  if (suggestions.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {suggestions.map((tag) => (
+        <button
+          key={tag}
+          type="button"
+          onClick={() => onPick(tag)}
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground ring-1 ring-border outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <PlusIcon className="size-3" />
+          {tag}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Edits a list of tags in a form, e.g. those a template gives its servers. */
+export function TagsField({ id, value, onChange }: { id: string; value: string[]; onChange: (tags: string[]) => void }) {
+  const [typing, setTyping] = useState("")
+  const [error, setError] = useState<string>()
+  const typed = typing.trim().toLowerCase()
+
+  function add(tag: string) {
+    if (!valid.test(tag)) return setError(t("Tags have up to 24 letters, digits, - and _."))
+    if (value.length >= maxTags) return setError(t("A server can have up to {{count}} tags.", { count: maxTags }))
+    onChange([...new Set([...value, tag])].sort())
+    setTyping("")
+    setError(undefined)
+  }
+
+  return (
+    <div className="grid gap-2">
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map((tag) => (
+            <TagChip
+              key={tag}
+              tag={tag}
+              onRemove={() => onChange(value.filter((x) => x !== tag))}
+              className="h-6 bg-card text-xs ring-1 ring-foreground/8"
+            />
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          value={typing}
+          maxLength={24}
+          placeholder={t("Add a tag, e.g. lobby")}
+          onChange={(e) => setTyping(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return
+            e.preventDefault() // rather than submitting the form
+            if (typed) add(typed)
+          }}
+        />
+        <Button type="button" variant="outline" disabled={!typed} onClick={() => add(typed)}>
+          <PlusIcon />
+          {t("Add")}
+        </Button>
+      </div>
+      <TagSuggestions typed={typed} except={value} onPick={add} />
+      {error && <FieldError>{error}</FieldError>}
+    </div>
   )
 }

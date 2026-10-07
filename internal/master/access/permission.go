@@ -105,7 +105,7 @@ var Catalog = []Area{
 	}},
 	{"Servers", []Info{
 		scoped(ServersView, "See servers", "Servers with their state, settings and plugins."),
-		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins.", ServersView),
+		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins, their tags the one to change server settings.", ServersView),
 		scoped(ServersStart, "Start servers", "", ServersView),
 		scoped(ServersStop, "Stop servers", "", ServersView),
 		scoped(ServersRestart, "Restart servers", "", ServersView),
