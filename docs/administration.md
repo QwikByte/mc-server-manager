@@ -66,8 +66,8 @@ Users get their permissions from groups; a user can be in several groups and has
 There are permissions for every action, by area: nodes (see, change, renew certificates, remove, add, manage the private
 network, which applies to all nodes), servers (see, create, start, stop, restart, change settings, delete), console
 (read, send commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download,
-change files, `server.properties`, plugins and mods), backups (see and download, back up, restore, delete), the log,
-networks, databases of networks, templates, file sets, backup jobs, schedules, the master's settings, the terminal,
+change files, `server.properties`, plugins and mods), backups (see and download, back up and keep, restore, delete), the
+log, networks, databases of networks, templates, file sets, backup jobs, schedules, the master's settings, the terminal,
 users and groups. Previewing and applying a file set also needs the permission to change the files of every server it
 touches, and restarting them the one to restart each. Choosing a permission also chooses what it needs, e.g. seeing the
 servers one may restart.

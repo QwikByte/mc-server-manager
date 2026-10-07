@@ -19,12 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BackupService_ListBackups_FullMethodName    = "/noryx.v1.BackupService/ListBackups"
-	BackupService_CreateBackup_FullMethodName   = "/noryx.v1.BackupService/CreateBackup"
-	BackupService_RestoreBackup_FullMethodName  = "/noryx.v1.BackupService/RestoreBackup"
-	BackupService_DeleteBackup_FullMethodName   = "/noryx.v1.BackupService/DeleteBackup"
-	BackupService_DownloadBackup_FullMethodName = "/noryx.v1.BackupService/DownloadBackup"
-	BackupService_ImportBackup_FullMethodName   = "/noryx.v1.BackupService/ImportBackup"
+	BackupService_ListBackups_FullMethodName     = "/noryx.v1.BackupService/ListBackups"
+	BackupService_CreateBackup_FullMethodName    = "/noryx.v1.BackupService/CreateBackup"
+	BackupService_RestoreBackup_FullMethodName   = "/noryx.v1.BackupService/RestoreBackup"
+	BackupService_DeleteBackup_FullMethodName    = "/noryx.v1.BackupService/DeleteBackup"
+	BackupService_UpdateBackup_FullMethodName    = "/noryx.v1.BackupService/UpdateBackup"
+	BackupService_ListBackupFiles_FullMethodName = "/noryx.v1.BackupService/ListBackupFiles"
+	BackupService_DownloadBackup_FullMethodName  = "/noryx.v1.BackupService/DownloadBackup"
+	BackupService_ImportBackup_FullMethodName    = "/noryx.v1.BackupService/ImportBackup"
 )
 
 // BackupServiceClient is the client API for BackupService service.
@@ -40,10 +42,14 @@ type BackupServiceClient interface {
 	// CreateBackup archives the selected data of a server. A running game server writes its
 	// worlds to disk first and pauses saving meanwhile, so players stay connected.
 	CreateBackup(ctx context.Context, in *CreateBackupRequest, opts ...grpc.CallOption) (*CreateBackupResponse, error)
-	// RestoreBackup replaces the files and folders in a backup with their backed up state.
-	// A running server is stopped meanwhile and started again.
+	// RestoreBackup replaces the files and folders in a backup, or some of them, with their
+	// backed up state. A running server is stopped meanwhile and started again.
 	RestoreBackup(ctx context.Context, in *RestoreBackupRequest, opts ...grpc.CallOption) (*RestoreBackupResponse, error)
 	DeleteBackup(ctx context.Context, in *DeleteBackupRequest, opts ...grpc.CallOption) (*DeleteBackupResponse, error)
+	// UpdateBackup changes the label of a backup and whether its job keeps it.
+	UpdateBackup(ctx context.Context, in *UpdateBackupRequest, opts ...grpc.CallOption) (*UpdateBackupResponse, error)
+	// ListBackupFiles lists a folder of a backup's archive, to choose what to restore.
+	ListBackupFiles(ctx context.Context, in *ListBackupFilesRequest, opts ...grpc.CallOption) (*ListBackupFilesResponse, error)
 	// DownloadBackup sends the archive in chunks. The first message carries its size, if known.
 	DownloadBackup(ctx context.Context, in *DownloadBackupRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadBackupResponse], error)
 	// ImportBackup adds a backup of a server that came from another node. The header
@@ -99,6 +105,26 @@ func (c *backupServiceClient) DeleteBackup(ctx context.Context, in *DeleteBackup
 	return out, nil
 }
 
+func (c *backupServiceClient) UpdateBackup(ctx context.Context, in *UpdateBackupRequest, opts ...grpc.CallOption) (*UpdateBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateBackupResponse)
+	err := c.cc.Invoke(ctx, BackupService_UpdateBackup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *backupServiceClient) ListBackupFiles(ctx context.Context, in *ListBackupFilesRequest, opts ...grpc.CallOption) (*ListBackupFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListBackupFilesResponse)
+	err := c.cc.Invoke(ctx, BackupService_ListBackupFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *backupServiceClient) DownloadBackup(ctx context.Context, in *DownloadBackupRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadBackupResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &BackupService_ServiceDesc.Streams[0], BackupService_DownloadBackup_FullMethodName, cOpts...)
@@ -144,10 +170,14 @@ type BackupServiceServer interface {
 	// CreateBackup archives the selected data of a server. A running game server writes its
 	// worlds to disk first and pauses saving meanwhile, so players stay connected.
 	CreateBackup(context.Context, *CreateBackupRequest) (*CreateBackupResponse, error)
-	// RestoreBackup replaces the files and folders in a backup with their backed up state.
-	// A running server is stopped meanwhile and started again.
+	// RestoreBackup replaces the files and folders in a backup, or some of them, with their
+	// backed up state. A running server is stopped meanwhile and started again.
 	RestoreBackup(context.Context, *RestoreBackupRequest) (*RestoreBackupResponse, error)
 	DeleteBackup(context.Context, *DeleteBackupRequest) (*DeleteBackupResponse, error)
+	// UpdateBackup changes the label of a backup and whether its job keeps it.
+	UpdateBackup(context.Context, *UpdateBackupRequest) (*UpdateBackupResponse, error)
+	// ListBackupFiles lists a folder of a backup's archive, to choose what to restore.
+	ListBackupFiles(context.Context, *ListBackupFilesRequest) (*ListBackupFilesResponse, error)
 	// DownloadBackup sends the archive in chunks. The first message carries its size, if known.
 	DownloadBackup(*DownloadBackupRequest, grpc.ServerStreamingServer[DownloadBackupResponse]) error
 	// ImportBackup adds a backup of a server that came from another node. The header
@@ -174,6 +204,12 @@ func (UnimplementedBackupServiceServer) RestoreBackup(context.Context, *RestoreB
 }
 func (UnimplementedBackupServiceServer) DeleteBackup(context.Context, *DeleteBackupRequest) (*DeleteBackupResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteBackup not implemented")
+}
+func (UnimplementedBackupServiceServer) UpdateBackup(context.Context, *UpdateBackupRequest) (*UpdateBackupResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateBackup not implemented")
+}
+func (UnimplementedBackupServiceServer) ListBackupFiles(context.Context, *ListBackupFilesRequest) (*ListBackupFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListBackupFiles not implemented")
 }
 func (UnimplementedBackupServiceServer) DownloadBackup(*DownloadBackupRequest, grpc.ServerStreamingServer[DownloadBackupResponse]) error {
 	return status.Error(codes.Unimplemented, "method DownloadBackup not implemented")
@@ -274,6 +310,42 @@ func _BackupService_DeleteBackup_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BackupService_UpdateBackup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateBackupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackupServiceServer).UpdateBackup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BackupService_UpdateBackup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackupServiceServer).UpdateBackup(ctx, req.(*UpdateBackupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BackupService_ListBackupFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBackupFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackupServiceServer).ListBackupFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BackupService_ListBackupFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackupServiceServer).ListBackupFiles(ctx, req.(*ListBackupFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BackupService_DownloadBackup_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(DownloadBackupRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -314,6 +386,14 @@ var BackupService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteBackup",
 			Handler:    _BackupService_DeleteBackup_Handler,
+		},
+		{
+			MethodName: "UpdateBackup",
+			Handler:    _BackupService_UpdateBackup_Handler,
+		},
+		{
+			MethodName: "ListBackupFiles",
+			Handler:    _BackupService_ListBackupFiles_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

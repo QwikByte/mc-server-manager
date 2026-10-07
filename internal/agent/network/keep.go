@@ -8,15 +8,6 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/properties"
 )
 
-// SecretFiles returns the files of a server that only hold secrets of its network: the
-// forwarding secret of a proxy, and the files of Geyser and Floodgate.
-func SecretFiles(typ noryxv1.ServerType) []string {
-	if !typ.Proxy() {
-		return nil
-	}
-	return append([]string{ForwardingSecretFile}, BedrockSecretFiles...)
-}
-
 // forwarding returns the settings by file, with paths like those of Settings, that decide
 // how a server trusts the players its proxy forwards, or how a proxy forwards them: those
 // that WriteBackend and WriteProxy write, and the secret that Velocity 1 kept in its

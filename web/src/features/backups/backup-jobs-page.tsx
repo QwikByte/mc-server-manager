@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { TaskCard } from "@/features/schedules/task-card"
-import { describeSelection, jobs, nothingSelected } from "./api"
+import { describeRetention, describeSelection, jobs, nothingSelected } from "./api"
 
 function NewJob() {
   return (
@@ -61,7 +61,7 @@ export function BackupJobsPage() {
                 !nothingSelected(job.settings.selection) && describeSelection(job.settings.selection),
                 job.settings.datastores?.length &&
                   t("{{count}} datastores", { count: job.settings.datastores.length, defaultValue_one: "{{count}} datastore" }),
-                job.settings.keep ? t("keeps {{count}}", { count: job.settings.keep }) : t("keeps all"),
+                describeRetention(job.settings),
               ]
                 .filter(Boolean)
                 .join(" · ")}

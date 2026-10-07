@@ -275,7 +275,8 @@ func (s *Service) DropDatabase(ctx context.Context, req *noryxv1.DropDatabaseReq
 // datastore keeps running, and each dump is consistent in itself.
 func (s *Service) CreateDump(ctx context.Context, req *noryxv1.CreateDumpRequest) (*noryxv1.CreateDumpResponse, error) {
 	label := strings.TrimSpace(req.GetLabel())
-	if err := backup.CheckDetails(label, req.GetJobId(), req.GetKeep()); err != nil {
+	retention := noryxv1.Retention(req.GetKeep(), req.GetRetention())
+	if err := backup.CheckDetails(label, req.GetJobId(), retention); err != nil {
 		return nil, err
 	}
 	ds, release, err := s.lock(ctx, req.GetId())
@@ -293,7 +294,7 @@ func (s *Service) CreateDump(ctx context.Context, req *noryxv1.CreateDumpRequest
 	}
 	d := backup.Details{Label: label, Created: time.Now(), Paths: names, JobID: req.GetJobId()}
 	progress.Step(ctx, "dump", 0)
-	b, err := s.dumps.Add(owner(ds.ID), cmp.Or(req.GetLocation(), storage.Default), backup.NewID(d.Created), d, ds.Size, func(w io.Writer) error {
+	b, err := s.dumps.Add(owner(ds.ID), cmp.Or(req.GetLocation(), storage.Default), noryxv1.NewBackupID(d.Created), d, ds.Size, func(w io.Writer) error {
 		zw := zip.NewWriter(w)
 		for _, name := range names {
 			f, err := zw.CreateHeader(&zip.FileHeader{Name: name + ".sql", Method: zip.Deflate, Modified: d.Created})
@@ -309,8 +310,8 @@ func (s *Service) CreateDump(ctx context.Context, req *noryxv1.CreateDumpRequest
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	if req.GetJobId() != "" && req.GetKeep() > 0 {
-		if err := s.dumps.Prune(owner(ds.ID), req.GetJobId(), int(req.GetKeep())); err != nil {
+	if req.GetJobId() != "" {
+		if err := s.dumps.Prune(owner(ds.ID), req.GetJobId(), retention); err != nil {
 			slog.Warn("Can't delete old dumps", logging.Databases, "datastore", ds.ID, "job", req.GetJobId(), "err", err)
 		}
 	}

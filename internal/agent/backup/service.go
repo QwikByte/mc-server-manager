@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -35,9 +36,9 @@ import (
 )
 
 const (
-	chunkSize = 256 << 10
-	maxLabel  = 64
-	maxKeep   = 1000
+	chunkSize  = 256 << 10
+	maxLabel   = 64
+	maxEntries = 5000 // listed of a folder of a backup
 )
 
 var jobPattern = regexp.MustCompile(`^[a-z0-9]{1,64}$`)
@@ -72,7 +73,8 @@ func (s *Service) ListBackups(ctx context.Context, req *noryxv1.ListBackupsReque
 
 func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupRequest) (*noryxv1.CreateBackupResponse, error) {
 	label := strings.TrimSpace(req.GetLabel())
-	if err := CheckDetails(label, req.GetJobId(), req.GetKeep()); err != nil {
+	retention := noryxv1.Retention(req.GetKeep(), req.GetRetention())
+	if err := CheckDetails(label, req.GetJobId(), retention); err != nil {
 		return nil, err
 	}
 	srv, release, err := s.lock(ctx, req.GetServerId())
@@ -85,7 +87,7 @@ func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupReq
 		return nil, toStatus(err)
 	}
 	defer data.Close()
-	paths, err := selected(data, srv.Type, req.GetSelection())
+	paths, exclude, err := selected(data, srv.Type, req.GetSelection())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -95,30 +97,38 @@ func (s *Service) CreateBackup(ctx context.Context, req *noryxv1.CreateBackupReq
 	case len(paths) == 0:
 		return nil, status.Error(codes.FailedPrecondition, "The server has none of the selected data.")
 	}
-	resume, err := runtime.PauseSaving(ctx, s.rt, srv)
-	if errors.Is(err, runtime.ErrNotReady) {
-		return nil, status.Error(codes.FailedPrecondition, "Wait until the server has started, or stop it, to back it up.")
-	}
+	d := Details{Label: label, Created: time.Now(), Paths: paths, Exclude: exclude, JobID: req.GetJobId()}
+	b, err := s.backUp(ctx, data, srv, cmp.Or(req.GetLocation(), storage.Default), d)
 	if err != nil {
-		return nil, toStatus(err)
+		return nil, err
 	}
-	location := cmp.Or(req.GetLocation(), storage.Default)
-	b, err := s.store.create(ctx, data, srv.ID, location, Details{Label: label, Created: time.Now(), Paths: paths, JobID: req.GetJobId()})
-	resume()
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	if req.GetJobId() != "" && req.GetKeep() > 0 {
-		if err := s.store.Prune(srv.ID, req.GetJobId(), int(req.GetKeep())); err != nil {
+	if req.GetJobId() != "" {
+		if err := s.store.Prune(srv.ID, req.GetJobId(), retention); err != nil {
 			slog.Warn("Can't delete old backups", logging.Backups, logging.KeyServer, srv.ID, "job", req.GetJobId(), "err", err)
 		}
 	}
 	return &noryxv1.CreateBackupResponse{Backup: b.Proto()}, nil
 }
 
-// RestoreBackup extracts the backup before it stops the server, so the server is only
-// down while the files are swapped. The restored data keeps the secrets of file sets and of
-// the server's network, and its forwarding settings, as they are now.
+// backUp archives the data of a server that d describes. A running game server writes its
+// worlds to disk first and doesn't save meanwhile.
+func (s *Service) backUp(ctx context.Context, data *datadir.Dir, srv runtime.Server, location string, d Details) (Archive, error) {
+	resume, err := runtime.PauseSaving(ctx, s.rt, srv)
+	if errors.Is(err, runtime.ErrNotReady) {
+		return Archive{}, status.Error(codes.FailedPrecondition, "Wait until the server has started, or stop it, to back it up.")
+	}
+	if err != nil {
+		return Archive{}, toStatus(err)
+	}
+	defer resume()
+	b, err := s.store.create(ctx, data, srv.ID, location, d)
+	return b, toStatus(err)
+}
+
+// RestoreBackup extracts the backup, and backs up what it replaces if asked, before it stops
+// the server, so the server is only down while the files are swapped. The restored data
+// keeps the secrets of the server, of file sets and of the server's network, and its
+// forwarding settings, as they are now.
 func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupRequest) (*noryxv1.RestoreBackupResponse, error) {
 	srv, release, err := s.lock(ctx, req.GetServerId())
 	if err != nil {
@@ -129,17 +139,32 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 	if err != nil {
 		return nil, toStatus(err)
 	}
+	zr, err := zip.OpenReader(b.Path())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	defer zr.Close()
+	paths, err := chosen(&zr.Reader, b, req.GetPaths())
+	if err != nil {
+		return nil, err
+	}
 	data, err := s.rt.Data(ctx, srv.ID)
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	defer data.Close()
-	staged, err := stage(ctx, data, b)
+	staged, err := stage(ctx, data, &zr.Reader, paths)
 	if staged != "" {
 		defer data.RemoveAll(staged) //nolint:errcheck // best effort; the result of restoring matters
 	}
 	if err != nil {
 		return nil, toStatus(err)
+	}
+	res := &noryxv1.RestoreBackupResponse{}
+	if req.GetSnapshotFirst() {
+		if res.Snapshot, err = s.snapshot(ctx, data, srv, b, paths); err != nil {
+			return nil, err
+		}
 	}
 	running := srv.State != noryxv1.ServerState_SERVER_STATE_STOPPED
 	if running {
@@ -148,15 +173,32 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 			return nil, toStatus(err)
 		}
 	}
-	err = keep(data, srv.Type, b, staged)
+	err = keep(data, srv.Type, staged)
 	if err == nil {
-		err = swap(data, b, staged)
+		err = swap(data, staged, paths, kept(data, b))
 	}
 	if running { // also after a failure, which leaves the server as it was or partly restored
 		progress.Step(ctx, "start", 0)
 		err = errors.Join(err, s.rt.Start(context.WithoutCancel(ctx), srv.ID))
 	}
-	return &noryxv1.RestoreBackupResponse{}, toStatus(err)
+	return res, toStatus(err)
+}
+
+// snapshot backs up what restoring paths of a backup replaces, as a backup made by hand
+// next to it; none if the server has none of the paths.
+func (s *Service) snapshot(ctx context.Context, data *datadir.Dir, srv runtime.Server, b Archive, paths []string) (*noryxv1.Backup, error) {
+	paths = slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return !exists(data, p) })
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	exclude := slices.DeleteFunc(slices.Clone(b.Exclude), func(e string) bool { return !slices.ContainsFunc(paths, within(e)) })
+	label := []rune("Before restoring " + cmp.Or(b.Label, b.ID))
+	d := Details{Label: string(label[:min(len(label), maxLabel)]), Created: time.Now(), Paths: paths, Exclude: exclude}
+	snapshot, err := s.backUp(ctx, data, srv, b.Location, d)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.Proto(), nil
 }
 
 func (s *Service) DeleteBackup(ctx context.Context, req *noryxv1.DeleteBackupRequest) (*noryxv1.DeleteBackupResponse, error) {
@@ -170,6 +212,64 @@ func (s *Service) DeleteBackup(ctx context.Context, req *noryxv1.DeleteBackupReq
 		err = s.store.Remove(b)
 	}
 	return &noryxv1.DeleteBackupResponse{}, toStatus(err)
+}
+
+func (s *Service) UpdateBackup(ctx context.Context, req *noryxv1.UpdateBackupRequest) (*noryxv1.UpdateBackupResponse, error) {
+	srv, release, err := s.lock(ctx, req.GetServerId())
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	b, err := s.store.Find(srv.ID, req.GetBackupId())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	if req.Label != nil {
+		b.Label = strings.TrimSpace(req.GetLabel())
+	}
+	if req.Kept != nil {
+		b.Kept = req.GetKept()
+	}
+	if err := CheckDetails(b.Label, "", nil); err != nil {
+		return nil, err
+	}
+	if err := s.store.Update(b); err != nil {
+		return nil, toStatus(err)
+	}
+	return &noryxv1.UpdateBackupResponse{Backup: b.Proto()}, nil
+}
+
+// ListBackupFiles lists a folder of a backup like the file manager lists one of the server:
+// what only holds secrets of the server now isn't listed.
+func (s *Service) ListBackupFiles(ctx context.Context, req *noryxv1.ListBackupFilesRequest) (*noryxv1.ListBackupFilesResponse, error) {
+	folder, ok := datadir.Name(req.GetPath())
+	if !ok {
+		return nil, status.Error(codes.InvalidArgument, "invalid path")
+	}
+	srv, err := s.find(ctx, req.GetServerId())
+	if err != nil {
+		return nil, err
+	}
+	b, err := s.store.Find(srv.ID, req.GetBackupId())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	data, err := s.rt.Data(ctx, srv.ID)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	hidden := fileset.Read(data).Secrets()
+	data.Close()
+	zr, err := zip.OpenReader(b.Path())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	defer zr.Close()
+	files, ok := list(&zr.Reader, folder, hidden)
+	if !ok {
+		return nil, status.Error(codes.NotFound, "The backup has no such folder.")
+	}
+	return &noryxv1.ListBackupFilesResponse{Files: files[:min(len(files), maxEntries)], Truncated: len(files) > maxEntries}, nil
 }
 
 func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream noryxv1.BackupService_DownloadBackupServer) error {
@@ -229,16 +329,16 @@ func Send(r io.Reader, size int64, send func(size int64, data []byte) error) err
 	}
 }
 
-// CheckDetails checks the label of a new backup, the job that creates it and how many of
-// the job's backups are kept.
-func CheckDetails(label, jobID string, keep uint32) error {
+// CheckDetails checks the label of a backup, the job that creates it and which of the
+// job's backups are kept.
+func CheckDetails(label, jobID string, retention *noryxv1.BackupRetention) error {
 	switch {
 	case utf8.RuneCountInString(label) > maxLabel || strings.ContainsFunc(label, unicode.IsControl):
 		return status.Errorf(codes.InvalidArgument, "Enter a label with up to %d characters.", maxLabel)
 	case jobID != "" && !jobPattern.MatchString(jobID):
 		return status.Error(codes.InvalidArgument, "invalid job ID")
-	case keep > maxKeep:
-		return status.Errorf(codes.InvalidArgument, "Keep at most %d backups.", maxKeep)
+	case retention.Problem() != "":
+		return status.Error(codes.InvalidArgument, retention.Problem())
 	}
 	return nil
 }
@@ -285,13 +385,20 @@ func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) 
 
 // importedDetails validates a backup from another node like those made here.
 func importedDetails(b *noryxv1.Backup) (Details, error) {
-	d := Details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId()}
+	d := Details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId(), Kept: b.GetKept()}
 	for _, p := range b.GetPaths() {
 		name, ok := datadir.Name(p)
 		if !ok {
 			return d, fmt.Errorf("invalid path %q in backup", p)
 		}
 		d.Paths = append(d.Paths, name)
+	}
+	for _, p := range b.GetExclude() {
+		name, ok := datadir.Name(p)
+		if !ok || name == "." {
+			return d, fmt.Errorf("invalid path %q in backup", p)
+		}
+		d.Exclude = append(d.Exclude, name)
 	}
 	switch {
 	case !idPattern.MatchString(b.GetId()):

@@ -8,26 +8,45 @@ Backups are ZIP archives that the agent keeps on the server's node, in the `back
 (`<data-dir>/backups` by default). What a backup contains is chosen per backup or job: worlds (every folder with a
 `level.dat`, also those added later), plugins or mods with their settings, configuration (the files in the server's
 folder except jars and logs, and `config/`), everything, or further files and folders, chosen in a browser of the
-server's folders (of one of a job's servers) or typed in. A running game server writes its worlds to disk first and
-pauses saving while they are archived, so players stay connected.
+server's folders (of one of a job's servers) or typed in. Files and folders inside them can be left out the same way,
+e.g. the tiles of a map plugin such as Dynmap or BlueMap, or the logs, which can be most of a server's data; restoring
+the backup leaves them as they are. A running game server writes its worlds to disk first and pauses saving while they
+are archived, so players stay connected.
 
 - **By hand.** The **Backups** tab of a server backs it up now, e.g. before an update, and lists, downloads, restores
-  and deletes its backups.
+  and deletes its backups and changes their labels.
 - **Jobs.** The **Backups** tab of the **Automation** schedules backup jobs for nodes, servers, tags and networks at
-  set times, see [Targets and times](#targets-and-times). A job keeps the newest backups per server and deletes older
-  ones; backups made by hand are never deleted that way. A job backs up one server per node at a time, and skips servers
-  without any of the selected data yet, e.g. new ones that never started: its runs list them. A job can also back up
-  [datastores](databases.md) with all their databases, also without any server, one at a time per node together with
-  the servers there. The **Backups** tab of a server names the jobs that cover it.
+  set times, see [Targets and times](#targets-and-times). A job keeps its newest backups per server, and the newest of
+  each of the last days, weeks and months that have backups, in its time zone, e.g. 7 daily and 4 weekly ones; once it
+  made a new backup, it deletes the others. Days without a backup don't count, so a job that couldn't back up for a
+  while doesn't delete more. Backups made by hand are never deleted that way, nor backups of a job that the **Backups**
+  tab of their server marks to keep, e.g. the one before a big update, until they are no longer kept. A job backs up one
+  server per node at a time, and skips servers without any of the selected data yet, e.g. new ones that never started:
+  its runs list them. A job can also back up [datastores](databases.md) with all their databases, also without any
+  server, one at a time per node together with the servers there; it keeps their backups the same way. The **Backups**
+  tab of a server names the jobs that cover it.
 - **Restoring** replaces what a backup contains with its backed up state: a backup of the worlds restores the worlds and
-  leaves plugins and settings alone. The archive is extracted next to the data first, so a running server is only
+  leaves plugins and settings alone. All of a backup is restored, or only files and folders chosen in a browser of it,
+  e.g. a single world or the folder of one plugin. The panel backs up what the restore replaces first, as a backup made
+  by hand next to the restored one, unless that is turned off, so restoring the wrong backup can be undone. The archive
+  is extracted next to the data first, and backed up while the server keeps running, so a running server is only
   stopped while the files are swapped, and started again afterwards. How the server takes part in a
   [network](networks.md) stays as it is: a proxy's forwarding secret and the keys and sign-ins of Geyser and Floodgate,
   the forwarding settings in its configuration, and a game server's `online-mode` and `enforce-secure-profile`. So a
   backup from before the server left its network, or joined another, brings back neither that network's secret nor the
-  trust in its proxy, nor offline mode. Files with secrets of [file sets](library.md#file-sets) stay as they are too.
-  The panel then configures the server's network again, e.g. the servers of the proxy, and warns if that fails; after
-  restoring with the CLI or the terminal, **Apply again** on the network's page does it.
+  trust in its proxy, nor offline mode. The files of the server's console password (RCON) and files with secrets of
+  [file sets](library.md#file-sets) stay as they are too. The panel then configures the server's network again, e.g.
+  the servers of the proxy, and warns if that fails; after restoring with the CLI or the terminal, **Apply again** on
+  the network's page does it.
+- **Into another server.** A backup can also be restored into another server of the same kind, game server or proxy,
+  also on another node, e.g. to look at an old world on a [copy](servers.md#copies) without touching the live server.
+  It needs the permission to see the backups of the original and to restore backups of the other server. The master
+  copies the backup to the other server with the secrets hidden, like a download, restores it there and deletes the
+  copy. Like a duplicate, the other server keeps its own secrets and those of its network, and its forwarding settings,
+  and gets no files with secrets of file sets.
+- Restoring chosen files, into another server or with a backup first needs an up-to-date agent on the node, as does
+  moving backups that leave something out or are kept; the panel says so otherwise. Until a node's agent is updated,
+  jobs that keep backups of days, weeks or months keep all of them there, and backups there leave nothing out.
 - Deleting a server deletes its backups too. Locally, `noryx-agent backup list|create|restore` works without the master,
   e.g. to restore a server while the master is unreachable.
 - **Databases** are backed up as SQL dumps instead, see [Databases](databases.md#backups).

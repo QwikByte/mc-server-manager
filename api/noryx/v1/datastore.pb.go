@@ -1213,8 +1213,10 @@ type CreateDumpRequest struct {
 	Label     string   `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	Location  string   `protobuf:"bytes,4,opt,name=location,proto3" json:"location,omitempty"`
 	JobId     string   `protobuf:"bytes,5,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	// Dumps of the job kept; 0 keeps all.
-	Keep          uint32 `protobuf:"varint,6,opt,name=keep,proto3" json:"keep,omitempty"`
+	// Dumps of the job kept; 0 keeps all. Ignored if retention is set.
+	Keep uint32 `protobuf:"varint,6,opt,name=keep,proto3" json:"keep,omitempty"`
+	// Which dumps of the job are kept, instead of keep.
+	Retention     *BackupRetention `protobuf:"bytes,7,opt,name=retention,proto3" json:"retention,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1289,6 +1291,13 @@ func (x *CreateDumpRequest) GetKeep() uint32 {
 		return x.Keep
 	}
 	return 0
+}
+
+func (x *CreateDumpRequest) GetRetention() *BackupRetention {
+	if x != nil {
+		return x.Retention
+	}
+	return nil
 }
 
 type CreateDumpResponse struct {
@@ -2384,14 +2393,15 @@ const file_noryx_v1_datastore_proto_rawDesc = "" +
 	"\x13DropDatabaseRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x16\n" +
-	"\x14DropDatabaseResponse\"\x9e\x01\n" +
+	"\x14DropDatabaseResponse\"\xd7\x01\n" +
 	"\x11CreateDumpRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\tdatabases\x18\x02 \x03(\tR\tdatabases\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1a\n" +
 	"\blocation\x18\x04 \x01(\tR\blocation\x12\x15\n" +
 	"\x06job_id\x18\x05 \x01(\tR\x05jobId\x12\x12\n" +
-	"\x04keep\x18\x06 \x01(\rR\x04keep\":\n" +
+	"\x04keep\x18\x06 \x01(\rR\x04keep\x127\n" +
+	"\tretention\x18\a \x01(\v2\x19.noryx.v1.BackupRetentionR\tretention\":\n" +
 	"\x12CreateDumpResponse\x12$\n" +
 	"\x04dump\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x04dump\"\"\n" +
 	"\x10ListDumpsRequest\x12\x0e\n" +
@@ -2542,7 +2552,8 @@ var file_noryx_v1_datastore_proto_goTypes = []any{
 	(*BrowseTableResponse)(nil),         // 39: noryx.v1.BrowseTableResponse
 	(*StreamDatastoreLogsRequest)(nil),  // 40: noryx.v1.StreamDatastoreLogsRequest
 	(*StreamDatastoreLogsResponse)(nil), // 41: noryx.v1.StreamDatastoreLogsResponse
-	(*Backup)(nil),                      // 42: noryx.v1.Backup
+	(*BackupRetention)(nil),             // 42: noryx.v1.BackupRetention
+	(*Backup)(nil),                      // 43: noryx.v1.Backup
 }
 var file_noryx_v1_datastore_proto_depIdxs = []int32{
 	0,  // 0: noryx.v1.Datastore.engine:type_name -> noryx.v1.DatastoreEngine
@@ -2553,51 +2564,52 @@ var file_noryx_v1_datastore_proto_depIdxs = []int32{
 	0,  // 5: noryx.v1.CreateDatastoreRequest.engine:type_name -> noryx.v1.DatastoreEngine
 	2,  // 6: noryx.v1.CreateDatastoreResponse.datastore:type_name -> noryx.v1.Datastore
 	2,  // 7: noryx.v1.UpdateDatastoreResponse.datastore:type_name -> noryx.v1.Datastore
-	42, // 8: noryx.v1.CreateDumpResponse.dump:type_name -> noryx.v1.Backup
-	42, // 9: noryx.v1.ListDumpsResponse.dumps:type_name -> noryx.v1.Backup
-	33, // 10: noryx.v1.ListTablesResponse.tables:type_name -> noryx.v1.Table
-	37, // 11: noryx.v1.TableRow.values:type_name -> noryx.v1.TableValue
-	36, // 12: noryx.v1.BrowseTableResponse.columns:type_name -> noryx.v1.TableColumn
-	38, // 13: noryx.v1.BrowseTableResponse.rows:type_name -> noryx.v1.TableRow
-	4,  // 14: noryx.v1.DatastoreService.ListDatastores:input_type -> noryx.v1.ListDatastoresRequest
-	6,  // 15: noryx.v1.DatastoreService.CreateDatastore:input_type -> noryx.v1.CreateDatastoreRequest
-	8,  // 16: noryx.v1.DatastoreService.StartDatastore:input_type -> noryx.v1.StartDatastoreRequest
-	10, // 17: noryx.v1.DatastoreService.StopDatastore:input_type -> noryx.v1.StopDatastoreRequest
-	12, // 18: noryx.v1.DatastoreService.UpdateDatastore:input_type -> noryx.v1.UpdateDatastoreRequest
-	14, // 19: noryx.v1.DatastoreService.PublishDatastore:input_type -> noryx.v1.PublishDatastoreRequest
-	16, // 20: noryx.v1.DatastoreService.DeleteDatastore:input_type -> noryx.v1.DeleteDatastoreRequest
-	18, // 21: noryx.v1.DatastoreService.EnsureDatabase:input_type -> noryx.v1.EnsureDatabaseRequest
-	20, // 22: noryx.v1.DatastoreService.DropDatabase:input_type -> noryx.v1.DropDatabaseRequest
-	22, // 23: noryx.v1.DatastoreService.CreateDump:input_type -> noryx.v1.CreateDumpRequest
-	24, // 24: noryx.v1.DatastoreService.ListDumps:input_type -> noryx.v1.ListDumpsRequest
-	26, // 25: noryx.v1.DatastoreService.RestoreDump:input_type -> noryx.v1.RestoreDumpRequest
-	28, // 26: noryx.v1.DatastoreService.DeleteDump:input_type -> noryx.v1.DeleteDumpRequest
-	30, // 27: noryx.v1.DatastoreService.DownloadDump:input_type -> noryx.v1.DownloadDumpRequest
-	32, // 28: noryx.v1.DatastoreService.ListTables:input_type -> noryx.v1.ListTablesRequest
-	35, // 29: noryx.v1.DatastoreService.BrowseTable:input_type -> noryx.v1.BrowseTableRequest
-	40, // 30: noryx.v1.DatastoreService.StreamDatastoreLogs:input_type -> noryx.v1.StreamDatastoreLogsRequest
-	5,  // 31: noryx.v1.DatastoreService.ListDatastores:output_type -> noryx.v1.ListDatastoresResponse
-	7,  // 32: noryx.v1.DatastoreService.CreateDatastore:output_type -> noryx.v1.CreateDatastoreResponse
-	9,  // 33: noryx.v1.DatastoreService.StartDatastore:output_type -> noryx.v1.StartDatastoreResponse
-	11, // 34: noryx.v1.DatastoreService.StopDatastore:output_type -> noryx.v1.StopDatastoreResponse
-	13, // 35: noryx.v1.DatastoreService.UpdateDatastore:output_type -> noryx.v1.UpdateDatastoreResponse
-	15, // 36: noryx.v1.DatastoreService.PublishDatastore:output_type -> noryx.v1.PublishDatastoreResponse
-	17, // 37: noryx.v1.DatastoreService.DeleteDatastore:output_type -> noryx.v1.DeleteDatastoreResponse
-	19, // 38: noryx.v1.DatastoreService.EnsureDatabase:output_type -> noryx.v1.EnsureDatabaseResponse
-	21, // 39: noryx.v1.DatastoreService.DropDatabase:output_type -> noryx.v1.DropDatabaseResponse
-	23, // 40: noryx.v1.DatastoreService.CreateDump:output_type -> noryx.v1.CreateDumpResponse
-	25, // 41: noryx.v1.DatastoreService.ListDumps:output_type -> noryx.v1.ListDumpsResponse
-	27, // 42: noryx.v1.DatastoreService.RestoreDump:output_type -> noryx.v1.RestoreDumpResponse
-	29, // 43: noryx.v1.DatastoreService.DeleteDump:output_type -> noryx.v1.DeleteDumpResponse
-	31, // 44: noryx.v1.DatastoreService.DownloadDump:output_type -> noryx.v1.DownloadDumpResponse
-	34, // 45: noryx.v1.DatastoreService.ListTables:output_type -> noryx.v1.ListTablesResponse
-	39, // 46: noryx.v1.DatastoreService.BrowseTable:output_type -> noryx.v1.BrowseTableResponse
-	41, // 47: noryx.v1.DatastoreService.StreamDatastoreLogs:output_type -> noryx.v1.StreamDatastoreLogsResponse
-	31, // [31:48] is the sub-list for method output_type
-	14, // [14:31] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	42, // 8: noryx.v1.CreateDumpRequest.retention:type_name -> noryx.v1.BackupRetention
+	43, // 9: noryx.v1.CreateDumpResponse.dump:type_name -> noryx.v1.Backup
+	43, // 10: noryx.v1.ListDumpsResponse.dumps:type_name -> noryx.v1.Backup
+	33, // 11: noryx.v1.ListTablesResponse.tables:type_name -> noryx.v1.Table
+	37, // 12: noryx.v1.TableRow.values:type_name -> noryx.v1.TableValue
+	36, // 13: noryx.v1.BrowseTableResponse.columns:type_name -> noryx.v1.TableColumn
+	38, // 14: noryx.v1.BrowseTableResponse.rows:type_name -> noryx.v1.TableRow
+	4,  // 15: noryx.v1.DatastoreService.ListDatastores:input_type -> noryx.v1.ListDatastoresRequest
+	6,  // 16: noryx.v1.DatastoreService.CreateDatastore:input_type -> noryx.v1.CreateDatastoreRequest
+	8,  // 17: noryx.v1.DatastoreService.StartDatastore:input_type -> noryx.v1.StartDatastoreRequest
+	10, // 18: noryx.v1.DatastoreService.StopDatastore:input_type -> noryx.v1.StopDatastoreRequest
+	12, // 19: noryx.v1.DatastoreService.UpdateDatastore:input_type -> noryx.v1.UpdateDatastoreRequest
+	14, // 20: noryx.v1.DatastoreService.PublishDatastore:input_type -> noryx.v1.PublishDatastoreRequest
+	16, // 21: noryx.v1.DatastoreService.DeleteDatastore:input_type -> noryx.v1.DeleteDatastoreRequest
+	18, // 22: noryx.v1.DatastoreService.EnsureDatabase:input_type -> noryx.v1.EnsureDatabaseRequest
+	20, // 23: noryx.v1.DatastoreService.DropDatabase:input_type -> noryx.v1.DropDatabaseRequest
+	22, // 24: noryx.v1.DatastoreService.CreateDump:input_type -> noryx.v1.CreateDumpRequest
+	24, // 25: noryx.v1.DatastoreService.ListDumps:input_type -> noryx.v1.ListDumpsRequest
+	26, // 26: noryx.v1.DatastoreService.RestoreDump:input_type -> noryx.v1.RestoreDumpRequest
+	28, // 27: noryx.v1.DatastoreService.DeleteDump:input_type -> noryx.v1.DeleteDumpRequest
+	30, // 28: noryx.v1.DatastoreService.DownloadDump:input_type -> noryx.v1.DownloadDumpRequest
+	32, // 29: noryx.v1.DatastoreService.ListTables:input_type -> noryx.v1.ListTablesRequest
+	35, // 30: noryx.v1.DatastoreService.BrowseTable:input_type -> noryx.v1.BrowseTableRequest
+	40, // 31: noryx.v1.DatastoreService.StreamDatastoreLogs:input_type -> noryx.v1.StreamDatastoreLogsRequest
+	5,  // 32: noryx.v1.DatastoreService.ListDatastores:output_type -> noryx.v1.ListDatastoresResponse
+	7,  // 33: noryx.v1.DatastoreService.CreateDatastore:output_type -> noryx.v1.CreateDatastoreResponse
+	9,  // 34: noryx.v1.DatastoreService.StartDatastore:output_type -> noryx.v1.StartDatastoreResponse
+	11, // 35: noryx.v1.DatastoreService.StopDatastore:output_type -> noryx.v1.StopDatastoreResponse
+	13, // 36: noryx.v1.DatastoreService.UpdateDatastore:output_type -> noryx.v1.UpdateDatastoreResponse
+	15, // 37: noryx.v1.DatastoreService.PublishDatastore:output_type -> noryx.v1.PublishDatastoreResponse
+	17, // 38: noryx.v1.DatastoreService.DeleteDatastore:output_type -> noryx.v1.DeleteDatastoreResponse
+	19, // 39: noryx.v1.DatastoreService.EnsureDatabase:output_type -> noryx.v1.EnsureDatabaseResponse
+	21, // 40: noryx.v1.DatastoreService.DropDatabase:output_type -> noryx.v1.DropDatabaseResponse
+	23, // 41: noryx.v1.DatastoreService.CreateDump:output_type -> noryx.v1.CreateDumpResponse
+	25, // 42: noryx.v1.DatastoreService.ListDumps:output_type -> noryx.v1.ListDumpsResponse
+	27, // 43: noryx.v1.DatastoreService.RestoreDump:output_type -> noryx.v1.RestoreDumpResponse
+	29, // 44: noryx.v1.DatastoreService.DeleteDump:output_type -> noryx.v1.DeleteDumpResponse
+	31, // 45: noryx.v1.DatastoreService.DownloadDump:output_type -> noryx.v1.DownloadDumpResponse
+	34, // 46: noryx.v1.DatastoreService.ListTables:output_type -> noryx.v1.ListTablesResponse
+	39, // 47: noryx.v1.DatastoreService.BrowseTable:output_type -> noryx.v1.BrowseTableResponse
+	41, // 48: noryx.v1.DatastoreService.StreamDatastoreLogs:output_type -> noryx.v1.StreamDatastoreLogsResponse
+	32, // [32:49] is the sub-list for method output_type
+	15, // [15:32] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_datastore_proto_init() }

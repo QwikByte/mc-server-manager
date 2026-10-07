@@ -33,7 +33,10 @@ type BackupSelection struct {
 	// Files in the data directory except .jar files and logs, and the config folder.
 	Config bool `protobuf:"varint,4,opt,name=config,proto3" json:"config,omitempty"`
 	// Further files or folders, relative to the data directory. Missing ones are skipped.
-	Paths         []string `protobuf:"bytes,5,rep,name=paths,proto3" json:"paths,omitempty"`
+	Paths []string `protobuf:"bytes,5,rep,name=paths,proto3" json:"paths,omitempty"`
+	// Files or folders inside the others that are left out, e.g. the tiles of a map plugin.
+	// Restoring the backup leaves them as they are. Agents of older versions archive them.
+	Exclude       []string `protobuf:"bytes,6,rep,name=exclude,proto3" json:"exclude,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -103,6 +106,93 @@ func (x *BackupSelection) GetPaths() []string {
 	return nil
 }
 
+func (x *BackupSelection) GetExclude() []string {
+	if x != nil {
+		return x.Exclude
+	}
+	return nil
+}
+
+// BackupRetention tells which backups of a job are kept: the newest ones, and the newest of
+// each of the last days, weeks (from Monday) and months that have backups. A backup that
+// any of them keeps stays; all zero keeps all.
+type BackupRetention struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Last   uint32                 `protobuf:"varint,1,opt,name=last,proto3" json:"last,omitempty"`
+	Days   uint32                 `protobuf:"varint,2,opt,name=days,proto3" json:"days,omitempty"`
+	Weeks  uint32                 `protobuf:"varint,3,opt,name=weeks,proto3" json:"weeks,omitempty"`
+	Months uint32                 `protobuf:"varint,4,opt,name=months,proto3" json:"months,omitempty"`
+	// IANA time zone in which days, weeks and months begin, e.g. the job's; empty for UTC.
+	TimeZone      string `protobuf:"bytes,5,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackupRetention) Reset() {
+	*x = BackupRetention{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackupRetention) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackupRetention) ProtoMessage() {}
+
+func (x *BackupRetention) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackupRetention.ProtoReflect.Descriptor instead.
+func (*BackupRetention) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BackupRetention) GetLast() uint32 {
+	if x != nil {
+		return x.Last
+	}
+	return 0
+}
+
+func (x *BackupRetention) GetDays() uint32 {
+	if x != nil {
+		return x.Days
+	}
+	return 0
+}
+
+func (x *BackupRetention) GetWeeks() uint32 {
+	if x != nil {
+		return x.Weeks
+	}
+	return 0
+}
+
+func (x *BackupRetention) GetMonths() uint32 {
+	if x != nil {
+		return x.Months
+	}
+	return 0
+}
+
+func (x *BackupRetention) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
+	}
+	return ""
+}
+
 type Backup struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -115,14 +205,18 @@ type Backup struct {
 	// Files and folders in the backup, relative to the data directory; "." is everything.
 	Paths []string `protobuf:"bytes,6,rep,name=paths,proto3" json:"paths,omitempty"`
 	// Job that made the backup; empty if it was made by hand.
-	JobId         string `protobuf:"bytes,7,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	JobId string `protobuf:"bytes,7,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// Files and folders inside the paths that the backup left out.
+	Exclude []string `protobuf:"bytes,8,rep,name=exclude,proto3" json:"exclude,omitempty"`
+	// Kept backups are never deleted by their job.
+	Kept          bool `protobuf:"varint,9,opt,name=kept,proto3" json:"kept,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Backup) Reset() {
 	*x = Backup{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[1]
+	mi := &file_noryx_v1_backup_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -134,7 +228,7 @@ func (x *Backup) String() string {
 func (*Backup) ProtoMessage() {}
 
 func (x *Backup) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[1]
+	mi := &file_noryx_v1_backup_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -147,7 +241,7 @@ func (x *Backup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Backup.ProtoReflect.Descriptor instead.
 func (*Backup) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{1}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Backup) GetId() string {
@@ -199,6 +293,20 @@ func (x *Backup) GetJobId() string {
 	return ""
 }
 
+func (x *Backup) GetExclude() []string {
+	if x != nil {
+		return x.Exclude
+	}
+	return nil
+}
+
+func (x *Backup) GetKept() bool {
+	if x != nil {
+		return x.Kept
+	}
+	return false
+}
+
 type ListBackupsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
@@ -208,7 +316,7 @@ type ListBackupsRequest struct {
 
 func (x *ListBackupsRequest) Reset() {
 	*x = ListBackupsRequest{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[2]
+	mi := &file_noryx_v1_backup_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -220,7 +328,7 @@ func (x *ListBackupsRequest) String() string {
 func (*ListBackupsRequest) ProtoMessage() {}
 
 func (x *ListBackupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[2]
+	mi := &file_noryx_v1_backup_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -233,7 +341,7 @@ func (x *ListBackupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBackupsRequest.ProtoReflect.Descriptor instead.
 func (*ListBackupsRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{2}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListBackupsRequest) GetServerId() string {
@@ -252,7 +360,7 @@ type ListBackupsResponse struct {
 
 func (x *ListBackupsResponse) Reset() {
 	*x = ListBackupsResponse{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[3]
+	mi := &file_noryx_v1_backup_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -264,7 +372,7 @@ func (x *ListBackupsResponse) String() string {
 func (*ListBackupsResponse) ProtoMessage() {}
 
 func (x *ListBackupsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[3]
+	mi := &file_noryx_v1_backup_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -277,7 +385,7 @@ func (x *ListBackupsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBackupsResponse.ProtoReflect.Descriptor instead.
 func (*ListBackupsResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{3}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListBackupsResponse) GetBackups() []*Backup {
@@ -296,18 +404,21 @@ type CreateBackupRequest struct {
 	Location string `protobuf:"bytes,4,opt,name=location,proto3" json:"location,omitempty"`
 	JobId    string `protobuf:"bytes,5,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
 	// Backups of the job to keep for the server, 0 for all. Older ones are deleted once the
-	// new backup exists. Backups made by hand are never deleted this way.
+	// new backup exists. Backups made by hand, and kept ones, are never deleted this way.
+	// Ignored if retention is set, which agents of older versions ignore.
 	Keep uint32 `protobuf:"varint,6,opt,name=keep,proto3" json:"keep,omitempty"`
 	// Whether a server without any of the selected data, e.g. one that never started, is
 	// skipped: the response has no backup then. Otherwise that is an error.
 	SkipWithoutData bool `protobuf:"varint,7,opt,name=skip_without_data,json=skipWithoutData,proto3" json:"skip_without_data,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Which backups of the job are kept, instead of keep.
+	Retention     *BackupRetention `protobuf:"bytes,8,opt,name=retention,proto3" json:"retention,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateBackupRequest) Reset() {
 	*x = CreateBackupRequest{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[4]
+	mi := &file_noryx_v1_backup_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -319,7 +430,7 @@ func (x *CreateBackupRequest) String() string {
 func (*CreateBackupRequest) ProtoMessage() {}
 
 func (x *CreateBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[4]
+	mi := &file_noryx_v1_backup_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,7 +443,7 @@ func (x *CreateBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBackupRequest.ProtoReflect.Descriptor instead.
 func (*CreateBackupRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{4}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateBackupRequest) GetServerId() string {
@@ -384,6 +495,13 @@ func (x *CreateBackupRequest) GetSkipWithoutData() bool {
 	return false
 }
 
+func (x *CreateBackupRequest) GetRetention() *BackupRetention {
+	if x != nil {
+		return x.Retention
+	}
+	return nil
+}
+
 type CreateBackupResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Backup        *Backup                `protobuf:"bytes,1,opt,name=backup,proto3" json:"backup,omitempty"`
@@ -393,7 +511,7 @@ type CreateBackupResponse struct {
 
 func (x *CreateBackupResponse) Reset() {
 	*x = CreateBackupResponse{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[5]
+	mi := &file_noryx_v1_backup_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -405,7 +523,7 @@ func (x *CreateBackupResponse) String() string {
 func (*CreateBackupResponse) ProtoMessage() {}
 
 func (x *CreateBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[5]
+	mi := &file_noryx_v1_backup_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -418,7 +536,7 @@ func (x *CreateBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBackupResponse.ProtoReflect.Descriptor instead.
 func (*CreateBackupResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{5}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateBackupResponse) GetBackup() *Backup {
@@ -429,16 +547,22 @@ func (x *CreateBackupResponse) GetBackup() *Backup {
 }
 
 type RestoreBackupRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	BackupId      string                 `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	BackupId string                 `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	// Files and folders of the backup to restore, relative to the data directory; empty for
+	// all it holds. Each must be in the backup. Agents of older versions restore all.
+	Paths []string `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
+	// Backs up what the restore replaces first, as a backup made by hand in the storage
+	// location of the restored one.
+	SnapshotFirst bool `protobuf:"varint,4,opt,name=snapshot_first,json=snapshotFirst,proto3" json:"snapshot_first,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RestoreBackupRequest) Reset() {
 	*x = RestoreBackupRequest{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[6]
+	mi := &file_noryx_v1_backup_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -450,7 +574,7 @@ func (x *RestoreBackupRequest) String() string {
 func (*RestoreBackupRequest) ProtoMessage() {}
 
 func (x *RestoreBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[6]
+	mi := &file_noryx_v1_backup_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -463,7 +587,7 @@ func (x *RestoreBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreBackupRequest.ProtoReflect.Descriptor instead.
 func (*RestoreBackupRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{6}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RestoreBackupRequest) GetServerId() string {
@@ -480,15 +604,31 @@ func (x *RestoreBackupRequest) GetBackupId() string {
 	return ""
 }
 
+func (x *RestoreBackupRequest) GetPaths() []string {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
+func (x *RestoreBackupRequest) GetSnapshotFirst() bool {
+	if x != nil {
+		return x.SnapshotFirst
+	}
+	return false
+}
+
 type RestoreBackupResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The backup that snapshot_first made; none if the server had none of the paths.
+	Snapshot      *Backup `protobuf:"bytes,1,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RestoreBackupResponse) Reset() {
 	*x = RestoreBackupResponse{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[7]
+	mi := &file_noryx_v1_backup_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -500,7 +640,7 @@ func (x *RestoreBackupResponse) String() string {
 func (*RestoreBackupResponse) ProtoMessage() {}
 
 func (x *RestoreBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[7]
+	mi := &file_noryx_v1_backup_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -513,7 +653,14 @@ func (x *RestoreBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreBackupResponse.ProtoReflect.Descriptor instead.
 func (*RestoreBackupResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{7}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RestoreBackupResponse) GetSnapshot() *Backup {
+	if x != nil {
+		return x.Snapshot
+	}
+	return nil
 }
 
 type DeleteBackupRequest struct {
@@ -526,7 +673,7 @@ type DeleteBackupRequest struct {
 
 func (x *DeleteBackupRequest) Reset() {
 	*x = DeleteBackupRequest{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[8]
+	mi := &file_noryx_v1_backup_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -538,7 +685,7 @@ func (x *DeleteBackupRequest) String() string {
 func (*DeleteBackupRequest) ProtoMessage() {}
 
 func (x *DeleteBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[8]
+	mi := &file_noryx_v1_backup_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -551,7 +698,7 @@ func (x *DeleteBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBackupRequest.ProtoReflect.Descriptor instead.
 func (*DeleteBackupRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{8}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeleteBackupRequest) GetServerId() string {
@@ -576,7 +723,7 @@ type DeleteBackupResponse struct {
 
 func (x *DeleteBackupResponse) Reset() {
 	*x = DeleteBackupResponse{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[9]
+	mi := &file_noryx_v1_backup_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -588,7 +735,7 @@ func (x *DeleteBackupResponse) String() string {
 func (*DeleteBackupResponse) ProtoMessage() {}
 
 func (x *DeleteBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[9]
+	mi := &file_noryx_v1_backup_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -601,7 +748,236 @@ func (x *DeleteBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBackupResponse.ProtoReflect.Descriptor instead.
 func (*DeleteBackupResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{9}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{10}
+}
+
+type UpdateBackupRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	BackupId string                 `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	// Only what is set changes.
+	Label         *string `protobuf:"bytes,3,opt,name=label,proto3,oneof" json:"label,omitempty"`
+	Kept          *bool   `protobuf:"varint,4,opt,name=kept,proto3,oneof" json:"kept,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateBackupRequest) Reset() {
+	*x = UpdateBackupRequest{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateBackupRequest) ProtoMessage() {}
+
+func (x *UpdateBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateBackupRequest.ProtoReflect.Descriptor instead.
+func (*UpdateBackupRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateBackupRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *UpdateBackupRequest) GetBackupId() string {
+	if x != nil {
+		return x.BackupId
+	}
+	return ""
+}
+
+func (x *UpdateBackupRequest) GetLabel() string {
+	if x != nil && x.Label != nil {
+		return *x.Label
+	}
+	return ""
+}
+
+func (x *UpdateBackupRequest) GetKept() bool {
+	if x != nil && x.Kept != nil {
+		return *x.Kept
+	}
+	return false
+}
+
+type UpdateBackupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Backup        *Backup                `protobuf:"bytes,1,opt,name=backup,proto3" json:"backup,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateBackupResponse) Reset() {
+	*x = UpdateBackupResponse{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateBackupResponse) ProtoMessage() {}
+
+func (x *UpdateBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateBackupResponse.ProtoReflect.Descriptor instead.
+func (*UpdateBackupResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *UpdateBackupResponse) GetBackup() *Backup {
+	if x != nil {
+		return x.Backup
+	}
+	return nil
+}
+
+type ListBackupFilesRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	BackupId string                 `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	// Folder in the backup, relative to the data directory; empty for its top.
+	Path          string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBackupFilesRequest) Reset() {
+	*x = ListBackupFilesRequest{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBackupFilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBackupFilesRequest) ProtoMessage() {}
+
+func (x *ListBackupFilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBackupFilesRequest.ProtoReflect.Descriptor instead.
+func (*ListBackupFilesRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListBackupFilesRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *ListBackupFilesRequest) GetBackupId() string {
+	if x != nil {
+		return x.BackupId
+	}
+	return ""
+}
+
+func (x *ListBackupFilesRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type ListBackupFilesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Folders first, then files, each sorted by name; a folder's size is that of all in it.
+	// Files that only hold secrets aren't listed.
+	Files []*FileInfo `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	// Set if the folder has more entries than the agent lists.
+	Truncated     bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBackupFilesResponse) Reset() {
+	*x = ListBackupFilesResponse{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBackupFilesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBackupFilesResponse) ProtoMessage() {}
+
+func (x *ListBackupFilesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBackupFilesResponse.ProtoReflect.Descriptor instead.
+func (*ListBackupFilesResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListBackupFilesResponse) GetFiles() []*FileInfo {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *ListBackupFilesResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 type DownloadBackupRequest struct {
@@ -617,7 +993,7 @@ type DownloadBackupRequest struct {
 
 func (x *DownloadBackupRequest) Reset() {
 	*x = DownloadBackupRequest{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[10]
+	mi := &file_noryx_v1_backup_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -629,7 +1005,7 @@ func (x *DownloadBackupRequest) String() string {
 func (*DownloadBackupRequest) ProtoMessage() {}
 
 func (x *DownloadBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[10]
+	mi := &file_noryx_v1_backup_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -642,7 +1018,7 @@ func (x *DownloadBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadBackupRequest.ProtoReflect.Descriptor instead.
 func (*DownloadBackupRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{10}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DownloadBackupRequest) GetServerId() string {
@@ -677,7 +1053,7 @@ type DownloadBackupResponse struct {
 
 func (x *DownloadBackupResponse) Reset() {
 	*x = DownloadBackupResponse{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[11]
+	mi := &file_noryx_v1_backup_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -689,7 +1065,7 @@ func (x *DownloadBackupResponse) String() string {
 func (*DownloadBackupResponse) ProtoMessage() {}
 
 func (x *DownloadBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[11]
+	mi := &file_noryx_v1_backup_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -702,7 +1078,7 @@ func (x *DownloadBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadBackupResponse.ProtoReflect.Descriptor instead.
 func (*DownloadBackupResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{11}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DownloadBackupResponse) GetSize() int64 {
@@ -730,7 +1106,7 @@ type ImportBackupHeader struct {
 
 func (x *ImportBackupHeader) Reset() {
 	*x = ImportBackupHeader{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[12]
+	mi := &file_noryx_v1_backup_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +1118,7 @@ func (x *ImportBackupHeader) String() string {
 func (*ImportBackupHeader) ProtoMessage() {}
 
 func (x *ImportBackupHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[12]
+	mi := &file_noryx_v1_backup_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +1131,7 @@ func (x *ImportBackupHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportBackupHeader.ProtoReflect.Descriptor instead.
 func (*ImportBackupHeader) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{12}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ImportBackupHeader) GetServerId() string {
@@ -785,7 +1161,7 @@ type ImportBackupRequest struct {
 
 func (x *ImportBackupRequest) Reset() {
 	*x = ImportBackupRequest{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[13]
+	mi := &file_noryx_v1_backup_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -797,7 +1173,7 @@ func (x *ImportBackupRequest) String() string {
 func (*ImportBackupRequest) ProtoMessage() {}
 
 func (x *ImportBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[13]
+	mi := &file_noryx_v1_backup_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -810,7 +1186,7 @@ func (x *ImportBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportBackupRequest.ProtoReflect.Descriptor instead.
 func (*ImportBackupRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{13}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ImportBackupRequest) GetContent() isImportBackupRequest_Content {
@@ -863,7 +1239,7 @@ type ImportBackupResponse struct {
 
 func (x *ImportBackupResponse) Reset() {
 	*x = ImportBackupResponse{}
-	mi := &file_noryx_v1_backup_proto_msgTypes[14]
+	mi := &file_noryx_v1_backup_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -875,7 +1251,7 @@ func (x *ImportBackupResponse) String() string {
 func (*ImportBackupResponse) ProtoMessage() {}
 
 func (x *ImportBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_backup_proto_msgTypes[14]
+	mi := &file_noryx_v1_backup_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +1264,7 @@ func (x *ImportBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportBackupResponse.ProtoReflect.Descriptor instead.
 func (*ImportBackupResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{14}
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ImportBackupResponse) GetBackup() *Backup {
@@ -902,7 +1278,7 @@ var File_noryx_v1_backup_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/backup.proto\x12\bnoryx.v1\"\x91\x01\n" +
+	"\x15noryx/v1/backup.proto\x12\bnoryx.v1\x1a\x13noryx/v1/file.proto\"\xab\x01\n" +
 	"\x0fBackupSelection\x12\x1e\n" +
 	"\n" +
 	"everything\x18\x01 \x01(\bR\n" +
@@ -910,7 +1286,14 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x06worlds\x18\x02 \x01(\bR\x06worlds\x12\x18\n" +
 	"\aplugins\x18\x03 \x01(\bR\aplugins\x12\x16\n" +
 	"\x06config\x18\x04 \x01(\bR\x06config\x12\x14\n" +
-	"\x05paths\x18\x05 \x03(\tR\x05paths\"\xae\x01\n" +
+	"\x05paths\x18\x05 \x03(\tR\x05paths\x12\x18\n" +
+	"\aexclude\x18\x06 \x03(\tR\aexclude\"\x84\x01\n" +
+	"\x0fBackupRetention\x12\x12\n" +
+	"\x04last\x18\x01 \x01(\rR\x04last\x12\x12\n" +
+	"\x04days\x18\x02 \x01(\rR\x04days\x12\x14\n" +
+	"\x05weeks\x18\x03 \x01(\rR\x05weeks\x12\x16\n" +
+	"\x06months\x18\x04 \x01(\rR\x06months\x12\x1b\n" +
+	"\ttime_zone\x18\x05 \x01(\tR\btimeZone\"\xdc\x01\n" +
 	"\x06Backup\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12!\n" +
@@ -918,11 +1301,13 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x1a\n" +
 	"\blocation\x18\x05 \x01(\tR\blocation\x12\x14\n" +
 	"\x05paths\x18\x06 \x03(\tR\x05paths\x12\x15\n" +
-	"\x06job_id\x18\a \x01(\tR\x05jobId\"1\n" +
+	"\x06job_id\x18\a \x01(\tR\x05jobId\x12\x18\n" +
+	"\aexclude\x18\b \x03(\tR\aexclude\x12\x12\n" +
+	"\x04kept\x18\t \x01(\bR\x04kept\"1\n" +
 	"\x12ListBackupsRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\"A\n" +
 	"\x13ListBackupsResponse\x12*\n" +
-	"\abackups\x18\x01 \x03(\v2\x10.noryx.v1.BackupR\abackups\"\xf4\x01\n" +
+	"\abackups\x18\x01 \x03(\v2\x10.noryx.v1.BackupR\abackups\"\xad\x02\n" +
 	"\x13CreateBackupRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x127\n" +
@@ -930,17 +1315,37 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\blocation\x18\x04 \x01(\tR\blocation\x12\x15\n" +
 	"\x06job_id\x18\x05 \x01(\tR\x05jobId\x12\x12\n" +
 	"\x04keep\x18\x06 \x01(\rR\x04keep\x12*\n" +
-	"\x11skip_without_data\x18\a \x01(\bR\x0fskipWithoutData\"@\n" +
+	"\x11skip_without_data\x18\a \x01(\bR\x0fskipWithoutData\x127\n" +
+	"\tretention\x18\b \x01(\v2\x19.noryx.v1.BackupRetentionR\tretention\"@\n" +
 	"\x14CreateBackupResponse\x12(\n" +
-	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup\"P\n" +
+	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup\"\x8d\x01\n" +
 	"\x14RestoreBackupRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
-	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\"\x17\n" +
-	"\x15RestoreBackupResponse\"O\n" +
+	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\x12\x14\n" +
+	"\x05paths\x18\x03 \x03(\tR\x05paths\x12%\n" +
+	"\x0esnapshot_first\x18\x04 \x01(\bR\rsnapshotFirst\"E\n" +
+	"\x15RestoreBackupResponse\x12,\n" +
+	"\bsnapshot\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\bsnapshot\"O\n" +
 	"\x13DeleteBackupRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
 	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\"\x16\n" +
-	"\x14DeleteBackupResponse\"t\n" +
+	"\x14DeleteBackupResponse\"\x96\x01\n" +
+	"\x13UpdateBackupRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
+	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\x12\x19\n" +
+	"\x05label\x18\x03 \x01(\tH\x00R\x05label\x88\x01\x01\x12\x17\n" +
+	"\x04kept\x18\x04 \x01(\bH\x01R\x04kept\x88\x01\x01B\b\n" +
+	"\x06_labelB\a\n" +
+	"\x05_kept\"@\n" +
+	"\x14UpdateBackupResponse\x12(\n" +
+	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup\"f\n" +
+	"\x16ListBackupFilesRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
+	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\"a\n" +
+	"\x17ListBackupFilesResponse\x12(\n" +
+	"\x05files\x18\x01 \x03(\v2\x12.noryx.v1.FileInfoR\x05files\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"t\n" +
 	"\x15DownloadBackupRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
 	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\x12!\n" +
@@ -956,12 +1361,14 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
 	"\acontent\"@\n" +
 	"\x14ImportBackupResponse\x12(\n" +
-	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup2\xf3\x03\n" +
+	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup2\x9a\x05\n" +
 	"\rBackupService\x12J\n" +
 	"\vListBackups\x12\x1c.noryx.v1.ListBackupsRequest\x1a\x1d.noryx.v1.ListBackupsResponse\x12M\n" +
 	"\fCreateBackup\x12\x1d.noryx.v1.CreateBackupRequest\x1a\x1e.noryx.v1.CreateBackupResponse\x12P\n" +
 	"\rRestoreBackup\x12\x1e.noryx.v1.RestoreBackupRequest\x1a\x1f.noryx.v1.RestoreBackupResponse\x12M\n" +
-	"\fDeleteBackup\x12\x1d.noryx.v1.DeleteBackupRequest\x1a\x1e.noryx.v1.DeleteBackupResponse\x12U\n" +
+	"\fDeleteBackup\x12\x1d.noryx.v1.DeleteBackupRequest\x1a\x1e.noryx.v1.DeleteBackupResponse\x12M\n" +
+	"\fUpdateBackup\x12\x1d.noryx.v1.UpdateBackupRequest\x1a\x1e.noryx.v1.UpdateBackupResponse\x12V\n" +
+	"\x0fListBackupFiles\x12 .noryx.v1.ListBackupFilesRequest\x1a!.noryx.v1.ListBackupFilesResponse\x12U\n" +
 	"\x0eDownloadBackup\x12\x1f.noryx.v1.DownloadBackupRequest\x1a .noryx.v1.DownloadBackupResponse0\x01\x12O\n" +
 	"\fImportBackup\x12\x1d.noryx.v1.ImportBackupRequest\x1a\x1e.noryx.v1.ImportBackupResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
@@ -977,48 +1384,62 @@ func file_noryx_v1_backup_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_backup_proto_rawDescData
 }
 
-var file_noryx_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_noryx_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_noryx_v1_backup_proto_goTypes = []any{
-	(*BackupSelection)(nil),        // 0: noryx.v1.BackupSelection
-	(*Backup)(nil),                 // 1: noryx.v1.Backup
-	(*ListBackupsRequest)(nil),     // 2: noryx.v1.ListBackupsRequest
-	(*ListBackupsResponse)(nil),    // 3: noryx.v1.ListBackupsResponse
-	(*CreateBackupRequest)(nil),    // 4: noryx.v1.CreateBackupRequest
-	(*CreateBackupResponse)(nil),   // 5: noryx.v1.CreateBackupResponse
-	(*RestoreBackupRequest)(nil),   // 6: noryx.v1.RestoreBackupRequest
-	(*RestoreBackupResponse)(nil),  // 7: noryx.v1.RestoreBackupResponse
-	(*DeleteBackupRequest)(nil),    // 8: noryx.v1.DeleteBackupRequest
-	(*DeleteBackupResponse)(nil),   // 9: noryx.v1.DeleteBackupResponse
-	(*DownloadBackupRequest)(nil),  // 10: noryx.v1.DownloadBackupRequest
-	(*DownloadBackupResponse)(nil), // 11: noryx.v1.DownloadBackupResponse
-	(*ImportBackupHeader)(nil),     // 12: noryx.v1.ImportBackupHeader
-	(*ImportBackupRequest)(nil),    // 13: noryx.v1.ImportBackupRequest
-	(*ImportBackupResponse)(nil),   // 14: noryx.v1.ImportBackupResponse
+	(*BackupSelection)(nil),         // 0: noryx.v1.BackupSelection
+	(*BackupRetention)(nil),         // 1: noryx.v1.BackupRetention
+	(*Backup)(nil),                  // 2: noryx.v1.Backup
+	(*ListBackupsRequest)(nil),      // 3: noryx.v1.ListBackupsRequest
+	(*ListBackupsResponse)(nil),     // 4: noryx.v1.ListBackupsResponse
+	(*CreateBackupRequest)(nil),     // 5: noryx.v1.CreateBackupRequest
+	(*CreateBackupResponse)(nil),    // 6: noryx.v1.CreateBackupResponse
+	(*RestoreBackupRequest)(nil),    // 7: noryx.v1.RestoreBackupRequest
+	(*RestoreBackupResponse)(nil),   // 8: noryx.v1.RestoreBackupResponse
+	(*DeleteBackupRequest)(nil),     // 9: noryx.v1.DeleteBackupRequest
+	(*DeleteBackupResponse)(nil),    // 10: noryx.v1.DeleteBackupResponse
+	(*UpdateBackupRequest)(nil),     // 11: noryx.v1.UpdateBackupRequest
+	(*UpdateBackupResponse)(nil),    // 12: noryx.v1.UpdateBackupResponse
+	(*ListBackupFilesRequest)(nil),  // 13: noryx.v1.ListBackupFilesRequest
+	(*ListBackupFilesResponse)(nil), // 14: noryx.v1.ListBackupFilesResponse
+	(*DownloadBackupRequest)(nil),   // 15: noryx.v1.DownloadBackupRequest
+	(*DownloadBackupResponse)(nil),  // 16: noryx.v1.DownloadBackupResponse
+	(*ImportBackupHeader)(nil),      // 17: noryx.v1.ImportBackupHeader
+	(*ImportBackupRequest)(nil),     // 18: noryx.v1.ImportBackupRequest
+	(*ImportBackupResponse)(nil),    // 19: noryx.v1.ImportBackupResponse
+	(*FileInfo)(nil),                // 20: noryx.v1.FileInfo
 }
 var file_noryx_v1_backup_proto_depIdxs = []int32{
-	1,  // 0: noryx.v1.ListBackupsResponse.backups:type_name -> noryx.v1.Backup
+	2,  // 0: noryx.v1.ListBackupsResponse.backups:type_name -> noryx.v1.Backup
 	0,  // 1: noryx.v1.CreateBackupRequest.selection:type_name -> noryx.v1.BackupSelection
-	1,  // 2: noryx.v1.CreateBackupResponse.backup:type_name -> noryx.v1.Backup
-	1,  // 3: noryx.v1.ImportBackupHeader.backup:type_name -> noryx.v1.Backup
-	12, // 4: noryx.v1.ImportBackupRequest.header:type_name -> noryx.v1.ImportBackupHeader
-	1,  // 5: noryx.v1.ImportBackupResponse.backup:type_name -> noryx.v1.Backup
-	2,  // 6: noryx.v1.BackupService.ListBackups:input_type -> noryx.v1.ListBackupsRequest
-	4,  // 7: noryx.v1.BackupService.CreateBackup:input_type -> noryx.v1.CreateBackupRequest
-	6,  // 8: noryx.v1.BackupService.RestoreBackup:input_type -> noryx.v1.RestoreBackupRequest
-	8,  // 9: noryx.v1.BackupService.DeleteBackup:input_type -> noryx.v1.DeleteBackupRequest
-	10, // 10: noryx.v1.BackupService.DownloadBackup:input_type -> noryx.v1.DownloadBackupRequest
-	13, // 11: noryx.v1.BackupService.ImportBackup:input_type -> noryx.v1.ImportBackupRequest
-	3,  // 12: noryx.v1.BackupService.ListBackups:output_type -> noryx.v1.ListBackupsResponse
-	5,  // 13: noryx.v1.BackupService.CreateBackup:output_type -> noryx.v1.CreateBackupResponse
-	7,  // 14: noryx.v1.BackupService.RestoreBackup:output_type -> noryx.v1.RestoreBackupResponse
-	9,  // 15: noryx.v1.BackupService.DeleteBackup:output_type -> noryx.v1.DeleteBackupResponse
-	11, // 16: noryx.v1.BackupService.DownloadBackup:output_type -> noryx.v1.DownloadBackupResponse
-	14, // 17: noryx.v1.BackupService.ImportBackup:output_type -> noryx.v1.ImportBackupResponse
-	12, // [12:18] is the sub-list for method output_type
-	6,  // [6:12] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	1,  // 2: noryx.v1.CreateBackupRequest.retention:type_name -> noryx.v1.BackupRetention
+	2,  // 3: noryx.v1.CreateBackupResponse.backup:type_name -> noryx.v1.Backup
+	2,  // 4: noryx.v1.RestoreBackupResponse.snapshot:type_name -> noryx.v1.Backup
+	2,  // 5: noryx.v1.UpdateBackupResponse.backup:type_name -> noryx.v1.Backup
+	20, // 6: noryx.v1.ListBackupFilesResponse.files:type_name -> noryx.v1.FileInfo
+	2,  // 7: noryx.v1.ImportBackupHeader.backup:type_name -> noryx.v1.Backup
+	17, // 8: noryx.v1.ImportBackupRequest.header:type_name -> noryx.v1.ImportBackupHeader
+	2,  // 9: noryx.v1.ImportBackupResponse.backup:type_name -> noryx.v1.Backup
+	3,  // 10: noryx.v1.BackupService.ListBackups:input_type -> noryx.v1.ListBackupsRequest
+	5,  // 11: noryx.v1.BackupService.CreateBackup:input_type -> noryx.v1.CreateBackupRequest
+	7,  // 12: noryx.v1.BackupService.RestoreBackup:input_type -> noryx.v1.RestoreBackupRequest
+	9,  // 13: noryx.v1.BackupService.DeleteBackup:input_type -> noryx.v1.DeleteBackupRequest
+	11, // 14: noryx.v1.BackupService.UpdateBackup:input_type -> noryx.v1.UpdateBackupRequest
+	13, // 15: noryx.v1.BackupService.ListBackupFiles:input_type -> noryx.v1.ListBackupFilesRequest
+	15, // 16: noryx.v1.BackupService.DownloadBackup:input_type -> noryx.v1.DownloadBackupRequest
+	18, // 17: noryx.v1.BackupService.ImportBackup:input_type -> noryx.v1.ImportBackupRequest
+	4,  // 18: noryx.v1.BackupService.ListBackups:output_type -> noryx.v1.ListBackupsResponse
+	6,  // 19: noryx.v1.BackupService.CreateBackup:output_type -> noryx.v1.CreateBackupResponse
+	8,  // 20: noryx.v1.BackupService.RestoreBackup:output_type -> noryx.v1.RestoreBackupResponse
+	10, // 21: noryx.v1.BackupService.DeleteBackup:output_type -> noryx.v1.DeleteBackupResponse
+	12, // 22: noryx.v1.BackupService.UpdateBackup:output_type -> noryx.v1.UpdateBackupResponse
+	14, // 23: noryx.v1.BackupService.ListBackupFiles:output_type -> noryx.v1.ListBackupFilesResponse
+	16, // 24: noryx.v1.BackupService.DownloadBackup:output_type -> noryx.v1.DownloadBackupResponse
+	19, // 25: noryx.v1.BackupService.ImportBackup:output_type -> noryx.v1.ImportBackupResponse
+	18, // [18:26] is the sub-list for method output_type
+	10, // [10:18] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_backup_proto_init() }
@@ -1026,7 +1447,9 @@ func file_noryx_v1_backup_proto_init() {
 	if File_noryx_v1_backup_proto != nil {
 		return
 	}
-	file_noryx_v1_backup_proto_msgTypes[13].OneofWrappers = []any{
+	file_noryx_v1_file_proto_init()
+	file_noryx_v1_backup_proto_msgTypes[11].OneofWrappers = []any{}
+	file_noryx_v1_backup_proto_msgTypes[18].OneofWrappers = []any{
 		(*ImportBackupRequest_Header)(nil),
 		(*ImportBackupRequest_Data)(nil),
 	}
@@ -1036,7 +1459,7 @@ func file_noryx_v1_backup_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_backup_proto_rawDesc), len(file_noryx_v1_backup_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

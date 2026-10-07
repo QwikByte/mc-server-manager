@@ -308,7 +308,7 @@ func API(s Services) *http.ServeMux {
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
 	datastore.NewHandler(s.Datastores, s.Operations).Register(m)
-	backup.NewHandler(s.Nodes, s.Networks, s.Operations).Register(m)
+	backup.NewHandler(s.Nodes, s.Networks, s.Operations, s.Moves.Check).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
 	update.NewHandler(s.Updates).Register(m)

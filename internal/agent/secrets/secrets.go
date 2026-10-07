@@ -8,6 +8,9 @@
 package secrets
 
 import (
+	"bytes"
+	"errors"
+	"io/fs"
 	"maps"
 	"path"
 	"regexp"
@@ -72,6 +75,9 @@ func With(marked ...string) Files { return Files{marked} }
 // Hidden reports whether name is a file that only holds secrets, or was marked.
 func (f Files) Hidden(name string) bool { return Hidden(name) || slices.Contains(f.marked, name) }
 
+// Paths returns the files that only hold secrets, and the marked ones.
+func (f Files) Paths() []string { return slices.Concat(hidden, f.marked) }
+
 // Under returns the files that may hold secrets at name or in the folder name.
 func (f Files) Under(name string) []string {
 	return slices.DeleteFunc(slices.Concat(hidden, f.marked, slices.Collect(maps.Keys(redacted))), func(p string) bool {
@@ -105,6 +111,30 @@ func Restore(name string, data, current []byte) []byte {
 		}
 		return slices.Concat(m[1], secrets[string(m[2])])
 	})
+}
+
+// Fill puts the secrets of current into the files of restored, e.g. a backup of another
+// server whose secrets were hidden, wherever they say Placeholder.
+func Fill(current, restored *datadir.Dir) error {
+	for name := range redacted {
+		data, err := restored.ReadFile(name)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		now, err := current.ReadOptional(name)
+		if err != nil {
+			return err
+		}
+		if filled := Restore(name, data, now); !bytes.Equal(filled, data) {
+			if err := restored.WriteFile(name, filled); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // Censor returns the censor of an archive of the folder dir of a server's data, e.g. "."
