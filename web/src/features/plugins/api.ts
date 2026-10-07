@@ -72,6 +72,11 @@ export interface ProjectVersion {
   gameVersions?: string[]
 }
 
+/** A version of a project with what changed in it: Markdown of its author, shown without HTML. */
+export interface Change extends ProjectVersion {
+  changelog: string
+}
+
 /** A plugin file on a server; files from Modrinth and Hangar are recognised by their hash. */
 export interface InstalledPlugin {
   fileName: string
@@ -81,8 +86,17 @@ export interface InstalledPlugin {
   versionId?: string
   /** Set for a version that isn't a release. */
   channel?: Exclude<Channel, "release">
-  /** A newer release that suits the server. */
+  /** A newer release that suits the server, and its ID. */
   update?: string
+  updateId?: string
+  /** The server keeps the project at its version: updating all plugins leaves it out. */
+  pinned?: boolean
+  /** Turned off: the server keeps the file but doesn't load it. */
+  disabled?: boolean
+  /** The folder of the plugin's settings, e.g. plugins/LuckPerms. */
+  settings?: string
+  /** The other turned-on projects of the server that require it. */
+  requiredBy?: string[]
 }
 
 export interface PluginListing {
@@ -101,10 +115,42 @@ export interface InstalledFile {
   channel?: Exclude<Channel, "release">
 }
 
+/** What installing, updating or removing plugins did on a server. */
 export interface InstallResult extends ServerRef {
+  /** The files installed, also those present already; an update only tells the files it wrote. */
   installed: InstalledFile[]
+  removed?: string[]
+  /** The projects with a newer release that the server keeps at their version. */
+  pinned?: string[]
   error?: string
+  /** The server runs without what changed, or was restarted to load it. */
+  restart?: boolean
+  restarted?: boolean
 }
+
+/** Restarts the running servers whose plugins changed afterwards, the game servers of a network batch at a time. */
+export interface Restart {
+  restart?: boolean
+  batch?: number
+}
+
+/** A file of a project on a server, as the server's listing describes it. */
+export type InstalledOn = ServerRef & Omit<InstalledPlugin, "project">
+
+/** What the servers the user may see have installed, by project of Modrinth or Hangar. */
+export interface Everywhere {
+  projects: { project: Project; servers: InstalledOn[] }[]
+  /** Nodes, or single servers, whose plugins couldn't be listed. */
+  unreachable: { nodeId: string; nodeName: string; serverId?: string; error: string }[]
+  catalogueError?: string
+}
+
+/** What the servers have installed; it asks all nodes, so it isn't asked often. */
+export const installedQuery = queryOptions({
+  queryKey: ["plugins", "installed"],
+  queryFn: () => api<Everywhere>("/plugins/installed"),
+  staleTime: 30_000,
+})
 
 /** Whether a pre-release was installed because no release suits the server, rather than chosen among the versions. */
 export const fallback = (file: InstalledFile, versions?: Record<string, string>) => file.channel !== undefined && !versions?.[file.projectId]
@@ -149,6 +195,17 @@ export const versionsQuery = (project: string, type: string, version: string) =>
     staleTime: 60_000,
   })
 
+/**
+ * What changed in the versions of a project that run on a server type and Minecraft version, the newest first: those
+ * after the version from up to the version to, or the newest ones.
+ */
+export const changesQuery = (project: string, type: string, version: string, from = "", to = "") =>
+  queryOptions({
+    queryKey: ["plugins", "changes", project, type, version, from, to],
+    queryFn: () => api<Change[]>(`/plugins/projects/${project}/changes?${new URLSearchParams({ type, version, from, to })}`),
+    staleTime: 300_000,
+  })
+
 const base = ({ nodeId, serverId }: ServerRef) => `/nodes/${nodeId}/servers/${serverId}/plugins`
 
 export const pluginsQuery = (ref: ServerRef) =>
@@ -174,7 +231,8 @@ export function useInstallPlugins() {
       servers,
       versions,
       onStart,
-    }: {
+      ...restart
+    }: Restart & {
       projects: string[]
       servers: ServerRef[]
       versions?: Record<string, string>
@@ -187,7 +245,7 @@ export function useInstallPlugins() {
         try {
           const res = await operate<{ results: InstallResult[] }>(
             "/plugins/install",
-            { body: { projects, servers: batch, versions } },
+            { body: { projects, servers: batch, versions, ...restart } },
             (op) => onStart?.(op, i / maxServers),
           )
           results.push(...res.results)
@@ -206,16 +264,55 @@ export function useInstallPlugins() {
   })
 }
 
-export type PluginChange = { action: "remove"; fileName: string } | { action: "upload"; file: File }
+/**
+ * Updates all plugins or mods of a server to the newest release that suits it, never to a beta or alpha, except
+ * those it keeps at their version and turned-off ones.
+ */
+export function useUpdatePlugins(ref: ServerRef) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () => (await operate<{ results: InstallResult[] }>("/plugins/update", { body: { servers: [ref] } })).results[0],
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
+  })
+}
+
+/**
+ * Updates a project to the newest release that suits each server, except where it is kept at its version or turned
+ * off, or removes it, also where it is turned off, on many servers at once.
+ */
+export function usePluginsEverywhere(action: "update" | "remove") {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ onStart, ...body }: Restart & { project: string; servers: ServerRef[]; onStart?: (op: Operation) => void }) =>
+      (await operate<{ results: InstallResult[] }>(`/plugins/${action}`, { body }, onStart)).results,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
+  })
+}
+
+export type PluginChange =
+  | { action: "remove"; fileName: string; disabled?: boolean }
+  | { action: "upload"; file: File }
+  | { action: "enable" | "disable"; fileName: string }
+  /** Keeps a project at its version, or lets updates of all plugins update it again. */
+  | { action: "pin" | "unpin"; project: string }
 
 export function useChangePlugins(ref: ServerRef) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (change: PluginChange) => {
-      if (change.action === "remove") return api(`${base(ref)}/${encodeURIComponent(change.fileName)}`, { method: "DELETE" })
+      switch (change.action) {
+        case "remove":
+          return api(`${base(ref)}/${encodeURIComponent(change.fileName)}${change.disabled ? "?disabled=true" : ""}`, { method: "DELETE" })
+        case "enable":
+        case "disable":
+          return api(`${base(ref)}/${encodeURIComponent(change.fileName)}/${change.action}`, { method: "POST" })
+        case "pin":
+        case "unpin":
+          return api(`${base(ref)}/pins/${change.project}`, { method: change.action === "pin" ? "PUT" : "DELETE" })
+      }
       const res = await fetch(`/api${base(ref)}/${encodeURIComponent(change.file.name)}`, { method: "PUT", body: change.file })
       if (!res.ok) throw await responseError(res, t("The upload failed with status {{status}}.", { status: res.status }))
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: pluginsQuery(ref).queryKey }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["plugins"] }),
   })
 }

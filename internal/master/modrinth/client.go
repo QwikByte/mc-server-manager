@@ -144,6 +144,8 @@ type Version struct {
 	Dependencies  []Dependency `json:"dependencies"`
 	GameVersions  []string     `json:"game_versions"`
 	Loaders       []string     `json:"loaders"`
+	// Changelog tells what changed in the version, as Markdown of its author; see Changelogs.
+	Changelog string `json:"changelog"`
 }
 
 // File returns the primary file of a version.
@@ -168,6 +170,8 @@ type File struct {
 
 type Dependency struct {
 	ProjectID string `json:"project_id"`
+	// VersionID is a version of the project, which some name instead of the project.
+	VersionID string `json:"version_id"`
 	Type      string `json:"dependency_type"` // required, optional, incompatible or embedded
 }
 
@@ -227,10 +231,19 @@ func (c *Client) Projects(ctx context.Context, ids []string) ([]Project, error) 
 // Versions returns the versions of a project for the given loaders and, unless empty,
 // Minecraft version, the newest first.
 func (c *Client) Versions(ctx context.Context, project string, loaderNames []string, gameVersion string) ([]Version, error) {
+	return c.versions(ctx, project, loaderNames, gameVersion, false)
+}
+
+// Changelogs returns the versions like Versions, with their changelogs.
+func (c *Client) Changelogs(ctx context.Context, project string, loaderNames []string, gameVersion string) ([]Version, error) {
+	return c.versions(ctx, project, loaderNames, gameVersion, true)
+}
+
+func (c *Client) versions(ctx context.Context, project string, loaderNames []string, gameVersion string, changelogs bool) ([]Version, error) {
 	if !ValidProjectID(project) {
 		return nil, errUnknown
 	}
-	q := url.Values{"loaders": {jsonText(loaderNames)}, "include_changelog": {"false"}}
+	q := url.Values{"loaders": {jsonText(loaderNames)}, "include_changelog": {strconv.FormatBool(changelogs)}}
 	if gameVersion != "" {
 		q.Set("game_versions", jsonText([]string{gameVersion}))
 	}

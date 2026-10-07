@@ -40,8 +40,10 @@ export function SaveTemplateDialog({
 
   const locked = new Set(properties.data?.locked.map((l) => l.key))
   const props = Object.fromEntries(Object.entries(properties.data?.properties ?? {}).filter(([key]) => !locked.has(key)))
-  const projects = plugins.data?.plugins.flatMap((p) => (p.project ? [p.project.id] : [])) ?? []
-  const others = (plugins.data?.plugins.length ?? 0) - projects.length
+  // Turned-off plugins stay out of the template, as the server doesn't load them.
+  const enabled = plugins.data?.plugins.filter((p) => !p.disabled) ?? []
+  const projects = enabled.flatMap((p) => (p.project ? [p.project.id] : []))
+  const others = enabled.length - projects.length
   const software = type.proxy ? type.label : `${type.label} ${displayVersion(server.version)}`
   const count = projects.length
   const summary = [

@@ -260,7 +260,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	nodes := m.nodes
 	modrinthClient := modrinth.New(m.modrinth.URL+"/v2", m.modrinth.URL+"/cdn/")
 	geyser := geysermc.New(m.geysermc.URL+"/v2", m.geysermc.URL+"/v2", 0)
-	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(m.hangar.URL+"/api/v1", m.hangar.URL+"/cdn/"), geyser)
+	plugins := plugin.NewService(m.db, nodes, modrinthClient, hangar.New(m.hangar.URL+"/api/v1", m.hangar.URL+"/cdn/"), geyser)
 	moves := server.NewMoves()
 	overlays := overlay.NewService(m.db, nodes)
 	datastores := datastore.NewStore(m.db, nodes, overlays)

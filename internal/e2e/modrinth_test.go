@@ -83,7 +83,13 @@ func startModrinth(t *testing.T) *fakeModrinth {
 	mux.HandleFunc("GET /v2/project/{id}/version", func(w http.ResponseWriter, r *http.Request) {
 		var loaders []string
 		_ = json.Unmarshal([]byte(r.URL.Query().Get("loaders")), &loaders)
-		writeJSON(w, f.find(func(v modrinth.Version) bool { return v.ProjectID == r.PathValue("id") && overlaps(v.Loaders, loaders) }))
+		found := f.find(func(v modrinth.Version) bool { return v.ProjectID == r.PathValue("id") && overlaps(v.Loaders, loaders) })
+		if r.URL.Query().Get("include_changelog") != "true" {
+			for i := range found {
+				found[i].Changelog = ""
+			}
+		}
+		writeJSON(w, found)
 	})
 	mux.HandleFunc("GET /v2/version/{id}", func(w http.ResponseWriter, r *http.Request) {
 		found := f.find(func(v modrinth.Version) bool { return v.ID == r.PathValue("id") })
@@ -139,7 +145,7 @@ func (f *fakeModrinth) release(project, number, name string, content []byte, loa
 	v := modrinth.Version{
 		ID: id, ProjectID: project, VersionNumber: number, VersionType: "release",
 		Published: time.Date(2026, 1, len(f.versions)+1, 0, 0, 0, 0, time.UTC), Files: []modrinth.File{file}, Loaders: loaders,
-		GameVersions: []string{"1.21.4"},
+		GameVersions: []string{"1.21.4"}, Changelog: "Changes in " + number,
 	}
 	for _, dep := range requires {
 		v.Dependencies = append(v.Dependencies, modrinth.Dependency{ProjectID: dep, Type: "required"})

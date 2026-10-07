@@ -1,7 +1,8 @@
 import type { ReactNode } from "react"
 
-// Release notes are Markdown. Its common parts become React elements, so that no HTML of the
-// notes reaches the page; everything else stays text. Only http and https links are followed.
+// Release notes and the changelogs of plugins are Markdown. Its common parts become React
+// elements, so that no HTML of the text reaches the page; everything else stays text. Only http
+// and https links are followed, and no images are loaded.
 
 const span =
   /`([^`]+)`|\*\*(.+?)\*\*|\*([^*\s][^*]*?)\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>]*[^\s<>.,:;!?)])/g

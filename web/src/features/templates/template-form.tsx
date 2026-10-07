@@ -179,6 +179,7 @@ export function TemplateForm({
                     <span className="min-w-0 flex-1 truncate">{p.title}</span>
                     <VersionMenu
                       project={p.id}
+                      title={p.title}
                       type={form.type}
                       version={form.version}
                       current={p.version}
