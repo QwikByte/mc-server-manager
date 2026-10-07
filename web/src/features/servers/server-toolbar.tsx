@@ -11,6 +11,7 @@ import { t } from "i18next"
 import type { ReactNode } from "react"
 import { CsvButton } from "@/components/csv-button"
 import { FilterChip } from "@/components/filter-chip"
+import { radios } from "@/components/radios"
 import { StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import {
@@ -99,6 +100,8 @@ export function ServerToolbar({
     .filter(({ property, options }) => search[property] || options.length > (property === "tag" ? 0 : 1))
   const active = filters.filter(({ property }) => search[property])
   const filtered = active.length > 0 || search.q || search.state
+  const layoutRadio = radios<View>(["grid", "table"], view, (v) => onSearch({ view: v }))
+  const stateRadio = radios([undefined, ...states], search.state, (state) => onSearch({ state }))
 
   return (
     <div className="mb-5 space-y-3">
@@ -181,12 +184,9 @@ export function ServerToolbar({
             ).map(([value, Icon, label]) => (
               <button
                 key={value}
-                type="button"
-                role="radio"
-                aria-checked={view === value}
+                {...layoutRadio(value)}
                 aria-label={label}
                 title={label}
-                onClick={() => onSearch({ view: value })}
                 className="grid h-8 w-9 place-items-center rounded-md text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-card aria-checked:text-foreground aria-checked:shadow-sm"
               >
                 <Icon className="size-4" weight="bold" />
@@ -201,10 +201,7 @@ export function ServerToolbar({
           {[undefined, ...states].map((state) => (
             <button
               key={state ?? "all"}
-              type="button"
-              role="radio"
-              aria-checked={search.state === state}
-              onClick={() => onSearch({ state })}
+              {...stateRadio(state)}
               className={cn(
                 "flex h-7 items-center gap-2 rounded-md px-2.5 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-checked:bg-card aria-checked:text-foreground aria-checked:shadow-sm",
                 state && counts[state] === 0 && search.state !== state && "opacity-50",
@@ -212,7 +209,7 @@ export function ServerToolbar({
             >
               {state && <StatusDot status={serverStates[state]} />}
               {state ? t(serverStates[state].label) : t("All")}
-              <span className="tabular-nums opacity-70">{state ? counts[state] : total}</span>
+              <span className="font-normal tabular-nums">{state ? counts[state] : total}</span>
             </button>
           ))}
         </div>

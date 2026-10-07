@@ -19,6 +19,7 @@ import { BackLink } from "@/components/back-link"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { StatCard } from "@/components/stat-card"
 import { Pill } from "@/components/status"
 import { TabLink } from "@/components/tab-link"
@@ -46,6 +47,7 @@ export function NetworkPage() {
   const { can, canSomewhere } = useAccess()
   const { networkId } = route.useParams()
   const { data: network, isPending, error } = useQuery(networkQuery(networkId))
+  usePageName(network?.name)
   const { data: servers } = useQuery(allServersQuery)
   const usage = useNetworkUsage(network ? [network] : [])
   const { data: maintenance } = useQuery(maintenanceQuery(networkId))

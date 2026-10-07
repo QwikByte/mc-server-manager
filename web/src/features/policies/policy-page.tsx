@@ -8,6 +8,7 @@ import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
 import { FormSection } from "@/components/form-section"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -23,6 +24,7 @@ export function PolicyPage() {
   const manage = useAccess().can("policies.manage")
   const { policyId } = route.useParams()
   const { data: policy, isPending, error } = useQuery(policies.taskQuery(policyId))
+  usePageName(policy?.name)
   const save = policies.useSaveTask(policyId)
   return (
     <>
@@ -59,6 +61,7 @@ export function PolicyPage() {
 
 export function NewPolicyPage() {
   const save = policies.useSaveTask()
+  usePageName(t("New schedule"))
   const navigate = useNavigate()
   return (
     <>

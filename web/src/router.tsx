@@ -5,6 +5,8 @@ import { ErrorPage } from "@/components/error-page"
 import { HubLayout } from "@/components/hub-layout"
 import { automation, home, library } from "@/components/navigation"
 import { NotFound } from "@/components/not-found"
+import { PageFocus } from "@/components/page-focus"
+import { DocumentTitle } from "@/components/page-title"
 import { Toaster } from "@/components/ui/sonner"
 import { accessQuery } from "@/features/access/api"
 import { accessOf } from "@/features/access/use-access"
@@ -15,6 +17,7 @@ import { validatePlayerSearch } from "@/features/players/search"
 import type { Kind } from "@/features/plugins/api"
 import { validateServerSearch } from "@/features/servers/browse"
 import { ApiError, onOutdated } from "@/lib/api"
+import { msg } from "@/lib/i18n"
 
 // Queries and mutations tell their state before the next click is handled, instead of in a
 // timer that a click can come before: a button disabled while its mutation is pending can't
@@ -39,9 +42,12 @@ export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: (count, error) => !(error instanceof ApiError) && count < 2 } },
 })
 
+// The browser's tab is titled after the open page, and a page that opens takes the focus.
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: () => (
     <>
+      <DocumentTitle />
+      <PageFocus />
       <Outlet />
       <Toaster />
     </>
@@ -51,6 +57,7 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
+  staticData: { title: msg("Sign in") },
   // Only same-site paths are accepted as redirect targets. The key must be set explicitly,
   // because the router merges the validated values over the raw search parameters.
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
@@ -65,6 +72,7 @@ const loginRoute = createRoute({
 const setupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/setup",
+  staticData: { title: msg("Set your password") },
   component: lazyRouteComponent(() => import("@/features/auth/setup-page"), "SetupPage"),
 })
 
@@ -86,6 +94,7 @@ const appRoute = createRoute({
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "$",
+  staticData: { title: msg("Page not found") },
   component: NotFound,
 })
 
@@ -93,6 +102,7 @@ const notFoundRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
+  staticData: { title: msg("Overview") },
   beforeLoad: ({ context }) => {
     const to = home(accessOf(context.queryClient.getQueryData(accessQuery.queryKey)))
     if (to !== "/") throw redirect({ to })
@@ -104,11 +114,13 @@ const indexRoute = createRoute({
 const nodesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/nodes",
+  staticData: { title: msg("Nodes") },
   component: lazyRouteComponent(() => import("@/features/nodes/nodes-page"), "NodesPage"),
 })
 const nodeRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/nodes/$nodeId",
+  staticData: { title: msg("Nodes") },
   validateSearch: validateServerSearch,
   component: lazyRouteComponent(() => import("@/features/nodes/node-page"), "NodePage"),
 })
@@ -116,18 +128,21 @@ const nodeRoute = createRoute({
 const serversRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/servers",
+  staticData: { title: msg("Servers") },
   validateSearch: validateServerSearch,
   component: lazyRouteComponent(() => import("@/features/servers/servers-page"), "ServersPage"),
 })
 const playersRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/players",
+  staticData: { title: msg("Players") },
   validateSearch: validatePlayerSearch,
   component: lazyRouteComponent(() => import("@/features/players/players-page"), "PlayersPage"),
 })
 const serverRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/nodes/$nodeId/servers/$serverId",
+  staticData: { title: msg("Servers") },
   component: lazyRouteComponent(() => import("@/features/servers/server-page"), "ServerPage"),
 })
 const serverConsoleRoute = createRoute({
@@ -138,6 +153,7 @@ const serverConsoleRoute = createRoute({
 const serverUsageRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "usage",
+  staticData: { title: msg("Usage") },
   component: lazyRouteComponent(() => import("@/features/usage/server-usage-page"), "ServerUsagePage"),
 })
 const serverPlayersRoute = createRoute({
@@ -149,6 +165,7 @@ const serverPlayersRoute = createRoute({
 const serverFilesRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "files",
+  staticData: { title: msg("Files") },
   // path is the folder shown, edit the file open in the editor.
   validateSearch: (search: Record<string, unknown>): { path?: string; edit?: string } => ({
     path: typeof search.path === "string" && search.path ? search.path : undefined,
@@ -159,13 +176,16 @@ const serverFilesRoute = createRoute({
 const serverPropertiesRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "properties",
+  staticData: { title: msg("Properties") },
   component: lazyRouteComponent(() => import("@/features/properties/properties-page"), "PropertiesPage"),
 })
 const serverProxyRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "proxy",
+  staticData: { title: msg("Configuration") },
   component: lazyRouteComponent(() => import("@/features/networks/proxy-settings"), "ServerProxySettingsPage"),
 })
+// The page titles itself, with plugins or mods depending on its server.
 const serverPluginsRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "plugins",
@@ -174,27 +194,32 @@ const serverPluginsRoute = createRoute({
 const serverBackupsRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "backups",
+  staticData: { title: msg("Backups") },
   component: lazyRouteComponent(() => import("@/features/backups/server-backups-page"), "ServerBackupsPage"),
 })
 const serverActivityRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "activity",
+  staticData: { title: msg("Activity") },
   component: lazyRouteComponent(() => import("@/features/logs/activity"), "ServerActivityPage"),
 })
 const serverSettingsRoute = createRoute({
   getParentRoute: () => serverRoute,
   path: "settings",
+  staticData: { title: msg("Settings") },
   component: lazyRouteComponent(() => import("@/features/servers/settings-page"), "SettingsPage"),
 })
 
 const networksRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/networks",
+  staticData: { title: msg("Networks") },
   component: lazyRouteComponent(() => import("@/features/networks/networks-page"), "NetworksPage"),
 })
 const networkRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/networks/$networkId",
+  staticData: { title: msg("Networks") },
   component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkPage"),
 })
 const networkOverviewRoute = createRoute({
@@ -205,17 +230,20 @@ const networkOverviewRoute = createRoute({
 const networkProxyRoute = createRoute({
   getParentRoute: () => networkRoute,
   path: "proxy",
+  staticData: { title: msg("Proxy configuration") },
   component: lazyRouteComponent(() => import("@/features/networks/network-page"), "NetworkProxy"),
 })
 const networkDatabasesRoute = createRoute({
   getParentRoute: () => networkRoute,
   path: "databases",
+  staticData: { title: msg("Databases") },
   component: lazyRouteComponent(() => import("@/features/datastores/databases-tab"), "DatabasesTab"),
 })
 // The table shown and the first of its rows are in the address.
 const networkDatabaseRoute = createRoute({
   getParentRoute: () => networkRoute,
   path: "databases/$datastoreId/$database",
+  staticData: { title: msg("Databases") },
   validateSearch: (search: Record<string, unknown>): { table?: string; schema?: string; offset?: number } => ({
     table: typeof search.table === "string" && search.table ? search.table : undefined,
     schema: typeof search.schema === "string" && search.schema ? search.schema : undefined,
@@ -228,76 +256,90 @@ const networkDatabaseRoute = createRoute({
 const libraryRoute = createRoute({
   getParentRoute: () => appRoute,
   id: "_library",
+  staticData: { title: msg("Library") },
   component: () => <HubLayout hub={library} />,
 })
 const automationRoute = createRoute({
   getParentRoute: () => appRoute,
   id: "_automation",
+  staticData: { title: msg("Automation") },
   component: () => <HubLayout hub={automation} />,
 })
 
 const templatesRoute = createRoute({
   getParentRoute: () => libraryRoute,
   path: "/templates",
+  staticData: { title: msg("Templates") },
   component: lazyRouteComponent(() => import("@/features/templates/templates-page"), "TemplatesPage"),
 })
 const newTemplateRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/templates/new",
+  staticData: { title: msg("Templates") },
   component: lazyRouteComponent(() => import("@/features/templates/template-page"), "NewTemplatePage"),
 })
 const templateRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/templates/$templateId",
+  staticData: { title: msg("Templates") },
   component: lazyRouteComponent(() => import("@/features/templates/template-page"), "TemplatePage"),
 })
 
 const fileSetsRoute = createRoute({
   getParentRoute: () => libraryRoute,
   path: "/filesets",
+  staticData: { title: msg("File sets") },
   component: lazyRouteComponent(() => import("@/features/filesets/filesets-page"), "FileSetsPage"),
 })
 const fileSetRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/filesets/$fileSetId",
+  staticData: { title: msg("File sets") },
   component: lazyRouteComponent(() => import("@/features/filesets/fileset-page"), "FileSetPage"),
 })
 
 const backupJobsRoute = createRoute({
   getParentRoute: () => automationRoute,
   path: "/backups",
+  staticData: { title: msg("Backups") },
   component: lazyRouteComponent(() => import("@/features/backups/backup-jobs-page"), "BackupJobsPage"),
 })
 const newBackupJobRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/backups/new",
+  staticData: { title: msg("Backups") },
   component: lazyRouteComponent(() => import("@/features/backups/backup-job-page"), "NewBackupJobPage"),
 })
 const backupJobRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/backups/$jobId",
+  staticData: { title: msg("Backups") },
   component: lazyRouteComponent(() => import("@/features/backups/backup-job-page"), "BackupJobPage"),
 })
 
 const policiesRoute = createRoute({
   getParentRoute: () => automationRoute,
   path: "/policies",
+  staticData: { title: msg("Schedules") },
   component: lazyRouteComponent(() => import("@/features/policies/policies-page"), "PoliciesPage"),
 })
 const newPolicyRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/policies/new",
+  staticData: { title: msg("Schedules") },
   component: lazyRouteComponent(() => import("@/features/policies/policy-page"), "NewPolicyPage"),
 })
 const policyRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/policies/$policyId",
+  staticData: { title: msg("Schedules") },
   component: lazyRouteComponent(() => import("@/features/policies/policy-page"), "PolicyPage"),
 })
 
 const pluginsRoute = createRoute({
   getParentRoute: () => libraryRoute,
   path: "/plugins",
+  staticData: { title: msg("Plugins & mods") },
   // kind tells whether mods are searched; without it, plugins are.
   validateSearch: (search: Record<string, unknown>): { kind?: Kind } => ({ kind: search.kind === "mods" ? "mods" : undefined }),
   component: lazyRouteComponent(() => import("@/features/plugins/plugins-page"), "PluginsPage"),
@@ -307,6 +349,7 @@ const pluginsRoute = createRoute({
 const logsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/logs",
+  staticData: { title: msg("Logs") },
   validateSearch: validateLogSearch,
   component: lazyRouteComponent(() => import("@/features/logs/logs-page"), "LogsPage"),
 })
@@ -315,47 +358,56 @@ const logsRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/account",
+  staticData: { title: msg("Your account") },
   component: lazyRouteComponent(() => import("@/features/auth/account-page"), "AccountPage"),
 })
 
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
+  staticData: { title: msg("Settings") },
   component: lazyRouteComponent(() => import("@/features/settings/settings-layout"), "SettingsLayout"),
 })
 const generalSettingsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "/",
+  staticData: { title: msg("General") },
   component: lazyRouteComponent(() => import("@/features/settings/general-page"), "GeneralSettingsPage"),
 })
 const agentsSettingsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "agents",
+  staticData: { title: msg("Agents") },
   component: lazyRouteComponent(() => import("@/features/settings/agents-page"), "AgentsSettingsPage"),
 })
 const usersRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "users",
+  staticData: { title: msg("Users") },
   component: lazyRouteComponent(() => import("@/features/access/users-page"), "UsersPage"),
 })
 const groupsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "groups",
+  staticData: { title: msg("Groups") },
   component: lazyRouteComponent(() => import("@/features/access/groups-page"), "GroupsPage"),
 })
 const newGroupRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "groups/new",
+  staticData: { title: msg("Groups") },
   component: lazyRouteComponent(() => import("@/features/access/group-page"), "NewGroupPage"),
 })
 const groupRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "groups/$groupId",
+  staticData: { title: msg("Groups") },
   component: lazyRouteComponent(() => import("@/features/access/group-page"), "GroupPage"),
 })
 const terminalRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "terminal",
+  staticData: { title: msg("Terminal") },
   // target is the ID of the node whose agent runs the commands; without it, the master does.
   validateSearch: (search: Record<string, unknown>): { target?: string } => ({
     target: typeof search.target === "string" && search.target ? search.target : undefined,

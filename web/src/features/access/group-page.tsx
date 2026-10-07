@@ -9,6 +9,7 @@ import { Callout, ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
+import { usePageName } from "@/components/page-title"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -46,6 +47,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
   const navigate = useNavigate()
   const save = useSaveGroup(group?.id)
   const remove = useDeleteGroup()
+  usePageName(group?.name ?? t("New group"))
   const start = {
     name: initial.name,
     description: initial.description,

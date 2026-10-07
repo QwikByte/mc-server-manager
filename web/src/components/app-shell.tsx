@@ -7,6 +7,8 @@ import { type ReactElement, useEffect, useId, useState } from "react"
 import { ConnectionBanner } from "@/components/connection-banner"
 import { Logo } from "@/components/logo"
 import { navigation } from "@/components/navigation"
+import { contentId } from "@/components/page-focus"
+import { SkipLink } from "@/components/skip-link"
 import { StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -61,6 +63,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
+      <SkipLink />
       <aside
         className={cn(
           "sticky top-0 z-30 flex shrink-0 items-center gap-1.5 border-b bg-sidebar/80 px-3 py-2.5 backdrop-blur-xl md:h-svh md:flex-col md:items-stretch md:gap-4 md:overflow-x-hidden md:overflow-y-auto md:border-r md:border-b-0 md:py-4 md:transition-[width] md:duration-300 md:ease-out",
@@ -120,7 +123,7 @@ export function AppShell() {
           </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-10 md:py-9">
+      <main id={contentId} tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6 md:px-10 md:py-9">
         <div className="mx-auto max-w-6xl">
           <ConnectionBanner />
           {access.admin && <UpdateBanner />}
@@ -168,7 +171,7 @@ const ActiveMark = () => (
   />
 )
 
-const heading = "px-2.5 pt-4 pb-1.5 text-[0.6875rem] font-semibold tracking-wider whitespace-nowrap text-muted-foreground/80 uppercase"
+const heading = "px-2.5 pt-4 pb-1.5 text-[0.6875rem] font-semibold tracking-wider whitespace-nowrap text-muted-foreground uppercase"
 
 type Entry = (typeof navigation.main)[number] | (typeof navigation.system)[number]
 

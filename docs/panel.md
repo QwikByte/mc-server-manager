@@ -94,3 +94,12 @@ or on their account page, which the panel stores for the signed-in user, so that
 the sign-in page, the button next to the colour theme chooses it for the browser. Dates, times and numbers follow the
 language too. What the master and the agents send, such as errors, the log and the descriptions of permissions, stays
 English.
+
+## Keyboard and screen readers
+
+Each page names itself in the title of the browser's tab, e.g. `Files · lobby · Servers · Noryx`. The first press of
+Tab shows **Skip to content**, which jumps past the navigation. Opening another page moves the focus to its heading, so
+that screen readers announce it; switching the tabs of a page or changing its search leaves the focus where it is.
+Choices in a row, such as the time range of charts, the view and state filter of servers or the colour theme, are one
+stop of Tab at the chosen option, and the arrow keys, Home and End choose another. On touch screens, small icon buttons,
+e.g. the pin of a server, grow to 40 px.

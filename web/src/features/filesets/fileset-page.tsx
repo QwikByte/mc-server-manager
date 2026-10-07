@@ -8,6 +8,7 @@ import { BackLink } from "@/components/back-link"
 import { ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { Pill, StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -38,6 +39,7 @@ type Tab = (typeof tabs)[number]["id"]
 export function FileSetPage() {
   const { fileSetId } = route.useParams()
   const { data: set, isPending, error } = useQuery(fileSetQuery(fileSetId))
+  usePageName(set?.name)
   return (
     <>
       <BackLink to="/filesets">{t("File sets")}</BackLink>

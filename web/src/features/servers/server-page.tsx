@@ -19,6 +19,7 @@ import { Chip } from "@/components/chip"
 import { BackLink } from "@/components/back-link"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
+import { usePageName } from "@/components/page-title"
 import { TabLink } from "@/components/tab-link"
 import { Tabs } from "@/components/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -108,6 +109,7 @@ export function ServerPage() {
   const navigate = useNavigate()
   const { data: node } = useQuery(nodeQuery(nodeId))
   const { server, isPending, error } = useServer(nodeId, serverId)
+  usePageName(server?.name)
 
   return (
     <>
