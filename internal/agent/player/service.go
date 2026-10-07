@@ -24,6 +24,9 @@ import (
 const (
 	running  = noryxv1.ServerState_SERVER_STATE_RUNNING
 	interval = 5 * time.Second
+	// changeTimeout bounds each waiting change, so that a server that doesn't answer its
+	// console keeps the change for the next attempt.
+	changeTimeout = 15 * time.Second
 )
 
 // commands are the console commands of the actions, which take the player and the reason.
@@ -43,15 +46,21 @@ var formatting = regexp.MustCompile(`§.`)
 
 type Service struct {
 	noryxv1.UnimplementedPlayerServiceServer
-	rt runtime.Runtime
+	rt    runtime.Runtime
+	locks serverLocks    // guard the file of waiting changes and the whitelist of each server
+	wg    sync.WaitGroup // the attempts at the waiting changes of servers
 
-	mu sync.Mutex // guards the files of waiting changes and waiting
+	mu sync.Mutex // guards waiting and applying; never held while a server is asked
 	// waiting tells which servers have changes that wait for them to run; servers the
 	// agent didn't look at yet are missing.
 	waiting map[string]bool
+	// applying are the servers whose waiting changes are being attempted.
+	applying map[string]bool
 }
 
-func NewService(rt runtime.Runtime) *Service { return &Service{rt: rt, waiting: map[string]bool{}} }
+func NewService(rt runtime.Runtime) *Service {
+	return &Service{rt: rt, locks: serverLocks{byID: map[string]*serverLock{}}, waiting: map[string]bool{}, applying: map[string]bool{}}
+}
 
 func (s *Service) GetPlayerLists(ctx context.Context, req *noryxv1.GetPlayerListsRequest) (*noryxv1.GetPlayerListsResponse, error) {
 	_, dir, err := s.open(ctx, req.GetServerId())
@@ -67,9 +76,7 @@ func (s *Service) GetPlayerLists(ctx context.Context, req *noryxv1.GetPlayerList
 	var props map[string]string
 	props, errs[3] = properties.Read(dir)
 	res.WhitelistEnabled = props["white-list"] == "true"
-	s.mu.Lock()
-	res.Pending, errs[4] = readPending(dir)
-	s.mu.Unlock()
+	res.Pending, errs[4] = readPending(dir) // its file is replaced at once, so it needs no lock
 	if err := errors.Join(errs[:]...); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -92,21 +99,30 @@ func (s *Service) ChangePlayer(ctx context.Context, req *noryxv1.ChangePlayerReq
 	if change.GetAction() == noryxv1.PlayerAction_PLAYER_ACTION_KICK {
 		return nil, status.Error(codes.FailedPrecondition, "The server doesn't run.")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.locks.lock(ctx, srv.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if err := addPending(dir, change); err != nil {
 		return nil, err
 	}
+	s.mu.Lock()
 	s.waiting[srv.ID] = true
+	s.mu.Unlock()
 	return &noryxv1.ChangePlayerResponse{Pending: true}, nil
 }
 
-// run changes a player on a running server. Changes of the whitelist hold s.mu, as those of
-// Bedrock players replace its file, which the server overwrites when its list changes.
+// run changes a player on a running server. Changes of the whitelist hold the server's lock,
+// as those of Bedrock players replace its file, which the server overwrites when its list
+// changes.
 func (s *Service) run(ctx context.Context, id string, dir *datadir.Dir, change *noryxv1.PlayerChange) (*noryxv1.ChangePlayerResponse, error) {
 	if a := change.GetAction(); a == noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_ADD || a == noryxv1.PlayerAction_PLAYER_ACTION_WHITELIST_REMOVE {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		unlock, err := s.locks.lock(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
 	}
 	if bedrockWhitelist(change) {
 		return s.whitelistBedrock(ctx, id, dir, change)
@@ -122,6 +138,7 @@ func (s *Service) run(ctx context.Context, id string, dir *datadir.Dir, change *
 func (s *Service) Run(ctx context.Context) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
+	defer s.wg.Wait()
 	for {
 		s.applyWaiting(ctx)
 		select {
@@ -132,6 +149,9 @@ func (s *Service) Run(ctx context.Context) {
 	}
 }
 
+// applyWaiting attempts the waiting changes of the servers that run, and looks for those of
+// servers it doesn't know yet. Each server is attempted on its own, and not again while its
+// last attempt runs, so that one that doesn't answer its console holds up only itself.
 func (s *Service) applyWaiting(ctx context.Context) {
 	servers, err := s.rt.List(ctx)
 	if err != nil {
@@ -143,15 +163,33 @@ func (s *Service) applyWaiting(ctx context.Context) {
 	s.waiting = make(map[string]bool, len(servers))
 	for _, srv := range servers {
 		waits, ok := known[srv.ID]
-		if !srv.Type.Proxy() && (!ok || waits && srv.State == running) {
-			waits = s.apply(ctx, srv)
+		if ok {
+			s.waiting[srv.ID] = waits
 		}
-		s.waiting[srv.ID] = waits
+		if !srv.Type.Proxy() && !s.applying[srv.ID] && (!ok || waits && srv.State == running) {
+			s.applying[srv.ID] = true
+			s.wg.Go(func() { s.apply(ctx, srv) })
+		}
 	}
 }
 
-// apply runs the waiting changes of a running server, and tells whether changes still wait.
-func (s *Service) apply(ctx context.Context, srv runtime.Server) bool {
+// apply attempts the waiting changes of a server and notes whether changes still wait. It
+// notes it before it unlocks the server, so that no change added in between is forgotten.
+func (s *Service) apply(ctx context.Context, srv runtime.Server) {
+	waits := true
+	if unlock, err := s.locks.lock(ctx, srv.ID); err == nil {
+		defer unlock()
+		waits = s.applyLocked(ctx, srv)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.waiting[srv.ID] = waits
+	delete(s.applying, srv.ID)
+}
+
+// applyLocked runs the waiting changes of a running server, each until changeTimeout, and
+// tells whether changes still wait.
+func (s *Service) applyLocked(ctx context.Context, srv runtime.Server) bool {
 	dir, err := s.rt.Data(ctx, srv.ID)
 	if err != nil {
 		return true
@@ -162,12 +200,14 @@ func (s *Service) apply(ctx context.Context, srv runtime.Server) bool {
 		return err != nil || len(pending) > 0
 	}
 	for i, change := range pending {
+		changeCtx, cancel := context.WithTimeout(ctx, changeTimeout)
 		var err error
 		if bedrockWhitelist(change) {
-			_, err = s.whitelistBedrock(ctx, srv.ID, dir, change)
+			_, err = s.whitelistBedrock(changeCtx, srv.ID, dir, change)
 		} else {
-			_, err = s.rt.SendCommand(ctx, srv.ID, command(change))
+			_, err = s.rt.SendCommand(changeCtx, srv.ID, command(change))
 		}
+		cancel()
 		if err != nil {
 			slog.Warn("Can't change a player on a server that started", "server", srv.ID, "err", err)
 			_ = writePending(dir, pending[i:]) // if it fails, the done changes run again, which changes nothing

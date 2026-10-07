@@ -26,8 +26,8 @@ func bedrockWhitelist(c *noryxv1.PlayerChange) bool {
 }
 
 // whitelistBedrock changes the whitelist file of a running server for a Bedrock player and
-// makes it reload the file. The caller holds s.mu, so that no other change of the whitelist
-// makes the server write its own list in between. Its messages are Minecraft's.
+// makes it reload the file. The caller holds the server's lock, so that no other change of the
+// whitelist makes the server write its own list in between. Its messages are Minecraft's.
 func (s *Service) whitelistBedrock(ctx context.Context, id string, dir *datadir.Dir, c *noryxv1.PlayerChange) (*noryxv1.ChangePlayerResponse, error) {
 	list := []whitelisted{}
 	if err := readJSON(dir, whitelistFile, &list); err != nil {

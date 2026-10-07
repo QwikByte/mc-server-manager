@@ -26,7 +26,9 @@ A ban suggests the reasons already in the ban list.
 ## Stopped servers
 
 Stopped servers get a change once they run again, so that a ban also reaches the servers of a network that are stopped.
-The agent keeps the waiting changes in `noryx-pending-players.json` in the server's data.
+The agent keeps the waiting changes in `noryx-pending-players.json` in the server's data. It tries them every 5 seconds;
+a server that doesn't answer a change within 15 seconds keeps it for the next try, and holds up neither the other servers
+of its node nor their lists.
 
 ## How it works
 

@@ -211,7 +211,9 @@ files, and to create servers on the new node.
 
 To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console password from the
 server's `server.properties` and connects to the server's console port inside Docker's network; the password never
-leaves the node.
+leaves the node. A server that doesn't answer its console, e.g. a compromised one, holds up only its own commands: the
+agent applies the waiting changes of players to each server on its own, and gives each change 15 seconds before it waits
+for the next try.
 
 Servers and their plugins write the output, so the panel shows it only as text: the agent turns its colours into
 Minecraft's colour codes, which the panel only maps to class names of a fixed set, never to markup. The plain output,
