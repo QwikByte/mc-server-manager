@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { chooseLanguage } from "@/lib/i18n"
+import { forgetCommandHistories } from "@/lib/use-command-history"
 
 export interface User {
   id: number
@@ -46,7 +47,10 @@ export function useLogout() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api("/auth/logout", { method: "POST" }),
-    onSettled: () => queryClient.clear(),
+    onSettled: () => {
+      queryClient.clear()
+      forgetCommandHistories()
+    },
   })
 }
 

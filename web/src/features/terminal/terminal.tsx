@@ -2,6 +2,7 @@ import { BroomIcon, PaperPlaneRightIcon, StopIcon, TerminalWindowIcon } from "@p
 import { t } from "i18next"
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Trans } from "react-i18next"
+import { useCommandHistory } from "@/lib/use-command-history"
 import { runCommand } from "./api"
 
 type EntryState = "running" | "done" | "failed" | "stopped"
@@ -31,8 +32,7 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
   const inputRef = useRef<HTMLInputElement>(null)
   const stickToBottom = useRef(true)
   const nextId = useRef(0)
-  const history = useRef<string[]>([])
-  const historyIndex = useRef(0)
+  const history = useCommandHistory(`terminal:${target}`)
 
   // Leaving the page stops a command that is still running.
   useEffect(() => () => controller.current?.abort(), [])
@@ -86,8 +86,7 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
     event.preventDefault()
     const command = input.trim()
     if (!command || busy) return
-    history.current = [...history.current.filter((c) => c !== command), command].slice(-50)
-    historyIndex.current = history.current.length
+    history.add(command)
     setInput("")
     stickToBottom.current = true
     if (command === "clear") setEntries([])
@@ -97,16 +96,16 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
   // Like in a terminal: arrow keys walk through earlier commands, Ctrl+C stops one, Ctrl+L clears.
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     const el = event.currentTarget
+    const step = historySteps[event.key]
     if (event.ctrlKey && event.key === "c" && busy && el.selectionStart === el.selectionEnd) {
       event.preventDefault()
       controller.current?.abort()
     } else if (event.ctrlKey && event.key === "l") {
       event.preventDefault()
       setEntries([])
-    } else if (historySteps[event.key]) {
+    } else if (step) {
       event.preventDefault()
-      historyIndex.current = Math.min(Math.max(historyIndex.current + historySteps[event.key]!, 0), history.current.length)
-      setInput(history.current[historyIndex.current] ?? "")
+      setInput(history.step(step))
     }
   }
 

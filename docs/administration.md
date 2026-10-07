@@ -39,6 +39,9 @@ as it happens, e.g. for `server logs <id>`, and Ctrl+C stops a command. A node's
 Besides the permission to use the terminal, every command needs its own, e.g. `server restart <id>` the one to restart
 this server.
 
+↑ and ↓ repeat earlier commands, which the browser tab keeps for each node and the master until it is closed or the
+user signs out.
+
 ### Users and groups
 
 The **Users** tab invites users, chooses their groups, disables and deletes them, creates setup links and turns off
