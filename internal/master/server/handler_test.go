@@ -71,6 +71,30 @@ func TestUpdateWarnsOfOlderAgents(t *testing.T) {
 	}
 }
 
+// Stopping and restarting a server are operations, which answer like a request when they end
+// quickly, and otherwise right away; the operation follows the stop.
+func TestStopAndRestartAreOperations(t *testing.T) {
+	for _, quick := range []time.Duration{time.Minute, 0} {
+		ops := operation.New(quick)
+		h := NewHandler(fakeNodes{}, fakeNetworks{}, nil, nil, nil, ops, NewMoves(), nil)
+		mux := http.NewServeMux()
+		for _, action := range []string{"stop", "restart"} {
+			mux.HandleFunc("POST /api/nodes/{node}/servers/{id}/"+action, h.power(action))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/nodes/n1/servers/s1/"+action, nil))
+			var op operation.Operation
+			switch {
+			case quick > 0 && rec.Code != http.StatusNoContent:
+				t.Errorf("%s: status %d: %s", action, rec.Code, rec.Body)
+			case quick == 0 && (rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &op) != nil):
+				t.Errorf("%s: status %d: %s", action, rec.Code, rec.Body)
+			case quick == 0 && (op.Kind != "server."+action || op.ServerID != "s1" || len(op.Steps) != 1 || op.Steps[0] != action || op.Cancellable):
+				t.Errorf("%s: %+v", action, op)
+			}
+		}
+	}
+}
+
 // Notes are kept for servers that exist, and need no restart.
 func TestSetNotes(t *testing.T) {
 	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))

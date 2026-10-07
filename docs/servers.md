@@ -93,6 +93,20 @@ the IANA time zones such as `Europe/Berlin` chosen from a searchable list, sets 
 plugins that work with times; servers run in UTC unless one is chosen. Agents of earlier versions keep 1 minute and UTC,
 which saving the settings tells.
 
+Stopping and restarting a server run as [operations](panel.md#operations), as they may take as long as its stop
+timeout: the panel follows them in a notification, and a reverse proxy in front of the master, e.g. nginx, which gives
+up after 60 seconds by default, doesn't cut them off. Starting a server only takes a moment and answers right away.
+
+When a node shuts down or reboots, systemd gives Docker 90 seconds to stop (its `DefaultTimeoutStopSec`), which cuts
+longer stop timeouts short: servers that haven't saved their worlds by then are killed. To give them their full stop
+timeout, raise `TimeoutStopSec` of `docker.service` beyond the longest one, e.g. to 11 minutes:
+
+```sh
+sudo mkdir -p /etc/systemd/system/docker.service.d
+printf '[Service]\nTimeoutStopSec=11min\n' | sudo tee /etc/systemd/system/docker.service.d/stop-timeout.conf
+sudo systemctl daemon-reload
+```
+
 ## Crashes and health
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5

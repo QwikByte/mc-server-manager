@@ -274,14 +274,15 @@ export function usePendingAction(nodeId: string, serverId: string): BulkAction["
   return undefined
 }
 
+/** Starts, stops, restarts or deletes a server; stopping and restarting may become operations, as a server may take minutes to stop. */
 export function useServerAction(nodeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: ["server-action", nodeId],
-    mutationFn: ({ id, action }: { id: string; action: ServerAction }) =>
+    mutationFn: ({ id, action, onStart }: { id: string; action: ServerAction } & Followed) =>
       action === "delete"
         ? api(`/nodes/${nodeId}/servers/${id}`, { method: "DELETE" })
-        : api(`/nodes/${nodeId}/servers/${id}/${action}`, { method: "POST" }),
+        : operate(`/nodes/${nodeId}/servers/${id}/${action}`, { method: "POST" }, onStart),
     onSettled: () => queryClient.invalidateQueries({ queryKey: serversQuery(nodeId).queryKey }),
   })
 }

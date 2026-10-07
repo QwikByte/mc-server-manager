@@ -19,13 +19,13 @@ import (
 
 const maxBulk = 500
 
-// bulkAction is an action on many servers and the permission it needs on each.
-type bulkAction struct {
+// serverAction is an action on a server, alone or among many, and the permission it needs.
+type serverAction struct {
 	need access.Permission
 	call func(ctx context.Context, c noryxv1.ServerServiceClient, id, command string) error
 }
 
-var bulkActions = map[string]bulkAction{
+var serverActions = map[string]serverAction{
 	"start": {access.ServersStart, func(ctx context.Context, c noryxv1.ServerServiceClient, id, _ string) error {
 		_, err := c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
 		return err
@@ -62,7 +62,7 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	action, ok := bulkActions[req.Action]
+	action, ok := serverActions[req.Action]
 	switch {
 	case !ok:
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose start, stop, restart or command."))

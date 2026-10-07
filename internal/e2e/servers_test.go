@@ -209,6 +209,25 @@ func TestOperations(t *testing.T) {
 		t.Fatalf("operations = %+v", listed)
 	}
 
+	// Restarting and stopping a server, which may take its stop timeout, are operations that
+	// can't be cancelled.
+	path := "/api/nodes/" + a.node.ID + "/servers"
+	for _, action := range []string{"restart", "stop"} {
+		var started operation.Operation
+		api.do("POST", path+"/"+got.ServerID+"/"+action, nil, http.StatusAccepted, &started)
+		if started.Kind != "server."+action || started.ServerID != got.ServerID || started.Cancellable {
+			t.Fatalf("%s: %+v", action, started)
+		}
+		if ended := waitForOperation(t, api, started.ID, func(op operation.Operation) bool { return op.FinishedAt != nil }); ended.Error != "" {
+			t.Fatalf("%s: %+v", action, ended)
+		}
+	}
+	var servers []struct{ State string }
+	api.do("GET", path, nil, http.StatusOK, &servers)
+	if len(servers) != 1 || servers[0].State != "stopped" || !slices.Contains(a.runtime.restarted(), got.ServerID) {
+		t.Fatalf("servers = %+v, restarted %q", servers, a.runtime.restarted())
+	}
+
 	// A failed operation tells why.
 	a.runtime.mu.Lock()
 	a.runtime.createErr = errors.New("no space left on device")

@@ -123,21 +123,10 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/servers/actions", access.SignedIn, h.bulk)
 	mux.Handle("POST /api/servers/tags", access.SignedIn, h.changeTags)
 	mux.Handle("POST /api/nodes/{node}/servers", createNeed, h.create)
-	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart),
-		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
-			_, err := c.StartServer(ctx, &noryxv1.StartServerRequest{Id: id})
-			return err
-		}))
-	mux.Handle("POST /api/nodes/{node}/servers/{id}/stop", access.OnServer(access.ServersStop),
-		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
-			_, err := c.StopServer(ctx, &noryxv1.StopServerRequest{Id: id})
-			return err
-		}))
-	mux.Handle("POST /api/nodes/{node}/servers/{id}/restart", access.OnServer(access.ServersRestart),
-		h.lifecycle(func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
-			_, err := c.RestartServer(ctx, &noryxv1.RestartServerRequest{Id: id})
-			return err
-		}))
+	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart), h.startServer)
+	for _, action := range []string{"stop", "restart"} {
+		mux.Handle("POST /api/nodes/{node}/servers/{id}/"+action, access.OnServer(serverActions[action].need), h.power(action))
+	}
 	mux.Handle("DELETE /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersDelete), h.delete)
 	mux.Handle("PUT /api/nodes/{node}/servers/{id}", access.OnServer(access.ServersSettings), h.update)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/update-image", access.OnServer(access.ServersSettings), h.updateImage)
@@ -643,20 +632,38 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// lifecycle wraps an operation on a single server that returns no data.
-func (h *Handler) lifecycle(op func(context.Context, noryxv1.ServerServiceClient, string) error) http.HandlerFunc {
+// startServer starts a server, which only takes a moment, so it answers once the server starts.
+func (h *Handler) startServer(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), actionTimeout)
+	defer cancel()
+	c, err := h.client(ctx, r)
+	if err == nil {
+		err = serverActions["start"].call(ctx, c, r.PathValue("id"), "")
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// power stops or restarts a server as an operation, server.stop or server.restart with the
+// step of the same name: a graceful stop may take the server's stop timeout, longer than a
+// proxy in front of the master waits for an answer. It can't be cancelled, as a restart cut
+// short would leave the server stopped.
+func (h *Handler) power(action string) http.HandlerFunc {
+	call := serverActions[action].call
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), actionTimeout)
-		defer cancel()
-		c, err := h.client(ctx, r)
-		if err == nil {
-			err = op(ctx, c, r.PathValue("id"))
+		nodeID, id := r.PathValue("node"), r.PathValue("id")
+		spec := operation.Spec{
+			Kind: "server." + action, NodeID: nodeID, ServerID: id, Steps: []string{action}, Status: http.StatusNoContent,
+			Timeout: actionTimeout, Category: logging.Servers, Visible: viewable(nodeID, id),
 		}
-		if err != nil {
-			httpapi.WriteError(w, r, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+		h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+			return nil, h.agent(ctx, nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
+				return call(ctx, c, id, "")
+			})
+		})
 	}
 }
 

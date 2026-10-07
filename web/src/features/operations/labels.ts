@@ -16,6 +16,10 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Save the settings of {{name}}", { name: subject })
     case "server.image":
       return t("Update the image of {{name}}", { name: subject })
+    case "server.stop":
+      return t("Stop {{name}}", { name: subject })
+    case "server.restart":
+      return t("Restart {{name}}", { name: subject })
     case "server.move":
       return t("Move {{name}}", { name: subject })
     case "plugins.install":
@@ -173,7 +177,7 @@ export function stepOf(op: Operation, step: string): string {
     case "files":
       return t("Write the files on the servers")
     case "restart":
-      return t("Restart the servers whose files changed")
+      return op.kind === "server.restart" ? t("Restart the server") : t("Restart the servers whose files changed")
     case "servers":
       if (op.kind.startsWith("players.")) return t("Apply it on the servers")
       if (verb === "rolling-restart") return t("Restart the servers one after the other")

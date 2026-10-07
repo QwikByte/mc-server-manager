@@ -13,13 +13,13 @@ import {
 } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { useState } from "react"
-import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
+import { useOperation } from "@/features/operations/use-operation"
 import { PinButton } from "@/features/preferences/pin-button"
 import { SaveTemplateDialog } from "@/features/templates/save-template-dialog"
 import { cn } from "@/lib/utils"
@@ -57,21 +57,20 @@ export function ServerActions({
   pin?: boolean
 }) {
   const mutation = useServerAction(nodeId)
+  const operation = useOperation()
   const move = useMove(server.id)
   const [dialog, setDialog] = useState<"duplicate" | "move" | "template" | "tags" | "notes">()
   const running = server.state !== "stopped"
   const dialogProps = { nodeId, server, open: true, onOpenChange: (open: boolean) => !open && setDialog(undefined) }
 
-  // The notification follows the action also if this component goes away meanwhile.
+  // The notification follows the action, e.g. a stop that takes minutes, also if this component goes away meanwhile.
   function run(action: ServerAction, done: string, then?: () => void) {
-    const id = toast.loading(pendingLabels[action](server.name))
-    mutation.mutateAsync({ id: server.id, action }).then(
-      () => {
-        toast.success(done, { id })
-        then?.()
-      },
-      (e: Error) => toast.error(e.message, { id }),
-    )
+    operation.run((onStart) => mutation.mutateAsync({ id: server.id, action, onStart }), {
+      title: pendingLabels[action](server.name),
+      notify: true,
+      done: () => ({ message: done }),
+      then,
+    })
   }
 
   const { can } = useAccess()
