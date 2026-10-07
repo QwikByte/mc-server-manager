@@ -38,7 +38,8 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [pinned, setPinned] = useState<ProjectVersion>()
-  const [part, setPart] = useState(0)
+  // The batch that runs, of how many, e.g. 1 of 2 for 150 servers.
+  const [[part, parts], setPart] = useState([0, 0])
   const { can } = useAccess()
   const { data: servers = [] } = useQuery({ ...allServersQuery, enabled: open })
   const { data: networks = [] } = useQuery({ ...networksQuery, enabled: open && can("networks.view") })
@@ -66,7 +67,6 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
   })
 
   const title = t("Install {{name}}", { name: hit.title })
-  const parts = Math.ceil(chosen.length / maxServers)
 
   const versions = pinned && { [hit.id]: pinned.id }
   // The results of a retry take the place of those of the servers it tried again.
@@ -81,7 +81,7 @@ export function InstallDialog({ hit }: { hit: SearchHit }) {
           servers,
           versions,
           onStart: (op, batch) => {
-            setPart(batch + 1)
+            setPart([batch + 1, Math.ceil(servers.length / maxServers)])
             onStart(op)
           },
         }),
