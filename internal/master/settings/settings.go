@@ -31,6 +31,8 @@ const (
 	minJoinTokenMinutes = 5
 	maxJoinTokenMinutes = 24 * 60
 	maxLogDays          = 365
+	minLogSizeMB        = 100
+	maxLogSizeMB        = 100 << 10 // 100 GiB
 )
 
 var hostname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$`)
@@ -58,13 +60,16 @@ type Settings struct {
 	NodeDefaults node.Limits `json:"nodeDefaults"`
 	// LogDays is how long log entries are kept.
 	LogDays int `json:"logDays"`
+	// LogSizeMB is how many MiB the log may take at most; the oldest entries beyond it are
+	// deleted before their time, so that agents can't fill the disk.
+	LogSizeMB int `json:"logSizeMb"`
 	// CheckUpdates makes the master look for new releases, which administrators can install.
 	CheckUpdates bool `json:"checkUpdates"`
 }
 
 // defaults apply until the settings are changed, and to settings added later.
 func defaults() Settings {
-	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, CheckUpdates: true}
+	return Settings{SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true}
 }
 
 // Master describes the running master. Apart from its certificates, it only changes with a restart.
@@ -232,10 +237,13 @@ func (s *Service) JoinTokenTTL() time.Duration {
 // NodeDefaults implements node.Config.
 func (s *Service) NodeDefaults() node.Limits { return s.Get().NodeDefaults }
 
-// LogRetention is how long log entries are kept.
+// LogRetention implements logs.Config.
 func (s *Service) LogRetention() time.Duration {
 	return time.Duration(s.Get().LogDays) * 24 * time.Hour
 }
+
+// LogMaxSize implements logs.Config.
+func (s *Service) LogMaxSize() int64 { return int64(s.Get().LogSizeMB) << 20 }
 
 // CheckUpdates implements update.Config.
 func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
@@ -267,6 +275,8 @@ func validate(s Settings, panelAddr string) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a join token validity from %d to %d minutes.", minJoinTokenMinutes, maxJoinTokenMinutes)
 	case s.LogDays < 1 || s.LogDays > maxLogDays:
 		return httpapi.Errorf(http.StatusBadRequest, "Enter how long log entries are kept, from 1 to %d days.", maxLogDays)
+	case s.LogSizeMB < minLogSizeMB || s.LogSizeMB > maxLogSizeMB:
+		return httpapi.Errorf(http.StatusBadRequest, "Enter how large the log may grow, from %d to %d MiB.", minLogSizeMB, maxLogSizeMB)
 	}
 	return s.NodeDefaults.Validate()
 }

@@ -238,7 +238,7 @@ func startMaster(t *testing.T) *master {
 	check(t, err)
 	nodes := node.NewService(db, ca, masterCert, conf)
 	t.Cleanup(nodes.Close)
-	logStore := logs.NewStore(db, logs.NewNames(nodes), conf.LogRetention)
+	logStore := logs.NewStore(db, logs.NewNames(nodes), conf)
 	logStore.Start(t.Context())
 	t.Cleanup(logStore.Close)
 	enrollServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(pki.MasterServerTLS(masterCert))))

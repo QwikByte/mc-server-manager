@@ -25,14 +25,14 @@ func TestMasterSettings(t *testing.T) {
 		Master   settings.Master   `json:"master"`
 	}
 	api.do("GET", "/api/settings", nil, http.StatusOK, &got)
-	if s := got.Settings; s.SessionHours != 12 || s.JoinTokenMinutes != 60 || *s.NodeDefaults.MemoryReserveMB != 1024 || s.LogDays != 30 || got.Master.EnrollAddr != m.enrollAddr {
+	if s := got.Settings; s.SessionHours != 12 || s.JoinTokenMinutes != 60 || *s.NodeDefaults.MemoryReserveMB != 1024 || s.LogDays != 30 || s.LogSizeMB != 2048 || got.Master.EnrollAddr != m.enrollAddr {
 		t.Fatalf("default settings = %+v, master = %+v", s, got.Master)
 	}
 
 	valid := func(change func(map[string]any)) map[string]any {
 		s := map[string]any{
 			"enrollAddr": "panel.example.com:9443", "sessionHours": 24, "joinTokenMinutes": 30,
-			"nodeDefaults": map[string]any{"portMin": 25565, "portMax": 25600, "memoryReserveMb": 2048}, "logDays": 90,
+			"nodeDefaults": map[string]any{"portMin": 25565, "portMax": 25600, "memoryReserveMb": 2048}, "logDays": 90, "logSizeMb": 500,
 		}
 		change(s)
 		return s
@@ -45,12 +45,17 @@ func TestMasterSettings(t *testing.T) {
 		"short join tokens":    func(s map[string]any) { s["joinTokenMinutes"] = 1 },
 		"reversed port range":  func(s map[string]any) { s["nodeDefaults"] = map[string]any{"portMin": 30000, "portMax": 20000} },
 		"logs kept forever":    func(s map[string]any) { s["logDays"] = 0 },
+		"tiny log":             func(s map[string]any) { s["logSizeMb"] = 10 },
+		"endless log":          func(s map[string]any) { s["logSizeMb"] = 1 << 20 },
 	} {
 		if body := api.do("PUT", "/api/settings", valid(change), http.StatusBadRequest, nil); body == "" {
 			t.Errorf("%s: no error message", name)
 		}
 	}
 	api.do("PUT", "/api/settings", valid(func(map[string]any) {}), http.StatusOK, &got)
+	if size := m.settings.LogMaxSize(); size != 500<<20 {
+		t.Fatalf("the log may take %d bytes, want 500 MiB", size)
+	}
 
 	// New nodes get the default limits and join tokens with the new address and validity.
 	var created struct {

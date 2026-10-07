@@ -29,7 +29,18 @@ reached. The history of a server moves and goes away with it.
 ## Logs
 
 The master keeps a log of what happens on it and on its agents, so that it's clear who did what and what went wrong.
-Entries are kept for 30 days unless the settings say otherwise, and at most the newest million.
+Entries are kept for 30 days unless the settings say otherwise, but at most the newest million and 2 GiB (the
+settings allow 100 MiB to 100 GiB), so that agents that log too much can't fill the master's disk. Every minute, the
+master deletes the expired entries, then the oldest beyond these limits. When this deletes entries before their time,
+it logs a warning, and warns again only after entries were kept for their whole time again. Then raise the limit, or
+find out on the **Logs** page what logs so much.
+
+The size of an entry counts its texts and its part of the indexes. SQLite reuses the space of deleted entries, so
+`master.db` stops growing once the log reached its limit: the log takes about as much space as its limit with usual
+entries, and at most about twice as much with entries of unfavourable sizes, as SQLite stores them in pages of 4 KiB.
+The file doesn't shrink by itself, e.g. after lowering the limit; a
+[backup of the master](automation.md#backing-up-the-master) holds a compact copy of the database, and restoring it
+gives the space back.
 
 ### Actions
 

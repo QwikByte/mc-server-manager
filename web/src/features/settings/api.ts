@@ -21,6 +21,8 @@ export interface MasterSettings {
   nodeDefaults: NodeLimits
   /** How long log entries are kept. */
   logDays: number
+  /** How many MiB the log may take; the oldest entries beyond it are deleted before their time. */
+  logSizeMb: number
   /** Whether the master looks for new releases, which administrators can install. */
   checkUpdates: boolean
 }

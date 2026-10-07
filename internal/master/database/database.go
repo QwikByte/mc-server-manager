@@ -14,9 +14,11 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// Open opens the database at path and applies all pending migrations.
+// Open opens the database at path and applies all pending migrations. The space of deleted
+// rows is reused, and the write-ahead log shrinks back to 16 MiB after a large transaction,
+// such as deleting many log entries.
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=journal_size_limit(16777216)")
 	if err != nil {
 		return nil, err
 	}

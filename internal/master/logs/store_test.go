@@ -1,8 +1,10 @@
 package logs
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -31,13 +33,22 @@ func (fakeNodes) Conn(context.Context, string) (grpc.ClientConnInterface, error)
 	return nil, errors.New("offline")
 }
 
+// limits are what a test's log keeps.
+type limits struct {
+	retention time.Duration
+	maxSize   int64
+}
+
+func (l *limits) LogRetention() time.Duration { return l.retention }
+func (l *limits) LogMaxSize() int64           { return l.maxSize }
+
 func newStore(t *testing.T) (*Store, context.Context) {
 	db, err := database.Open(filepath.Join(t.TempDir(), "master.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return NewStore(db, NewNames(fakeNodes{}), func() time.Duration { return 24 * time.Hour }), access.WithGrants(t.Context(), access.Admin())
+	return NewStore(db, NewNames(fakeNodes{}), &limits{24 * time.Hour, 1 << 30}), access.WithGrants(t.Context(), access.Admin())
 }
 
 func messages(t *testing.T, s *Store, ctx context.Context, f Filter) string {
@@ -120,13 +131,94 @@ func TestStore(t *testing.T) {
 
 func TestPrune(t *testing.T) {
 	s, ctx := newStore(t)
-	old := Entry{Time: time.Now().Add(-25 * time.Hour), Message: "old"}
-	if err := s.write(ctx, []Entry{old, {Time: time.Now(), Message: "new"}}, nil); err != nil {
+	// More old entries than pruning deletes in a step.
+	if _, err := s.db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i <= ?)
+		INSERT INTO log_entries (`+fields+`) SELECT ?, 0, 'master', 'system', 'old', '', '', '', '', '', '{}' FROM n`,
+		pruneStep, time.Now().Add(-25*time.Hour).UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
-	s.prune(ctx)
+	if err := s.write(ctx, []Entry{{Time: time.Now(), Message: "new"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.prune(ctx); err != nil {
+		t.Fatal(err)
+	}
 	if got := messages(t, s, ctx, Filter{}); got != "new" {
 		t.Fatalf("after pruning: %q", got)
+	}
+}
+
+// Beyond the size limit, the oldest entries are deleted; that they are younger than the
+// retention is logged once, and again after entries lasted the whole retention.
+func TestPruneBySize(t *testing.T) {
+	s, ctx := newStore(t)
+	s.conf = &limits{24 * time.Hour, 10_000}
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	written := 0
+	add := func(n int, at time.Time) {
+		t.Helper()
+		batch := make([]Entry, n)
+		for i := range batch {
+			// 100 bytes of message, "system" and "{}" make 108 bytes of text, and 64 more.
+			batch[i] = Entry{Time: at, Message: fmt.Sprintf("%03d%s", written, strings.Repeat("x", 97))}
+			written++
+		}
+		if err := s.write(ctx, batch, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// prune checks the totals and returns the first entry left, their number and size.
+	prune := func() (first string, entries, size int64) {
+		t.Helper()
+		if err := s.prune(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var counted, summed [2]int64
+		if err := s.db.QueryRowContext(ctx, `SELECT entries, bytes FROM log_size`).Scan(&counted[0], &counted[1]); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(size), 0) FROM log_entries`).Scan(&summed[0], &summed[1]); err != nil {
+			t.Fatal(err)
+		}
+		if counted != summed {
+			t.Fatalf("log_size holds %v, the entries are %v", counted, summed)
+		}
+		oldest, err := s.List(ctx, Filter{}, true, 1)
+		if err != nil || len(oldest) == 0 {
+			t.Fatal(oldest, err)
+		}
+		return oldest[0].Message[:3], counted[0], counted[1]
+	}
+	warnings := func() int { return strings.Count(buf.String(), "The log reached its limit") }
+
+	add(100, time.Now())
+	if first, entries, size := prune(); first != "042" || entries != 58 || size != 58*172 || warnings() != 1 {
+		t.Fatalf("after pruning 100 entries of 172 bytes to 10,000: %d entries of %d bytes from %s, %d warnings", entries, size, first, warnings())
+	}
+	if !strings.Contains(buf.String(), "limit=") || !strings.Contains(buf.String(), "deleted=42") {
+		t.Errorf("warning without the limit or the deleted entries: %s", buf.String())
+	}
+	add(10, time.Now())
+	if first, _, _ := prune(); first != "052" || warnings() != 1 {
+		t.Fatalf("a log that stays full: first entry %s, %d warnings", first, warnings())
+	}
+	add(1, time.Now().Add(-25*time.Hour))
+	if _, entries, _ := prune(); entries != 58 || warnings() != 1 {
+		t.Fatalf("after deleting an expired entry: %d entries, %d warnings", entries, warnings())
+	}
+	add(10, time.Now())
+	if first, _, _ := prune(); first != "062" || warnings() != 2 {
+		t.Fatalf("full again after entries lasted the retention: first entry %s, %d warnings", first, warnings())
+	}
+
+	s.conf = &limits{24 * time.Hour, 1 << 30}
+	add(10, time.Now())
+	if _, entries, _ := prune(); entries != 68 || warnings() != 2 {
+		t.Fatalf("below the limit: %d entries, %d warnings", entries, warnings())
 	}
 }
 

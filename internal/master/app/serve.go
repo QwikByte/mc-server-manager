@@ -110,7 +110,7 @@ func serve(ctx context.Context, cfg config) error {
 	users := auth.NewService(db)
 	nodes := node.NewService(db, ca, masterCert, conf)
 	defer nodes.Close()
-	logStore := logs.NewStore(db, logs.NewNames(nodes), conf.LogRetention)
+	logStore := logs.NewStore(db, logs.NewNames(nodes), conf)
 	logFile, err := logging.Setup(cfg.log, logStore.Handler(cfg.log.Level))
 	if err != nil {
 		return err

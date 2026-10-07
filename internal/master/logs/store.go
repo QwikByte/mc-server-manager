@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -15,10 +16,15 @@ import (
 )
 
 const (
-	queueSize   = 4096
-	batchSize   = 500
-	maxEntries  = 1_000_000 // kept at most, however long the retention
-	pruneEvery  = time.Hour
+	queueSize  = 4096
+	batchSize  = 500
+	maxEntries = 1_000_000 // kept at most, however long the retention and large the limit
+	// pruneEvery is short, so that agents can't add much beyond the size limit in between.
+	pruneEvery = time.Minute
+	// Pruning deletes pruneStep entries at a time and pauses in between, so that other writers
+	// needn't wait long for the database when it deletes many, e.g. after lowering the limit.
+	pruneStep   = 10_000
+	prunePause  = 50 * time.Millisecond
 	reportEvery = time.Minute // problems of the store itself are logged at most this often
 )
 
@@ -27,13 +33,22 @@ const (
 	columns = `id, ` + fields
 )
 
+// Config tells how much of the log to keep.
+type Config interface {
+	// LogRetention is how long entries are kept.
+	LogRetention() time.Duration
+	// LogMaxSize is how many bytes the entries may take in the database.
+	LogMaxSize() int64
+}
+
 // Store keeps the log in the database. The master's entries are written in the background,
 // so logging never waits for the database; if it falls behind, entries are dropped and
-// counted. Entries older than the retention are deleted every hour.
+// counted. Every minute, entries older than the retention are deleted, and the oldest ones
+// beyond the limits.
 type Store struct {
-	db        *sql.DB
-	names     *Names
-	retention func() time.Duration
+	db    *sql.DB
+	names *Names
+	conf  Config
 
 	queue   chan Entry
 	dropped atomic.Int64
@@ -43,10 +58,15 @@ type Store struct {
 	mu       sync.Mutex
 	changed  chan struct{} // closed when entries were added
 	reported time.Time
+
+	// cut tells that pruning deleted entries younger than the retention and warned about it,
+	// since entries last lasted the whole retention. Only prune uses it.
+	cut bool
 }
 
-func NewStore(db *sql.DB, names *Names, retention func() time.Duration) *Store {
-	return &Store{db: db, names: names, retention: retention, queue: make(chan Entry, queueSize), changed: make(chan struct{})}
+// NewStore returns the store of the log; conf may be nil for a store that is only read.
+func NewStore(db *sql.DB, names *Names, conf Config) *Store {
+	return &Store{db: db, names: names, conf: conf, queue: make(chan Entry, queueSize), changed: make(chan struct{})}
 }
 
 // Handler returns a slog handler that stores the master's records of at least level.
@@ -80,13 +100,18 @@ func (s *Store) run(ctx context.Context) {
 	defer close(s.done)
 	ticker := time.NewTicker(pruneEvery)
 	defer ticker.Stop()
-	s.prune(ctx)
+	prune := func() {
+		if err := s.prune(ctx); err != nil && ctx.Err() == nil {
+			s.report("Can't delete old log entries", "err", err)
+		}
+	}
+	prune()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.prune(ctx)
+			prune()
 		case e := <-s.queue:
 			_ = s.write(ctx, s.take([]Entry{e}), nil)
 		}
@@ -183,14 +208,68 @@ func (s *Store) report(msg string, args ...any) {
 	}
 }
 
-// prune deletes the entries older than the retention, and the oldest beyond maxEntries.
-func (s *Store) prune(ctx context.Context) {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM log_entries WHERE time < ?`, time.Now().Add(-s.retention()).UnixMilli())
-	if err == nil {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM log_entries WHERE id <= (SELECT id FROM log_entries ORDER BY id DESC LIMIT 1 OFFSET ?)`, maxEntries)
+// prune deletes the entries older than the retention, then the oldest beyond maxEntries or the
+// size limit. It warns when it deletes entries before their retention ends, but only once until
+// entries lasted the whole retention again, so that a log that stays full doesn't warn every minute.
+func (s *Store) prune(ctx context.Context) error {
+	aged, err := s.remove(ctx, `time < ?`, time.Now().Add(-s.conf.LogRetention()).UnixMilli())
+	if err != nil {
+		return err
 	}
-	if err != nil && ctx.Err() == nil {
-		slog.Error("Can't delete old log entries", "err", err)
+	if aged > 0 {
+		s.cut = false
+	}
+	var entries, size int64
+	if err := s.db.QueryRowContext(ctx, `SELECT entries, bytes FROM log_size`).Scan(&entries, &size); err != nil {
+		return err
+	}
+	maxSize := s.conf.LogMaxSize()
+	if entries <= maxEntries && size <= maxSize {
+		return nil
+	}
+	// The oldest entries up to the first with which enough are deleted for both limits; the
+	// window reads no further than that.
+	var last int64
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM (
+		SELECT id, COUNT(*) OVER w AS entries, SUM(size) OVER w AS bytes FROM log_entries WINDOW w AS (ORDER BY id)
+	) WHERE entries >= ? AND bytes >= ? LIMIT 1`, entries-maxEntries, size-maxSize).Scan(&last); err != nil {
+		return err
+	}
+	cut, err := s.remove(ctx, `id <= ?`, last)
+	if err != nil || cut == 0 || s.cut {
+		return err
+	}
+	s.cut = true
+	limit := fmt.Sprintf("%d MiB", maxSize>>20)
+	if size <= maxSize {
+		limit = fmt.Sprintf("%d entries", maxEntries)
+	}
+	var oldest int64
+	_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(MIN(time), 0) FROM log_entries`).Scan(&oldest)
+	slog.Warn("The log reached its limit, so entries are deleted before their retention ends", logging.Settings,
+		"limit", limit, "deleted", cut, "oldest", time.UnixMilli(oldest).UTC().Format(time.RFC3339))
+	return nil
+}
+
+// remove deletes the entries that match cond, pruneStep at a time, and returns their number.
+func (s *Store) remove(ctx context.Context, cond string, args ...any) (int64, error) {
+	var removed int64
+	for {
+		//nolint:gosec // cond has placeholders for all values
+		res, err := s.db.ExecContext(ctx, `DELETE FROM log_entries WHERE id IN (SELECT id FROM log_entries WHERE `+cond+` LIMIT ?)`,
+			append(args, pruneStep)...)
+		if err != nil {
+			return removed, err
+		}
+		n, _ := res.RowsAffected()
+		if removed += n; n < pruneStep {
+			return removed, nil
+		}
+		select {
+		case <-ctx.Done():
+			return removed, ctx.Err()
+		case <-time.After(prunePause):
+		}
 	}
 }
 

@@ -174,7 +174,7 @@ function PanelCertificateFacts({ master }: { master: Master }) {
 }
 
 function formOf(s: MasterSettings) {
-  const { panelAddr, panelHttps, panelDomain, enrollAddr, sessionHours, joinTokenMinutes, logDays, checkUpdates } = s
+  const { panelAddr, panelHttps, panelDomain, enrollAddr, sessionHours, joinTokenMinutes, logDays, logSizeMb, checkUpdates } = s
   return {
     panelAddr,
     panelHttps,
@@ -183,6 +183,7 @@ function formOf(s: MasterSettings) {
     sessionHours,
     joinTokenMinutes,
     logDays,
+    logSizeMb,
     checkUpdates,
     nodeDefaults: limitsForm(s.nodeDefaults),
   }
@@ -296,9 +297,21 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
               value={form.logDays}
               onChange={(logDays) => set({ logDays })}
             />
+            <FieldDescription>{t("Up to a year. Export entries to keep them longer.")}</FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="settings-log-size">{t("Maximum size")}</FieldLabel>
+            <NumberInput
+              id="settings-log-size"
+              min={100}
+              max={102400}
+              unit="MiB"
+              value={form.logSizeMb}
+              onChange={(logSizeMb) => set({ logSizeMb })}
+            />
             <FieldDescription>
               {t(
-                "Up to a year. Older entries are deleted every hour; the newest million are kept at most. Export entries to keep them longer.",
+                "From 100 MiB to 100 GiB, so that the log can't fill the disk. Beyond this size or a million entries, the oldest entries are deleted before their time, and a warning is logged.",
               )}
             </FieldDescription>
           </Field>
