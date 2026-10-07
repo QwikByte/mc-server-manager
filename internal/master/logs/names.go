@@ -37,8 +37,11 @@ type Names struct {
 }
 
 type serverNames struct {
-	at    time.Time
-	names map[string]string
+	at time.Time
+	// listed are the servers of the agent's latest answer, names those of the answer before
+	// too: names of deleted servers stay for a while, but not forever, as an agent could
+	// answer with new servers each time.
+	listed, names map[string]string
 }
 
 func NewNames(nodes Nodes) *Names { return &Names{nodes: nodes, servers: map[string]*serverNames{}} }
@@ -62,17 +65,21 @@ func (n *Names) Server(ctx context.Context, nodeID, id string) string {
 			return known.names[id]
 		}
 	}
-	fresh := &serverNames{at: time.Now(), names: map[string]string{}}
+	fresh := &serverNames{at: time.Now(), listed: map[string]string{}, names: map[string]string{}}
 	if known != nil {
-		maps.Copy(fresh.names, known.names)
+		fresh.listed, fresh.names = known.listed, known.names
 	}
 	ctx, cancel := context.WithTimeout(ctx, namesTimeout)
 	defer cancel()
 	if conn, err := n.nodes.Conn(ctx, nodeID); err == nil {
 		if res, err := noryxv1.NewServerServiceClient(conn).ListServers(ctx, &noryxv1.ListServersRequest{}); err == nil {
+			listed := map[string]string{}
 			for _, srv := range res.GetServers() {
-				fresh.names[srv.GetId()] = srv.GetName()
+				listed[srv.GetId()] = srv.GetName()
 			}
+			fresh.names = maps.Clone(fresh.listed)
+			maps.Copy(fresh.names, listed)
+			fresh.listed = listed
 		}
 	}
 	n.mu.Lock()
