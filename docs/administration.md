@@ -104,6 +104,12 @@ clients only if `--trusted-proxy` names the proxy (see [Installation](installati
 `GET /api/auth/sessions`, ends one with `DELETE /api/auth/sessions/<id>` and all others with
 `DELETE /api/auth/sessions`.
 
+### API tokens
+
+Scripts use the API with personal API tokens instead of a password, which users create and revoke on their account
+page, with all of their permissions or fewer; see [REST API and API tokens](api.md). Changing the password, setting one
+with a setup link, turning on two-factor authentication and disabling a user revoke the user's tokens.
+
 ### Two-factor authentication
 
 Two-factor authentication is off until users set it up on their account page: they scan a QR code with an authenticator

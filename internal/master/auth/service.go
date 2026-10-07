@@ -45,6 +45,8 @@ type User struct {
 	// authentication, but who hasn't set it up: until then, the user may only use the routes
 	// of the own account, see access.Mux.
 	MustSetUpMFA bool `json:"mustSetUpMfa,omitempty"`
+	// Token is the API token that a request acts with; nil for a session of the panel.
+	Token *Token `json:"-"`
 }
 
 // Account is a user as the user management shows it.
@@ -136,19 +138,25 @@ func (s *Service) Accounts(ctx context.Context) ([]Account, error) {
 	return accounts, rows.Err()
 }
 
-// SetDisabled disables or enables a user. Disabling ends the user's sessions.
+// SetDisabled disables or enables a user. Disabling ends the user's sessions and revokes the
+// user's API tokens.
 func (s *Service) SetDisabled(ctx context.Context, id int64, disabled bool) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET disabled = ? WHERE id = ?`, disabled, id)
-	if err == nil && rowsAffected(res) == 0 {
-		return errNotFound
-	}
-	if err == nil && disabled {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id)
-	}
-	return err
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE users SET disabled = ? WHERE id = ?`, disabled, id)
+		if err == nil && rowsAffected(res) == 0 {
+			return errNotFound
+		}
+		if err == nil && disabled {
+			_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id)
+		}
+		if err == nil && disabled {
+			err = revokeTokens(ctx, tx, id)
+		}
+		return err
+	})
 }
 
-// Delete deletes a user with its sessions.
+// Delete deletes a user with its sessions and API tokens.
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
 	if err == nil && rowsAffected(res) == 0 {
@@ -184,8 +192,9 @@ func (s *Service) SetupUser(ctx context.Context, token string) (User, error) {
 }
 
 // Setup sets the password of a user with a setup link, which is used up. All sessions of
-// the user end and a new one starts for client, which lasts for ttl, unless signing in needs
-// a code too: then the returned token is empty, so that a setup link can't replace the code.
+// the user end, the user's API tokens are revoked, and a new session starts for client,
+// which lasts for ttl, unless signing in needs a code too: then the returned token is
+// empty, so that a setup link can't replace the code.
 func (s *Service) Setup(ctx context.Context, token, password string, ttl time.Duration, client Client) (User, string, error) {
 	if err := checkPassword(password); err != nil {
 		return User{}, "", err
@@ -205,6 +214,9 @@ func (s *Service) Setup(ctx context.Context, token, password string, ttl time.Du
 		if err == nil {
 			_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, u.ID)
 		}
+		if err == nil {
+			err = revokeTokens(ctx, tx, u.ID)
+		}
 		return err
 	})
 	if err != nil {
@@ -218,7 +230,7 @@ func (s *Service) Setup(ctx context.Context, token, password string, ttl time.Du
 }
 
 // ChangePassword replaces the password of a user who knows the current one. Other
-// sessions than the one identified by keep end.
+// sessions than the one identified by keep end, and the user's API tokens are revoked.
 func (s *Service) ChangePassword(ctx context.Context, id int64, current, next, keep string) error {
 	if err := s.confirmPassword(ctx, id, current); err != nil {
 		return err
@@ -235,6 +247,9 @@ func (s *Service) ChangePassword(ctx context.Context, id int64, current, next, k
 		}
 		if err == nil {
 			_, err = tx.ExecContext(ctx, endOtherSessions, id, hashToken(keep))
+		}
+		if err == nil {
+			err = revokeTokens(ctx, tx, id)
 		}
 		return err
 	})

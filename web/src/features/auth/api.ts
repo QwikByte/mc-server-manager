@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import type { Permission } from "@/features/access/permissions"
 import { ApiError, api } from "@/lib/api"
 import { chooseLanguage } from "@/lib/i18n"
 import { forgetCommandHistories, ownCommandHistories } from "@/lib/use-command-history"
@@ -86,12 +87,13 @@ export function useSetup() {
   })
 }
 
-/** Changes the signed-in user's password; the user's other sessions end. */
+/** Changes the signed-in user's password; the user's other sessions end and the API tokens are revoked. */
 export function useChangePassword() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: { current: string; new: string }) => api("/auth/password", { method: "PUT", body: input }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: sessionsQuery.queryKey }),
+    onSuccess: () =>
+      Promise.all([sessionsQuery.queryKey, tokensQuery.queryKey].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
   })
 }
 
@@ -117,7 +119,8 @@ export function useSetUpMfa() {
 
 /**
  * The changes of two-factor authentication need the password; some return new recovery codes. Turning it on
- * or off changes the user, e.g. whether it has to be set up, and turning it on ends the other sessions.
+ * or off changes the user, e.g. whether it has to be set up, and turning it on ends the other sessions and
+ * revokes the API tokens.
  */
 function useMfaChange<T, R>(mutationFn: (input: T) => Promise<R>) {
   const queryClient = useQueryClient()
@@ -125,7 +128,9 @@ function useMfaChange<T, R>(mutationFn: (input: T) => Promise<R>) {
     mutationFn,
     onSuccess: () =>
       Promise.all(
-        [mfaQuery.queryKey, meQuery.queryKey, sessionsQuery.queryKey].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        [mfaQuery.queryKey, meQuery.queryKey, sessionsQuery.queryKey, tokensQuery.queryKey].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
       ),
   })
 }
@@ -164,5 +169,50 @@ export function useEndSessions() {
   return useMutation({
     mutationFn: (id?: string) => api(id ? `/auth/sessions/${encodeURIComponent(id)}` : "/auth/sessions", { method: "DELETE" }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: sessionsQuery.queryKey }),
+  })
+}
+
+/** A personal API token of the signed-in user, which scripts send instead of signing in. */
+export interface ApiToken {
+  /** Names the token; it can't authenticate. */
+  id: string
+  name: string
+  /** The permissions of the user's that it may use, besides those they require; missing for all of them. */
+  permissions?: Permission[]
+  createdAt: string
+  /** Missing for tokens that don't expire. */
+  expiresAt?: string
+  /** Missing for tokens never used. */
+  lastUsedAt?: string
+  /** The address it was used from last. */
+  ip?: string
+}
+
+export interface NewApiToken {
+  name: string
+  expiresAt?: string
+  /** Missing for all of the user's. */
+  permissions?: Permission[]
+  password: string
+  code?: string
+}
+
+export const tokensQuery = queryOptions({ queryKey: ["tokens"], queryFn: () => api<ApiToken[]>("/auth/tokens") })
+
+/** Creates an API token; the answer holds the token itself, which is shown only once. */
+export function useCreateToken() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: NewApiToken) => api<ApiToken & { secret: string }>("/auth/tokens", { body: input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tokensQuery.queryKey }),
+  })
+}
+
+/** Revokes an API token, which needs no password, as it only takes rights away. */
+export function useRevokeToken() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api(`/auth/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: tokensQuery.queryKey }),
   })
 }

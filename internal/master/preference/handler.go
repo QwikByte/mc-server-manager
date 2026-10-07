@@ -14,12 +14,12 @@ func NewHandler(store *Store) *Handler { return &Handler{store: store} }
 // Register adds the routes for the signed-in user's own preferences. Like those of the
 // user's account, they need a session but no permission, and they aren't in the audit log,
 // as they only change how the panel looks for the user. So they go on the API's mux itself
-// rather than on access.Mux, which logs every change.
+// rather than on access.Mux, which logs every change. API tokens can't use them.
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/preferences", h.get)
-	mux.HandleFunc("PUT /api/preferences/dashboard", h.setDashboard)
-	mux.HandleFunc("PUT /api/preferences/pinned", h.setPinned)
-	mux.HandleFunc("PATCH /api/preferences/settings", h.changeSettings)
+	mux.HandleFunc("GET /api/preferences", auth.SessionOnly(h.get))
+	mux.HandleFunc("PUT /api/preferences/dashboard", auth.SessionOnly(h.setDashboard))
+	mux.HandleFunc("PUT /api/preferences/pinned", auth.SessionOnly(h.setPinned))
+	mux.HandleFunc("PATCH /api/preferences/settings", auth.SessionOnly(h.changeSettings))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) { h.reply(w, r, nil) }

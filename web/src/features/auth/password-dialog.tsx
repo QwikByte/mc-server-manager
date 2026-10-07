@@ -38,7 +38,9 @@ export function PasswordDialog({ username }: { username: string }) {
       { current: form.current, new: form.next },
       {
         onSuccess: () => {
-          toast.success(t("Changed your password"), { description: t("You were signed out everywhere else.") })
+          toast.success(t("Changed your password"), {
+            description: t("You were signed out everywhere else, and your API tokens were revoked."),
+          })
           onOpenChange(false)
         },
       },
@@ -55,7 +57,7 @@ export function PasswordDialog({ username }: { username: string }) {
           <DialogHeader>
             <DialogTitle>{t("Change your password")}</DialogTitle>
             <DialogDescription>
-              {t("Other devices where you are signed in as {{name}} are signed out.", { name: username })}
+              {t("Other devices where you are signed in as {{name}} are signed out, and your API tokens stop working.", { name: username })}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>

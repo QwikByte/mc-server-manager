@@ -114,6 +114,7 @@ export function MfaSetupDialog({
                   />
                 </Field>
               </FieldGroup>
+              <p className="text-muted-foreground">{t("Your other sessions end, and your API tokens stop working.")}</p>
             </Step>
           </ol>
           {enable.error && <FieldError>{enable.error.message}</FieldError>}

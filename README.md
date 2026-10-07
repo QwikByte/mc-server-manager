@@ -64,6 +64,7 @@ all nodes while the Minecraft servers keep running.
 | [Players](docs/players.md)                                | Kicks, bans, whitelists and operators                                          |
 | [Usage and logs](docs/monitoring.md)                      | Measurements, their history and the log                                        |
 | [Settings, users and permissions](docs/administration.md) | Settings of the master, terminal, users, groups, two-factor authentication     |
+| [REST API and API tokens](docs/api.md)                    | Scripts with API tokens, the description of the API                            |
 | [Security model](docs/security.md)                        | How master, agents and servers are protected                                   |
 | [Development](docs/development.md)                        | Building, running locally, translations, releasing                             |
 

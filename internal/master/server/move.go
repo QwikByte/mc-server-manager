@@ -186,7 +186,7 @@ func (h *Handler) move(w http.ResponseWriter, r *http.Request) {
 	started := *mv // the move changes mv from now on
 	go func() {
 		defer release()
-		h.runMove(context.WithoutCancel(r.Context()), started, src, req, user.Username)
+		h.runMove(context.WithoutCancel(r.Context()), started, src, req, user)
 	}()
 	httpapi.WriteJSON(w, http.StatusAccepted, started)
 }
@@ -259,7 +259,7 @@ func (h *Handler) find(ctx context.Context, nodeID, id string) (*noryxv1.Server,
 }
 
 // runMove moves the server and logs how it went.
-func (h *Handler) runMove(ctx context.Context, mv Move, src *noryxv1.Server, req moveRequest, user string) {
+func (h *Handler) runMove(ctx context.Context, mv Move, src *noryxv1.Server, req moveRequest, user auth.User) {
 	ctx, cancel := context.WithTimeout(ctx, moveTimeout)
 	defer cancel()
 	running := src.GetState() != noryxv1.ServerState_SERVER_STATE_STOPPED
@@ -271,8 +271,11 @@ func (h *Handler) runMove(ctx context.Context, mv Move, src *noryxv1.Server, req
 			warnings = append(warnings, w)
 		}
 	}
-	attrs := []any{logging.Servers, logging.KeyUser, user, logging.KeyNode, mv.From, logging.KeyServer, mv.ServerID,
+	attrs := []any{logging.Servers, logging.KeyNode, mv.From, logging.KeyServer, mv.ServerID,
 		logging.KeyServerName, mv.ServerName, "to", mv.ToName, "to_id", mv.To}
+	for _, a := range user.LogAttrs() {
+		attrs = append(attrs, a)
+	}
 	if n, err := h.nodes.Get(ctx, mv.From); err == nil {
 		attrs = append(attrs, logging.KeyNodeName, n.Name)
 	}
