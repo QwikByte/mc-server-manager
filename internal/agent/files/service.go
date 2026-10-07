@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/sha512"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -338,6 +340,55 @@ func (s *Service) DeleteFile(ctx context.Context, req *noryxv1.DeleteFileRequest
 		return nil, toStatus(err)
 	}
 	return &noryxv1.DeleteFileResponse{}, toStatus(dir.RemoveAll(name))
+}
+
+// HashFiles hashes regular files, e.g. those of a modpack. Files with secrets get no hash,
+// so that a hash can't tell anything about a secret, and neither do links, as the master
+// writes no file through one.
+func (s *Service) HashFiles(ctx context.Context, req *noryxv1.HashFilesRequest) (*noryxv1.HashFilesResponse, error) {
+	if len(req.GetPaths()) > noryxv1.MaxHashPaths {
+		return nil, status.Errorf(codes.InvalidArgument, "Up to %d files can be hashed at once.", noryxv1.MaxHashPaths)
+	}
+	dir, _, err := s.open(ctx, req.GetServerId(), "")
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	hidden := fileset.Read(dir).Secrets()
+	res := &noryxv1.HashFilesResponse{Sha512: map[string]string{}}
+	for _, p := range req.GetPaths() {
+		name, err := clean(p)
+		if err != nil {
+			return nil, err
+		}
+		info, err := dir.Lstat(name)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		case err != nil:
+			return nil, toStatus(err)
+		case !info.Mode().IsRegular() || info.Size() > noryxv1.MaxHashedSize || hidden.Hidden(name) || secrets.Redacted(name):
+			res.Sha512[p] = ""
+		default:
+			if res.Sha512[p], err = hashFile(dir, name); err != nil {
+				return nil, toStatus(err)
+			}
+		}
+	}
+	return res, nil
+}
+
+func hashFile(dir *datadir.Dir, name string) (string, error) {
+	f, err := dir.Open(name)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha512.New()
+	if _, err := io.Copy(h, io.LimitReader(f, noryxv1.MaxHashedSize+1)); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // open opens the data directory of a server and returns the path as a name in it.

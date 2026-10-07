@@ -150,6 +150,11 @@ func (f *fakeModrinth) release(project, number, name string, content []byte, loa
 
 // modpack adds a Fabric modpack with a version whose .mrpack holds the index and the files.
 func (f *fakeModrinth) modpack(t *testing.T, project string, index any, files map[string]string) modrinth.Version {
+	return f.modpackVersion(t, project, "1.0", index, files)
+}
+
+// modpackVersion adds a version of a Fabric modpack, and the modpack unless it exists.
+func (f *fakeModrinth) modpackVersion(t *testing.T, project, number string, index any, files map[string]string) modrinth.Version {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	data, err := json.Marshal(index)
@@ -162,9 +167,11 @@ func (f *fakeModrinth) modpack(t *testing.T, project string, index any, files ma
 		check(t, err)
 	}
 	check(t, zw.Close())
-	f.project(project, project, []string{"fabric"})
-	f.packs[project] = true
-	return f.release(project, "1.0", project+"-1.0.mrpack", buf.Bytes(), []string{"fabric"})
+	if !f.packs[project] {
+		f.project(project, project, []string{"fabric"})
+		f.packs[project] = true
+	}
+	return f.release(project, number, project+"-"+number+".mrpack", buf.Bytes(), []string{"fabric"})
 }
 
 func sha512Hex(data []byte) string {

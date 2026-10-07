@@ -16,6 +16,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Save the settings of {{name}}", { name: subject })
     case "server.image":
       return t("Update the image of {{name}}", { name: subject })
+    case "server.modpack":
+      return t("Change the modpack version of {{name}}", { name: subject })
     case "server.stop":
       return t("Stop {{name}}", { name: subject })
     case "server.restart":
@@ -129,7 +131,7 @@ export function stepOf(op: Operation, step: string): string {
     case "modpack":
       return t("Download the modpack")
     case "mods":
-      return t("Install the mods of the modpack")
+      return op.kind === "server.modpack" ? t("Change the mods and files of the modpack") : t("Install the mods of the modpack")
     case "save":
       return t("Save the worlds")
     case "copy":

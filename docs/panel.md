@@ -79,9 +79,9 @@ They do nothing while the focus is in a field or the editor, or while a dialog i
 ## Operations
 
 Long actions run as **operations**: creating, copying and changing servers, stopping and restarting them, updating their
-image, installing plugins on many servers, backing up and restoring, and the actions on networks and on many servers at
-once. The panel shows their steps as they go, e.g. how much of a server image is downloaded or how many servers of a
-network are configured. A dialog can't be closed by mistake meanwhile; **Continue in the background** hands the
+image or modpack, installing plugins on many servers, backing up and restoring, and the actions on networks and on many
+servers at once. The panel shows their steps as they go, e.g. how much of a server image is downloaded or how many
+servers of a network are configured. A dialog can't be closed by mistake meanwhile; **Continue in the background** hands the
 operation to a notification, which follows it to its end and links to its result. The operations of the last hour, also
 those of other users, are in the list behind the button next to the warnings. The master runs them in the background:
 an answer comes right away if the action ends within a second, otherwise `202 Accepted` with the operation, which
@@ -90,8 +90,8 @@ master can't restart while one runs. Agents tell the progress of their part, e.g
 `ProgressService`; agents of older versions only let the panel show the steps.
 
 Operations whose steps can stop safely show **Cancel** in their dialog, notification and list: creating and copying
-servers, backing up, installing plugins, applying file sets and the actions on players and on many servers at once
-(`POST /api/operations/{id}/cancel`). The operation stops at its next step that can stop, calls to the agents stop with
+servers, backing up, installing plugins, applying file sets, updating a modpack until the server stops for it, and the
+actions on players and on many servers at once (`POST /api/operations/{id}/cancel`). The operation stops at its next step that can stop, calls to the agents stop with
 it, and it ends as **cancelled**; one that was done before it noticed ends as done. A cancelled creation or copy of a
 server leaves no server; once a new server has its modpack, it stays, as installing its plugins can't be cancelled. An
 action on many servers begins no more servers, but finishes on those it began, so that e.g. no restart is cut short and

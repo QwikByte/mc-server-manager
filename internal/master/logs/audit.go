@@ -84,6 +84,7 @@ var actions = map[string]action{
 	"POST /api/plugins/install":                                {logging.Plugins, "Install plugins"},
 	"PUT " + routeServer + "/plugins/{file}":                   {logging.Plugins, "Upload plugin"},
 	"DELETE " + routeServer + "/plugins/{file}":                {logging.Plugins, "Remove plugin"},
+	"POST " + routeServer + "/modpack":                         {logging.Plugins, "Update modpack"},
 	"POST " + routeBackups:                                     {logging.Backups, "Back up server"},
 	"POST " + routeBackups + "/{backup}/restore":               {logging.Backups, "Restore backup"},
 	"DELETE " + routeBackups + "/{backup}":                     {logging.Backups, "Delete backup"},

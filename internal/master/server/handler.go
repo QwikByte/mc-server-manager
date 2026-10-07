@@ -78,10 +78,11 @@ type Plugins interface {
 	InstallOn(ctx context.Context, projects []string, kept map[string]string, nodeID, serverID string) error
 }
 
-// Modpacks installs Modrinth modpacks on new servers.
+// Modpacks installs Modrinth modpacks on new servers, and gives copies the pack of the original.
 type Modpacks interface {
 	Resolve(ctx context.Context, project, version string) (*modpack.Pack, error)
 	Install(ctx context.Context, nodeID, serverID string, p *modpack.Pack) error
+	Copy(ctx context.Context, nodeID, from, to string) error
 }
 
 // References refer to servers, e.g. the targets of backup jobs and the scopes of groups.
@@ -519,6 +520,9 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		ctx = context.WithoutCancel(ctx)
 		if err := h.tags.Copy(ctx, tag.Server{NodeID: nodeID, ServerID: id}, tag.Server{NodeID: nodeID, ServerID: copied.GetId()}); err != nil {
 			slog.Warn("The copy of a server didn't get its tags and notes", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, copied.GetId(), "err", err)
+		}
+		if err := h.modpacks.Copy(ctx, nodeID, id, copied.GetId()); err != nil {
+			slog.Warn("The copy of a server didn't get its modpack", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, copied.GetId(), "err", err)
 		}
 		return toView(copied), nil
 	})
