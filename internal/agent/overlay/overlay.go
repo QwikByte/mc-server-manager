@@ -120,7 +120,7 @@ func (s *Service) ConfigureOverlay(ctx context.Context, req *noryxv1.ConfigureOv
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if previous != nil {
-		next.Clients = previous.Clients
+		next.Clients = next.peerClients(previous.Clients)
 	}
 	return &noryxv1.ConfigureOverlayResponse{}, s.apply(next, key, previous)
 }
@@ -184,11 +184,7 @@ func (s *Service) Admit(id string, port uint32, clients ...string) (string, erro
 	}
 	previous := *st
 	// A port belongs to one server or datastore; one that had it before is gone.
-	c := Client{Port: uint16(port), Address: addrs[0]} //nolint:gosec // checked
-	if len(addrs) > 1 {
-		c.Others = addrs[1:]
-	}
-	updated := map[string]Client{id: c}
+	updated := map[string]Client{id: newClient(uint16(port), addrs)} //nolint:gosec // checked
 	for other, c := range st.Clients {
 		if other != id && c.Port != uint16(port) { //nolint:gosec // checked
 			updated[other] = c
