@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"sync"
 
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/auth"
@@ -25,6 +26,9 @@ var (
 type Handler struct {
 	svc   *Service
 	users *auth.Service
+	// changes serialises the changes of users, so that two administrators who disable or
+	// delete each other at once can't leave none.
+	changes sync.Mutex
 }
 
 func NewHandler(svc *Service, users *auth.Service) *Handler { return &Handler{svc: svc, users: users} }
@@ -184,6 +188,8 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	h.changes.Lock()
+	defer h.changes.Unlock()
 	target, groups, err := h.manageable(r)
 	if err == nil {
 		err = grantable(From(ctx), groups, target.Groups, req.Groups)
@@ -208,6 +214,8 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	h.changes.Lock()
+	defer h.changes.Unlock()
 	target, _, err := h.manageable(r)
 	if err == nil && isSelf(ctx, target.ID) {
 		err = errSelf
