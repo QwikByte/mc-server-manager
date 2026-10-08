@@ -215,13 +215,26 @@ without internet, which they share with each other as backends in a proxy's netw
 over the private network of the nodes, for the nodes of its servers, never at a public address. The agent checks every
 name against `^[a-z][a-z0-9_]{0,31}$`, refuses those of the engines themselves, and only takes passwords from `a-z2-7`,
 so no statement or configuration file needs escaping; statements go to the clients in the container on their standard
-input. Dumps are loaded as their database's own user, never as the superuser, with MariaDB's sandbox mode, so a dump
-can't gain more rights; as MariaDB has no way to sign in as a user without its password, the user gets a random one for
-the time of the load. The agent never stores the passwords of users: upgrades keep the hashes, which it checks before it
-uses them in a statement. Dumps are kept like backups and checked before a restore drops anything, so a damaged one
-changes nothing. Browsing reads as the superuser in a session that only reads and stops each statement after 10 seconds,
-with statements the agent builds itself from names that need no escaping: tables, schemas and columns whose names don't
-match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. The log
+input. Dumps are loaded as their database's own user, never as the superuser, so a dump can't gain more rights; as
+MariaDB has no way to sign in as a user without its password, the user gets a random one for the time of the load. The
+clients' own commands are off while they load a dump, also one uploaded from elsewhere: MariaDB's client runs in binary
+mode, which only allows `DELIMITER`, `\C` and the sandbox, in its sandbox and without sending files for `LOAD DATA
+LOCAL`, and psql in its restricted mode with a random key, which refuses `\!`, `\connect`, `\copy`, `\i`, `\o` and all
+others. The `\restrict` and `\unrestrict` with which pg_dump wraps a dump are left out only at its start and end, as its
+author knows their key; any other one fails the load. So a dump can't run programs in the container, read its files,
+e.g. the superuser's password, or connect to another database or as another user. An uploaded dump is checked before it
+is kept: a single SQL file goes into a database the master knows, and a ZIP archive may only hold a `<database>.sql`
+with a valid name for each database besides folders and macOS's `__MACOSX`, up to 1000 entries, 50 databases and SQL
+files of 64 GB and 100 times its size together, all read to their ends to check their checksums; the agent keeps only
+these SQL files, and uploads have at most 16 GB. The agent never stores the passwords of users: upgrades keep the
+hashes, which it checks before it uses them in a statement. Dumps are kept like backups and checked before a restore
+drops anything, so a damaged one changes nothing. Browsing reads as the superuser in a session that only reads and stops
+each statement after 10 seconds, with statements the agent builds itself from names that need no escaping: tables,
+schemas and columns whose names don't match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, the columns to sort and filter by
+must be the table's, the value of a filter, at most 1 KiB of UTF-8 without NUL, goes into the statement in hexadecimal,
+MariaDB's client runs in its sandbox, and a page has at most 3 MiB. To count the connections of a datastore, the agent
+runs a query of its own as the superuser, and the master records the usage only of the datastores it has on the node
+that reports it. The log
 of a datastore's container, which only those who may manage datastores see, shows the statements that the engines log,
 e.g. when one fails, so the agent hides every quoted value after `PASSWORD`, `PASSWORD(`, `IDENTIFIED BY` and `USING`,
 the hashes of passwords too, before it sends a line: also with escaped quotes, and to the end of the line where it can't

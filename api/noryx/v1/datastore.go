@@ -1,9 +1,11 @@
 package noryxv1
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -23,6 +25,10 @@ var (
 const (
 	MaxDatabases         = 50 // of a datastore
 	MaxNetworkDatastores = 10
+	// MaxImportedDump is the most bytes of an uploaded dump.
+	MaxImportedDump = 16 << 30
+	// MaxFilterValue is the most bytes of the value that a filter of a table compares.
+	MaxFilterValue = 1 << 10
 )
 
 // reservedDatabases are the databases and users of the engines themselves.
@@ -35,6 +41,21 @@ func DatabaseNameProblem(name string) string {
 		return "Use up to 32 lower-case letters, digits and underscores, starting with a letter."
 	case slices.Contains(reservedDatabases, name) || strings.HasPrefix(name, "pg_"):
 		return "The database engine uses this name itself."
+	}
+	return ""
+}
+
+// Problem returns why a filter of a table can't be used, or "". The agent puts the value into
+// statements in hexadecimal, so it needs no escaping, but it must be text that both engines
+// take: UTF-8 without NUL.
+func (f *TableFilter) Problem() string {
+	switch v := f.GetValue(); {
+	case !TableName.MatchString(f.GetColumn()):
+		return "Choose a column to filter by."
+	case len(v) > MaxFilterValue:
+		return fmt.Sprintf("Filter by up to %d bytes.", MaxFilterValue)
+	case !utf8.ValidString(v) || strings.ContainsRune(v, 0):
+		return "Filter by text without NUL characters."
 	}
 	return ""
 }

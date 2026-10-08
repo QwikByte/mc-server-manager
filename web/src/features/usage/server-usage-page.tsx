@@ -9,7 +9,7 @@ import { type Server, useServer } from "@/features/servers/api"
 import { isPaper } from "@/features/servers/server-types"
 import { niceBytes } from "@/lib/chart"
 import { formatBytes } from "@/lib/format"
-import { type ServerUsage, useServerUsage } from "./api"
+import { historyQuery, type ServerUsage, useServerUsage } from "./api"
 import { formatCores, formatNumber, formatRate } from "./format"
 import { type ChartSpec, UsageHistory } from "./usage-history"
 
@@ -77,7 +77,7 @@ export function ServerUsagePage() {
       ) : (
         <LiveUsage server={server} usage={usage} />
       )}
-      <UsageHistory nodeId={nodeId} serverId={serverId} charts={charts} />
+      <UsageHistory history={(range) => historyQuery(nodeId, serverId, range)} charts={charts} />
     </>
   )
 }

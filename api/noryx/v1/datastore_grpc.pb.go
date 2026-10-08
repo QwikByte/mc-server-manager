@@ -33,6 +33,7 @@ const (
 	DatastoreService_RestoreDump_FullMethodName         = "/noryx.v1.DatastoreService/RestoreDump"
 	DatastoreService_DeleteDump_FullMethodName          = "/noryx.v1.DatastoreService/DeleteDump"
 	DatastoreService_DownloadDump_FullMethodName        = "/noryx.v1.DatastoreService/DownloadDump"
+	DatastoreService_ImportDump_FullMethodName          = "/noryx.v1.DatastoreService/ImportDump"
 	DatastoreService_ListTables_FullMethodName          = "/noryx.v1.DatastoreService/ListTables"
 	DatastoreService_BrowseTable_FullMethodName         = "/noryx.v1.DatastoreService/BrowseTable"
 	DatastoreService_StreamDatastoreLogs_FullMethodName = "/noryx.v1.DatastoreService/StreamDatastoreLogs"
@@ -74,6 +75,11 @@ type DatastoreServiceClient interface {
 	DeleteDump(ctx context.Context, in *DeleteDumpRequest, opts ...grpc.CallOption) (*DeleteDumpResponse, error)
 	// DownloadDump sends a dump in chunks; the first message carries its size.
 	DownloadDump(ctx context.Context, in *DownloadDumpRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadDumpResponse], error)
+	// ImportDump adds a dump made elsewhere, e.g. of a database that moves to Noryx. The first
+	// message describes it, the data that follows is a ZIP archive with a <database>.sql for
+	// each database, or the SQL of a single database. The agent checks it and keeps it like
+	// the dumps it makes, so that RestoreDump loads it as the databases' users.
+	ImportDump(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportDumpRequest, ImportDumpResponse], error)
 	// ListTables returns the tables of a database of a running datastore.
 	ListTables(ctx context.Context, in *ListTablesRequest, opts ...grpc.CallOption) (*ListTablesResponse, error)
 	// BrowseTable returns rows of a table as text, with long values cut short. It only reads,
@@ -243,6 +249,19 @@ func (c *datastoreServiceClient) DownloadDump(ctx context.Context, in *DownloadD
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DatastoreService_DownloadDumpClient = grpc.ServerStreamingClient[DownloadDumpResponse]
 
+func (c *datastoreServiceClient) ImportDump(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportDumpRequest, ImportDumpResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DatastoreService_ServiceDesc.Streams[1], DatastoreService_ImportDump_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ImportDumpRequest, ImportDumpResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DatastoreService_ImportDumpClient = grpc.ClientStreamingClient[ImportDumpRequest, ImportDumpResponse]
+
 func (c *datastoreServiceClient) ListTables(ctx context.Context, in *ListTablesRequest, opts ...grpc.CallOption) (*ListTablesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListTablesResponse)
@@ -265,7 +284,7 @@ func (c *datastoreServiceClient) BrowseTable(ctx context.Context, in *BrowseTabl
 
 func (c *datastoreServiceClient) StreamDatastoreLogs(ctx context.Context, in *StreamDatastoreLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDatastoreLogsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DatastoreService_ServiceDesc.Streams[1], DatastoreService_StreamDatastoreLogs_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DatastoreService_ServiceDesc.Streams[2], DatastoreService_StreamDatastoreLogs_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -318,6 +337,11 @@ type DatastoreServiceServer interface {
 	DeleteDump(context.Context, *DeleteDumpRequest) (*DeleteDumpResponse, error)
 	// DownloadDump sends a dump in chunks; the first message carries its size.
 	DownloadDump(*DownloadDumpRequest, grpc.ServerStreamingServer[DownloadDumpResponse]) error
+	// ImportDump adds a dump made elsewhere, e.g. of a database that moves to Noryx. The first
+	// message describes it, the data that follows is a ZIP archive with a <database>.sql for
+	// each database, or the SQL of a single database. The agent checks it and keeps it like
+	// the dumps it makes, so that RestoreDump loads it as the databases' users.
+	ImportDump(grpc.ClientStreamingServer[ImportDumpRequest, ImportDumpResponse]) error
 	// ListTables returns the tables of a database of a running datastore.
 	ListTables(context.Context, *ListTablesRequest) (*ListTablesResponse, error)
 	// BrowseTable returns rows of a table as text, with long values cut short. It only reads,
@@ -379,6 +403,9 @@ func (UnimplementedDatastoreServiceServer) DeleteDump(context.Context, *DeleteDu
 }
 func (UnimplementedDatastoreServiceServer) DownloadDump(*DownloadDumpRequest, grpc.ServerStreamingServer[DownloadDumpResponse]) error {
 	return status.Error(codes.Unimplemented, "method DownloadDump not implemented")
+}
+func (UnimplementedDatastoreServiceServer) ImportDump(grpc.ClientStreamingServer[ImportDumpRequest, ImportDumpResponse]) error {
+	return status.Error(codes.Unimplemented, "method ImportDump not implemented")
 }
 func (UnimplementedDatastoreServiceServer) ListTables(context.Context, *ListTablesRequest) (*ListTablesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListTables not implemented")
@@ -655,6 +682,13 @@ func _DatastoreService_DownloadDump_Handler(srv interface{}, stream grpc.ServerS
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DatastoreService_DownloadDumpServer = grpc.ServerStreamingServer[DownloadDumpResponse]
 
+func _DatastoreService_ImportDump_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DatastoreServiceServer).ImportDump(&grpc.GenericServerStream[ImportDumpRequest, ImportDumpResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DatastoreService_ImportDumpServer = grpc.ClientStreamingServer[ImportDumpRequest, ImportDumpResponse]
+
 func _DatastoreService_ListTables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListTablesRequest)
 	if err := dec(in); err != nil {
@@ -775,6 +809,11 @@ var DatastoreService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "DownloadDump",
 			Handler:       _DatastoreService_DownloadDump_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ImportDump",
+			Handler:       _DatastoreService_ImportDump_Handler,
+			ClientStreams: true,
 		},
 		{
 			StreamName:    "StreamDatastoreLogs",

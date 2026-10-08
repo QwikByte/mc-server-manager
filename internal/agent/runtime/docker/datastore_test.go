@@ -118,6 +118,15 @@ func liveDatastore(t *testing.T, d *Docker, engine noryxv1.DatastoreEngine) {
 	var dump bytes.Buffer
 	must(t, d.Dump(ctx, spec.ID, "shop", &dump))
 	asUser(t, d, spec.ID, password, "INSERT INTO items VALUES (7);")
+	// A dump from elsewhere can't use the commands of the client itself, e.g. to run programs.
+	for _, sql := range []string{"\\! touch /tmp/escaped\n", "SELECT 1; \\! touch /tmp/escaped\n", "system touch /tmp/escaped\n", "\\unrestrict x\n\\! touch /tmp/escaped\n"} {
+		if err := d.Load(ctx, spec.ID, "shop", strings.NewReader(sql)); err == nil {
+			t.Errorf("loaded %q", sql)
+		}
+	}
+	if d.exec(ctx, spec.ID, []string{"test", "-e", "/tmp/escaped"}, nil, nil, nil) == nil {
+		t.Error("a dump ran a program")
+	}
 	must(t, d.Load(ctx, spec.ID, "shop", &dump))
 	if got := asUser(t, d, spec.ID, password, "SELECT SUM(v) FROM items;"); got != "42" {
 		t.Errorf("after the load, the sum is %q", got)

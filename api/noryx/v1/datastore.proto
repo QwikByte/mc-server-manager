@@ -38,6 +38,11 @@ service DatastoreService {
   rpc DeleteDump(DeleteDumpRequest) returns (DeleteDumpResponse);
   // DownloadDump sends a dump in chunks; the first message carries its size.
   rpc DownloadDump(DownloadDumpRequest) returns (stream DownloadDumpResponse);
+  // ImportDump adds a dump made elsewhere, e.g. of a database that moves to Noryx. The first
+  // message describes it, the data that follows is a ZIP archive with a <database>.sql for
+  // each database, or the SQL of a single database. The agent checks it and keeps it like
+  // the dumps it makes, so that RestoreDump loads it as the databases' users.
+  rpc ImportDump(stream ImportDumpRequest) returns (ImportDumpResponse);
   // ListTables returns the tables of a database of a running datastore.
   rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
   // BrowseTable returns rows of a table as text, with long values cut short. It only reads,
@@ -237,6 +242,28 @@ message DownloadDumpResponse {
   bytes data = 2;
 }
 
+message ImportDumpRequest {
+  oneof content {
+    ImportDumpHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message ImportDumpHeader {
+  string id = 1;
+  string label = 2;
+  string location = 3;
+  // The database whose SQL follows; empty for a ZIP archive.
+  string database = 4;
+  // Bytes that follow, at most MaxImportedDump; 0 if unknown.
+  int64 size = 5;
+}
+
+message ImportDumpResponse {
+  // Its paths are the databases in it.
+  Backup dump = 1;
+}
+
 message ListTablesRequest {
   string id = 1;
   string database = 2;
@@ -261,10 +288,25 @@ message BrowseTableRequest {
   string database = 2;
   string schema = 3;
   string table = 4;
-  // Rows skipped, in the order of the primary key if the table has one.
+  // Rows skipped, in the order of the sort column if there is one, and then of the primary
+  // key if the table has one.
   uint64 offset = 5;
   // Rows returned at most.
   uint32 limit = 6;
+  // A column to sort the rows by; empty for none. Agents of older versions ignore it.
+  string sort = 7;
+  bool descending = 8;
+  // Leaves out the rows that don't match; none for all rows.
+  TableFilter filter = 9;
+}
+
+// TableFilter matches the rows whose value of a column, as text like a page shows it, equals
+// a value or contains it.
+message TableFilter {
+  string column = 1;
+  string value = 2;
+  // Matches values that contain value, ignoring case, instead of those that equal it.
+  bool contains = 3;
 }
 
 message TableColumn {
@@ -291,6 +333,8 @@ message BrowseTableResponse {
   repeated TableRow rows = 2;
   // The table has more rows after these.
   bool more = 3;
+  // The agent sorted and filtered the rows as asked; agents of older versions don't.
+  bool sorted_and_filtered = 4;
 }
 
 message StreamDatastoreLogsRequest {

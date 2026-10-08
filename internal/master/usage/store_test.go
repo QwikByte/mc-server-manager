@@ -102,3 +102,57 @@ func TestAddLimits(t *testing.T) {
 		t.Errorf("recorded %d servers, the lobby %d times", servers, lobbies)
 	}
 }
+
+// The master records the running datastores it has on the node that measured them, each once,
+// and forgets their history with them.
+func TestDatastoreHistory(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, sql := range []string{
+		`INSERT INTO nodes (id, name, address, created_at) VALUES ('n1', 'n1', 'host:7443', 0), ('n2', 'n2', 'host:7443', 0)`,
+		`INSERT INTO networks (id, name, proxy_node_id, proxy_server_id, forwarding_secret, created_at) VALUES ('net', 'Main', 'n1', 'proxy', '', 0)`,
+		`INSERT INTO datastores (id, network_id, node_id, name, engine, version, memory_mb, cpu_millis, storage, created_at)
+			VALUES ('main', 'net', 'n1', 'main', 'mariadb', '11.8', 512, 0, '', 0), ('other', 'net', 'n2', 'other', 'postgres', '18', 512, 0, '', 0)`,
+	} {
+		if _, err := db.Exec(sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, ctx := NewStore(db, nil, nil), t.Context()
+	step := 5 * time.Minute
+	start := time.Now().Truncate(step).Add(-step)
+	for i, connections := range []*uint32{new(uint32(3)), nil, new(uint32(5))} {
+		stats := &noryxv1.GetStatsResponse{Node: &noryxv1.NodeStats{}, Datastores: []*noryxv1.DatastoreStats{
+			{Id: "main", Running: true, CpuMillis: uint32(100 * (i + 1)), MemoryBytes: 1 << 30, Connections: connections, DiskBytes: 100}, //nolint:gosec // small
+			{Id: "main", Running: true, CpuMillis: 9000},
+			{Id: "other", Running: true},
+			{Id: "unknown", Running: true},
+		}}
+		if err := s.add(ctx, "n1", start.Add(time.Duration(i)*time.Minute), stats); err != nil {
+			t.Fatal(err)
+		}
+	}
+	points, err := s.DatastoreHistory(ctx, "main", time.Hour, step)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 1 || points[0].CPUMillis != 200 || *points[0].Connections != 5 || points[0].DiskBytes != 100 || !points[0].Time.Equal(start) {
+		t.Fatalf("points = %+v", points)
+	}
+	if points, err := s.DatastoreHistory(ctx, "other", time.Hour, step); err != nil || len(points) != 0 {
+		t.Fatalf("a datastore of another node recorded: %+v, %v", points, err)
+	}
+	if _, err := s.DatastoreHistory(ctx, "unknown", time.Hour, step); err == nil {
+		t.Fatal("history of an unknown datastore")
+	}
+	if _, err := db.Exec(`DELETE FROM datastores WHERE id = 'main'`); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM datastore_usage`).Scan(&left); err != nil || left != 0 {
+		t.Fatalf("%d samples left, %v", left, err)
+	}
+}

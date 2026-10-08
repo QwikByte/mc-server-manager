@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -93,6 +94,7 @@ type Docker struct {
 	cli      *client.Client
 	storage  *storage.Locations
 	consoles *rcon.Consoles
+	sizes    sync.Map // of the data of datastores by folder, as dataSize measured them
 }
 
 // New connects to the Docker daemon configured by the standard DOCKER_* variables.

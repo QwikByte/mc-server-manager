@@ -185,6 +185,27 @@ func (s Store) Add(owner, location, id string, d Details, size int64, write func
 	return b, b.load()
 }
 
+// Temp creates a temporary file next to the backups of an owner in a location, if size bytes
+// fit, e.g. for an archive to check before it becomes a backup. The caller removes it.
+func (s Store) Temp(owner, location string, size int64) (*os.File, error) {
+	root, err := s.storage.BackupPath(location)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(root, owner)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(datadir.TempName(dir), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a new file in the backups folder
+	if err != nil {
+		return nil, err
+	}
+	if err := storage.Fits(f, size); err != nil {
+		return nil, errors.Join(err, f.Close(), os.Remove(f.Name()))
+	}
+	return f, nil
+}
+
 // Update stores the changed details of a backup.
 func (s Store) Update(b Archive) error {
 	info, err := json.Marshal(b.Details)

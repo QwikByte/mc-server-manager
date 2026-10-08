@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,6 +75,29 @@ func TestDatastores(t *testing.T) {
 		t.Fatalf("password %q", password)
 	}
 
+	// What it uses, now for those who may see datastores, and its history.
+	var latest struct {
+		Datastores []struct {
+			ID          string  `json:"id"`
+			Running     bool    `json:"running"`
+			MemoryBytes uint64  `json:"memoryBytes"`
+			Connections *uint32 `json:"connections"`
+		} `json:"datastores"`
+	}
+	api.do("GET", "/api/nodes/"+a1.node.ID+"/usage", nil, http.StatusOK, &latest)
+	if u := latest.Datastores; len(u) != 1 || u[0].ID != ds.ID || !u[0].Running || u[0].MemoryBytes != 256<<20 || u[0].Connections == nil || *u[0].Connections != 1 {
+		t.Fatalf("latest usage %+v", latest)
+	}
+	history := "/api/datastores/" + ds.ID + "/usage/history"
+	api.do("GET", history+"?range=week", nil, http.StatusOK, nil)
+	api.do("GET", history+"?range=year", nil, http.StatusBadRequest, nil)
+	api.do("GET", "/api/datastores/unknown/usage/history", nil, http.StatusNotFound, nil)
+	serverViewer := m.withGrants(t, map[string]any{"name": "Server viewers", "permissions": []string{"servers.view", "nodes.view"}, "allServers": true})
+	serverViewer.do("GET", history, nil, http.StatusForbidden, nil)
+	if body := serverViewer.do("GET", "/api/nodes/"+a1.node.ID+"/usage", nil, http.StatusOK, nil); strings.Contains(body, ds.ID) {
+		t.Errorf("a server viewer sees the datastore's usage: %s", body)
+	}
+
 	// Those who manage datastores see the password, which lists never show, to enter it into
 	// the configuration of plugins, at the addresses where the servers reach the datastore.
 	var shown struct {
@@ -108,6 +132,21 @@ func TestDatastores(t *testing.T) {
 	api.do("GET", dbs+"/luckperms/tables/content?offset=0", nil, http.StatusOK, &page)
 	if len(tables) != 1 || tables[0].Name != "content" || len(page.Columns) != 1 || len(page.Rows) != 1 || page.Rows[0][0].Text != "groups v1" || page.More {
 		t.Fatalf("tables %+v, page %+v", tables, page)
+	}
+	// Sorted by a column, and filtered by its value or by text it contains.
+	for query, rows := range map[string]int{
+		"?filter=content&value=groups%20v1":          1,
+		"?filter=content&value=GROUPS&contains=true": 1,
+		"?filter=content&value=groups":               0,
+		"?sort=content&descending=true":              1,
+	} {
+		api.do("GET", dbs+"/luckperms/tables/content"+query, nil, http.StatusOK, &page)
+		if len(page.Rows) != rows {
+			t.Errorf("%s: %+v", query, page)
+		}
+	}
+	for _, query := range []string{"?sort=missing", "?filter=missing&value=x", "?filter=content&value=%00", "?filter=content&value=" + strings.Repeat("x", 1025)} {
+		api.do("GET", dbs+"/luckperms/tables/content"+query, nil, http.StatusBadRequest, nil)
 	}
 	api.do("GET", dbs+"/luckperms/tables/missing", nil, http.StatusNotFound, nil)
 	api.do("GET", dbs+"/luckperms/tables/a%20b", nil, http.StatusBadRequest, nil)
@@ -170,6 +209,52 @@ func TestDatastores(t *testing.T) {
 	api.do("GET", backups, nil, http.StatusOK, &dumps)
 	if len(dumps) != 2 || dumps[0].JobID != task.ID || dumps[0].Label != "Databases" {
 		t.Fatalf("dumps = %+v", dumps)
+	}
+
+	// Dumps made elsewhere, the SQL of a database or a ZIP archive with a <database>.sql for
+	// each, are kept like those made here and restored the same way.
+	var uploaded datastore.Dump
+	api.do("POST", backups+"/upload?database=luckperms&label=moved", []byte("groups v3"), http.StatusCreated, &uploaded)
+	if !slices.Equal(uploaded.Databases, []string{"luckperms"}) || uploaded.Label != "moved" {
+		t.Fatalf("uploaded %+v", uploaded)
+	}
+	api.do("POST", backups+"/"+uploaded.ID+"/restore", map[string]any{}, http.StatusNoContent, nil)
+	if content, _ := a1.runtime.Content(ds.ID, "luckperms"); content != "groups v3" {
+		t.Fatalf("after loading the SQL: %q", content)
+	}
+	zipped := func(files ...string) []byte {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		for i := 0; i < len(files); i += 2 {
+			f, err := zw.Create(files[i])
+			check(t, err)
+			_, err = io.WriteString(f, files[i+1])
+			check(t, err)
+		}
+		check(t, zw.Close())
+		return buf.Bytes()
+	}
+	api.do("POST", backups+"/upload", zipped("luckperms.sql", "groups v4", "__MACOSX/._luckperms.sql", "junk"), http.StatusCreated, &uploaded)
+	api.do("POST", backups+"/"+uploaded.ID+"/restore", map[string]any{}, http.StatusNoContent, nil)
+	if content, _ := a1.runtime.Content(ds.ID, "luckperms"); content != "groups v4" || !slices.Equal(uploaded.Databases, []string{"luckperms"}) {
+		t.Fatalf("after loading %+v: %q", uploaded, content)
+	}
+	for query, body := range map[string][]byte{
+		"":                    []byte("groups v5"),
+		"?label=":             zipped("../luckperms.sql", "groups v5"),
+		"?label=other":        zipped("luckperms.sql", "groups v5", "plugin.jar", ""),
+		"?database=Luckperms": []byte("groups v5"),
+	} {
+		status := http.StatusBadRequest
+		if strings.Contains(query, "database") {
+			status = http.StatusNotFound
+		}
+		api.do("POST", backups+"/upload"+query, body, status, nil)
+	}
+	viewer.do("POST", backups+"/upload?database=luckperms", []byte("groups v5"), http.StatusForbidden, nil)
+	api.do("GET", backups, nil, http.StatusOK, &dumps)
+	if len(dumps) != 4 {
+		t.Errorf("dumps after the uploads: %+v", dumps)
 	}
 
 	// An upgrade keeps the data of the previous version until it is removed.

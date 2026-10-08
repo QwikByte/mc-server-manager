@@ -45,6 +45,7 @@ const (
 	datastoreStop      = 120 // seconds; the postgres image warns that Docker's 10 are too few
 	datastorePids      = 512
 	datastoreReadyWait = 5 * time.Minute
+	sizeInterval       = time.Minute
 )
 
 // engine describes how an engine runs in its official image.
@@ -127,12 +128,29 @@ func (d *Docker) ListDatastores(ctx context.Context) ([]runtime.Datastore, error
 		}
 		ds := runtime.Datastore{DatastoreSpec: spec, State: datastoreState(c.State, c.Health)}
 		if dir, err := d.datastoreDir(spec); err == nil {
-			ds.Size = datadir.Size(os.DirFS(dir), dataFolder(spec.Version))
+			ds.Size = d.dataSize(filepath.Join(dir, dataFolder(spec.Version)))
 		}
 		list = append(list, ds)
 	}
 	slices.SortFunc(list, func(a, b runtime.Datastore) int { return strings.Compare(a.ID, b.ID) })
 	return list, nil
+}
+
+// sized is the size of a folder and when it was measured.
+type sized struct {
+	bytes int64
+	at    time.Time
+}
+
+// dataSize returns the size of a folder of data, measured at most every sizeInterval, as
+// measuring reads the details of all its files and the datastores are listed often.
+func (d *Docker) dataSize(folder string) int64 {
+	if s, ok := d.sizes.Load(folder); ok && time.Since(s.(sized).at) < sizeInterval {
+		return s.(sized).bytes
+	}
+	size := datadir.Size(os.DirFS(filepath.Dir(folder)), filepath.Base(folder))
+	d.sizes.Store(folder, sized{size, time.Now()})
+	return size
 }
 
 func datastoreSpecOf(labels map[string]string) (runtime.DatastoreSpec, bool) {

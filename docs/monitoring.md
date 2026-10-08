@@ -1,10 +1,10 @@
 # Usage and logs
 
-What nodes and servers use, and who did what.
+What nodes, servers and datastores use, and who did what.
 
 ## Usage
 
-The panel shows what nodes and servers use, now and during the last week.
+The panel shows what nodes, servers and [datastores](databases.md#usage) use, now and during the last week.
 
 ### Current values
 
@@ -17,14 +17,16 @@ every such request. The names of all players and the ticks per second come throu
 within the network of their proxy, where the status request can't reach them, so their console tells the number of
 players too. A network counts the players of its game servers, like the **Players** page, or those its proxy counts
 while the agents can't tell them, e.g. agents of older versions. Server cards show CPU, memory and players; the
-**Usage** tab of a server and the node page show the rest.
+**Usage** tab of a server and the node page show the rest. Agents measure the CPU, memory and connections of the
+datastores of their node too, and the size of their data every minute.
 
 ### History
 
 The master records the latest measurement of every agent each minute and keeps it for a week. Charts show the last 24
 hours (averages of 5 minutes) or 7 days (averages of 30 minutes), with the most players and the largest size of the data
 of each step, and a table shows the same values. Gaps are times in which a server didn't run or its node couldn't be
-reached. The history of a server moves and goes away with it.
+reached. The history of a server moves and goes away with it, that of a datastore goes away with it. Thresholds and
+warnings are only for nodes and servers.
 
 ### Warnings
 

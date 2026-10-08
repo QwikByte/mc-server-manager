@@ -10,6 +10,7 @@ import (
 	"iter"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -176,16 +177,33 @@ func (f *Datastores) Tables(_ context.Context, id, name string) (tables []*noryx
 	})
 }
 
-func (f *Datastores) Browse(ctx context.Context, id, name, _, table string, offset uint64, limit uint32) (*noryxv1.BrowseTableResponse, error) {
-	if _, err := f.Tables(ctx, id, name); err != nil || table != "content" {
+// Browse shows the row of the table content, if its filter matches it.
+func (f *Datastores) Browse(ctx context.Context, id string, req *noryxv1.BrowseTableRequest) (*noryxv1.BrowseTableResponse, error) {
+	if _, err := f.Tables(ctx, id, req.GetDatabase()); err != nil || req.GetTable() != "content" {
 		return nil, cmp.Or(err, runtime.ErrNoTable)
 	}
-	content, _ := f.Content(id, name)
-	res := &noryxv1.BrowseTableResponse{Columns: []*noryxv1.TableColumn{{Name: "content", Type: "text"}}}
-	if offset == 0 && limit > 0 {
+	filter := req.GetFilter()
+	for _, column := range []string{req.GetSort(), filter.GetColumn()} {
+		if column != "" && column != "content" {
+			return nil, runtime.ErrNoColumn
+		}
+	}
+	content, _ := f.Content(id, req.GetDatabase())
+	matches := filter == nil || content == filter.GetValue() ||
+		filter.GetContains() && strings.Contains(strings.ToLower(content), strings.ToLower(filter.GetValue()))
+	res := &noryxv1.BrowseTableResponse{Columns: []*noryxv1.TableColumn{{Name: "content", Type: "text"}}, SortedAndFiltered: true}
+	if req.GetOffset() == 0 && req.GetLimit() > 0 && matches {
 		res.Rows = []*noryxv1.TableRow{{Values: []*noryxv1.TableValue{{Text: content}}}}
 	}
 	return res, nil
+}
+
+// DatastoreUsage reports 256 MiB of memory and a connection for each database.
+func (f *Datastores) DatastoreUsage(_ context.Context, id string) (u runtime.DatastoreUsage, err error) {
+	return u, f.with(id, true, func(ds *datastore) error {
+		u = runtime.DatastoreUsage{Usage: runtime.Usage{MemoryBytes: 256 << 20, MemoryLimit: uint64(ds.MemoryMB) << 20}, Connections: len(ds.databases)}
+		return nil
+	})
 }
 
 // DatastoreLogs yields the last tail lines of a datastore's log written after the time after,

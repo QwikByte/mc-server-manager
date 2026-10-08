@@ -136,6 +136,7 @@ var actions = map[string]action{
 	"GET /api/datastores/{id}/databases/{name}/password":       {logging.Databases, "Show database password"},
 	"GET /api/datastores/{id}/databases/{name}/tables/{table}": {logging.Databases, "Browse database table"},
 	"POST /api/datastores/{id}/backups":                        {logging.Databases, "Back up datastore"},
+	"POST /api/datastores/{id}/backups/upload":                 {logging.Databases, "Upload datastore backup"},
 	"POST /api/datastores/{id}/backups/{backup}/restore":       {logging.Databases, "Restore datastore backup"},
 	"DELETE /api/datastores/{id}/backups/{backup}":             {logging.Databases, "Delete datastore backup"},
 	"GET /api/datastores/{id}/backups/{backup}/download":       {logging.Databases, "Download datastore backup"},

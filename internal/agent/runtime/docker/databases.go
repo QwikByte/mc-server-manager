@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -40,10 +41,14 @@ type dialect struct {
 	// recreate drops a database and creates it empty, owned by its user.
 	recreate func(name string) string
 	dump     func(name string) []string
-	// load runs a client as a database's user, which reads SQL from its standard input.
-	// For an engine whose users sign in with a password there, password sets one.
+	// load runs a client as a database's user, which reads SQL from its standard input
+	// without running commands of its own, as input turns it into, if set. For an engine
+	// whose users sign in with a password there, password sets one.
 	load     func(name, password string) (cmd, env []string)
+	input    func(r io.Reader) io.Reader
 	password func(name, password string) string
+	// connections counts the clients connected, without the one that asks.
+	connections string
 }
 
 var dialects = map[noryxv1.DatastoreEngine]dialect{
@@ -76,11 +81,15 @@ var dialects = map[noryxv1.DatastoreEngine]dialect{
 		dump: func(n string) []string {
 			return []string{"mariadb-dump", "-uroot", "--single-transaction", "--routines", "--triggers", "--events", "--hex-blob", n}
 		},
-		// The sandbox refuses the commands of the client itself, e.g. to run programs.
+		// Binary mode refuses the commands of the client itself but DELIMITER, \C and the
+		// sandbox's, e.g. to run programs, read files or connect elsewhere, which the sandbox
+		// refuses too, and the client sends no files for LOAD DATA LOCAL.
 		load: func(n, p string) ([]string, []string) {
-			return []string{"mariadb", "--sandbox", "--protocol=tcp", "-h127.0.0.1", "-u" + n, n}, []string{"MYSQL_PWD=" + p}
+			return []string{"mariadb", "--binary-mode", "--sandbox", "--local-infile=0", "--protocol=tcp", "-h127.0.0.1", "-u" + n, n},
+				[]string{"MYSQL_PWD=" + p}
 		},
-		password: func(n, p string) string { return fmt.Sprintf("ALTER USER '%s'@'%%' IDENTIFIED BY '%s';", n, p) },
+		password:    func(n, p string) string { return fmt.Sprintf("ALTER USER '%s'@'%%' IDENTIFIED BY '%s';", n, p) },
+		connections: "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID() AND COMMAND <> 'Daemon'",
 	},
 	// The superuser and the users of databases sign in without a password on the container
 	// itself, as the image allows it there.
@@ -117,6 +126,8 @@ var dialects = map[noryxv1.DatastoreEngine]dialect{
 		load: func(n, _ string) ([]string, []string) {
 			return slices.Concat(psql, []string{"-U", n, "-d", n}), nil
 		},
+		input:       restricted,
+		connections: "SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()",
 	},
 }
 
@@ -302,7 +313,26 @@ func (d *Docker) Load(ctx context.Context, id, name string, r io.Reader) (err er
 		}()
 	}
 	cmd, env := s.dialect.load(name, password)
+	if s.dialect.input != nil {
+		r = s.dialect.input(r)
+	}
 	return d.exec(ctx, id, cmd, env, r, nil, password)
+}
+
+// connections counts the clients of a ready datastore.
+func (d *Docker) connections(ctx context.Context, id string) (int, error) {
+	s, err := d.session(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	words, err := s.query(ctx, s.dialect.connections)
+	if err != nil {
+		return 0, err
+	}
+	if len(words) != 1 {
+		return 0, fmt.Errorf("unexpected output %q", words)
+	}
+	return strconv.Atoi(words[0])
 }
 
 var _ runtime.Datastores = (*Docker)(nil)
