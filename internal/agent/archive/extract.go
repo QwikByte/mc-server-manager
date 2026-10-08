@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -29,6 +30,10 @@ type Options struct {
 	Skip      bool
 	// Overwrite replaces files that exist; otherwise such a file refuses the archive.
 	Overwrite bool
+	// Only, if set, chooses the entries to extract by their names.
+	Only func(name string) bool
+	// Step names the progress of extracting; "extract" if empty.
+	Step string
 }
 
 // Result tells what Extract extracted, and the entries it left out, up to maxLeftOut.
@@ -58,7 +63,7 @@ func (a *Archive) Extract(ctx context.Context, dir *datadir.Dir, dest string, o 
 	if err := storage.Fits(top, res.Size); err != nil {
 		return res, err
 	}
-	progress.Step(ctx, "extract", res.Size)
+	progress.Step(ctx, cmp.Or(o.Step, "extract"), res.Size)
 	made := map[string]bool{} // folders created or found
 	write := func(i int, r io.Reader) error {
 		e, target := a.Entries[i], targets[i]
@@ -116,6 +121,9 @@ func (a *Archive) plan(dir *datadir.Dir, dest string, o Options) ([]string, Resu
 	targets := make([]string, len(a.Entries))
 	direct := map[string]bool{} // folders of dir that are no links
 	for i, e := range a.Entries {
+		if o.Only != nil && !o.Only(e.Name) {
+			continue
+		}
 		target, ok := datadir.Name(path.Join(filepath.ToSlash(dest), e.Name))
 		if !ok {
 			return nil, res, refused("The path of %s is too long.", e.Name)

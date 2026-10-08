@@ -62,6 +62,7 @@ import {
   useBackups,
 } from "./api"
 import { LocationField, SelectionField } from "./backup-fields"
+import { UploadBackupDialog } from "./upload-backup-dialog"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/backups")
 
@@ -74,6 +75,8 @@ export function ServerBackupsPage() {
   const { data: jobList = [] } = useQuery({ ...jobs.coveringQuery(nodeId, serverId), enabled: can("backupjobs.view") })
   const { data: servers = [] } = useQuery(allServersQuery)
   const create = can("backups.create", nodeId, serverId)
+  // An uploaded backup is there to be restored.
+  const upload = create && can("backups.restore", nodeId, serverId)
   const covering = jobList.filter((j) => j.enabled)
 
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />
@@ -92,7 +95,7 @@ export function ServerBackupsPage() {
       title={t("{{count}} backups", { count: backups.length, defaultValue_one: "{{count}} backup" })}
       description={formatBytes(total)}
       className="mt-0"
-      actions={create && <CreateBackupDialog nodeId={nodeId} server={server} />}
+      actions={create && <BackupActions nodeId={nodeId} server={server} upload={upload} />}
     >
       {can("backupjobs.view") && (
         <Callout tone={covering.length > 0 ? "info" : "neutral"} icon={ClockIcon} className="mb-4">
@@ -133,7 +136,7 @@ export function ServerBackupsPage() {
       )}
       {backups.length === 0 ? (
         <EmptyState icon={ArchiveIcon} tone="info" title={t("No backups yet")}>
-          {create && <CreateBackupDialog nodeId={nodeId} server={server} />}
+          {create && <BackupActions nodeId={nodeId} server={server} upload={upload} />}
         </EmptyState>
       ) : (
         <ul className="surface divide-y rounded-xl">
@@ -143,6 +146,16 @@ export function ServerBackupsPage() {
         </ul>
       )}
     </Section>
+  )
+}
+
+/** Backs up the server now, and uploads a backup if allowed. */
+function BackupActions({ nodeId, server, upload }: { nodeId: string; server: Server; upload: boolean }) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {upload && <UploadBackupDialog nodeId={nodeId} server={server} />}
+      <CreateBackupDialog nodeId={nodeId} server={server} />
+    </div>
   )
 }
 
@@ -190,6 +203,11 @@ function BackupRow({ nodeId, server, backup, others }: { nodeId: string; server:
               <PushPinIcon className="size-3" />
               {t("Kept")}
             </Pill>
+          )}
+          {backup.untrusted && (
+            <span title={t("Not made on this node, e.g. uploaded. Restoring it checks its archive and keeps the server's secrets.")}>
+              <Pill tone="neutral">{t("From elsewhere")}</Pill>
+            </span>
           )}
         </p>
         <p className="truncate text-xs text-muted-foreground">

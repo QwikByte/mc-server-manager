@@ -277,6 +277,15 @@ back up the server, and letting its job delete it again the one to delete backup
 paths, into another server or with a backup first on nodes whose agent would ignore that, e.g. restore all of a backup
 instead.
 
+An uploaded backup is untrusted. The agent receives it outside the server's data, keeps it only once it checked it like
+an archive of the file manager (see [File manager](#file-manager)), and marks it as untrusted in its details, which only
+the agent writes. Restoring an untrusted backup checks it again, with limits for backups (up to 1,000,000 entries and
+1 TB), and extracts it confined like an archive of the file manager, without the files that only hold secrets, the
+manifest of file sets and the files of the agent; it replaces every secret in the other files with the server's own,
+not only placeholders, and keeps the server's network settings like any restore. The mark moves with the backup to
+another node, and copies for restoring into another server keep it; the master refuses both with agents that would
+drop it. Uploading needs the permissions to back up and to restore the server.
+
 ## Permissions
 
 Every API route states the permission it needs when it is registered, so none can be added without; the terminal checks
@@ -349,6 +358,12 @@ Agents never connect to each other: the master relays the server's archive and b
 authenticated connections. The new node checks the settings like those of a new server and extracts the archive confined
 to the server's data directory, without symbolic links. Moving needs the permissions to delete the server and read its
 files, and to create servers on the new node.
+
+A server created from an archive of a server from elsewhere gets the archive checked like one of the file manager,
+before anything of it is used: links, paths outside the data and too much data delete the new server again. It leaves
+out the files that only hold secrets, the manifest of file sets and the files of the agent, empties the secrets in the
+other files, and removes the forwarding settings, so that the server trusts no proxy and runs in online mode, until a
+network configures it. It needs the permission to create servers on the node.
 
 ## Console
 

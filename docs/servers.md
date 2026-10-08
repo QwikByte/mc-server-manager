@@ -19,6 +19,18 @@ template has them, or as Minecraft's defaults. They are written to `server.prope
 agent checks them like other properties. The [stop timeout and the time zone](#settings-and-images) fold away the same
 way, as the template has them, or 1 minute and UTC. Deleting a server with all its worlds asks for its name first.
 
+A server that ran elsewhere, e.g. at a host or on another panel, can start from **An archive of a server**: a ZIP or
+`.tar.gz` archive of the contents of its folder, with `server.properties` at its top. Software, version, memory and port
+are chosen as usual, and the archive becomes its data, streamed through the master like an upload of the file manager
+(up to 16 GB, while 1 GB stays free on the node, which also needs room for the archive until it is unpacked). The agent
+checks the archive like one of the file manager; one with links, paths outside the folder or too much data creates no
+server. The server doesn't take what holds secrets of the server it came from or what Noryx writes again: the files of
+the console password (`.rcon-cli.env`, `.rcon-cli.yaml`), a proxy's `forwarding.secret`, Floodgate's key and Geyser's
+sign-ins, the manifest of file sets and other files of the agent are left out, which the panel names, and the console
+password and other secrets in `server.properties` and the configuration of plugins are emptied. It trusts no proxy: its
+forwarding settings are removed and it runs in online mode until it joins a [network](networks.md). Creating a server
+from an archive needs the permission to create servers on the node and an up-to-date agent.
+
 The page of a server shows the address players join at, with a button to copy it: the host of its node's address with
 the server's port, or its proxy's for a server of a network. Without the permissions to see that node and the networks,
 it shows only the port.

@@ -15,6 +15,16 @@ are archived, so players stay connected.
 
 - **By hand.** The **Backups** tab of a server backs it up now, e.g. before an update, and lists, downloads, restores
   and deletes its backups and changes their labels.
+- **Uploaded.** **Upload** on the **Backups** tab adds a ZIP archive as a backup of the server, e.g. one downloaded
+  before, also after the server was deleted, or files of a server from elsewhere; it can then be restored like any
+  other. It streams through the master like an upload of the file manager, up to 16 GB, as long as 1 GB stays free. The
+  agent checks it like an archive of the file manager before it keeps it, and refuses archives with links, paths
+  outside the server's folder, `./` or backslashes in paths, more than 100,000 entries or too much data. Uploaded
+  backups are marked **From elsewhere**, and restoring one treats it as untrusted: it replaces the files and folders at
+  the top of the archive, checks the archive again, leaves out the files that only hold secrets and those of the agent,
+  such as the manifest of file sets, and replaces every secret in the other files with the server's own, besides
+  keeping how the server takes part in its network as any restore does. Uploading needs the permissions to back up and
+  to restore the server's backups.
 - **Jobs.** The **Backups** tab of the **Automation** schedules backup jobs for nodes, servers, tags and networks at
   set times, see [Targets and times](#targets-and-times). A job keeps its newest backups per server, and the newest of
   each of the last days, weeks and months that have backups, in its time zone, e.g. 7 daily and 4 weekly ones; once it

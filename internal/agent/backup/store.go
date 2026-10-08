@@ -39,6 +39,9 @@ type Details struct {
 	JobID   string   `json:"jobId,omitempty"`
 	// Kept backups are never deleted by their job.
 	Kept bool `json:"kept,omitempty"`
+	// Untrusted backups weren't made by this agent but came from elsewhere, e.g. from another
+	// node or a copy of a backup, so restoring them trusts nothing that their archive tells.
+	Untrusted bool `json:"untrusted,omitempty"`
 }
 
 // Archive is a kept backup, a ZIP archive.
@@ -57,7 +60,7 @@ func (b Archive) info() string { return filepath.Join(b.dir, b.ID+".json") }
 func (b Archive) Proto() *noryxv1.Backup {
 	return &noryxv1.Backup{
 		Id: b.ID, Label: b.Label, CreatedUnix: b.Created.Unix(), Size: b.Size, Location: b.Location, Paths: slashed(b.Paths), JobId: b.JobID,
-		Exclude: slashed(b.Exclude), Kept: b.Kept,
+		Exclude: slashed(b.Exclude), Kept: b.Kept, Untrusted: b.Untrusted,
 	}
 }
 
@@ -152,6 +155,12 @@ func (s Store) create(ctx context.Context, data *datadir.Dir, serverID, location
 // Add adds a backup of an owner to a location, whose archive write writes, if size bytes
 // fit. It only shows up once its archive is complete, and never replaces another one.
 func (s Store) Add(owner, location, id string, d Details, size int64, write func(io.Writer) error) (Archive, error) {
+	return s.AddFile(owner, location, id, d, size, func(f *os.File, _ *Details) error { return write(f) })
+}
+
+// AddFile is Add for an archive that write may read again once it wrote it, e.g. to check an
+// upload, and whose details it may complete.
+func (s Store) AddFile(owner, location, id string, d Details, size int64, write func(*os.File, *Details) error) (Archive, error) {
 	root, err := s.storage.BackupPath(location)
 	if err != nil {
 		return Archive{}, err
@@ -164,7 +173,7 @@ func (s Store) Add(owner, location, id string, d Details, size int64, write func
 		return b, fs.ErrExist
 	}
 	tmp := datadir.TempName(b.dir)
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a new file in the backups folder
+	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a new file in the backups folder
 	if err != nil {
 		return b, err
 	}
@@ -172,8 +181,11 @@ func (s Store) Add(owner, location, id string, d Details, size int64, write func
 	if err := storage.Fits(f, size); err != nil {
 		return b, errors.Join(err, f.Close())
 	}
+	if err := errors.Join(write(f, &b.Details), f.Close()); err != nil {
+		return b, err
+	}
 	info, err := json.Marshal(b.Details)
-	if err = errors.Join(err, write(f), f.Close()); err != nil {
+	if err != nil {
 		return b, err
 	}
 	if err := os.WriteFile(b.info(), info, 0o600); err != nil {

@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,9 +27,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/archive"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/agent/secrets"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/logging"
 
@@ -153,7 +156,12 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 		return nil, toStatus(err)
 	}
 	defer data.Close()
-	staged, err := stage(ctx, data, &zr.Reader, paths)
+	var staged string
+	if b.Untrusted {
+		staged, err = stageUntrusted(ctx, data, b, paths)
+	} else {
+		staged, err = stage(ctx, data, &zr.Reader, paths)
+	}
 	if staged != "" {
 		defer data.RemoveAll(staged) //nolint:errcheck // best effort; the result of restoring matters
 	}
@@ -173,7 +181,7 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 			return nil, toStatus(err)
 		}
 	}
-	err = keep(data, srv.Type, staged)
+	err = keep(data, srv.Type, staged, b.Untrusted)
 	if err == nil {
 		err = swap(data, staged, paths, kept(data, b))
 	}
@@ -383,9 +391,73 @@ func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) 
 	return stream.SendAndClose(&noryxv1.ImportBackupResponse{Backup: imported.Proto()})
 }
 
+// UploadBackup adds an archive from elsewhere as an untrusted backup of a server once it checked
+// it like an archive of the file manager.
+func (s *Service) UploadBackup(stream noryxv1.BackupService_UploadBackupServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	if h == nil {
+		return status.Error(codes.InvalidArgument, "the first message must describe the backup")
+	}
+	label := strings.TrimSpace(h.GetLabel())
+	if err := CheckDetails(label, "", nil); err != nil {
+		return err
+	}
+	srv, err := s.find(stream.Context(), h.GetServerId())
+	if err != nil {
+		return err
+	}
+	d := Details{Label: label, Created: time.Now(), Untrusted: true}
+	b, err := s.store.AddFile(srv.ID, cmp.Or(h.GetLocation(), storage.Default), noryxv1.NewBackupID(d.Created), d, h.GetSize(), func(f *os.File, d *Details) error {
+		_, err := archive.Receive(stream.Recv, storage.Guard(f, f))
+		if err == nil {
+			d.Paths, err = uploadedPaths(f)
+		}
+		return err
+	})
+	if err != nil {
+		return toStatus(err)
+	}
+	return stream.SendAndClose(&noryxv1.UploadBackupResponse{Backup: b.Proto()})
+}
+
+// uploadedPaths checks the archive of an uploaded backup in f like one of the file manager,
+// and returns the files and folders at its top, which restoring it replaces, without those a
+// server never takes from an archive. Its entries have clean names, as listing and restoring
+// parts of backups need them.
+func uploadedPaths(f *os.File) ([]string, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	a, err := archive.Open(f, info.Size(), archive.Uploads)
+	switch {
+	case err != nil:
+		return nil, err
+	case !a.Plain():
+		return nil, status.Error(codes.InvalidArgument, "Upload a ZIP archive of files and folders of a server, e.g. a backup downloaded before, whose paths don't start with ./ or use backslashes.")
+	}
+	foreign := archive.Foreign(secrets.With(fileset.ManifestFile))
+	var paths []string
+	for _, e := range a.Entries {
+		top, _, _ := strings.Cut(e.Name, "/")
+		if !foreign(top) {
+			paths = append(paths, filepath.FromSlash(top))
+		}
+	}
+	slices.Sort(paths)
+	if paths = slices.Compact(paths); len(paths) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "The archive holds no files of a server.")
+	}
+	return paths, nil
+}
+
 // importedDetails validates a backup from another node like those made here.
 func importedDetails(b *noryxv1.Backup) (Details, error) {
-	d := Details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId(), Kept: b.GetKept()}
+	d := Details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId(), Kept: b.GetKept(), Untrusted: b.GetUntrusted()}
 	for _, p := range b.GetPaths() {
 		name, ok := datadir.Name(p)
 		if !ok {

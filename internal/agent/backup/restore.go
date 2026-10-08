@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/archive"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/network"
@@ -105,6 +107,35 @@ func stage(ctx context.Context, dir *datadir.Dir, zr *zip.Reader, paths []string
 	return tmp, dir.ExtractZip(ctx, &zip.Reader{File: files}, tmp)
 }
 
+// stageUntrusted stages what an untrusted backup holds of paths like stage, checked and
+// confined like an archive of the file manager: see archive.Extract. It leaves out the files a
+// server never takes from an archive.
+func stageUntrusted(ctx context.Context, dir *datadir.Dir, b Archive, paths []string) (string, error) {
+	f, err := os.Open(b.Path())
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	a, err := archive.Open(f, b.Size, archive.Backups)
+	if err != nil {
+		return "", err
+	}
+	tmp := datadir.TempName(".")
+	if err := dir.MkdirAll(tmp); err != nil {
+		return tmp, err
+	}
+	staged, err := dir.Sub(tmp)
+	if err != nil {
+		return tmp, err
+	}
+	defer staged.Close()
+	_, err = a.Extract(ctx, staged, ".", archive.Options{
+		Protected: archive.Foreign(fileset.Read(dir).Secrets()), Skip: true, Step: "restore",
+		Only: func(name string) bool { return slices.ContainsFunc(paths, within(filepath.FromSlash(name))) },
+	})
+	return tmp, err
+}
+
 // kept returns the files and folders that restoring a backup leaves as they are: what the
 // backup left out, and the files of the server with secrets of its own, of its network and
 // of file sets. A backup must not bring back the secret of a network the server left since,
@@ -116,16 +147,20 @@ func kept(dir *datadir.Dir, b Archive) []string {
 
 // keep gives the staged backup of a server the forwarding settings of its network as they
 // are, as it may have left the network or joined another since, and its secrets wherever a
-// backup of another server says "<hidden>". It changes only the staged backup, which swap
-// moves into place, so it runs while the server is stopped; if it fails, the server stays
-// as it is.
-func keep(dir *datadir.Dir, typ noryxv1.ServerType, staged string) error {
+// backup of another server says "<hidden>", or in place of all secrets of an untrusted one. It
+// changes only the staged backup, which swap moves into place, so it runs while the server is
+// stopped; if it fails, the server stays as it is.
+func keep(dir *datadir.Dir, typ noryxv1.ServerType, staged string, untrusted bool) error {
 	restored, err := dir.Sub(staged)
 	if err != nil {
 		return err
 	}
 	defer restored.Close()
-	if err := secrets.Fill(dir, restored); err != nil {
+	fill := secrets.Fill
+	if untrusted {
+		fill = secrets.Take
+	}
+	if err := fill(dir, restored); err != nil {
 		return err
 	}
 	return network.KeepForwarding(dir, restored, typ)

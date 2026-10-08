@@ -28,22 +28,31 @@ import (
 const (
 	// MaxUpload limits archives uploaded to the agent, like the files of the file manager.
 	MaxUpload = 16 << 30
-	// MaxEntries limits the files and folders of an archive.
-	MaxEntries = 100_000
-	// MaxSize limits the size of the files of an archive.
-	MaxSize = 64 << 30
 	// MaxRatio limits how many times larger the files of an archive are than the archive,
 	// unless they have up to freeSize bytes. Worlds and plugins compress far less; zip bombs
 	// far more.
 	MaxRatio = 100
 	freeSize = 64 << 20
-	// maxDirectory limits what archive/zip reads of the directory of a ZIP archive, which it
-	// keeps in memory: about 100 bytes for each entry.
-	maxDirectory = 64 << 20
-	// slack is what a .tar.gz archive unpacks to besides its files: a header of 512 bytes
-	// and up to 511 bytes after each, and some long names.
-	slack   = MaxEntries<<10 + 16<<20
-	maxName = 1024
+	maxName  = 1024
+)
+
+// Limits are what an archive may hold at most.
+type Limits struct {
+	// Entries are its files and folders, Size the size of its files.
+	Entries int
+	Size    int64
+	// Directory is what archive/zip reads of the directory of a ZIP archive, which it keeps in
+	// memory: about 100 bytes for each entry.
+	Directory int64
+}
+
+var (
+	// Uploads limits the archives that users upload, e.g. to the file manager.
+	Uploads = Limits{Entries: 100_000, Size: 64 << 30, Directory: 64 << 20}
+	// Backups limits backups from elsewhere when they are restored, e.g. those that other
+	// agents made of servers that moved here, which can be larger. Uploaded backups were
+	// checked against Uploads before.
+	Backups = Limits{Entries: 1_000_000, Size: 1 << 40, Directory: 256 << 20}
 )
 
 var (
@@ -67,15 +76,23 @@ type Entry struct {
 type Archive struct {
 	Entries []Entry
 	// Size is that of all its files.
-	Size int64
-	r    io.ReaderAt
-	size int64
-	zip  bool
+	Size   int64
+	r      io.ReaderAt
+	size   int64
+	limits Limits
+	zip    bool
+	// plain tells that it is a ZIP archive whose entries have clean names, see Plain.
+	plain bool
 }
 
-// Open reads the list of the archive in r, which has size bytes, and checks its entries.
-func Open(r io.ReaderAt, size int64) (*Archive, error) {
-	a := &Archive{r: r, size: size}
+// Plain reports whether the archive is a ZIP archive whose entries have clean names, as in the
+// backups of the agent, e.g. one downloaded from Noryx, rather than ./world or world\level.dat.
+func (a *Archive) Plain() bool { return a.plain }
+
+// Open reads the list of the archive in r, which has size bytes, and checks its entries
+// against limits.
+func Open(r io.ReaderAt, size int64, limits Limits) (*Archive, error) {
+	a := &Archive{r: r, size: size, limits: limits}
 	head := make([]byte, 4)
 	if _, err := r.ReadAt(head, 0); err != nil {
 		return nil, errFormat
@@ -90,13 +107,13 @@ func Open(r io.ReaderAt, size int64) (*Archive, error) {
 }
 
 func (a *Archive) listZip() error {
-	a.zip = true
-	limited := &limitedAt{r: a.r, left: maxDirectory}
+	a.zip, a.plain = true, true
+	limited := &limitedAt{r: a.r, left: a.limits.Directory}
 	zr, err := zip.NewReader(limited, a.size)
 	limited.left = math.MaxInt64 // the files are read through it later
 	switch {
 	case errors.Is(err, errLimit):
-		return tooMany()
+		return a.tooMany()
 	case err != nil && !errors.Is(err, zip.ErrInsecurePath): // add checks the names
 		return errDamaged
 	}
@@ -105,11 +122,12 @@ func (a *Archive) listZip() error {
 		if f.Method != zip.Store && f.Method != zip.Deflate || f.Flags&1 != 0 {
 			return refused("%q is encrypted or compressed in a way that can't be read. Pack the archive again, e.g. as a plain ZIP archive.", f.Name)
 		}
-		e, err := entry(f.Name, f.Mode().Type(), f.UncompressedSize64, f.Modified)
+		e, err := a.entry(f.Name, f.Mode().Type(), f.UncompressedSize64, f.Modified)
 		if err != nil {
 			return err
 		}
 		e.file = f
+		a.plain = a.plain && e.Name != "" && strings.TrimSuffix(f.Name, "/") == e.Name
 		if err := a.add(kinds, e); err != nil {
 			return err
 		}
@@ -125,7 +143,9 @@ func (a *Archive) walkTar(extract func(i int, r io.Reader) error) error {
 		return errDamaged
 	}
 	defer gz.Close()
-	tr := tar.NewReader(&limited{r: gz, left: a.limit() + slack})
+	// Besides its files, it unpacks to a header of 512 bytes and up to 511 bytes after each,
+	// and some long names.
+	tr := tar.NewReader(&limited{r: gz, left: a.limit() + int64(a.limits.Entries)<<10 + 16<<20})
 	kinds := map[string]bool{}
 	for i := 0; ; {
 		h, err := tr.Next()
@@ -141,7 +161,7 @@ func (a *Archive) walkTar(extract func(i int, r io.Reader) error) error {
 		case h.Typeflag == tar.TypeXGlobalHeader: // e.g. the commit of git archive
 			continue
 		}
-		e, err := entry(h.Name, tarType(h.Typeflag), uint64(max(h.Size, 0)), h.ModTime) //nolint:gosec // not negative
+		e, err := a.entry(h.Name, tarType(h.Typeflag), uint64(max(h.Size, 0)), h.ModTime) //nolint:gosec // not negative
 		switch {
 		case err != nil && extract != nil:
 			return errChanged
@@ -177,19 +197,19 @@ func tarType(flag byte) fs.FileMode {
 }
 
 // entry checks the name and type of an entry of an archive. The folder itself has no name.
-func entry(raw string, typ fs.FileMode, size uint64, modified time.Time) (Entry, error) {
+func (a *Archive) entry(raw string, typ fs.FileMode, size uint64, modified time.Time) (Entry, error) {
 	name, ok := clean(raw)
 	switch {
 	case !ok:
 		return Entry{}, refused("The archive holds %q, a path that leaves the folder or isn't valid.", raw)
 	case typ != 0 && typ != fs.ModeDir:
 		return Entry{}, refused("The archive holds %s, a link or another special file, which can't be extracted.", name)
-	case size > MaxSize:
-		return Entry{}, tooLarge("The files of an archive can have up to %d GB.", MaxSize>>30)
+	case size > uint64(a.limits.Size): //nolint:gosec // a positive limit
+		return Entry{}, tooLarge("The files of an archive can have up to %d GB.", a.limits.Size>>30)
 	}
 	e := Entry{Name: name, Dir: typ == fs.ModeDir, Modified: modified}
 	if !e.Dir {
-		e.Size = int64(size)
+		e.Size = int64(size) //nolint:gosec // at most the limit, see above
 	}
 	return e, nil
 }
@@ -215,8 +235,8 @@ func (a *Archive) add(kinds map[string]bool, e Entry) error {
 	if e.Name == "" {
 		return nil
 	}
-	if len(a.Entries) == MaxEntries {
-		return tooMany()
+	if len(a.Entries) == a.limits.Entries {
+		return a.tooMany()
 	}
 	if a.Size += e.Size; a.Size > a.limit() {
 		return a.tooLarge()
@@ -240,17 +260,17 @@ func (a *Archive) add(kinds map[string]bool, e Entry) error {
 }
 
 // limit is the size of the files of the archive at most.
-func (a *Archive) limit() int64 { return min(MaxSize, max(MaxRatio*a.size, freeSize)) }
+func (a *Archive) limit() int64 { return min(a.limits.Size, max(MaxRatio*a.size, freeSize)) }
 
 func (a *Archive) tooLarge() error {
-	if a.limit() == MaxSize {
-		return tooLarge("The files of an archive can have up to %d GB.", MaxSize>>30)
+	if a.limit() == a.limits.Size {
+		return tooLarge("The files of an archive can have up to %d GB.", a.limits.Size>>30)
 	}
 	return refused("The archive unpacks to more than %d times its size, like a zip bomb.", MaxRatio)
 }
 
-func tooMany() error {
-	return tooLarge("An archive can hold up to %d files and folders.", MaxEntries)
+func (a *Archive) tooMany() error {
+	return tooLarge("An archive can hold up to %d files and folders.", a.limits.Entries)
 }
 
 func refused(format string, args ...any) error {

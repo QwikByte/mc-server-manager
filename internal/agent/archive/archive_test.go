@@ -91,7 +91,7 @@ func data(t *testing.T) (*datadir.Dir, string) {
 }
 
 func extract(t *testing.T, dir *datadir.Dir, archive []byte, dest string, o Options) (Result, error) {
-	a, err := Open(bytes.NewReader(archive), int64(len(archive)))
+	a, err := Open(bytes.NewReader(archive), int64(len(archive)), Uploads)
 	if err != nil {
 		return Result{}, err
 	}
@@ -236,7 +236,7 @@ func TestZipBombs(t *testing.T) {
 	}{
 		"ratio of a ZIP":        {declared(freeSize + 1), codes.InvalidArgument, "zip bomb"},
 		"ratio of a .tar.gz":    {header.Bytes(), codes.InvalidArgument, "zip bomb"},
-		"size of a ZIP":         {declared(MaxSize + 1), codes.ResourceExhausted, "64 GB"},
+		"size of a ZIP":         {declared(uint64(Uploads.Size) + 1), codes.ResourceExhausted, "64 GB"},
 		"many entries of zeros": {zeros(t), codes.InvalidArgument, "zip bomb"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -347,11 +347,16 @@ func TestTooManyEntries(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	for i := range MaxEntries + 1 {
+	for i := range Uploads.Entries + 1 {
 		_, err := zw.CreateHeader(&zip.FileHeader{Name: fmt.Sprintf("d%d/f%d", i%100, i), Method: zip.Store})
 		check(t, err)
 	}
 	check(t, zw.Close())
-	_, err := Open(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	_, err := Open(bytes.NewReader(buf.Bytes()), int64(buf.Len()), Uploads)
 	wantCode(t, err, codes.ResourceExhausted, "100000 files and folders")
+	// Backups of large servers from other nodes may hold more.
+	a, err := Open(bytes.NewReader(buf.Bytes()), int64(buf.Len()), Backups)
+	if err != nil || len(a.Entries) != Uploads.Entries+1 {
+		t.Fatalf("backup: %v", err)
+	}
 }

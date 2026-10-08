@@ -125,6 +125,7 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/servers/actions", access.SignedIn, h.bulk)
 	mux.Handle("POST /api/servers/tags", access.SignedIn, h.changeTags)
 	mux.Handle("POST /api/nodes/{node}/servers", createNeed, h.create)
+	mux.Handle("POST /api/nodes/{node}/servers/import", createNeed, h.importServer)
 	mux.Handle("POST /api/nodes/{node}/servers/{id}/start", access.OnServer(access.ServersStart), h.startServer)
 	for _, action := range []string{"stop", "restart"} {
 		mux.Handle("POST /api/nodes/{node}/servers/{id}/"+action, access.OnServer(serverActions[action].need), h.power(action))

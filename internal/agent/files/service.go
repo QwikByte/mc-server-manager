@@ -374,7 +374,7 @@ func (s *Service) ExtractArchive(ctx context.Context, req *noryxv1.ExtractArchiv
 	case info.IsDir():
 		return nil, status.Error(codes.InvalidArgument, "This is a folder, not an archive.")
 	}
-	a, err := archive.Open(f, info.Size())
+	a, err := archive.Open(f, info.Size(), archive.Uploads)
 	if err != nil {
 		return nil, toStatus(err)
 	}

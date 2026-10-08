@@ -209,7 +209,10 @@ type Backup struct {
 	// Files and folders inside the paths that the backup left out.
 	Exclude []string `protobuf:"bytes,8,rep,name=exclude,proto3" json:"exclude,omitempty"`
 	// Kept backups are never deleted by their job.
-	Kept          bool `protobuf:"varint,9,opt,name=kept,proto3" json:"kept,omitempty"`
+	Kept bool `protobuf:"varint,9,opt,name=kept,proto3" json:"kept,omitempty"`
+	// The backup wasn't made by the agent that keeps it but came from elsewhere, e.g. an upload,
+	// so restoring it trusts nothing that its archive tells: see UploadBackup.
+	Untrusted     bool `protobuf:"varint,10,opt,name=untrusted,proto3" json:"untrusted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -303,6 +306,13 @@ func (x *Backup) GetExclude() []string {
 func (x *Backup) GetKept() bool {
 	if x != nil {
 		return x.Kept
+	}
+	return false
+}
+
+func (x *Backup) GetUntrusted() bool {
+	if x != nil {
+		return x.Untrusted
 	}
 	return false
 }
@@ -1274,6 +1284,202 @@ func (x *ImportBackupResponse) GetBackup() *Backup {
 	return nil
 }
 
+type UploadBackupHeader struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	Label    string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	// Storage location for the backup; empty means the default location.
+	Location string `protobuf:"bytes,3,opt,name=location,proto3" json:"location,omitempty"`
+	// Size of the archive if known, so that one that doesn't fit is refused before it is sent.
+	Size          int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadBackupHeader) Reset() {
+	*x = UploadBackupHeader{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadBackupHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadBackupHeader) ProtoMessage() {}
+
+func (x *UploadBackupHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadBackupHeader.ProtoReflect.Descriptor instead.
+func (*UploadBackupHeader) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UploadBackupHeader) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *UploadBackupHeader) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *UploadBackupHeader) GetLocation() string {
+	if x != nil {
+		return x.Location
+	}
+	return ""
+}
+
+func (x *UploadBackupHeader) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+type UploadBackupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*UploadBackupRequest_Header
+	//	*UploadBackupRequest_Data
+	Content       isUploadBackupRequest_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadBackupRequest) Reset() {
+	*x = UploadBackupRequest{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadBackupRequest) ProtoMessage() {}
+
+func (x *UploadBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadBackupRequest.ProtoReflect.Descriptor instead.
+func (*UploadBackupRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *UploadBackupRequest) GetContent() isUploadBackupRequest_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *UploadBackupRequest) GetHeader() *UploadBackupHeader {
+	if x != nil {
+		if x, ok := x.Content.(*UploadBackupRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *UploadBackupRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Content.(*UploadBackupRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isUploadBackupRequest_Content interface {
+	isUploadBackupRequest_Content()
+}
+
+type UploadBackupRequest_Header struct {
+	Header *UploadBackupHeader `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type UploadBackupRequest_Data struct {
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*UploadBackupRequest_Header) isUploadBackupRequest_Content() {}
+
+func (*UploadBackupRequest_Data) isUploadBackupRequest_Content() {}
+
+type UploadBackupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Backup        *Backup                `protobuf:"bytes,1,opt,name=backup,proto3" json:"backup,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadBackupResponse) Reset() {
+	*x = UploadBackupResponse{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadBackupResponse) ProtoMessage() {}
+
+func (x *UploadBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadBackupResponse.ProtoReflect.Descriptor instead.
+func (*UploadBackupResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *UploadBackupResponse) GetBackup() *Backup {
+	if x != nil {
+		return x.Backup
+	}
+	return nil
+}
+
 var File_noryx_v1_backup_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_backup_proto_rawDesc = "" +
@@ -1293,7 +1499,7 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x04days\x18\x02 \x01(\rR\x04days\x12\x14\n" +
 	"\x05weeks\x18\x03 \x01(\rR\x05weeks\x12\x16\n" +
 	"\x06months\x18\x04 \x01(\rR\x06months\x12\x1b\n" +
-	"\ttime_zone\x18\x05 \x01(\tR\btimeZone\"\xdc\x01\n" +
+	"\ttime_zone\x18\x05 \x01(\tR\btimeZone\"\xfa\x01\n" +
 	"\x06Backup\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12!\n" +
@@ -1303,7 +1509,9 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x05paths\x18\x06 \x03(\tR\x05paths\x12\x15\n" +
 	"\x06job_id\x18\a \x01(\tR\x05jobId\x12\x18\n" +
 	"\aexclude\x18\b \x03(\tR\aexclude\x12\x12\n" +
-	"\x04kept\x18\t \x01(\bR\x04kept\"1\n" +
+	"\x04kept\x18\t \x01(\bR\x04kept\x12\x1c\n" +
+	"\tuntrusted\x18\n" +
+	" \x01(\bR\tuntrusted\"1\n" +
 	"\x12ListBackupsRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\"A\n" +
 	"\x13ListBackupsResponse\x12*\n" +
@@ -1361,7 +1569,18 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
 	"\acontent\"@\n" +
 	"\x14ImportBackupResponse\x12(\n" +
-	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup2\x9a\x05\n" +
+	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup\"w\n" +
+	"\x12UploadBackupHeader\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x1a\n" +
+	"\blocation\x18\x03 \x01(\tR\blocation\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\"n\n" +
+	"\x13UploadBackupRequest\x126\n" +
+	"\x06header\x18\x01 \x01(\v2\x1c.noryx.v1.UploadBackupHeaderH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
+	"\acontent\"@\n" +
+	"\x14UploadBackupResponse\x12(\n" +
+	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup2\xeb\x05\n" +
 	"\rBackupService\x12J\n" +
 	"\vListBackups\x12\x1c.noryx.v1.ListBackupsRequest\x1a\x1d.noryx.v1.ListBackupsResponse\x12M\n" +
 	"\fCreateBackup\x12\x1d.noryx.v1.CreateBackupRequest\x1a\x1e.noryx.v1.CreateBackupResponse\x12P\n" +
@@ -1370,7 +1589,8 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\fUpdateBackup\x12\x1d.noryx.v1.UpdateBackupRequest\x1a\x1e.noryx.v1.UpdateBackupResponse\x12V\n" +
 	"\x0fListBackupFiles\x12 .noryx.v1.ListBackupFilesRequest\x1a!.noryx.v1.ListBackupFilesResponse\x12U\n" +
 	"\x0eDownloadBackup\x12\x1f.noryx.v1.DownloadBackupRequest\x1a .noryx.v1.DownloadBackupResponse0\x01\x12O\n" +
-	"\fImportBackup\x12\x1d.noryx.v1.ImportBackupRequest\x1a\x1e.noryx.v1.ImportBackupResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
+	"\fImportBackup\x12\x1d.noryx.v1.ImportBackupRequest\x1a\x1e.noryx.v1.ImportBackupResponse(\x01\x12O\n" +
+	"\fUploadBackup\x12\x1d.noryx.v1.UploadBackupRequest\x1a\x1e.noryx.v1.UploadBackupResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_backup_proto_rawDescOnce sync.Once
@@ -1384,7 +1604,7 @@ func file_noryx_v1_backup_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_backup_proto_rawDescData
 }
 
-var file_noryx_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_noryx_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_noryx_v1_backup_proto_goTypes = []any{
 	(*BackupSelection)(nil),         // 0: noryx.v1.BackupSelection
 	(*BackupRetention)(nil),         // 1: noryx.v1.BackupRetention
@@ -1406,7 +1626,10 @@ var file_noryx_v1_backup_proto_goTypes = []any{
 	(*ImportBackupHeader)(nil),      // 17: noryx.v1.ImportBackupHeader
 	(*ImportBackupRequest)(nil),     // 18: noryx.v1.ImportBackupRequest
 	(*ImportBackupResponse)(nil),    // 19: noryx.v1.ImportBackupResponse
-	(*FileInfo)(nil),                // 20: noryx.v1.FileInfo
+	(*UploadBackupHeader)(nil),      // 20: noryx.v1.UploadBackupHeader
+	(*UploadBackupRequest)(nil),     // 21: noryx.v1.UploadBackupRequest
+	(*UploadBackupResponse)(nil),    // 22: noryx.v1.UploadBackupResponse
+	(*FileInfo)(nil),                // 23: noryx.v1.FileInfo
 }
 var file_noryx_v1_backup_proto_depIdxs = []int32{
 	2,  // 0: noryx.v1.ListBackupsResponse.backups:type_name -> noryx.v1.Backup
@@ -1415,31 +1638,35 @@ var file_noryx_v1_backup_proto_depIdxs = []int32{
 	2,  // 3: noryx.v1.CreateBackupResponse.backup:type_name -> noryx.v1.Backup
 	2,  // 4: noryx.v1.RestoreBackupResponse.snapshot:type_name -> noryx.v1.Backup
 	2,  // 5: noryx.v1.UpdateBackupResponse.backup:type_name -> noryx.v1.Backup
-	20, // 6: noryx.v1.ListBackupFilesResponse.files:type_name -> noryx.v1.FileInfo
+	23, // 6: noryx.v1.ListBackupFilesResponse.files:type_name -> noryx.v1.FileInfo
 	2,  // 7: noryx.v1.ImportBackupHeader.backup:type_name -> noryx.v1.Backup
 	17, // 8: noryx.v1.ImportBackupRequest.header:type_name -> noryx.v1.ImportBackupHeader
 	2,  // 9: noryx.v1.ImportBackupResponse.backup:type_name -> noryx.v1.Backup
-	3,  // 10: noryx.v1.BackupService.ListBackups:input_type -> noryx.v1.ListBackupsRequest
-	5,  // 11: noryx.v1.BackupService.CreateBackup:input_type -> noryx.v1.CreateBackupRequest
-	7,  // 12: noryx.v1.BackupService.RestoreBackup:input_type -> noryx.v1.RestoreBackupRequest
-	9,  // 13: noryx.v1.BackupService.DeleteBackup:input_type -> noryx.v1.DeleteBackupRequest
-	11, // 14: noryx.v1.BackupService.UpdateBackup:input_type -> noryx.v1.UpdateBackupRequest
-	13, // 15: noryx.v1.BackupService.ListBackupFiles:input_type -> noryx.v1.ListBackupFilesRequest
-	15, // 16: noryx.v1.BackupService.DownloadBackup:input_type -> noryx.v1.DownloadBackupRequest
-	18, // 17: noryx.v1.BackupService.ImportBackup:input_type -> noryx.v1.ImportBackupRequest
-	4,  // 18: noryx.v1.BackupService.ListBackups:output_type -> noryx.v1.ListBackupsResponse
-	6,  // 19: noryx.v1.BackupService.CreateBackup:output_type -> noryx.v1.CreateBackupResponse
-	8,  // 20: noryx.v1.BackupService.RestoreBackup:output_type -> noryx.v1.RestoreBackupResponse
-	10, // 21: noryx.v1.BackupService.DeleteBackup:output_type -> noryx.v1.DeleteBackupResponse
-	12, // 22: noryx.v1.BackupService.UpdateBackup:output_type -> noryx.v1.UpdateBackupResponse
-	14, // 23: noryx.v1.BackupService.ListBackupFiles:output_type -> noryx.v1.ListBackupFilesResponse
-	16, // 24: noryx.v1.BackupService.DownloadBackup:output_type -> noryx.v1.DownloadBackupResponse
-	19, // 25: noryx.v1.BackupService.ImportBackup:output_type -> noryx.v1.ImportBackupResponse
-	18, // [18:26] is the sub-list for method output_type
-	10, // [10:18] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	20, // 10: noryx.v1.UploadBackupRequest.header:type_name -> noryx.v1.UploadBackupHeader
+	2,  // 11: noryx.v1.UploadBackupResponse.backup:type_name -> noryx.v1.Backup
+	3,  // 12: noryx.v1.BackupService.ListBackups:input_type -> noryx.v1.ListBackupsRequest
+	5,  // 13: noryx.v1.BackupService.CreateBackup:input_type -> noryx.v1.CreateBackupRequest
+	7,  // 14: noryx.v1.BackupService.RestoreBackup:input_type -> noryx.v1.RestoreBackupRequest
+	9,  // 15: noryx.v1.BackupService.DeleteBackup:input_type -> noryx.v1.DeleteBackupRequest
+	11, // 16: noryx.v1.BackupService.UpdateBackup:input_type -> noryx.v1.UpdateBackupRequest
+	13, // 17: noryx.v1.BackupService.ListBackupFiles:input_type -> noryx.v1.ListBackupFilesRequest
+	15, // 18: noryx.v1.BackupService.DownloadBackup:input_type -> noryx.v1.DownloadBackupRequest
+	18, // 19: noryx.v1.BackupService.ImportBackup:input_type -> noryx.v1.ImportBackupRequest
+	21, // 20: noryx.v1.BackupService.UploadBackup:input_type -> noryx.v1.UploadBackupRequest
+	4,  // 21: noryx.v1.BackupService.ListBackups:output_type -> noryx.v1.ListBackupsResponse
+	6,  // 22: noryx.v1.BackupService.CreateBackup:output_type -> noryx.v1.CreateBackupResponse
+	8,  // 23: noryx.v1.BackupService.RestoreBackup:output_type -> noryx.v1.RestoreBackupResponse
+	10, // 24: noryx.v1.BackupService.DeleteBackup:output_type -> noryx.v1.DeleteBackupResponse
+	12, // 25: noryx.v1.BackupService.UpdateBackup:output_type -> noryx.v1.UpdateBackupResponse
+	14, // 26: noryx.v1.BackupService.ListBackupFiles:output_type -> noryx.v1.ListBackupFilesResponse
+	16, // 27: noryx.v1.BackupService.DownloadBackup:output_type -> noryx.v1.DownloadBackupResponse
+	19, // 28: noryx.v1.BackupService.ImportBackup:output_type -> noryx.v1.ImportBackupResponse
+	22, // 29: noryx.v1.BackupService.UploadBackup:output_type -> noryx.v1.UploadBackupResponse
+	21, // [21:30] is the sub-list for method output_type
+	12, // [12:21] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_backup_proto_init() }
@@ -1453,13 +1680,17 @@ func file_noryx_v1_backup_proto_init() {
 		(*ImportBackupRequest_Header)(nil),
 		(*ImportBackupRequest_Data)(nil),
 	}
+	file_noryx_v1_backup_proto_msgTypes[21].OneofWrappers = []any{
+		(*UploadBackupRequest_Header)(nil),
+		(*UploadBackupRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_backup_proto_rawDesc), len(file_noryx_v1_backup_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
