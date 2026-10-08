@@ -73,7 +73,8 @@ func (s *Service) ListFiles(ctx context.Context, req *noryxv1.ListFilesRequest) 
 	hidden := sets.Secrets()
 	for _, e := range entries[:min(len(entries), maxEntries)] {
 		p := path.Join(name, e.Name())
-		if info, err := e.Info(); err == nil && !hidden.Hidden(p) { // also skips entries deleted in the meantime
+		// Info also skips entries deleted in the meantime.
+		if info, err := e.Info(); err == nil && !hidden.Hidden(p) && !datadir.IsTemp(e.Name()) {
 			f := fileInfo(info)
 			f.FileSet = sets.Set(p)
 			res.Files = append(res.Files, f)
@@ -510,9 +511,12 @@ func (s *Service) open(ctx context.Context, id, p string) (*datadir.Dir, string,
 	return dir, name, nil
 }
 
+// clean returns a path of the file manager as a name in the data directory. No path leads into
+// a temporary file or folder of the agent, which can hold secrets, e.g. a backup that is being
+// restored with the forwarding secret of the server.
 func clean(p string) (string, error) {
 	name, ok := datadir.Name(p)
-	if !ok {
+	if !ok || slices.ContainsFunc(strings.Split(name, string(filepath.Separator)), datadir.IsTemp) {
 		return "", status.Error(codes.InvalidArgument, "invalid path")
 	}
 	return name, nil
