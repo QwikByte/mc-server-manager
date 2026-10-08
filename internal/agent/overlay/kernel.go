@@ -1,11 +1,13 @@
 package overlay
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/netip"
 	"os"
 	"slices"
+	"syscall"
 	"time"
 
 	"github.com/jsimonetti/rtnetlink/v2"
@@ -34,6 +36,12 @@ type Kernel interface {
 	// HostNets returns the addresses and routes of the node outside the interface, except
 	// default routes.
 	HostNets() ([]netip.Prefix, error)
+	// Firewall returns nil if the firewall rules are in place as Apply wrote them for st,
+	// ErrNoTable if they are missing, or else what differs.
+	Firewall(st State) error
+	// Connect opens a TCP connection through the interface to addr and closes it at once,
+	// without sending anything.
+	Connect(ctx context.Context, addr netip.AddrPort) error
 }
 
 // PeerStatus is the state of a peer of the interface.
@@ -42,6 +50,8 @@ type PeerStatus struct {
 	Endpoint        string
 	LatestHandshake time.Time
 	Received, Sent  int64
+	// AllowedIPs are the addresses the interface sends to the peer, and accepts from it.
+	AllowedIPs []netip.Prefix
 }
 
 var errNoWireGuard = errors.New("the kernel has no WireGuard. Linux 5.6 and newer have it, RHEL 9 only as an unsupported Technology Preview")
@@ -107,9 +117,34 @@ func (Linux) Peers() ([]PeerStatus, error) {
 		if p.Endpoint != nil {
 			s.Endpoint = p.Endpoint.String()
 		}
+		for _, n := range p.AllowedIPs {
+			if ip, ok := netip.AddrFromSlice(n.IP); ok {
+				bits, _ := n.Mask.Size()
+				s.AllowedIPs = append(s.AllowedIPs, netip.PrefixFrom(ip.Unmap(), bits))
+			}
+		}
 		peers = append(peers, s)
 	}
 	return peers, nil
+}
+
+func (Linux) Firewall(st State) error { return checkFirewall(st) }
+
+// Connect binds the connection to the interface, so that it leaves the node only through the
+// tunnel, to the peer that WireGuard sends addr to.
+func (Linux) Connect(ctx context.Context, addr netip.AddrPort) error {
+	d := net.Dialer{Control: func(_, _ string, c syscall.RawConn) error {
+		var err error
+		if ctrlErr := c.Control(func(fd uintptr) { err = unix.BindToDevice(int(fd), Interface) }); ctrlErr != nil { //nolint:gosec // a file descriptor
+			return ctrlErr
+		}
+		return err
+	}}
+	conn, err := d.DialContext(ctx, "tcp4", addr.String())
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 func (Linux) Remove() error {

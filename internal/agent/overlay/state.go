@@ -32,6 +32,9 @@ type Peer struct {
 	PublicKey string         `json:"publicKey"`
 	Address   netip.Addr     `json:"address"`
 	Endpoint  netip.AddrPort `json:"endpoint"`
+	// Ports are the TCP ports at which it publishes servers or datastores for this node, as
+	// the master configured them: the only ones that tests connect to.
+	Ports []uint16 `json:"ports,omitempty"`
 }
 
 // Client is the address in the network of the node of a server's proxy, the only one that
@@ -80,7 +83,15 @@ func parse(ctx context.Context, req *noryxv1.ConfigureOverlayRequest) (State, er
 		if err != nil {
 			return st, fmt.Errorf("peer %s: %w", addr, err)
 		}
-		st.Peers = append(st.Peers, Peer{p.GetPublicKey(), addr, endpoint})
+		var ports []uint16
+		for _, port := range p.GetPorts() {
+			if port == 0 || port > 65535 {
+				return st, fmt.Errorf("peer %s: invalid port %d", addr, port)
+			}
+			ports = append(ports, uint16(port))
+		}
+		slices.Sort(ports)
+		st.Peers = append(st.Peers, Peer{p.GetPublicKey(), addr, endpoint, slices.Compact(ports)})
 	}
 	return st, nil
 }

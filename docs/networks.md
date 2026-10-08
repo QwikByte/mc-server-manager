@@ -195,6 +195,18 @@ of their nodes was offline meanwhile, or if a node's key changed otherwise, e.g.
 the interface `noryx0` while the agent restarts or updates, and `noryx-overlay.service` restores it at boot, before
 Docker starts the servers.
 
+When a proxy doesn't reach a server on another node, the node pages tell why. Each one shows whether the node's firewall
+rules for the network (the nftables table `inet noryx`) are in place, missing or incomplete, e.g. after something
+flushed the rules: the master writes them again within 5 minutes, or `noryx-agent overlay up` right away. Its
+**Published ports** list each port the node publishes in the network with its server or datastore and the nodes that
+reach it; a node whose key changed since, marked _old key_, reaches the port once the network is applied again.
+**Test** next to a peer, for those who may manage the private network, connects from this node to every port that the
+peer publishes for it, and shows for each port whether a connection came about and how long that took, or why not: e.g.
+_connection refused_ if the server is stopped, or no answer within 3 seconds if a firewall drops the packets or the
+peer is unreachable. The node connects from itself, not from the proxy's container, sends nothing and closes each
+connection at once, so a server may log a connection that ended without data. `noryx-agent overlay status` shows the
+firewall and the published ports on the node, too.
+
 ## Legacy forwarding
 
 Legacy forwarding doesn't prove that players come through the proxy: anyone who reaches such a server can join as any

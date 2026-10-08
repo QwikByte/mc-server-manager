@@ -1,11 +1,17 @@
 package overlay
 
 import (
+	"context"
 	"fmt"
 	"maps"
+	"net"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"sync"
+	"syscall"
 	"testing"
 
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
@@ -13,8 +19,16 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 )
 
-// fakeKernel keeps the state that was applied last.
-type fakeKernel struct{ applied State }
+// fakeKernel keeps the state that was applied last, and lets connections reach the
+// addresses in listening.
+type fakeKernel struct {
+	applied  State
+	firewall error
+
+	mu        sync.Mutex
+	listening []netip.AddrPort
+	dialed    []netip.AddrPort
+}
 
 func (*fakeKernel) Check() error { return nil }
 
@@ -23,11 +37,29 @@ func (k *fakeKernel) Apply(st State, _ wgtypes.Key, _ *State) error {
 	return nil
 }
 
-func (*fakeKernel) Peers() ([]PeerStatus, error) { return nil, nil }
+func (k *fakeKernel) Peers() ([]PeerStatus, error) {
+	var peers []PeerStatus
+	for _, p := range k.applied.Peers {
+		peers = append(peers, PeerStatus{PublicKey: p.PublicKey, AllowedIPs: []netip.Prefix{netip.PrefixFrom(p.Address, 32)}})
+	}
+	return peers, nil
+}
 
 func (*fakeKernel) Remove() error { return nil }
 
 func (*fakeKernel) HostNets() ([]netip.Prefix, error) { return nil, nil }
+
+func (k *fakeKernel) Firewall(State) error { return k.firewall }
+
+func (k *fakeKernel) Connect(_ context.Context, addr netip.AddrPort) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.dialed = append(k.dialed, addr)
+	if !slices.Contains(k.listening, addr) {
+		return &net.OpError{Op: "dial", Net: "tcp4", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+	}
+	return nil
+}
 
 // member is the agent of a member at 10.213.0.3, with the kernel it configures.
 type member struct {

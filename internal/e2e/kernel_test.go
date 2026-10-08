@@ -1,10 +1,12 @@
 package e2e
 
 import (
+	"context"
 	"maps"
 	"net/netip"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
@@ -20,6 +22,9 @@ type fakeKernel struct {
 	key   wgtypes.Key
 	// host are the addresses and routes of the node.
 	host []netip.Prefix
+	// firewall is what Firewall finds, and listening are the addresses that connections reach.
+	firewall  error
+	listening []netip.AddrPort
 }
 
 func (k *fakeKernel) Check() error { return nil }
@@ -40,7 +45,9 @@ func (k *fakeKernel) Peers() ([]overlay.PeerStatus, error) {
 	}
 	peers := []overlay.PeerStatus{}
 	for _, p := range k.state.Peers {
-		peers = append(peers, overlay.PeerStatus{PublicKey: p.PublicKey, Endpoint: p.Endpoint.String(), LatestHandshake: time.Now()})
+		peers = append(peers, overlay.PeerStatus{
+			PublicKey: p.PublicKey, Endpoint: p.Endpoint.String(), LatestHandshake: time.Now(), AllowedIPs: []netip.Prefix{netip.PrefixFrom(p.Address, 32)},
+		})
 	}
 	return peers, nil
 }
@@ -56,6 +63,28 @@ func (k *fakeKernel) HostNets() ([]netip.Prefix, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	return slices.Clone(k.host), nil
+}
+
+func (k *fakeKernel) Firewall(overlay.State) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.firewall
+}
+
+func (k *fakeKernel) Connect(_ context.Context, addr netip.AddrPort) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if !slices.Contains(k.listening, addr) {
+		return syscall.ECONNREFUSED
+	}
+	return nil
+}
+
+// set changes what the kernel finds of the firewall, and which addresses connections reach.
+func (k *fakeKernel) set(firewall error, listening ...netip.AddrPort) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.firewall, k.listening = firewall, listening
 }
 
 // applied returns the state the agent applied last, or nil if it isn't a member.

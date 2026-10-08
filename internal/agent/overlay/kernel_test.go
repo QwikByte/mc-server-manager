@@ -1,12 +1,17 @@
 package overlay
 
 import (
+	"context"
 	"errors"
+	"net"
 	"net/netip"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/nftables"
 )
 
 // TestLinux runs against the kernel, in a network namespace of its own:
@@ -52,7 +57,44 @@ func TestLinux(t *testing.T) {
 			}
 		}
 	}
+
+	// The check finds the table as it was written, and what differs or is missing.
+	if err := k.Firewall(st); err != nil {
+		t.Fatalf("after writing the table: %v", err)
+	}
+	other := st
+	other.Clients = map[string]Client{"a": st.Clients["a"]}
+	if err := k.Firewall(other); err == nil || errors.Is(err, ErrNoTable) {
+		t.Errorf("for other clients: %v", err)
+	}
+	conn, err := nftables.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn.FlushChain(&nftables.Chain{Table: table, Name: "input"})
+	if err := conn.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.Firewall(st); err == nil || !strings.Contains(err.Error(), "input") {
+		t.Errorf("without the rule of input: %v", err)
+	}
+
+	// Connections leave only through the interface, which this namespace lacks.
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if err := k.Connect(ctx, netip.MustParseAddrPort(ln.Addr().String())); err == nil {
+		t.Error("connected without the interface")
+	}
+
 	if err := k.Remove(); err != nil {
 		t.Fatal(err)
+	}
+	if err := k.Firewall(st); !errors.Is(err, ErrNoTable) {
+		t.Errorf("after removing the table: %v", err)
 	}
 }

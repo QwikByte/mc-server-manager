@@ -19,6 +19,11 @@ service OverlayService {
   rpc RotateOverlayKey(RotateOverlayKeyRequest) returns (RotateOverlayKeyResponse);
   // LeaveOverlay removes the interface and its firewall rules. The key stays.
   rpc LeaveOverlay(LeaveOverlayRequest) returns (LeaveOverlayResponse);
+  // TestOverlayPeer opens TCP connections through the interface to a peer's address in the
+  // network, at ports that the peer publishes for this node, and closes them at once without
+  // sending anything. The agent connects only to the address that its configuration gives
+  // the peer, and only to the ports that its configuration says the peer publishes for it.
+  rpc TestOverlayPeer(TestOverlayPeerRequest) returns (TestOverlayPeerResponse);
 }
 
 message GetOverlayRequest {}
@@ -34,6 +39,38 @@ message GetOverlayResponse {
   // is a member.
   string address = 4;
   repeated OverlayPeerStatus peers = 5;
+  // The ports the node publishes at its address in the network, and for whom.
+  repeated OverlayPublished published = 6;
+  // Whether the nftables table of the network is in place; unspecified unless the node is a
+  // member, and from older agents.
+  OverlayFirewall firewall = 7;
+  // What is missing or differs, if the table is incomplete.
+  string firewall_problem = 8;
+}
+
+// OverlayPublished is a port that the node publishes in the network.
+message OverlayPublished {
+  // The TCP port.
+  uint32 port = 1;
+  // The server whose port it is, or else the datastore.
+  string server_id = 2;
+  string datastore_id = 3;
+  // The peers that reach it, with the key each had when it was let in.
+  repeated OverlayClient clients = 4;
+}
+
+message OverlayClient {
+  // Its address in the network, e.g. 10.213.0.4.
+  string address = 1;
+  string public_key = 2;
+}
+
+enum OverlayFirewall {
+  OVERLAY_FIREWALL_UNSPECIFIED = 0;
+  OVERLAY_FIREWALL_IN_PLACE = 1;
+  OVERLAY_FIREWALL_MISSING = 2;
+  // The table exists, but chains or rules are missing or differ.
+  OVERLAY_FIREWALL_INCOMPLETE = 3;
 }
 
 message OverlayPeerStatus {
@@ -62,6 +99,9 @@ message OverlayPeer {
   string address = 2;
   // host:port at which it is reached; the agent resolves host names.
   string endpoint = 3;
+  // The TCP ports at which the peer publishes servers or datastores for this node, the only
+  // ones TestOverlayPeer connects to. Older masters send none.
+  repeated uint32 ports = 4;
 }
 
 message ConfigureOverlayResponse {}
@@ -75,3 +115,23 @@ message RotateOverlayKeyResponse {
 message LeaveOverlayRequest {}
 
 message LeaveOverlayResponse {}
+
+message TestOverlayPeerRequest {
+  // The peer's public key.
+  string public_key = 1;
+  // The ports to test, at most 32, each one that the peer publishes for this node.
+  repeated uint32 ports = 2;
+}
+
+message TestOverlayPeerResponse {
+  // The results, in the order of the ports.
+  repeated OverlayPortTest results = 1;
+}
+
+message OverlayPortTest {
+  uint32 port = 1;
+  // Why no connection came about, e.g. as it was refused or timed out; empty if one did.
+  string error = 2;
+  // How long connecting took, or failing.
+  uint32 duration_micros = 3;
+}

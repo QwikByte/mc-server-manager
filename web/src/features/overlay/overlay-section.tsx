@@ -1,23 +1,34 @@
-import { ArrowsClockwiseIcon, LinkIcon, PencilSimpleIcon, ShieldCheckIcon, SignOutIcon, WarningIcon } from "@phosphor-icons/react"
+import {
+  ArrowsClockwiseIcon,
+  LinkIcon,
+  PencilSimpleIcon,
+  ShieldCheckIcon,
+  ShieldWarningIcon,
+  SignOutIcon,
+  WarningIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, type ReactNode, useState } from "react"
 import { Trans } from "react-i18next"
 import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Section } from "@/components/section"
-import { Pill } from "@/components/status"
+import { type Status, StatusBadge } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
-import { type Node, nodesQuery } from "@/features/nodes/api"
+import type { Node } from "@/features/nodes/api"
 import { useOperation } from "@/features/operations/use-operation"
-import { formatAgo, formatBytes, formatDate } from "@/lib/format"
+import { formatDate } from "@/lib/format"
+import { msg } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 import {
+  type FirewallState,
   type NodeOverlay,
   nodeOverlayQuery,
   overlayQuery,
@@ -26,9 +37,16 @@ import {
   useRotateOverlayKey,
   useSetOverlayEndpoint,
 } from "./api"
+import { PeerTable, PublishedPorts } from "./overlay-ports"
 
-/** Whether peers had no handshake for 5 minutes, e.g. as a firewall blocks the port, which keepalives renew every 2. */
-const stale = (handshake?: string) => !handshake || Date.now() - Date.parse(handshake) > 5 * 60_000
+const firewallStatus: Record<FirewallState, Status> = {
+  in_place: { tone: "success", label: msg("In place") },
+  missing: { tone: "destructive", label: msg("Missing") },
+  incomplete: { tone: "warning", label: msg("Incomplete") },
+}
+
+/** The class of commands in texts. */
+const code = "rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
 
 /** A node's part in the private network of the nodes: whether it may and can join, its address and its peers. */
 export function OverlaySection({ node }: { node: Node }) {
@@ -48,7 +66,7 @@ export function OverlaySection({ node }: { node: Node }) {
         <Callout icon={ShieldCheckIcon} title={t("Not allowed on this node")}>
           <Trans
             i18nKey="Its administrator allows it with <command/> on the node."
-            components={{ command: <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">noryx-agent overlay allow</code> }}
+            components={{ command: <code className={code}>noryx-agent overlay allow</code> }}
           />
         </Callout>
       ) : data.unsupported ? (
@@ -56,7 +74,7 @@ export function OverlaySection({ node }: { node: Node }) {
           {data.unsupported}
         </Callout>
       ) : data.member ? (
-        <Membership overlay={data} />
+        <Membership nodeId={node.id} overlay={data} manage={manage} />
       ) : (
         <JoinForm node={node} manage={manage} />
       )}
@@ -105,16 +123,17 @@ function JoinForm({ node, manage }: { node: Node; manage: boolean }) {
   )
 }
 
-/** The address and key of a member, and how it reaches the others. */
-function Membership({ overlay }: { overlay: NodeOverlay }) {
-  const { data: nodes } = useQuery(nodesQuery)
+/** The address, key and firewall of a member, how it reaches the others, and the ports it publishes for them. */
+function Membership({ nodeId, overlay, manage }: { nodeId: string; overlay: NodeOverlay; manage: boolean }) {
   const member = overlay.member!
-  const facts = [
+  const firewall = overlay.firewall && firewallStatus[overlay.firewall]
+  const facts: [string, ReactNode][] = [
     [t("Address"), member.address],
     [t("Endpoint"), overlay.endpoint ?? "–"],
     [t("Key"), overlay.fingerprint ? `${overlay.fingerprint}…` : "–"],
     [t("Joined"), formatDate(member.joinedAt)],
   ]
+  if (firewall) facts.push([t("Firewall"), <StatusBadge key="firewall" status={firewall} className="font-sans" />])
   return (
     <div className="space-y-4">
       {member.problem && (
@@ -122,11 +141,27 @@ function Membership({ overlay }: { overlay: NodeOverlay }) {
           {member.problem}
         </Callout>
       )}
-      <dl className="surface grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl px-5 py-4 md:grid-cols-4">
+      {overlay.firewall && overlay.firewall !== "in_place" && (
+        <Callout
+          tone={overlay.firewall === "missing" ? "destructive" : "warning"}
+          icon={ShieldWarningIcon}
+          role="alert"
+          title={overlay.firewall === "missing" ? t("Its firewall rules are missing") : t("Its firewall rules are incomplete")}
+        >
+          {overlay.firewallProblem && <p className="font-mono text-xs">{overlay.firewallProblem}</p>}
+          <p>
+            <Trans
+              i18nKey="Until they are back, members may reach the node itself and ports it publishes for others. The master writes them again within 5 minutes, or right away with <command/> on the node."
+              components={{ command: <code className={code}>noryx-agent overlay up</code> }}
+            />
+          </p>
+        </Callout>
+      )}
+      <dl className={cn("surface grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl px-5 py-4", firewall ? "md:grid-cols-5" : "md:grid-cols-4")}>
         {facts.map(([term, value]) => (
           <div key={term} className="min-w-0">
             <dt className="text-xs text-muted-foreground">{term}</dt>
-            <dd className="mt-0.5 truncate font-mono text-sm" title={value}>
+            <dd className="mt-0.5 truncate font-mono text-sm" title={typeof value === "string" ? value : undefined}>
               {value}
             </dd>
           </div>
@@ -135,38 +170,12 @@ function Membership({ overlay }: { overlay: NodeOverlay }) {
       {overlay.peers.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("No other node is part of it yet.")}</p>
       ) : (
-        <div className="surface overflow-x-auto rounded-xl">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr className="border-b">
-                <th className="px-4 py-2.5 font-medium">{t("Node")}</th>
-                <th className="px-4 py-2.5 font-medium">{t("Address")}</th>
-                <th className="px-4 py-2.5 font-medium">{t("Endpoint")}</th>
-                <th className="px-4 py-2.5 font-medium">{t("Latest handshake")}</th>
-                <th className="px-4 py-2.5 text-right font-medium">{t("Received / sent")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {overlay.peers.map((p) => (
-                <tr key={p.nodeId}>
-                  <td className="px-4 py-2.5 font-medium">{nodes?.find((n) => n.id === p.nodeId)?.name ?? p.nodeId}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs">{p.address}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs">{p.endpoint ?? "–"}</td>
-                  <td className="px-4 py-2.5">
-                    {stale(p.latestHandshake) ? (
-                      <Pill tone="warning">{p.latestHandshake ? formatAgo(p.latestHandshake) : t("never")}</Pill>
-                    ) : (
-                      formatAgo(p.latestHandshake!)
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">
-                    {formatBytes(p.receivedBytes)} / {formatBytes(p.sentBytes)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <PeerTable nodeId={nodeId} peers={overlay.peers} manage={manage} />
+      )}
+      {firewall ? (
+        <PublishedPorts nodeId={nodeId} published={overlay.published} />
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("Update the agent of this node to see its firewall and the ports it publishes.")}</p>
       )}
     </div>
   )
