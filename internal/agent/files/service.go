@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/archive"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
@@ -167,7 +168,7 @@ func (s *Service) WriteFile(stream noryxv1.FileService_WriteFileServer) error {
 	// The file is replaced right after the content is written, and checked just before.
 	err = dir.Replace(name, header.GetOverwrite(), func(w io.Writer) error {
 		if !secrets.Redacted(name) {
-			if err := receive(stream, &spaceChecked{w: w, dir: top}, MaxFileSize); err != nil {
+			if err := receive(stream, storage.Guard(w, top), MaxFileSize); err != nil {
 				return err
 			}
 			return unchanged(dir, name, header.GetExpected())
@@ -342,6 +343,97 @@ func (s *Service) DeleteFile(ctx context.Context, req *noryxv1.DeleteFileRequest
 	return &noryxv1.DeleteFileResponse{}, toStatus(dir.RemoveAll(name))
 }
 
+// ExtractArchive extracts an archive of the server, which is untrusted: it extracts nothing
+// into the files with secrets of the server, nor those that Noryx writes itself, and refuses
+// the archive before it writes anything if any entry would go there; see archive.Extract.
+func (s *Service) ExtractArchive(ctx context.Context, req *noryxv1.ExtractArchiveRequest) (*noryxv1.ExtractArchiveResponse, error) {
+	dir, name, err := s.open(ctx, req.GetServerId(), req.GetPath())
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	dest, err := clean(req.GetDestination())
+	if err != nil {
+		return nil, err
+	}
+	if err := errors.Join(dir.Direct(name), dir.Direct(dest)); err != nil {
+		return nil, toStatus(err)
+	}
+	f, err := dir.Open(name)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	defer f.Close()
+	hidden := fileset.Read(dir).Secrets() // once the archive is open, see ReadFile
+	info, err := f.Stat()
+	switch {
+	case err != nil:
+		return nil, toStatus(err)
+	case hidden.Hidden(name):
+		return nil, errSecret
+	case info.IsDir():
+		return nil, status.Error(codes.InvalidArgument, "This is a folder, not an archive.")
+	}
+	a, err := archive.Open(f, info.Size())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	res, err := a.Extract(ctx, dir, dest, archive.Options{Protected: archive.Guarded(hidden), Overwrite: req.GetOverwrite()})
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &noryxv1.ExtractArchiveResponse{Files: res.Files, Size: res.Size}, nil
+}
+
+// CopyFile copies a file or folder within the data of a server, following the rules of
+// MoveFile: what holds secrets can't be copied, and the copy goes nowhere where they would
+// show.
+func (s *Service) CopyFile(ctx context.Context, req *noryxv1.CopyFileRequest) (*noryxv1.CopyFileResponse, error) {
+	dir, from, err := s.open(ctx, req.GetServerId(), req.GetFrom())
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	to, err := clean(req.GetTo())
+	if err != nil {
+		return nil, err
+	}
+	exists := func(p string) bool { _, err := dir.Lstat(p); return err == nil }
+	// Whether the copy holds a file with secrets, or would make one at a place of such files.
+	secret := func(hidden secrets.Files) bool {
+		return slices.ContainsFunc(hidden.Under(from), exists) ||
+			slices.ContainsFunc(hidden.Under(to), func(p string) bool { return exists(filepath.Join(from, strings.TrimPrefix(p, to))) })
+	}
+	switch {
+	case from == "." || to == ".":
+		return nil, status.Error(codes.InvalidArgument, "The server folder itself can't be copied.")
+	case from == to || strings.HasPrefix(to, from+string(filepath.Separator)):
+		return nil, status.Error(codes.InvalidArgument, "A folder can't be copied into itself.")
+	case secret(fileset.Read(dir).Secrets()):
+		return nil, errSecret
+	}
+	if err := errors.Join(dir.Direct(from), dir.Direct(to)); err != nil {
+		return nil, toStatus(err)
+	}
+	if _, err := dir.Lstat(from); err != nil {
+		return nil, toStatus(err)
+	}
+	if exists(to) {
+		return nil, toStatus(fs.ErrExist)
+	}
+	if err := dir.CopyTree(ctx, from, to); err != nil {
+		return nil, toStatus(err)
+	}
+	// A file set marks a file before it writes it: one that it wrote meanwhile is marked now.
+	if secret(fileset.Read(dir).Secrets()) {
+		if err := dir.RemoveAll(to); err != nil {
+			return nil, toStatus(err)
+		}
+		return nil, errSecret
+	}
+	return &noryxv1.CopyFileResponse{}, nil
+}
+
 // HashFiles hashes regular files, e.g. those of a modpack. Files with secrets get no hash,
 // so that a hash can't tell anything about a secret, and neither do links, as the master
 // writes no file through one.
@@ -446,26 +538,6 @@ func receive(stream noryxv1.FileService_WriteFileServer, w io.Writer, limit int6
 	}
 }
 
-// spaceChecked stops writing before the free space of the file system of dir falls below
-// storage.MinFree, checking every checkEvery bytes.
-type spaceChecked struct {
-	w         io.Writer
-	dir       *os.File
-	unchecked int
-}
-
-const checkEvery = 64 << 20
-
-func (s *spaceChecked) Write(p []byte) (int, error) {
-	if s.unchecked += len(p); s.unchecked >= checkEvery {
-		s.unchecked = 0
-		if err := storage.Fits(s.dir, int64(len(p))); err != nil {
-			return 0, err
-		}
-	}
-	return s.w.Write(p)
-}
-
 // readRedacted reads a file with secrets, up to maxRedacted bytes.
 func readRedacted(r io.Reader) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(r, maxRedacted+1))
@@ -518,6 +590,8 @@ func toStatus(err error) error {
 		return status.FromContextError(err).Err()
 	case errors.As(err, new(storage.FullError)):
 		return status.Error(codes.ResourceExhausted, err.Error())
+	case errors.Is(err, datadir.ErrLink):
+		return status.Error(codes.InvalidArgument, "This path leads through a link of the server, which the file manager doesn't follow.")
 	case strings.Contains(err.Error(), "path escapes from parent"): // os.Root, e.g. through a symbolic link
 		return status.Error(codes.InvalidArgument, "This path leads outside of the server folder.")
 	}

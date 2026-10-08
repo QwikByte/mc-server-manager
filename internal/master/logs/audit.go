@@ -80,6 +80,8 @@ var actions = map[string]action{
 	"PUT " + routeFiles + "/content":                           {logging.Files, "Upload file"},
 	"POST " + routeFiles + "/directories":                      {logging.Files, "Create folder"},
 	"POST " + routeFiles + "/move":                             {logging.Files, "Move file"},
+	"POST " + routeFiles + "/copy":                             {logging.Files, "Copy file"},
+	"POST " + routeFiles + "/extract":                          {logging.Files, "Extract archive"},
 	"DELETE " + routeFiles:                                     {logging.Files, "Delete file"},
 	"POST /api/plugins/install":                                {logging.Plugins, "Install plugins"},
 	"PUT " + routeServer + "/plugins/{file}":                   {logging.Plugins, "Upload plugin"},

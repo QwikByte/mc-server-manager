@@ -83,6 +83,35 @@ export async function api<T = void>(path: string, init: RequestInit = {}): Promi
   return read<T>(await request(path, init))
 }
 
+/**
+ * Sends a file or form to the master's REST API with progress reports, which fetch can't give for uploads, and
+ * returns the JSON of the answer, or throws the error the master sent.
+ */
+export function send<T>(
+  method: string,
+  path: string,
+  body: Blob | FormData | string,
+  { onProgress, signal }: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, `/api${path}`)
+    if (!(body instanceof FormData)) xhr.setRequestHeader("Content-Type", "application/octet-stream")
+    xhr.responseType = "json"
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve(xhr.response as T)
+        : reject(
+            new ApiError(xhr.status, xhr.response?.error ?? t("The upload failed with status {{status}}.", { status: xhr.status }), xhr.response?.code),
+          )
+    xhr.onerror = () => reject(new Error(t("The connection to the panel was lost.")))
+    xhr.onabort = () => reject(new DOMException(t("The upload was cancelled."), "AbortError"))
+    signal?.addEventListener("abort", () => xhr.abort())
+    xhr.send(body)
+  })
+}
+
 /** Reads the message the master sent with a failed response. */
 export async function responseError(
   res: Response,

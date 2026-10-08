@@ -129,10 +129,26 @@ zone as `TZ`, once the agent found it among the IANA time zones it knows.
 The agent confines every path to the server's data directory, including through symbolic links, and new files belong to
 the server's user. Downloads are sent as attachments with a sandboxing CSP, so an uploaded HTML file can't run scripts
 in the panel. Secrets of the server stay on the node: files that only hold them can't be listed, read, written or moved,
-others show them as `<hidden>`, no file or folder with secrets can be moved where they would show, and archives leave
-them out. Only moving a server to another node copies them. Moving or deleting several files and folders at once
-checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the browser
-only up to 16 MB, so that a small archive can't exhaust the browser's memory.
+others show them as `<hidden>`, no file or folder with secrets can be moved or copied where they would show, and
+archives leave them out. Only moving a server to another node copies them. Copies never follow links, and one that a
+file set filled with secrets while it was copied is removed again. Moving, copying or deleting several files and folders
+at once checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the
+browser only up to 16 MB, so that a small archive can't exhaust the browser's memory. A search shows files as the
+editor does: without the files that only hold secrets and with secrets as `<hidden>`, also those a file set marks while
+it searches, and it doesn't follow links.
+
+Archives that are extracted, uploaded as backups or imported as servers are untrusted, unlike the backups the agent made
+itself. The agent reads the list of such an archive before it writes anything and refuses it for links, hard links,
+devices and other special files, absolute paths, `..` and control characters in names, encrypted entries, a path twice
+or both as a file and a folder, more than 100,000 entries, more than 64 GB of files, and files that would be more than
+100 times the size of the archive (zip bombs; up to 64 MB are exempt). It reads at most 64 MB of the directory of a ZIP
+archive, which it keeps in memory, and decompresses a `.tar.gz` archive at most as far as these limits allow, twice: to
+check it, then to extract it, when each entry must match the list. The files must fit with 1 GB to spare. Every entry
+is written below its folder in the server's data (`os.Root`), as the server's user, and neither through a link nor in
+place of something that isn't a file, so a link of the server can't lead it elsewhere. The file manager extracts
+nothing into a hidden path, the manifest of file sets, the temporary files of the agent or the files Noryx writes
+itself, such as `server.properties`, `ops.json` and `forwarding.secret`, and refuses the whole archive if it would.
+Extracting and copying need the permission to change files, searching the one to read them.
 
 ## Plugins and downloads
 

@@ -91,6 +91,10 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn off the whitelist of {{count}} servers", { count, defaultValue_one: "Turn off the whitelist of {{count}} server" })
     case "fileset.apply":
       return t("Apply the file set {{name}}", { name: subject })
+    case "files.extract":
+      return t("Extract {{name}}", { name: subject })
+    case "files.copy":
+      return t("Copy {{name}}", { name: subject })
     case "datastore.create":
       return t("Create the datastore {{name}}", { name: subject })
     case "datastore.update":
@@ -152,6 +156,8 @@ export function stepOf(op: Operation, step: string): string {
       return op.kind.startsWith("backup.restore") ? t("Back up what is replaced") : t("Pack the backup")
     case "restore":
       return t("Unpack the backup")
+    case "extract":
+      return t("Extract the files")
     case "stop":
     case "stopping":
       return t("Stop the server")
