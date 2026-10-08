@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -36,13 +37,19 @@ type column struct {
 	Key  string `json:"key"`  // PRI for one of the primary key
 }
 
-// browser is how the agent reads the tables of an engine's databases: as the superuser in a
-// session that only reads, with statements it builds itself from names that need no escaping,
-// as noryxv1.DatabaseName and noryxv1.TableName match them, and values in hexadecimal. Each
-// statement prints a JSON value per line.
+// browser is how the agent reads the tables of an engine's databases: never as the superuser,
+// as reading runs what the database's user may have written, e.g. casts, functions and views,
+// in a session that only reads, with statements it builds itself from names that need no
+// escaping, as noryxv1.DatabaseName and noryxv1.TableName match them, and values in
+// hexadecimal. Each statement prints a JSON value per line.
 type browser struct {
-	// client reads SQL from its standard input on a database, with the superuser's environment.
-	client  func(database string) []string
+	// client reads SQL from its standard input on a database as user, who signs in with
+	// password if it needs one.
+	client func(user, database, password string) (cmd, env []string)
+	// reader, if set, creates a user who may only read a database and signs in with password
+	// on the container, and forget drops it; otherwise the database's own user reads it.
+	reader  func(user, database, password string) string
+	forget  func(user string) string
 	session string
 	quote   func(name string) string
 	// tables prints a noryxv1.Table per line, columns a column.
@@ -67,9 +74,14 @@ var mariadbBinary = []string{"binary", "varbinary", "tinyblob", "blob", "mediumb
 var browsers = map[noryxv1.DatastoreEngine]browser{
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB: {
 		// The sandbox refuses the commands of the client itself, and raw output keeps JSON as it is.
-		client: func(db string) []string {
-			return []string{"mariadb", "-uroot", "-N", "-B", "-r", "--sandbox", "--default-character-set=utf8mb4", db}
+		client: func(user, db, password string) ([]string, []string) {
+			return []string{"mariadb", "-u" + user, "-N", "-B", "-r", "--sandbox", "--default-character-set=utf8mb4", db}, []string{"MYSQL_PWD=" + password}
 		},
+		// MariaDB signs in its users only with their passwords, which only the master knows.
+		reader: func(user, db, password string) string {
+			return fmt.Sprintf("CREATE USER '%[1]s'@'localhost' IDENTIFIED BY '%[3]s'; GRANT SELECT ON `%[2]s`.* TO '%[1]s'@'localhost';", user, grantable(db), password)
+		},
+		forget:  func(user string) string { return fmt.Sprintf("DROP USER IF EXISTS '%s'@'localhost';", user) },
 		session: fmt.Sprintf("SET SESSION TRANSACTION READ ONLY; SET SESSION max_statement_time = %d;\n", browseTimeout),
 		quote:   func(name string) string { return "`" + name + "`" },
 		tables: func(db string) string {
@@ -103,7 +115,10 @@ var browsers = map[noryxv1.DatastoreEngine]browser{
 		row:  func(cells []string) string { return "JSON_ARRAY(" + strings.Join(cells, ", ") + ")" },
 	},
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {
-		client:  func(db string) []string { return slices.Concat(psql, []string{"-A", "-t", "-U", "postgres", "-d", db}) },
+		// The database's user signs in without a password on the container, as Load does.
+		client: func(user, db, _ string) ([]string, []string) {
+			return slices.Concat(psql, []string{"-A", "-t", "-U", user, "-d", db}), nil
+		},
 		session: fmt.Sprintf("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY; SET statement_timeout = '%ds';\n", browseTimeout),
 		quote:   func(name string) string { return `"` + name + `"` },
 		tables: func(string) string {
@@ -165,15 +180,26 @@ func (b browser) rows(req *noryxv1.BrowseTableRequest, schema string, columns []
 
 // browse runs a statement that sql builds on a database of a ready datastore, in a session
 // that only reads, and decodes each line it prints with decode.
-func (d *Docker) browse(ctx context.Context, id, name string, sql func(b browser) string, decode func(line []byte) error) error {
+func (d *Docker) browse(ctx context.Context, id, name string, sql func(b browser) string, decode func(line []byte) error) (err error) {
 	s, err := d.session(ctx, id, name)
 	if err != nil {
 		return err
 	}
 	b := browsers[s.engine]
-	_, env := s.dialect.superuser(s.password)
+	user, password := name, ""
+	if b.reader != nil {
+		user, password = "noryx-reader-"+strings.ToLower(rand.Text()[:12]), strings.ToLower(rand.Text())
+		defer func() {
+			_, forgetErr := s.query(context.WithoutCancel(ctx), b.forget(user))
+			err = errors.Join(err, forgetErr)
+		}()
+		if _, err := s.query(ctx, b.reader(user, name, password), password); err != nil {
+			return err
+		}
+	}
+	cmd, env := b.client(user, name, password)
 	out := &capped{max: maxPage}
-	if err := d.exec(ctx, id, b.client(name), env, strings.NewReader(b.session+sql(b)), out, s.password); err != nil {
+	if err := d.exec(ctx, id, cmd, env, strings.NewReader(b.session+sql(b)), out, password); err != nil {
 		return err
 	}
 	lines := bufio.NewScanner(&out.Buffer)

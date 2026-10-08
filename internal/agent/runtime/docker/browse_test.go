@@ -22,13 +22,22 @@ func TestEveryDatastoreEngineHasABrowser(t *testing.T) {
 
 // TestBrowseLive browses the tables of both engines in Docker: in the order of the primary
 // key or of another column, filtered, with long values cut short, binary values in
-// hexadecimal, and a session that only reads; and it counts the connections. It only runs
-// with NORYX_DOCKER_TEST set, like TestDatastoresLive.
+// hexadecimal, and a session that only reads, without the superuser's rights; and it counts
+// the connections. It only runs with NORYX_DOCKER_TEST set, like TestDatastoresLive.
 func TestBrowseLive(t *testing.T) {
 	d := live(t)
-	tests := map[noryxv1.DatastoreEngine]struct{ blob, bytes, hex string }{
-		noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB:  {"BLOB", "X'00FF'", "0x00FF"},
-		noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {"bytea", `'\x00ff'`, `\x00ff`},
+	tests := map[noryxv1.DatastoreEngine]struct{ blob, bytes, hex, probe string }{
+		noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB: {"BLOB", "X'00FF'", "0x00FF",
+			// A view that reads as the user who reads it, e.g. the superuser's password.
+			"CREATE SQL SECURITY INVOKER VIEW probes AS SELECT CONCAT('ran as ', CURRENT_USER()) AS who, LOAD_FILE('" + superuserMount + "') AS secret;"},
+		noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {"bytea", `'\x00ff'`, `\x00ff`,
+			// A cast to text that runs as the user who reads its column.
+			"CREATE TYPE probe AS (x int);\n" +
+				"CREATE FUNCTION probe_text(probe) RETURNS text LANGUAGE plpgsql AS $$ BEGIN\n" +
+				" IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN RAISE EXCEPTION 'ran as the superuser %', current_user; END IF;\n" +
+				" RETURN 'ran as ' || current_user; END $$;\n" +
+				"CREATE CAST (probe AS text) WITH FUNCTION probe_text(probe);\n" +
+				"CREATE TABLE probes (p probe); INSERT INTO probes VALUES (ROW(1));"},
 	}
 	for engine, tc := range tests {
 		t.Run(engine.Slug(), func(t *testing.T) {
@@ -117,6 +126,24 @@ func TestBrowseLive(t *testing.T) {
 			write := func(browser) string { return "INSERT INTO items VALUES (1);" }
 			if err := d.browse(ctx, spec.ID, "shop", write, func([]byte) error { return nil }); err == nil {
 				t.Error("a browsing session wrote")
+			}
+
+			// What the database's user wrote runs with its rights, not the superuser's.
+			asUser(t, d, spec.ID, password, tc.probe)
+			probes, err := browse(&noryxv1.BrowseTableRequest{Table: "probes", Limit: 10})
+			if err != nil || len(probes.GetRows()) != 1 {
+				t.Fatalf("probes %v, %v", probes, err)
+			}
+			if row := probes.GetRows()[0].GetValues(); !strings.HasPrefix(row[0].GetText(), "ran as ") || strings.Contains(row[0].GetText(), "root") ||
+				len(row) > 1 && !row[1].GetNull() {
+				t.Errorf("probes %v", probes)
+			}
+			if engine == noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB {
+				s, err := d.session(ctx, spec.ID)
+				must(t, err)
+				if left, err := s.query(ctx, "SELECT COUNT(*) FROM mysql.global_priv WHERE User LIKE 'noryx-reader-%'"); err != nil || !slices.Equal(left, []string{"0"}) {
+					t.Errorf("readers left: %v, %v", left, err)
+				}
 			}
 		})
 	}

@@ -50,8 +50,9 @@ time, with values cut to 200 characters and binary ones in hexadecimal. Rows com
 of a column whose header is clicked, first ascending, then descending, and then in the order of the primary key again.
 The filter above the rows shows those whose value of a column contains a text, ignoring case, or is exactly a text: the
 value as text, as the page shows it, binary values in hexadecimal like `0x00FF` for MariaDB and `\x00ff` for PostgreSQL.
-The table, the first row, the sort and the filter are in the page's address. Browsing only reads, also only for those
-who may manage datastores, and the agent checks the columns to sort and filter by against those of the table.
+The table, the first row, the sort and the filter are in the page's address. Browsing only reads, with no more rights
+than the database's user, also only for those who may manage datastores, and the agent checks the columns to sort and
+filter by against those of the table.
 
 ## Log
 

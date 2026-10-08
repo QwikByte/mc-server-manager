@@ -266,11 +266,15 @@ with a valid name for each database besides folders and macOS's `__MACOSX`, up t
 files of 64 GB and 100 times its size together, all read to their ends to check their checksums; the agent keeps only
 these SQL files, and uploads have at most 16 GB. The agent never stores the passwords of users: upgrades keep the
 hashes, which it checks before it uses them in a statement. Dumps are kept like backups and checked before a restore
-drops anything, so a damaged one changes nothing. Browsing reads as the superuser in a session that only reads and stops
-each statement after 10 seconds, with statements the agent builds itself from names that need no escaping: tables,
-schemas and columns whose names don't match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, the columns to sort and filter by
-must be the table's, the value of a filter, at most 1 KiB of UTF-8 without NUL, goes into the statement in hexadecimal,
-MariaDB's client runs in its sandbox, and a page has at most 3 MiB. To count the connections of a datastore, the agent
+drops anything, so a damaged one changes nothing. Browsing never reads as the superuser, as reading runs what the
+database's user may have written, e.g. casts to text, functions and views: on PostgreSQL it reads as the database's own
+user, and on MariaDB, which signs in users only with their passwords, as a user that may only read the database, signs in
+only on the container with a random password and exists only while the agent reads. It reads in a session that only
+reads and stops each statement after 10 seconds, with statements the agent builds itself from names that need no
+escaping: tables, schemas and columns whose names don't match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, the columns to
+sort and filter by must be the table's, the value of a filter, at most 1 KiB of UTF-8 without NUL, goes into the
+statement in hexadecimal, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. To count the connections
+of a datastore, the agent
 runs a query of its own as the superuser, and the master records the usage only of the datastores it has on the node
 that reports it. The log
 of a datastore's container, which only those who may manage datastores see, shows the statements that the engines log,
