@@ -599,7 +599,7 @@ func (h *Handler) restoreCopy(w http.ResponseWriter, r *http.Request) {
 		defer archive.Close()
 		header := &noryxv1.ImportBackupHeader{ServerId: req.Server, Backup: &noryxv1.Backup{
 			Id: noryxv1.NewBackupID(cp.CreatedAt), Label: cmp.Or(cp.Label, cp.ServerName), CreatedUnix: cp.CreatedAt.Unix(), Size: cp.Size,
-			Paths: cp.Paths, Exclude: cp.Exclude,
+			Paths: cp.Paths, Exclude: cp.Exclude, Untrusted: true,
 		}}
 		// The storage or node that keeps the copy can't make it larger than it was.
 		imported, err := upload(ctx, conn, header, io.LimitReader(archive, cp.Size), func(n int64) { operation.Count(ctx, n, cp.Size, "bytes") })
@@ -613,6 +613,9 @@ func (h *Handler) restoreCopy(w http.ResponseWriter, r *http.Request) {
 				slog.Warn("Can't delete the copy of a backup", logging.Backups, logging.KeyNode, req.Node, logging.KeyServer, req.Server, "backup", imported.GetId(), "err", err)
 			}
 		}()
+		if !imported.GetUntrusted() { // an older agent would trust it
+			return nil, httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the node to restore copies of backups into its servers.")
+		}
 		return h.restoreOn(ctx, req.Node, req.Server, imported.GetId(), restoreRequest{SnapshotFirst: req.SnapshotFirst})
 	})
 }

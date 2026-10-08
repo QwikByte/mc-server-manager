@@ -343,7 +343,8 @@ and never restores them itself: the master relays them, as agents never connect 
 read them there, like the backups of the servers on their own node. Agents mark every backup that came from elsewhere, a
 copy or one of another node, as untrusted, and restore it like an uploaded backup (see [Backups](#backups)): checked
 again with the limits for backups, extracted confined like an archive of the file manager, and with every secret
-replaced by the server's own. So a compromised node or storage can change the data of the servers restored from its
+replaced by the server's own; the master refuses to restore a copy with an agent that would trust it. So a compromised
+node or storage can change the data of the servers restored from its
 copies, like a node can change the backups of its own servers, but nothing beyond them. A copy belongs to its server on
 the node it was copied from, and follows the server when it moves: nodes tell the IDs of their servers themselves, so a
 compromised node that claims the ID of another node's server only gets copies of its own, and a job neither replaces
