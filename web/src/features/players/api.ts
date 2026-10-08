@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ServerRef } from "@/features/networks/api"
 import { operate } from "@/features/operations/api"
 import type { Followed } from "@/features/servers/api"
@@ -63,6 +63,50 @@ export function playerListsQuery({ network, server }: { network?: string; server
     refetchInterval: 30_000, // the lists change in the game and through plugins too
   })
 }
+
+/** When a player was first and last seen online, and for how many minutes. */
+export interface Span {
+  firstSeen: string
+  lastSeen: string
+  minutes: number
+}
+
+/** A player seen online, with the servers, those seen last first. */
+export interface SeenPlayer extends Span {
+  name: string
+  servers: (ServerRef & Span)[]
+}
+
+/** Where and when a player was online, with the minutes of each day (as 2026-10-01, in UTC). */
+export interface PlayerHistory extends SeenPlayer {
+  days: { day: string; minutes: number }[]
+}
+
+/** The players seen on the servers the user may see, of a network, of one server or all, those seen last first. */
+export function seenPlayersQuery({ q = "", network, server, limit }: { q?: string; network?: string; server?: ServerRef; limit?: number } = {}) {
+  const search = new URLSearchParams({
+    q,
+    ...(network && { network }),
+    ...(server && { node: server.nodeId, server: server.serverId }),
+    ...(limit && { limit: String(limit) }),
+  })
+  return queryOptions({
+    queryKey: ["players", "seen", search.toString()],
+    queryFn: () => api<{ players: SeenPlayer[]; total: number }>(`/players/seen?${search}`),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000, // the master notes the players online every minute
+  })
+}
+
+export const playerHistoryQuery = (name: string) =>
+  queryOptions({
+    queryKey: ["players", "seen", "player", name.toLowerCase()],
+    queryFn: () => api<PlayerHistory>(`/players/seen/${encodeURIComponent(name)}`),
+    refetchInterval: 60_000,
+  })
+
+/** Whether a name is that of a player that the master and the agents take: of Java players, or of Bedrock players with Floodgate's dot. */
+export const validPlayerName = (name: string) => /^\.?[A-Za-z0-9_]{1,16}$/.test(name)
 
 export interface PlayerChange {
   action: PlayerAction

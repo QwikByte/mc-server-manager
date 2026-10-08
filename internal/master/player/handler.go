@@ -24,17 +24,21 @@ const (
 )
 
 type Handler struct {
-	svc *Service
-	ops *operation.Operations
+	svc  *Service
+	seen *Sightings
+	ops  *operation.Operations
 }
 
-func NewHandler(svc *Service, ops *operation.Operations) *Handler {
-	return &Handler{svc: svc, ops: ops}
+func NewHandler(svc *Service, seen *Sightings, ops *operation.Operations) *Handler {
+	return &Handler{svc: svc, seen: seen, ops: ops}
 }
 
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/players/actions", access.SignedIn, h.change)
 	mux.Handle("GET /api/players/lists", access.SignedIn, h.lists)
+	// Only the sightings on the servers the user may see count.
+	mux.Handle("GET /api/players/seen", access.SignedIn, h.seenPlayers)
+	mux.Handle("GET /api/players/seen/{name}", access.SignedIn, h.history)
 	mux.Handle("POST /api/networks/{id}/players/send", access.Everywhere(access.NetworksView), h.send)
 	mux.Handle("POST /api/networks/{id}/players/move", access.Everywhere(access.NetworksView), h.move)
 }
@@ -131,6 +135,65 @@ func (h *Handler) lists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, h.svc.Lists(ctx, servers))
+}
+
+// seenPlayers returns the players seen on the servers the user may see, of a network
+// (?network=), of one server (?node=&server=) or all, whose name contains ?q=, those seen last
+// first and up to ?limit=.
+func (h *Handler) seenPlayers(w http.ResponseWriter, r *http.Request) {
+	ctx, q := r.Context(), r.URL.Query()
+	visible, err := h.visible(ctx, q.Get("network"))
+	if server := (network.Ref{NodeID: q.Get("node"), ServerID: q.Get("server")}); err == nil && q.Has("server") {
+		all := visible
+		visible = func(ref network.Ref) bool { return ref == server && all(ref) }
+	}
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > MaxSeen {
+		limit = MaxSeen
+	}
+	var players []Player
+	var total int
+	if err == nil {
+		players, total, err = h.seen.SeenPlayers(ctx, strings.TrimSpace(q.Get("q")), limit, visible)
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"players": players, "total": total})
+}
+
+// history returns where and when a player was online on the servers the user may see.
+func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !noryxv1.ValidPlayerName(name) {
+		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Enter the name of a player: up to 16 letters, digits and underscores."))
+		return
+	}
+	visible, _ := h.visible(r.Context(), "")
+	history, err := h.seen.History(r.Context(), name, visible)
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, history)
+}
+
+// visible returns whether the user may see a server, of the network with the given ID unless
+// it is empty.
+func (h *Handler) visible(ctx context.Context, networkID string) (func(network.Ref) bool, error) {
+	grants := access.From(ctx)
+	visible := func(ref network.Ref) bool { return grants.On(access.ServersView, ref.NodeID, ref.ServerID) }
+	if networkID == "" {
+		return visible, nil
+	}
+	if !grants.Has(access.NetworksView) {
+		return nil, access.Denied(access.NetworksView)
+	}
+	n, err := h.svc.networks.Get(ctx, networkID)
+	return func(ref network.Ref) bool {
+		return visible(ref) && slices.ContainsFunc(n.Backends, func(b network.Backend) bool { return b.Ref == ref })
+	}, err
 }
 
 // send sends a player to another server of a network.

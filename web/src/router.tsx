@@ -167,6 +167,12 @@ const playersRoute = createRoute({
   validateSearch: validatePlayerSearch,
   component: lazyRouteComponent(() => import("@/features/players/players-page"), "PlayersPage"),
 })
+const playerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/players/$name",
+  staticData: { title: msg("Players") },
+  component: lazyRouteComponent(() => import("@/features/players/player-page"), "PlayerPage"),
+})
 const serverRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/nodes/$nodeId/servers/$serverId",
@@ -478,6 +484,7 @@ export const router = createRouter({
       ]),
       networksRoute,
       playersRoute,
+      playerRoute,
       networkRoute.addChildren([networkOverviewRoute, networkProxyRoute, networkDatabasesRoute, networkDatabaseRoute]),
       libraryRoute.addChildren([templatesRoute, fileSetsRoute, pluginsRoute]),
       newTemplateRoute,

@@ -8,11 +8,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { SortableHead, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAccess } from "@/features/access/use-access"
 import { key, refOf } from "@/features/networks/servers"
-import { serverKey } from "@/features/servers/api"
+import type { Network } from "@/features/networks/api"
+import { type NodeServer, serverKey } from "@/features/servers/api"
 import { type Sorting, sortBy } from "@/lib/sort"
 import { playerActions } from "./actions"
 import type { PlayerAction } from "./api"
 import type { OnlinePlayer } from "./online"
+import { PlayerName } from "./player-name"
 import type { PlayerDialog } from "./players-page"
 import { useScopes } from "./scopes"
 import type { OnlineSort } from "./search"
@@ -70,15 +72,7 @@ export function OnlinePlayers({
               return (
                 <TableRow key={`${name}@${serverKey(server)}`}>
                   <TableCell className="pl-4">
-                    <span className="flex items-center gap-3">
-                      <span
-                        aria-hidden
-                        className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
-                      >
-                        {name.replace(/^\./, "")[0]?.toUpperCase()}
-                      </span>
-                      <span className="truncate font-mono font-medium">{name}</span>
-                    </span>
+                    <PlayerName name={name} />
                   </TableCell>
                   <TableCell>
                     <Link
@@ -116,13 +110,25 @@ export function OnlinePlayers({
   )
 }
 
-/** What can be done to a player online: send them to another server of the network, kick, ban and more. */
-export function PlayerMenu({ player: { name, server, network }, onAct }: { player: OnlinePlayer; onAct: (dialog: PlayerDialog) => void }) {
+/** A player of a server, online there unless offline, of a network, or of all servers. */
+export interface PlayerAt {
+  name: string
+  server?: NodeServer
+  network?: Network
+  offline?: boolean
+}
+
+/** What can be done to a player: send them to another server of the network while they're online, kick, ban and more. */
+export function PlayerMenu({ player: { name, server, network, offline }, onAct }: { player: PlayerAt; onAct: (dialog: PlayerDialog) => void }) {
   const { can } = useAccess()
   const scopesFor = useScopes()
-  const actions = menu.map((action) => ({ action, scopes: scopesFor(action, { server, network }) })).filter((a) => a.scopes.length > 0)
-  const from = network?.backends.find((b) => key(b) === key(refOf(server)))?.name
-  const sends = network && network.backends.length > 1 && can("players.manage", network.proxy.nodeId, network.proxy.serverId)
+  const actions = menu
+    .filter((action) => !offline || action !== "kick")
+    .map((action) => ({ action, scopes: scopesFor(action, { server, network }) }))
+    .filter((a) => a.scopes.length > 0)
+  const from = server && network?.backends.find((b) => key(b) === key(refOf(server)))?.name
+  const sends =
+    server && !offline && network && network.backends.length > 1 && can("players.manage", network.proxy.nodeId, network.proxy.serverId)
   if (actions.length === 0 && !sends) return null
   return (
     <DropdownMenu>

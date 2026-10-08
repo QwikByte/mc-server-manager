@@ -55,6 +55,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/overlay"
+	"github.com/QwikByte/noryx/internal/master/player"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/preference"
@@ -267,7 +268,8 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	networks := network.NewService(m.db, nodes, plugins, overlays, datastores)
 	tags := tag.NewStore(m.db)
 	accessService := access.NewService(m.db)
-	usageStore := usage.NewStore(m.db, nodes, m.settings)
+	sightings := player.NewSightings(m.db, m.settings)
+	usageStore := usage.NewStore(m.db, nodes, m.settings, sightings)
 	jobs := backup.NewJobs(nodes, datastores)
 	tasks := schedule.NewService(m.db, nodes, tags, networks, accessService, map[string]schedule.Kind{
 		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins),
@@ -278,7 +280,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 		Users: auth.NewService(m.db), Access: accessService, Settings: m.settings, Nodes: nodes, Overlay: overlays,
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
-		Usage: usageStore, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
+		Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
 	}
 }
 

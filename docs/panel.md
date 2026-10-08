@@ -54,10 +54,10 @@ know.
 
 ## Search
 
-**Ctrl+K** (⌘K) or `/` searches servers, also by tag and notes, players online, networks, nodes and pages from anywhere in the
-panel, and, once something is typed, templates, file sets, backup jobs, schedules and users; each only for those who may
-see them. Before anything is typed, it offers what was opened last: servers, networks, nodes, templates, file sets,
-backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user
+**Ctrl+K** (⌘K) or `/` searches servers, also by tag and notes, players online, networks, nodes and pages from anywhere
+in the panel, and, once something is typed, players seen before, templates, file sets, backup jobs, schedules and users;
+each only for those who may see them. Before anything is typed, it offers what was opened last: servers, networks,
+nodes, templates, file sets, backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user
 may still see are offered. A search that starts with an action, e.g. `restart lobby`, starts, restarts or stops a server
 or opens its console. **Create server**, **Create network** and **Add node** open their dialogs from the search too.
 

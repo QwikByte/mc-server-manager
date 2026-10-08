@@ -47,6 +47,14 @@ export function formatDuration(ms: number): string {
   return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "long" }).format(Math.floor(ms / size))
 }
 
+/** Formats minutes as hours and minutes in the viewer's locale, e.g. "45 min" or "12 hr, 5 min". */
+export function formatMinutes(minutes: number): string {
+  const unit = (unit: string, value: number) => new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short" }).format(value)
+  const [h, m] = [Math.floor(minutes / 60), minutes % 60]
+  if (h === 0) return unit("minute", m)
+  return m === 0 ? unit("hour", h) : new Intl.ListFormat(locale, { style: "narrow", type: "unit" }).format([unit("hour", h), unit("minute", m)])
+}
+
 /** Formats how long something took as minutes and seconds, e.g. "1:05" or "1:02:03". */
 export function formatElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))

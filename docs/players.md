@@ -1,15 +1,30 @@
 # Players
 
 The **Players** page lists the players online on all game servers, with their server and network, to search and act on;
-[`Ctrl+K`](panel.md#search) finds them too. Its other tabs join the ban list, whitelist and operators of all servers or
+[`Ctrl+K`](panel.md#search) finds them too. **Seen** lists the players who were online, those seen last first, with
+when, how long and where they played. Its other tabs join the ban list, whitelist and operators of all servers or
 of a network, with how many servers have each player, and the changes that wait for stopped servers. Temporary bans,
 which Paper's ban list and plugins such as EssentialsX write, show when they end, and those that ended are marked. The
 **Players** tab of a game server shows the same for that server alone, with the same actions.
 **Players online** on a network's page opens the page for that network.
-The headers of the tables sort them, by player, server and network or by player and number of servers; the address keeps
-the order. **Export CSV** downloads a tab as shown, searched and sorted, for spreadsheets: the players online with their
-server, node and network, or the players of a list with their servers, and for bans the reason, when it started and ends
-and who banned them.
+The headers of the tables sort them, by player, server and network, by when they were seen and how long they played, or
+by player and number of servers; the address keeps the order. **Export CSV** downloads a tab as shown, searched and
+sorted, for spreadsheets: the players online with their server, node and network, the players seen with when and how
+long they played and their servers, or the players of a list with their servers, and for bans the reason, when it
+started and ends and who banned them.
+
+## A player's page
+
+Each name opens the player's page at `/players/<name>`, which `Ctrl+K` finds too, also of players who are offline: when
+the player was first and last seen, how many minutes they played on each day and on each server, their entries in the
+ban list, whitelist and operators of the servers, and the actions below.
+
+The master notes every minute which players are online on each game server, as its agent measures them anyway, and
+keeps where they played for as long as the [log](monitoring.md#logs) (30 days unless the settings say otherwise). It
+counts a minute for each measurement that names the player, so the time of a server whose console doesn't answer, which
+then only names some players, is missing. Proxies aren't counted, as their players are those of the game servers.
+Sightings move with a server to another node and go with a deleted server. Users only see the sightings on the
+servers they may see.
 
 ## Actions
 

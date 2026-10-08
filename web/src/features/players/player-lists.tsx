@@ -19,11 +19,12 @@ import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 import { needs, playerActions } from "./actions"
 import { type Listed, type PlayerAction, type PlayerLists, playerListsQuery } from "./api"
+import { PlayerName } from "./player-name"
 import type { PlayerDialog } from "./players-page"
 import { useScopes } from "./scopes"
 import type { ListSort, PlayerSearch } from "./search"
 
-export type ListKind = NonNullable<PlayerSearch["tab"]>
+export type ListKind = Exclude<NonNullable<PlayerSearch["tab"]>, "seen">
 
 const kinds: Record<
   ListKind,
@@ -217,13 +218,11 @@ function ListRow({
   const ended = entry.until !== undefined && Date.parse(entry.until) <= now
   return (
     <TableRow className={cn(ended && "text-muted-foreground")}>
-      <TableCell className="pl-4 font-mono font-medium">
-        {entry.name}
-        {banned && entry.until && (
-          <Pill tone={ended ? "neutral" : "warning"} className="ml-2 font-sans">
-            {ended ? t("Ended") : t("Temporary")}
-          </Pill>
-        )}
+      <TableCell className="pl-4">
+        <span className="flex items-center gap-2">
+          <PlayerName name={entry.name} />
+          {banned && entry.until && <Pill tone={ended ? "neutral" : "warning"}>{ended ? t("Ended") : t("Temporary")}</Pill>}
+        </span>
       </TableCell>
       {banned && (
         <TableCell className="max-w-80 whitespace-normal text-muted-foreground max-md:hidden">

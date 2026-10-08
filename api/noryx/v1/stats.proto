@@ -51,6 +51,8 @@ message ServerStats {
   bool offline_mode = 11;
   // Most CPU time the server may use, in thousandths of a core; 0 if it isn't limited.
   uint32 cpu_limit_millis = 12;
+  // A proxy, whose players are those of its network's game servers.
+  bool proxy = 13;
 }
 
 message Players {

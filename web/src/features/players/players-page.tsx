@@ -18,7 +18,8 @@ import { useOnlinePlayers } from "./online"
 import { OnlinePlayers } from "./online-players"
 import { PlayerActionDialog, type Scope } from "./player-action-dialog"
 import { type ListKind, PlayerListTab } from "./player-lists"
-import { listSorts, onlineSorts, type PlayerSearch } from "./search"
+import { listSorts, onlineSorts, type PlayerSearch, seenSorts } from "./search"
+import { SeenPlayers } from "./seen-players"
 import { SendDialog } from "./send-dialog"
 
 const route = getRouteApi("/_app/players")
@@ -52,12 +53,14 @@ export function PlayersPage() {
         description={t("{{count}} players online", { count: players.length + unnamed, defaultValue_one: "{{count}} player online" })}
       />
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Segmented<ListKind | "online">
+        <Segmented<ListKind | "online" | "seen">
           label={t("List")}
+          className="max-w-full overflow-x-auto"
           value={tab}
           onChange={(tab) => set({ tab: tab === "online" ? undefined : tab })}
           options={[
             { value: "online", label: t("Online") },
+            { value: "seen", label: t("Seen") },
             { value: "banned", label: t("Banned") },
             { value: "whitelisted", label: t("Whitelist") },
             { value: "operators", label: t("Operators") },
@@ -101,6 +104,8 @@ export function PlayersPage() {
             <OnlinePlayers players={online} sorting={sortingOf(search, onlineSorts, set)} onAct={setDialog} />
           )}
         </>
+      ) : tab === "seen" ? (
+        <SeenPlayers network={network} query={query} sorting={sortingOf(search, seenSorts, set)} onAct={setDialog} />
       ) : (
         <PlayerListTab kind={tab} network={network} query={query} sorting={sortingOf(search, listSorts, set)} onAct={setDialog} />
       )}
