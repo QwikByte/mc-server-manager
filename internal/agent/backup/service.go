@@ -153,7 +153,7 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 		return nil, toStatus(err)
 	}
 	defer data.Close()
-	staged, err := stage(ctx, data, &zr.Reader, paths)
+	staged, err := stage(ctx, data, &zr.Reader, paths, b.Untrusted)
 	if staged != "" {
 		defer data.RemoveAll(staged) //nolint:errcheck // best effort; the result of restoring matters
 	}
@@ -350,37 +350,102 @@ func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) 
 		return err
 	}
 	h := first.GetHeader()
-	b := h.GetBackup()
-	if b == nil {
+	if h.GetBackup() == nil {
 		return status.Error(codes.InvalidArgument, "the first message must describe the backup")
-	}
-	d, err := importedDetails(b)
-	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	srv, release, err := s.lock(stream.Context(), h.GetServerId())
 	if err != nil {
 		return err
 	}
 	defer release()
-	imported, err := s.store.Add(srv.ID, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, b.GetSize(), func(w io.Writer) error {
+	imported, err := s.importArchive(srv.ID, h.GetBackup(), func() ([]byte, error) {
+		msg, err := stream.Recv()
+		return msg.GetData(), err
+	})
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(&noryxv1.ImportBackupResponse{Backup: imported.Proto()})
+}
+
+// ImportCopy keeps a copy of a backup of a server of another node, apart from the backups of
+// the servers here, which the master relays from there.
+func (s *Service) ImportCopy(stream noryxv1.BackupService_ImportCopyServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	switch {
+	case h.GetBackup() == nil:
+		return status.Error(codes.InvalidArgument, "the first message must describe the backup")
+	case !runtime.ValidID(h.GetServerId()):
+		return status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	imported, err := s.importArchive(copies(h.GetServerId()), h.GetBackup(), func() ([]byte, error) {
+		msg, err := stream.Recv()
+		return msg.GetData(), err
+	})
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(&noryxv1.ImportCopyResponse{Backup: imported.Proto()})
+}
+
+// importArchive adds the archive that recv receives, until io.EOF, as a backup of owner that
+// b describes. It came from elsewhere, so it is untrusted.
+func (s *Service) importArchive(owner string, b *noryxv1.Backup, recv func() ([]byte, error)) (Archive, error) {
+	d, err := importedDetails(b)
+	if err != nil {
+		return Archive{}, status.Error(codes.InvalidArgument, err.Error())
+	}
+	d.Untrusted = true
+	imported, err := s.store.Add(owner, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, b.GetSize(), func(w io.Writer) error {
 		for {
-			msg, err := stream.Recv()
+			data, err := recv()
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-			if _, err := w.Write(msg.GetData()); err != nil {
+			if _, err := w.Write(data); err != nil {
 				return err
 			}
 		}
 	})
+	return imported, toStatus(err)
+}
+
+// DownloadCopy sends the archive of a copy that ImportCopy keeps.
+func (s *Service) DownloadCopy(req *noryxv1.DownloadCopyRequest, stream noryxv1.BackupService_DownloadCopyServer) error {
+	if !runtime.ValidID(req.GetServerId()) {
+		return status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	b, err := s.store.Find(copies(req.GetServerId()), req.GetBackupId())
 	if err != nil {
 		return toStatus(err)
 	}
-	return stream.SendAndClose(&noryxv1.ImportBackupResponse{Backup: imported.Proto()})
+	f, err := os.Open(b.Path())
+	if err != nil {
+		return toStatus(err)
+	}
+	defer f.Close()
+	return Send(f, b.Size, func(size int64, data []byte) error {
+		return stream.Send(&noryxv1.DownloadCopyResponse{Size: size, Data: data})
+	})
+}
+
+// DeleteCopy deletes a copy that ImportCopy keeps.
+func (s *Service) DeleteCopy(_ context.Context, req *noryxv1.DeleteCopyRequest) (*noryxv1.DeleteCopyResponse, error) {
+	if !runtime.ValidID(req.GetServerId()) {
+		return nil, status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	b, err := s.store.Find(copies(req.GetServerId()), req.GetBackupId())
+	if err == nil {
+		err = s.store.Remove(b)
+	}
+	return &noryxv1.DeleteCopyResponse{}, toStatus(err)
 }
 
 // importedDetails validates a backup from another node like those made here.

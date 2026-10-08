@@ -120,10 +120,11 @@ type Handler struct {
 	ops      *operation.Operations
 	// moving refuses changes to a server while it moves to another node.
 	moving func(serverID string) error
+	copies *Copies
 }
 
-func NewHandler(nodes Nodes, networks Networks, ops *operation.Operations, moving func(serverID string) error) *Handler {
-	return &Handler{nodes: nodes, networks: networks, ops: ops, moving: moving}
+func NewHandler(nodes Nodes, networks Networks, ops *operation.Operations, moving func(serverID string) error, copies *Copies) *Handler {
+	return &Handler{nodes: nodes, networks: networks, ops: ops, moving: moving, copies: copies}
 }
 
 func (h *Handler) Register(mux access.Mux) {
@@ -138,6 +139,7 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST "+base+"/{backup}/restore-into", access.OnServer(access.BackupsView), h.restoreInto)
 	mux.Handle("DELETE "+base+"/{backup}", access.OnServer(access.BackupsDelete), h.delete)
 	mux.Handle("GET "+base+"/{backup}/download", access.OnServer(access.BackupsView), h.download)
+	h.registerCopies(mux)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

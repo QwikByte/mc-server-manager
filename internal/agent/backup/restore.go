@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"maps"
+	"math"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/network"
 	"github.com/QwikByte/noryx/internal/agent/secrets"
+	"github.com/QwikByte/noryx/internal/agent/storage"
 
 	"github.com/QwikByte/noryx/internal/agent/progress"
 )
@@ -93,14 +95,26 @@ func list(zr *zip.Reader, folder string, hidden secrets.Files) ([]*noryxv1.FileI
 
 // stage extracts what a backup holds of paths into a temporary folder of the data directory,
 // which the caller removes unless its name is empty. Nothing of the server changes yet, so it
-// can keep running meanwhile.
-func stage(ctx context.Context, dir *datadir.Dir, zr *zip.Reader, paths []string) (string, error) {
+// can keep running meanwhile. An untrusted archive must fit on the disk with the space that
+// is left for the servers, as it tells: extracting its files stops at their sizes.
+func stage(ctx context.Context, dir *datadir.Dir, zr *zip.Reader, paths []string, untrusted bool) (string, error) {
 	files := slices.DeleteFunc(slices.Clone(zr.File), func(f *zip.File) bool { return !slices.ContainsFunc(paths, within(entry(f))) })
-	var size int64
+	var size uint64 // never more than twice math.MaxInt64, so it can't overflow
 	for _, f := range files {
-		size += int64(f.UncompressedSize64) //nolint:gosec // a size that fits on a disk
+		size = min(size+min(f.UncompressedSize64, math.MaxInt64), math.MaxInt64)
 	}
-	progress.Step(ctx, "restore", size)
+	if untrusted {
+		root, err := dir.Root.Open(".")
+		if err != nil {
+			return "", err
+		}
+		err = storage.Fits(root, int64(size)) //nolint:gosec // at most math.MaxInt64
+		root.Close()
+		if err != nil {
+			return "", err
+		}
+	}
+	progress.Step(ctx, "restore", int64(size)) //nolint:gosec // at most math.MaxInt64
 	tmp := datadir.TempName(".")
 	return tmp, dir.ExtractZip(ctx, &zip.Reader{File: files}, tmp)
 }

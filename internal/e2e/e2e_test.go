@@ -58,6 +58,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/preference"
+	"github.com/QwikByte/noryx/internal/master/s3/s3test"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 	"github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/settings"
@@ -222,6 +223,7 @@ type master struct {
 	modrinth   *fakeModrinth
 	hangar     *fakeHangar
 	geysermc   *fakeGeyserMC
+	s3         *s3test.Server // S3-compatible storage for copies of backups
 	update     update.Options
 	// quick is how long requests wait for their operations; tests get the result right away.
 	quick time.Duration
@@ -251,7 +253,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), update: update.Options{DataDir: dir}, quick: time.Minute,
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), s3: s3test.New(t), update: update.Options{DataDir: dir}, quick: time.Minute,
 	}
 }
 
@@ -268,7 +270,8 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	tags := tag.NewStore(m.db)
 	accessService := access.NewService(m.db)
 	usageStore := usage.NewStore(m.db, nodes, m.settings)
-	jobs := backup.NewJobs(nodes, datastores)
+	copies := backup.NewCopies(m.db, nodes, m.s3.Client().Transport)
+	jobs := backup.NewJobs(nodes, datastores, copies)
 	tasks := schedule.NewService(m.db, nodes, tags, networks, accessService, map[string]schedule.Kind{
 		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins),
 	}, moves.Busy)
@@ -276,7 +279,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	fileSets := fileset.NewService(m.db, nodes, networks, tags, datastores, moves)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: accessService, Settings: m.settings, Nodes: nodes, Overlay: overlays,
-		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks, Copies: copies,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
 		Usage: usageStore, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
 	}

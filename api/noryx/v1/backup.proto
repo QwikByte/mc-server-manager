@@ -28,6 +28,14 @@ service BackupService {
   // ImportBackup adds a backup of a server that came from another node. The header
   // describes it, the data that follows is its archive.
   rpc ImportBackup(stream ImportBackupRequest) returns (ImportBackupResponse);
+  // ImportCopy keeps a copy of a backup of a server of another node, apart from the backups
+  // of the servers of this node, so that the server can be restored if its node is lost. The
+  // header names the server, which needn't exist here, and describes the backup. Copies are
+  // never restored where they are kept: the master relays them into a server.
+  rpc ImportCopy(stream ImportCopyRequest) returns (ImportCopyResponse);
+  // DownloadCopy sends the archive of a copy in chunks; the first message carries its size.
+  rpc DownloadCopy(DownloadCopyRequest) returns (stream DownloadCopyResponse);
+  rpc DeleteCopy(DeleteCopyRequest) returns (DeleteCopyResponse);
 }
 
 // BackupSelection chooses what of a server is backed up.
@@ -187,3 +195,34 @@ message ImportBackupRequest {
 message ImportBackupResponse {
   Backup backup = 1;
 }
+
+message ImportCopyRequest {
+  oneof content {
+    // server_id names the server of another node that the backup is of.
+    ImportBackupHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message ImportCopyResponse {
+  Backup backup = 1;
+}
+
+message DownloadCopyRequest {
+  // The server of another node that the backup is of.
+  string server_id = 1;
+  string backup_id = 2;
+}
+
+message DownloadCopyResponse {
+  // Size of the archive in the first message.
+  int64 size = 1;
+  bytes data = 2;
+}
+
+message DeleteCopyRequest {
+  string server_id = 1;
+  string backup_id = 2;
+}
+
+message DeleteCopyResponse {}
