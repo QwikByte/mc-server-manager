@@ -33,6 +33,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/notify"
 	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/overlay"
 	"github.com/QwikByte/noryx/internal/master/player"
@@ -161,6 +162,8 @@ func serve(ctx context.Context, cfg config) error {
 	go overlays.Run(ctx)
 	fileSets := fileset.NewService(db, nodes, networks, tags, datastores, moves)
 	go fileSets.Run(ctx)
+	notifications := notify.New(db, logStore, notify.Options{})
+	go notifications.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}
 	var restart func() error
@@ -183,7 +186,7 @@ func serve(ctx context.Context, cfg config) error {
 			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
-			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
+			Tasks:      tasks, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -254,6 +257,7 @@ type Services struct {
 	Datastores *datastore.Service
 	Tasks      *schedule.Service
 	Logs       *logs.Store
+	Notify     *notify.Service
 	Updates    *update.Service
 	Usage      *usage.Store
 	Tags       *tag.Store
@@ -298,6 +302,7 @@ func API(s Services) *http.ServeMux {
 	access.NewHandler(s.Access, s.Users).Register(m)
 	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
+	notify.NewHandler(s.Notify).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)

@@ -51,6 +51,12 @@ lists them, e.g. servers with their names, and a click takes one. Tab in an empt
 ↑ and ↓ repeat earlier commands, which the browser tab keeps for each node and the master until it is closed or the
 user signs out.
 
+### Notifications
+
+The **Notifications** tab sends warnings and errors to Discord, Slack, a webhook or by mail, with rules that choose
+them; see [Notifications](monitoring.md#notifications). It shows to administrators and those who may manage
+notifications and see the log for all servers.
+
 ### Users and groups
 
 The **Users** tab invites users, chooses their groups, disables and deletes them, creates setup links and turns off
@@ -67,10 +73,10 @@ There are permissions for every action, by area: nodes (see, change, renew certi
 network, which applies to all nodes), servers (see, create, start, stop, restart, change settings, delete), console
 (read, send commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download,
 change files, `server.properties`, plugins and mods), backups (see and download, back up and keep, restore, delete), the
-log, networks, databases of networks, templates, file sets, backup jobs, schedules, the master's settings, the terminal,
-users and groups. Previewing and applying a file set also needs the permission to change the files of every server it
-touches, and restarting them the one to restart each. Choosing a permission also chooses what it needs, e.g. seeing the
-servers one may restart.
+log, notifications, networks, databases of networks, templates, file sets, backup jobs, schedules, the master's
+settings, the terminal, users and groups. Previewing and applying a file set also needs the permission to change the
+files of every server it touches, and restarting them the one to restart each. Choosing a permission also chooses what
+it needs, e.g. seeing the servers one may restart.
 
 ### Scopes
 

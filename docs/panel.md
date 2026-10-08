@@ -45,6 +45,9 @@ readable in both themes (WCAG AA), while the colours of states, such as running 
 tightens all spacing, e.g. for long lists of servers, on screens used with a mouse or touchpad; touch screens keep the
 comfortable one.
 
+Users who may see the log can also turn on [desktop notifications](monitoring.md#everywhere-else) there, in each
+browser.
+
 The master keeps these choices for each user, as well as the view, sort and grouping of server lists chosen last, so
 that they apply in all their browsers. Each browser remembers the look and the clock it showed last and uses them until
 someone signs in; what a user never chose follows the browser. `GET /api/preferences` returns a user's settings with the

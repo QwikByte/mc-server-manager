@@ -53,6 +53,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/modrinth"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/notify"
 	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/overlay"
 	"github.com/QwikByte/noryx/internal/master/plugin"
@@ -279,6 +280,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
 		Usage: usageStore, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
+		Notify: notify.New(m.db, m.logs, notify.Options{}),
 	}
 }
 

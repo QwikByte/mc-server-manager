@@ -57,7 +57,7 @@ master don't tell the CPU limit of a server, so until they are updated, its CPU 
 
 Warnings show up in the bell like every warning of the log, and **Needs attention** on the overview lists the servers
 and nodes that are beyond a threshold now, with the latest value and how long it has lasted, to the users who may see
-them. Sending warnings to Discord, Slack or by mail is planned.
+them. [Notifications](#notifications) send them to Discord, Slack, a webhook or by mail.
 
 ## Logs
 
@@ -105,6 +105,12 @@ too much for a while ([Warnings](#warnings)), and nodes that go offline: the mas
 every 30 seconds and logs a node that fails two checks in a row once, and once more when it is back. Servers have an
 **Activity** tab and nodes an **Activity** section.
 
+Each user can also turn on **Desktop notifications** on their account page, in each browser: while the panel is open in
+a tab in the background, new warnings and errors show as notifications of the operating system, except those of the
+user's own actions. Later ones replace the notification and count how many came since the tab was left, so that a burst
+doesn't fill the screen; a click opens the log. The browser asks for its permission when they are turned on. Some
+browsers, e.g. Chrome on Android, only show notifications of sites with a service worker, which the panel has none of.
+
 ### Command line
 
 `noryx-master logs` and the terminal's `logs` command show the log with the same filters, also as JSON lines and
@@ -115,3 +121,81 @@ following new entries with `-f`. `noryx-agent logs [-f]` shows an agent's own lo
 Master and agent log to stderr as text or, with `--log-format json`, as JSON; `--log-level` chooses the least important
 level (`info` by default) and `--log-file` also writes JSON lines to a file, which is rotated at 10 MB with 5 older
 files kept.
+
+## Notifications
+
+Warnings and errors reach administrators who aren't looking at the panel, e.g. a server that keeps crashing or a node
+that went offline. The **Notifications** tab of the settings sets them up, for administrators and those with the
+permissions to manage notifications and to see the log for all servers, as rules send entries about every node and
+server.
+
+### Channels
+
+A channel is where notifications go:
+
+| Kind    | Sends                                                                                                    |
+| ------- | -------------------------------------------------------------------------------------------------------- |
+| Discord | a message with an embed per entry to a webhook of a Discord channel (its settings, **Integrations**)      |
+| Slack   | a message with a block of plain text per entry to an incoming webhook of a Slack app                     |
+| Webhook | the entries as JSON by `POST` to any URL, see [Payload of webhooks](#payload-of-webhooks)                |
+| Email   | a plain text mail through a mail server, over TLS from the start (port 465) or after STARTTLS (port 587) |
+
+URLs must start with `https://`, and channels only connect to public addresses, see
+[Security](security.md#notifications). The URL of a webhook and the password of a mail server can't be seen again once
+saved, and the log never names them: to change them, enter new ones; an empty field keeps them. A mail channel keeps its
+password only while its server, port and user stay the same, so that nobody can send it to another server. **Send test**
+sends a test message right away and shows why it failed, e.g. that the webhook answered `404 Not Found`; each channel
+allows three tests at once, then one every 20 seconds.
+
+Each channel shows when it last sent and why it last failed, since the master started. A message that fails is sent once
+more after 30 seconds, then given up and counted in the next message. When a channel starts to fail, the master logs a
+warning (category **Notifications**) once, and an information entry when it works again; the channel itself doesn't get
+the entries about itself, so that it can't keep itself busy.
+
+Entries can hold IP addresses, e.g. of sign-ins, and the names of players, which then leave the master; the panel says
+so where channels are set up. Secrets aren't logged, so they are never sent.
+
+### Rules
+
+A rule sends the new entries of the log of at least a level (errors; warnings and errors; or information, warnings and
+errors) to a channel: of the categories it chooses, or of all, and of a node or a server if it names one. Rules can be
+turned off. An entry that several rules send to the same channel goes there once.
+
+The master follows the log as entries are added, also those it collects from the agents, and sends only new ones: after
+a restart, it starts with the entries added from then on. Entries that come within 5 seconds go in one message of at
+most 10 entries, which counts the others. Each channel sends 5 messages at once, then one a minute at most, which
+bundles what came meanwhile. So a server in a crash loop or many agents that warn at once can't flood a channel, and an
+entry, e.g. of a node that went offline, reaches it within a minute. Messages name each entry's level, message, server
+and node, category, user, error and time.
+
+### Payload of webhooks
+
+A webhook gets a `POST` with `Content-Type: application/json` and the `User-Agent` `Noryx/<version>`, and should answer
+with a status of `2xx`; redirects aren't followed.
+
+```json
+{
+  "test": false,
+  "entries": [
+    {
+      "id": 4711,
+      "time": "2026-10-08T12:00:00Z",
+      "level": "warn",
+      "source": "agent",
+      "category": "servers",
+      "message": "A server crashed and starts again; its console and crash reports tell why",
+      "nodeId": "…",
+      "nodeName": "node-1",
+      "serverId": "…",
+      "serverName": "Lobby",
+      "attrs": { "crashes": "2", "exit_code": "1" }
+    }
+  ],
+  "notSent": 0
+}
+```
+
+`entries` are the entries in the form `GET /api/logs` returns them, oldest first; `user`, `nodeId`, `nodeName`,
+`serverId` and `serverName` are left out when an entry has none. `notSent` counts the entries that matched but weren't
+sent, as the message was full or sending failed before. A test has `"test": true` and no entries. The URL is the only
+credential, so keep it hard to guess, e.g. with a random token in its path.
