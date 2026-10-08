@@ -153,13 +153,22 @@ func TestExtract(t *testing.T) {
 	_, err = extract(t, dir, newer, "imported", Options{Overwrite: true})
 	check(t, err)
 
+	run := reg("./run.sh", "#!/bin/sh")
+	run.Mode = 0o6755
 	pack := tarGzOf(t, &tar.Header{Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": "abc"}},
-		&tar.Header{Name: "./", Typeflag: tar.TypeDir}, reg("./config/mod.toml", "a = 1"), reg("./mods/a.jar", "jar"))
+		&tar.Header{Name: "./", Typeflag: tar.TypeDir}, reg("./config/mod.toml", "a = 1"), reg("./mods/a.jar", "jar"), run)
 	_, err = extract(t, dir, pack, "", Options{})
 	check(t, err)
 	want["imported/world/level.dat"], want["config/"], want["config/mod.toml"], want["mods/"], want["mods/a.jar"] = "newer", "", "a = 1", "", "jar"
+	want["run.sh"] = "#!/bin/sh"
 	if got := written(t, path); !maps.Equal(got, want) {
 		t.Fatalf("extracted %v", got)
+	}
+	// Files keep that their owner may run them, but get no other permissions.
+	for name, perm := range map[string]fs.FileMode{"run.sh": 0o740, "config/mod.toml": 0o640} {
+		if info, err := os.Stat(filepath.Join(path, name)); err != nil || info.Mode() != perm {
+			t.Errorf("%s: %v, %v", name, info.Mode(), err)
+		}
 	}
 }
 

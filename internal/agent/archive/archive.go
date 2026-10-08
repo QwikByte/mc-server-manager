@@ -70,7 +70,9 @@ type Entry struct {
 	Dir      bool
 	Size     int64
 	Modified time.Time
-	file     *zip.File
+	// Exec tells that its owner may run the file.
+	Exec bool
+	file *zip.File
 }
 
 // Archive is an untrusted ZIP or .tar.gz archive whose entries were checked.
@@ -122,7 +124,7 @@ func (a *Archive) listZip() error {
 		if err != nil {
 			return err
 		}
-		e.file = f
+		e.file, e.Exec = f, f.Mode()&0o100 != 0
 		a.plain = a.plain && e.Name != "" && strings.TrimSuffix(f.Name, "/") == e.Name
 		if err := a.add(kinds, e); err != nil {
 			return err
@@ -210,6 +212,7 @@ func (a *Archive) walkTar(extract func(i int, r io.Reader) error) error {
 			continue
 		}
 		e, err := a.entry(h.Name, tarType(h.Typeflag), uint64(max(h.Size, 0)), h.ModTime) //nolint:gosec // not negative
+		e.Exec = h.Mode&0o100 != 0
 		switch {
 		case err != nil && extract != nil:
 			return errChanged

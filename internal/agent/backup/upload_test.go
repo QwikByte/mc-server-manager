@@ -237,4 +237,19 @@ func TestImportBackup(t *testing.T) {
 	if !stream.res.GetBackup().GetUntrusted() {
 		t.Fatalf("imported %v", stream.res.GetBackup())
 	}
+
+	// Restoring it leaves the files of the agent as they are, which it doesn't take from the
+	// backup, also where the backup has them, e.g. one of the configuration.
+	write(t, path+"/noryx-pending-players.json", "ours")
+	config := zipped(t, zipEntry{name: "bukkit.yml", content: "b: 2\n"}, zipEntry{name: "noryx-pending-players.json", content: "theirs"})
+	for _, paths := range [][]string{{"bukkit.yml", "noryx-pending-players.json"}, {"."}} {
+		b := backup(len(config))
+		b.Paths = paths
+		check(t, s.ImportBackup(importing(b, config)))
+		_, err := s.RestoreBackup(t.Context(), &noryxv1.RestoreBackupRequest{ServerId: serverID, BackupId: b.GetId()})
+		check(t, err)
+		if read(path, "bukkit.yml") != "b: 2\n" || read(path, "noryx-pending-players.json") != "ours" {
+			t.Fatalf("restoring %v: pending players = %q", paths, read(path, "noryx-pending-players.json"))
+		}
+	}
 }

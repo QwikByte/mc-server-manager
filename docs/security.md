@@ -159,12 +159,14 @@ devices and other special files, absolute paths, `..` and control characters in 
 or both as a file and a folder, more than 100,000 entries, more than 64 GB of files, and files that would be more than
 100 times the size of the archive (zip bombs; up to 64 MB are exempt). It reads at most 64 MB of the directory of a ZIP
 archive, which it keeps in memory, refuses one whose end announces more entries or a larger directory before it reads
-any, as Go's reader of ZIP archives reserves memory for them first, and decompresses a `.tar.gz` archive at most as far as these limits allow, twice: to
-check it, then to extract it, when each entry must match the list. The files must fit with 1 GB to spare. Every entry
-is written below its folder in the server's data (`os.Root`), as the server's user, and neither through a link nor in
-place of something that isn't a file, so a link of the server can't lead it elsewhere. The file manager extracts
-nothing into a hidden path, the manifest of file sets, the temporary files of the agent or the files Noryx writes
-itself, such as `server.properties`, `ops.json` and `forwarding.secret`, and refuses the whole archive if it would.
+any, as Go's reader of ZIP archives reserves memory for them first, and decompresses a `.tar.gz` archive at most as far
+as these limits allow, twice: to check it, then to extract it, when each entry must match the list. The files must fit
+with 1 GB to spare. Every entry is written below its folder in the server's data (`os.Root`), as the server's user, and
+neither through a link nor in place of something that isn't a file, so a link of the server can't lead it elsewhere.
+Of the permissions in the archive, a file only keeps that its owner may run it, which the server's user could allow
+itself, and never special ones such as setuid. The file manager extracts nothing into a hidden path, the manifest of
+file sets, the temporary files of the agent or the files Noryx writes itself, such as `server.properties`, `ops.json`
+and `forwarding.secret`, and refuses the whole archive if it would.
 Extracting and copying need the permission to change files, searching the one to read them.
 
 ## Plugins and downloads
@@ -313,8 +315,9 @@ An uploaded backup is untrusted. The agent receives it outside the server's data
 an archive of the file manager (see [File manager](#file-manager)), and marks it as untrusted in its details, which only
 the agent writes. Restoring an untrusted backup checks it again, with limits for backups (up to 1,000,000 entries and
 1 TB), and extracts it confined like an archive of the file manager, without the files that only hold secrets, the
-manifest of file sets and the files of the agent; it replaces every secret in the other files with the server's own,
-not only placeholders, and keeps the server's network settings like any restore. A backup from another node, moved
+manifest of file sets and the files of the agent, whose versions on the server stay as they are, e.g. the pardons that
+wait for the end of temporary bans; it replaces every secret in the other files with the server's own, not only
+placeholders, and keeps the server's network settings like any restore. A backup from another node, moved
 with its server, copied there or a copy restored into a server, is untrusted too: the agent keeps it once it checked it
 like an uploaded one, with the limits for backups, and refuses it once it is larger than the master announced or less
 than 1 GB would stay free, also when the data of a moving server arrive. Listing, downloading and restoring an
