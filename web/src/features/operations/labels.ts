@@ -65,6 +65,10 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn on maintenance of {{name}}", { name: subject })
     case "network.maintenance-off":
       return t("Turn off maintenance of {{name}}", { name: subject })
+    case "network.maintenance-timer":
+      return t("Plan maintenance of {{name}}", { name: subject })
+    case "network.maintenance-end":
+      return t("Plan the end of maintenance of {{name}}", { name: subject })
     case "overlay.leave":
       return t("Remove {{name}} from the private network", { name: subject })
     case "overlay.rotate":
@@ -180,6 +184,7 @@ export function stepOf(op: Operation, step: string): string {
     case "bedrock-remove":
       return t("Remove Geyser and Floodgate")
     case "maintenance":
+      if (op.kind === "network.maintenance-timer" || op.kind === "network.maintenance-end") return t("Start the timer of the Maintenance plugin")
       return op.kind === "network.maintenance-off" ? t("Turn maintenance off") : t("Turn maintenance on")
     case "overlay":
       return t("Leave the private network")

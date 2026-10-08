@@ -2,6 +2,7 @@ package network
 
 import (
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -21,6 +22,60 @@ func TestBackendName(t *testing.T) {
 	} {
 		if got := backendName(server, existing); got != want {
 			t.Errorf("backendName(%q) = %q, want %q", server, got, want)
+		}
+	}
+}
+
+func TestCopyName(t *testing.T) {
+	existing := []Backend{{Name: "lobby"}, {Name: "lobby-2"}, {Name: "game"}, {Name: "a-very-long-name-of-a-server-123"}}
+	for original, want := range map[string]string{
+		"lobby":                            "lobby-3",
+		"lobby-2":                          "lobby-3",
+		"game":                             "game-2",
+		"skyblock-1":                       "skyblock-2",
+		"a-very-long-name-of-a-server-123": "a-very-long-name-of-a-server-2",
+		"2024":                             "2024-2",
+	} {
+		if got := copyName(original, existing); got != want || !noryxv1.ValidBackendName(got) {
+			t.Errorf("copyName(%q) = %q, want %q", original, got, want)
+		}
+	}
+	if got := after([]string{"lobby", "game"}, "lobby", "lobby-2"); !slices.Equal(got, []string{"lobby", "lobby-2", "game"}) {
+		t.Errorf("after = %q", got)
+	}
+	if got := after([]string{"game"}, "lobby", "lobby-2"); !slices.Equal(got, []string{"game"}) {
+		t.Errorf("after without the original = %q", got)
+	}
+}
+
+func TestMaintenanceRequests(t *testing.T) {
+	changes := func(c MaintenanceChange) []string {
+		reqs, err := c.requests()
+		if err != nil {
+			return []string{err.Error()}
+		}
+		var out []string
+		for _, r := range reqs {
+			out = append(out, r.GetChange().String()+" "+r.GetServer()+" "+strconv.Itoa(int(r.GetMinutes()))+" "+strconv.Itoa(int(r.GetDurationMinutes())))
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		change MaintenanceChange
+		want   []string
+	}{
+		{MaintenanceChange{Enabled: true}, []string{"MAINTENANCE_CHANGE_ON  0 0"}},
+		{MaintenanceChange{Enabled: true, Server: "lobby", Duration: 60}, []string{"MAINTENANCE_CHANGE_ON lobby 0 0", "MAINTENANCE_CHANGE_END_TIMER lobby 60 0"}},
+		{MaintenanceChange{Enabled: true, Delay: 5}, []string{"MAINTENANCE_CHANGE_START_TIMER  5 0"}},
+		{MaintenanceChange{Enabled: true, Delay: 5, Duration: 60}, []string{"MAINTENANCE_CHANGE_SCHEDULE  5 60"}},
+		{MaintenanceChange{Server: "lobby"}, []string{"MAINTENANCE_CHANGE_OFF lobby 0 0"}},
+		{MaintenanceChange{Delay: 30}, []string{"MAINTENANCE_CHANGE_END_TIMER  30 0"}},
+		{MaintenanceChange{Duration: 30}, []string{"Choose times from 1 minute to 28 days."}},
+		{MaintenanceChange{Enabled: true, Delay: noryxv1.MaxMaintenanceMinutes + 1}, []string{"Choose times from 1 minute to 28 days."}},
+		{MaintenanceChange{Enabled: true, Server: "global"}, []string{"The Maintenance plugin reads global as the whole network. Rename the server in the network to change its maintenance alone."}},
+	} {
+		if got := changes(tc.change); !slices.Equal(got, tc.want) {
+			t.Errorf("%+v = %q, want %q", tc.change, got, tc.want)
 		}
 	}
 }

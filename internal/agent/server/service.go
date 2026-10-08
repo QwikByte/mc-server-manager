@@ -59,9 +59,7 @@ var (
 	// Versions of mod loaders, e.g. 0.16.10 or 1.20.1-47.3.0, end up in a variable of the image.
 	loaderVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
 	secretPattern        = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
-	// Names of backends a proxy sends players to; "try" is the list of these names.
-	backendPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
-	hostPattern    = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
+	hostPattern          = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
 	// Host names that players connect through, e.g. survival.example.com.
 	forcedHostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 	// JVM options end up in a shell variable that the image splits at spaces, so they
@@ -573,7 +571,7 @@ func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
 	for _, b := range req.GetBackends() {
 		backend := runtime.NetworkBackend{Name: b.GetName(), ServerID: b.GetServerId(), Address: b.GetAddress(), Restricted: b.GetRestricted(), Motd: b.GetMotd()}
 		switch {
-		case !backendPattern.MatchString(backend.Name) || backend.Name == "try" || names[backend.Name]:
+		case !noryxv1.ValidBackendName(backend.Name) || names[backend.Name]:
 			return network, fmt.Sprintf("invalid or duplicate backend name %q", backend.Name)
 		case backend.ServerID != "" && !runtime.ValidID(backend.ServerID):
 			return network, "invalid backend server ID"

@@ -116,6 +116,7 @@ var actions = map[string]action{
 	"POST /api/networks/{id}/broadcast":                        {logging.Networks, "Send message to network"},
 	"POST /api/networks/{id}/rolling-restart":                  {logging.Networks, "Restart network server by server"},
 	"POST /api/networks/{id}/maintenance":                      {logging.Networks, "Change network maintenance"},
+	"POST /api/networks/{id}/maintenance/abort":                {logging.Networks, "Abort network maintenance timer"},
 	"POST /api/networks/{id}/maintenance/players":              {logging.Networks, "Change who may join during maintenance"},
 	"POST /api/networks/{id}/players/send":                     {logging.Players, "Send player to server"},
 	"POST /api/networks/{id}/players/move":                     {logging.Players, "Send players to another server"},

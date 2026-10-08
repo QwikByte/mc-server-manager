@@ -40,7 +40,8 @@ type ProxyServiceClient interface {
 	// maintenance is on, and which players may join meanwhile.
 	GetMaintenance(ctx context.Context, in *GetMaintenanceRequest, opts ...grpc.CallOption) (*GetMaintenanceResponse, error)
 	// ChangeMaintenance runs a command of the Maintenance plugin on the console of a running
-	// proxy, and returns once the plugin saved the change.
+	// proxy, and returns once the plugin saved the change. Timers only live in the plugin, so
+	// the call returns once it sent their commands.
 	ChangeMaintenance(ctx context.Context, in *ChangeMaintenanceRequest, opts ...grpc.CallOption) (*ChangeMaintenanceResponse, error)
 }
 
@@ -107,7 +108,8 @@ type ProxyServiceServer interface {
 	// maintenance is on, and which players may join meanwhile.
 	GetMaintenance(context.Context, *GetMaintenanceRequest) (*GetMaintenanceResponse, error)
 	// ChangeMaintenance runs a command of the Maintenance plugin on the console of a running
-	// proxy, and returns once the plugin saved the change.
+	// proxy, and returns once the plugin saved the change. Timers only live in the plugin, so
+	// the call returns once it sent their commands.
 	ChangeMaintenance(context.Context, *ChangeMaintenanceRequest) (*ChangeMaintenanceResponse, error)
 	mustEmbedUnimplementedProxyServiceServer()
 }

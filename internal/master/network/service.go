@@ -58,7 +58,6 @@ var (
 	errFabricMode = httpapi.Errorf(http.StatusBadRequest, "Fabric and Quilt servers only support Velocity's modern forwarding.")
 
 	nonSlug     = regexp.MustCompile(`[^a-z0-9]+`)
-	namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 	hostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 )
 
@@ -266,6 +265,12 @@ func (s *Service) Update(ctx context.Context, id string, c Change) (Network, err
 	n := current
 	n.Name, n.Forwarding, n.Firewalled = c.Name, c.Forwarding, c.Firewalled
 	n.Backends, n.Try, n.ForcedHosts, n.BedrockPort = c.Backends, c.Try, c.ForcedHosts, c.BedrockPort
+	return s.update(ctx, current, n)
+}
+
+// update gives a network new settings, while the lock is held, and returns the network as it
+// is saved.
+func (s *Service) update(ctx context.Context, current, n Network) (Network, error) {
 	m, err := s.members(ctx)
 	if err == nil {
 		err = n.validate(m)
@@ -603,7 +608,7 @@ func (n *Network) validate(m members) error {
 	names := map[string]bool{}
 	for i, b := range n.Backends {
 		switch {
-		case !namePattern.MatchString(b.Name) || b.Name == "try":
+		case !noryxv1.ValidBackendName(b.Name):
 			return httpapi.Errorf(http.StatusBadRequest, "%q can't name a server: use up to 32 lower-case letters, digits, - and _.", b.Name)
 		case names[b.Name]:
 			return httpapi.Errorf(http.StatusBadRequest, "Two servers are named %q.", b.Name)

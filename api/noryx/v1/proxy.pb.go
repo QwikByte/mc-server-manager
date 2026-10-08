@@ -30,6 +30,13 @@ const (
 	// Adds or removes a player who may join during maintenance.
 	MaintenanceChange_MAINTENANCE_CHANGE_ADD    MaintenanceChange = 3
 	MaintenanceChange_MAINTENANCE_CHANGE_REMOVE MaintenanceChange = 4
+	// Starts or ends maintenance after minutes; a new timer replaces the one that runs.
+	MaintenanceChange_MAINTENANCE_CHANGE_START_TIMER MaintenanceChange = 5
+	MaintenanceChange_MAINTENANCE_CHANGE_END_TIMER   MaintenanceChange = 6
+	// Starts maintenance after minutes, and ends it duration_minutes later.
+	MaintenanceChange_MAINTENANCE_CHANGE_SCHEDULE MaintenanceChange = 7
+	// Aborts the timer that runs, if any.
+	MaintenanceChange_MAINTENANCE_CHANGE_ABORT_TIMER MaintenanceChange = 8
 )
 
 // Enum value maps for MaintenanceChange.
@@ -40,6 +47,10 @@ var (
 		2: "MAINTENANCE_CHANGE_OFF",
 		3: "MAINTENANCE_CHANGE_ADD",
 		4: "MAINTENANCE_CHANGE_REMOVE",
+		5: "MAINTENANCE_CHANGE_START_TIMER",
+		6: "MAINTENANCE_CHANGE_END_TIMER",
+		7: "MAINTENANCE_CHANGE_SCHEDULE",
+		8: "MAINTENANCE_CHANGE_ABORT_TIMER",
 	}
 	MaintenanceChange_value = map[string]int32{
 		"MAINTENANCE_CHANGE_UNSPECIFIED": 0,
@@ -47,6 +58,10 @@ var (
 		"MAINTENANCE_CHANGE_OFF":         2,
 		"MAINTENANCE_CHANGE_ADD":         3,
 		"MAINTENANCE_CHANGE_REMOVE":      4,
+		"MAINTENANCE_CHANGE_START_TIMER": 5,
+		"MAINTENANCE_CHANGE_END_TIMER":   6,
+		"MAINTENANCE_CHANGE_SCHEDULE":    7,
+		"MAINTENANCE_CHANGE_ABORT_TIMER": 8,
 	}
 )
 
@@ -385,9 +400,17 @@ type ChangeMaintenanceRequest struct {
 	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
 	Change   MaintenanceChange      `protobuf:"varint,2,opt,name=change,proto3,enum=noryx.v1.MaintenanceChange" json:"change,omitempty"`
 	// The player to add or remove.
-	Player        string `protobuf:"bytes,3,opt,name=player,proto3" json:"player,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Player string `protobuf:"bytes,3,opt,name=player,proto3" json:"player,omitempty"`
+	// The game server of the network that maintenance is turned on or off for, or that a
+	// timer is about, by its name in the configuration of the proxy; empty for the whole
+	// network. Agents that don't tell servers_and_timers in Maintenance ignore it.
+	Server string `protobuf:"bytes,4,opt,name=server,proto3" json:"server,omitempty"`
+	// Minutes until a timer starts or ends maintenance, from 1 to MaxMaintenanceMinutes.
+	Minutes uint32 `protobuf:"varint,5,opt,name=minutes,proto3" json:"minutes,omitempty"`
+	// Minutes that the maintenance a schedule starts lasts, from 1 to MaxMaintenanceMinutes.
+	DurationMinutes uint32 `protobuf:"varint,6,opt,name=duration_minutes,json=durationMinutes,proto3" json:"duration_minutes,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ChangeMaintenanceRequest) Reset() {
@@ -441,6 +464,27 @@ func (x *ChangeMaintenanceRequest) GetPlayer() string {
 	return ""
 }
 
+func (x *ChangeMaintenanceRequest) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
+func (x *ChangeMaintenanceRequest) GetMinutes() uint32 {
+	if x != nil {
+		return x.Minutes
+	}
+	return 0
+}
+
+func (x *ChangeMaintenanceRequest) GetDurationMinutes() uint32 {
+	if x != nil {
+		return x.DurationMinutes
+	}
+	return 0
+}
+
 type ChangeMaintenanceResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Maintenance   *Maintenance           `protobuf:"bytes,1,opt,name=maintenance,proto3" json:"maintenance,omitempty"`
@@ -491,9 +535,18 @@ type Maintenance struct {
 	Installed bool `protobuf:"varint,1,opt,name=installed,proto3" json:"installed,omitempty"`
 	Enabled   bool `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	// Who may join during maintenance.
-	Players       []*MaintenancePlayer `protobuf:"bytes,3,rep,name=players,proto3" json:"players,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Players []*MaintenancePlayer `protobuf:"bytes,3,rep,name=players,proto3" json:"players,omitempty"`
+	// The servers in maintenance on their own, by their name in the configuration of the proxy.
+	Servers []string `protobuf:"bytes,4,rep,name=servers,proto3" json:"servers,omitempty"`
+	// When the plugin ends the maintenance of the whole network, in Unix seconds, if it keeps
+	// its end timer over restarts (continue-endtimer-after-restart); 0 otherwise. The plugin
+	// keeps its other timers to itself.
+	EndsAt int64 `protobuf:"varint,5,opt,name=ends_at,json=endsAt,proto3" json:"ends_at,omitempty"`
+	// The agent changes the maintenance of single servers and starts timers. Older agents
+	// ignore the fields of ChangeMaintenanceRequest for them.
+	ServersAndTimers bool `protobuf:"varint,6,opt,name=servers_and_timers,json=serversAndTimers,proto3" json:"servers_and_timers,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Maintenance) Reset() {
@@ -545,6 +598,27 @@ func (x *Maintenance) GetPlayers() []*MaintenancePlayer {
 		return x.Players
 	}
 	return nil
+}
+
+func (x *Maintenance) GetServers() []string {
+	if x != nil {
+		return x.Servers
+	}
+	return nil
+}
+
+func (x *Maintenance) GetEndsAt() int64 {
+	if x != nil {
+		return x.EndsAt
+	}
+	return 0
+}
+
+func (x *Maintenance) GetServersAndTimers() bool {
+	if x != nil {
+		return x.ServersAndTimers
+	}
+	return false
 }
 
 type MaintenancePlayer struct {
@@ -625,26 +699,36 @@ const file_noryx_v1_proxy_proto_rawDesc = "" +
 	"\x15GetMaintenanceRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\"Q\n" +
 	"\x16GetMaintenanceResponse\x127\n" +
-	"\vmaintenance\x18\x01 \x01(\v2\x15.noryx.v1.MaintenanceR\vmaintenance\"\x84\x01\n" +
+	"\vmaintenance\x18\x01 \x01(\v2\x15.noryx.v1.MaintenanceR\vmaintenance\"\xe1\x01\n" +
 	"\x18ChangeMaintenanceRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x123\n" +
 	"\x06change\x18\x02 \x01(\x0e2\x1b.noryx.v1.MaintenanceChangeR\x06change\x12\x16\n" +
-	"\x06player\x18\x03 \x01(\tR\x06player\"T\n" +
+	"\x06player\x18\x03 \x01(\tR\x06player\x12\x16\n" +
+	"\x06server\x18\x04 \x01(\tR\x06server\x12\x18\n" +
+	"\aminutes\x18\x05 \x01(\rR\aminutes\x12)\n" +
+	"\x10duration_minutes\x18\x06 \x01(\rR\x0fdurationMinutes\"T\n" +
 	"\x19ChangeMaintenanceResponse\x127\n" +
-	"\vmaintenance\x18\x01 \x01(\v2\x15.noryx.v1.MaintenanceR\vmaintenance\"|\n" +
+	"\vmaintenance\x18\x01 \x01(\v2\x15.noryx.v1.MaintenanceR\vmaintenance\"\xdd\x01\n" +
 	"\vMaintenance\x12\x1c\n" +
 	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\x125\n" +
-	"\aplayers\x18\x03 \x03(\v2\x1b.noryx.v1.MaintenancePlayerR\aplayers\";\n" +
+	"\aplayers\x18\x03 \x03(\v2\x1b.noryx.v1.MaintenancePlayerR\aplayers\x12\x18\n" +
+	"\aservers\x18\x04 \x03(\tR\aservers\x12\x17\n" +
+	"\aends_at\x18\x05 \x01(\x03R\x06endsAt\x12,\n" +
+	"\x12servers_and_timers\x18\x06 \x01(\bR\x10serversAndTimers\";\n" +
 	"\x11MaintenancePlayer\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04uuid\x18\x02 \x01(\tR\x04uuid*\xa9\x01\n" +
+	"\x04uuid\x18\x02 \x01(\tR\x04uuid*\xb4\x02\n" +
 	"\x11MaintenanceChange\x12\"\n" +
 	"\x1eMAINTENANCE_CHANGE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15MAINTENANCE_CHANGE_ON\x10\x01\x12\x1a\n" +
 	"\x16MAINTENANCE_CHANGE_OFF\x10\x02\x12\x1a\n" +
 	"\x16MAINTENANCE_CHANGE_ADD\x10\x03\x12\x1d\n" +
-	"\x19MAINTENANCE_CHANGE_REMOVE\x10\x042\x80\x03\n" +
+	"\x19MAINTENANCE_CHANGE_REMOVE\x10\x04\x12\"\n" +
+	"\x1eMAINTENANCE_CHANGE_START_TIMER\x10\x05\x12 \n" +
+	"\x1cMAINTENANCE_CHANGE_END_TIMER\x10\x06\x12\x1f\n" +
+	"\x1bMAINTENANCE_CHANGE_SCHEDULE\x10\a\x12\"\n" +
+	"\x1eMAINTENANCE_CHANGE_ABORT_TIMER\x10\b2\x80\x03\n" +
 	"\fProxyService\x12Y\n" +
 	"\x10GetProxySettings\x12!.noryx.v1.GetProxySettingsRequest\x1a\".noryx.v1.GetProxySettingsResponse\x12b\n" +
 	"\x13UpdateProxySettings\x12$.noryx.v1.UpdateProxySettingsRequest\x1a%.noryx.v1.UpdateProxySettingsResponse\x12S\n" +

@@ -55,6 +55,15 @@ export function backendName(serverName: string, taken: string[]) {
   return name
 }
 
+/** The name of a copy of a server in its network: the original's without its number and the next free one, e.g. lobby-2. */
+export function copyName(original: string, taken: string[]) {
+  const base = original.replace(/-[0-9]+$/, "")
+  for (let i = 2; ; i++) {
+    const name = `${base.slice(0, 32 - `-${i}`.length)}-${i}`
+    if (!taken.includes(name)) return name
+  }
+}
+
 /** The command that lets only the proxy's node reach a server's port, for Docker's DOCKER-USER chain. */
 export function firewallCommand(port: number, proxyHost: string) {
   const tables = proxyHost.includes(":") ? "ip6tables" : "iptables" // an IPv6 address needs the IPv6 tables
