@@ -25,6 +25,7 @@ import (
 	"github.com/QwikByte/noryx/internal/buildinfo"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/mojang"
 )
 
 const (
@@ -84,9 +85,9 @@ type cached struct {
 }
 
 type Client struct {
-	api, global string
-	http        *http.Client
-	cache       time.Duration
+	api, globalAPI string
+	http           *http.Client
+	cache          time.Duration
 
 	mu     sync.Mutex
 	builds map[string]cached // the newest build by project
@@ -95,7 +96,7 @@ type Client struct {
 // New returns a client for the download server and the global API at the given base URLs,
 // which keeps the newest builds for the time cache.
 func New(api, global string, cache time.Duration) *Client {
-	return &Client{api: api, global: global, http: &http.Client{Timeout: 2 * time.Minute}, cache: cache, builds: map[string]cached{}}
+	return &Client{api: api, globalAPI: global, http: &http.Client{Timeout: 2 * time.Minute}, cache: cache, builds: map[string]cached{}}
 }
 
 // Latest returns the newest build of a project for the platform of the first loader
@@ -171,22 +172,51 @@ func (c *Client) Download(ctx context.Context, f modrinth.File) ([]byte, error) 
 // PlayerID returns the ID Floodgate gives the Bedrock player with a gamertag: their XUID,
 // which GeyserMC knows of those who joined a server with Geyser before.
 func (c *Client) PlayerID(ctx context.Context, gamertag string) (string, error) {
-	res, err := c.send(ctx, c.global+"/xbox/xuid/"+url.PathEscape(gamertag))
-	if err != nil {
+	xuid, err := c.xuid(ctx, gamertag)
+	if err == nil && xuid == 0 {
+		err = httpapi.Errorf(http.StatusNotFound,
+			"GeyserMC doesn't know the Bedrock player %s yet. They need to join a server with Geyser once, e.g. one of yours with its whitelist off.", gamertag)
+	}
+	return fmt.Sprintf("00000000-0000-0000-%04x-%012x", xuid>>48, xuid&(1<<48-1)), err
+}
+
+// SkinTexture returns the ID of the skin of a Bedrock player on Minecraft's textures server,
+// to which Geyser uploads the skins of the players who join, or "" if GeyserMC knows none.
+func (c *Client) SkinTexture(ctx context.Context, gamertag string) (string, error) {
+	xuid, err := c.xuid(ctx, gamertag)
+	if err != nil || xuid == 0 {
 		return "", err
 	}
-	defer res.Body.Close()
+	var skin struct {
+		TextureID string `json:"texture_id"` // missing without a skin
+	}
+	if err := c.fromGlobal(ctx, fmt.Sprintf("/skin/%d", xuid), &skin); err != nil || !mojang.ValidTexture(skin.TextureID) {
+		return "", err
+	}
+	return skin.TextureID, nil
+}
+
+// xuid returns the XUID of the Bedrock player with a gamertag, or 0 if GeyserMC doesn't know them.
+func (c *Client) xuid(ctx context.Context, gamertag string) (uint64, error) {
 	var body struct {
 		XUID uint64 `json:"xuid"` // missing for players GeyserMC doesn't know
 	}
-	if err := json.NewDecoder(io.LimitReader(res.Body, maxResponseBytes)).Decode(&body); err != nil {
-		return "", unavailable(fmt.Errorf("status %d", res.StatusCode))
+	err := c.fromGlobal(ctx, "/xbox/xuid/"+url.PathEscape(gamertag), &body)
+	return body.XUID, err
+}
+
+// fromGlobal decodes the answer of the global API at path into v, whatever its status: GeyserMC
+// answers players it doesn't know with an error and a message.
+func (c *Client) fromGlobal(ctx context.Context, path string, v any) error {
+	res, err := c.send(ctx, c.globalAPI+path)
+	if err != nil {
+		return err
 	}
-	if body.XUID == 0 {
-		return "", httpapi.Errorf(http.StatusNotFound,
-			"GeyserMC doesn't know the Bedrock player %s yet. They need to join a server with Geyser once, e.g. one of yours with its whitelist off.", gamertag)
+	defer res.Body.Close()
+	if err := json.NewDecoder(io.LimitReader(res.Body, maxResponseBytes)).Decode(v); err != nil {
+		return unavailable(fmt.Errorf("status %d", res.StatusCode))
 	}
-	return fmt.Sprintf("00000000-0000-0000-%04x-%012x", body.XUID>>48, body.XUID&(1<<48-1)), nil
+	return nil
 }
 
 // do gets a URL and checks that the response is OK.

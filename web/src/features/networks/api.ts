@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { operate } from "@/features/operations/api"
+import type { Message } from "@/features/players/api"
 import type { Followed } from "@/features/servers/api"
 import { api } from "@/lib/api"
 
@@ -120,7 +121,8 @@ export interface Deleted {
 
 export type NetworkAction =
   | { action: "apply" | "delete" | "start" | "stop" | "restart" }
-  | { action: "broadcast"; message: string }
+  /** A message to the players of all game servers, in the chat, as a title or above the hotbar. */
+  | ({ action: "broadcast" } & Message)
   /** Restarts the running game servers a batch at a time, or only those named, e.g. one safely. */
   | { action: "rolling-restart"; batch: number; servers?: ServerRef[] }
 
@@ -134,7 +136,7 @@ export function useNetworkAction(id: string) {
         case "delete":
           return operate<Deleted>(path, { method: "DELETE" }, a.onStart)
         case "broadcast":
-          return api(`${path}/broadcast`, { body: { message: a.message } })
+          return api(`${path}/broadcast`, { body: { kind: a.kind, message: a.message, subtitle: a.subtitle } })
         case "rolling-restart":
           return operate(`${path}/rolling-restart`, { body: { batch: a.batch, servers: a.servers } }, a.onStart)
         default:

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -17,8 +16,6 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/operation"
 )
-
-const maxBroadcast = 256
 
 // Actions on all servers of a network.
 const (
@@ -71,18 +68,23 @@ func (s *Service) Power(ctx context.Context, n Network, action string) error {
 	return errors.Join(errs...)
 }
 
-// Broadcast sends a chat message to the players of all running game servers of a network.
-func (s *Service) Broadcast(ctx context.Context, n Network, text string) error {
-	text = strings.TrimSpace(text)
-	if text == "" || len(text) > maxBroadcast || strings.ContainsFunc(text, unicode.IsControl) {
-		return httpapi.Errorf(http.StatusBadRequest, "Enter a message of up to %d characters.", maxBroadcast)
+// Broadcast shows a message to the players of all running game servers of a network.
+func (s *Service) Broadcast(ctx context.Context, n Network, m Message) error {
+	commands, err := m.Commands(Everyone)
+	if err != nil {
+		return err
 	}
 	return s.each(ctx, n.Backends, func(ctx context.Context, c noryxv1.ServerServiceClient, id string) error {
-		_, err := c.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: "say " + text})
-		if status.Code(err) == codes.FailedPrecondition {
-			return nil // a stopped server has no players
+		for _, command := range commands {
+			_, err := c.SendCommand(ctx, &noryxv1.SendCommandRequest{Id: id, Command: command})
+			if status.Code(err) == codes.FailedPrecondition {
+				return nil // a stopped server has no players
+			}
+			if err != nil {
+				return err
+			}
 		}
-		return err
+		return nil
 	})
 }
 

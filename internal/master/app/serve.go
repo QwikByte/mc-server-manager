@@ -31,6 +31,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/mojang"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/notify"
@@ -148,7 +149,8 @@ func serve(ctx context.Context, cfg config) error {
 	networks := network.NewService(db, nodes, plugins, overlays, datastores)
 	tags := tag.NewStore(db)
 	accessService := access.NewService(db)
-	usageStore := usage.NewStore(db, nodes, conf)
+	sightings := player.NewSightings(db, conf)
+	usageStore := usage.NewStore(db, nodes, conf, sightings)
 	copies := backup.NewCopies(db, nodes, nil)
 	jobs := backup.NewJobs(nodes, datastores, copies)
 	tasks := schedule.NewService(db, nodes, tags, networks, accessService, map[string]schedule.Kind{
@@ -185,9 +187,9 @@ func serve(ctx context.Context, cfg config) error {
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
-			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
+			Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(mojang.API, mojang.SessionServer, mojang.Textures), Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
-			Tasks:      tasks, Copies: copies, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
+			Tasks:      tasks, Copies: copies, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -243,14 +245,16 @@ func serve(ctx context.Context, cfg config) error {
 
 // Services are what the master serves over HTTP.
 type Services struct {
-	Users     *auth.Service
-	Access    *access.Service
-	Settings  *settings.Service
-	Nodes     *node.Service
-	Networks  *network.Service
-	Overlay   *overlay.Service
-	Plugins   *plugin.Service
-	GeyserMC  *geysermc.Client
+	Users    *auth.Service
+	Access   *access.Service
+	Settings *settings.Service
+	Nodes    *node.Service
+	Networks *network.Service
+	Overlay  *overlay.Service
+	Plugins  *plugin.Service
+	GeyserMC *geysermc.Client
+	// Mojang knows the skins of players.
+	Mojang    *mojang.Client
 	Modpacks  *modpack.Service
 	Templates *template.Service
 	FileSets  *fileset.Service
@@ -262,7 +266,9 @@ type Services struct {
 	Notify     *notify.Service
 	Updates    *update.Service
 	Usage      *usage.Store
-	Tags       *tag.Store
+	// Sightings are where and when players were online.
+	Sightings *player.Sightings
+	Tags      *tag.Store
 	// Preferences are what each user chose for the panel: the layout of the overview, pinned servers and settings.
 	Preferences *preference.Store
 	// Operations are the long actions in progress.
@@ -308,10 +314,10 @@ func API(s Services) *http.ServeMux {
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins, s.Sightings).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations, s.FileSets).Register(m)
-	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Operations).Register(m)
+	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Sightings, player.NewFaces(s.Mojang, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
 	plugin.NewHandler(s.Plugins, s.Operations, s.Networks).Register(m)

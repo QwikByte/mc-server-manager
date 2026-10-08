@@ -15,11 +15,13 @@ import { type NodeServer, useServer } from "@/features/servers/api"
 import { type ServerUsage, useServerUsage } from "@/features/usage/api"
 import { sortingOf } from "@/lib/sort"
 import { PlayerMenu } from "./online-players"
-import { PlayerActionDialog } from "./player-action-dialog"
+import { PlayerBulkBar } from "./player-bulk-bar"
+import { type PlayerDialog, PlayerDialogs } from "./player-dialog"
 import { type ListKind, PlayerListTab } from "./player-lists"
-import type { PlayerDialog } from "./players-page"
-import { listSorts, type PlayerSearch } from "./search"
-import { SendDialog } from "./send-dialog"
+import { PlayerName } from "./player-name"
+import { listSorts, type PlayerSearch, seenSorts } from "./search"
+import { SeenPlayers } from "./seen-players"
+import { bulkActions, useSelection } from "./selection"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/players")
 
@@ -33,6 +35,7 @@ export function ServerPlayersPage() {
   const { usage, isPending, error } = useServerUsage(nodeId, serverId)
   const network = useNetworkOf()({ nodeId, serverId })
   const [dialog, setDialog] = useState<PlayerDialog>()
+  const selection = useSelection()
   if (!server) return null
 
   const tab = search.tab ?? "online"
@@ -43,12 +46,17 @@ export function ServerPlayersPage() {
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Segmented<ListKind | "online">
+        <Segmented<ListKind | "online" | "seen">
           label={t("List")}
+          className="max-w-full overflow-x-auto"
           value={tab}
-          onChange={(tab) => set({ tab: tab === "online" ? undefined : tab })}
+          onChange={(tab) => {
+            selection.clear()
+            set({ tab: tab === "online" ? undefined : tab })
+          }}
           options={[
             { value: "online", label: t("Online") },
+            { value: "seen", label: t("Seen") },
             { value: "banned", label: t("Banned") },
             { value: "whitelisted", label: t("Whitelist") },
             { value: "operators", label: t("Operators") },
@@ -67,13 +75,23 @@ export function ServerPlayersPage() {
           />
         </InputGroup>
       </div>
-      {tab !== "online" ? (
+      {tab === "seen" ? (
+        <SeenPlayers
+          network={network}
+          server={nodeServer}
+          query={query}
+          sorting={sortingOf(search, seenSorts, set)}
+          selection={selection}
+          onAct={setDialog}
+        />
+      ) : tab !== "online" ? (
         <PlayerListTab
           kind={tab}
           network={network}
           server={nodeServer}
           query={query}
           sorting={sortingOf(search, listSorts, set)}
+          selection={selection}
           onAct={setDialog}
         />
       ) : error ? (
@@ -83,12 +101,10 @@ export function ServerPlayersPage() {
       ) : (
         <Online server={nodeServer} network={network} usage={usage} query={query} onAct={setDialog} />
       )}
-      {dialog &&
-        ("send" in dialog ? (
-          <SendDialog name={dialog.send} network={dialog.network} from={dialog.from} onClose={() => setDialog(undefined)} />
-        ) : (
-          <PlayerActionDialog action={dialog.action} name={dialog.name} scopes={dialog.scopes} onClose={() => setDialog(undefined)} />
-        ))}
+      {tab !== "online" && (
+        <PlayerBulkBar selection={selection} actions={bulkActions[tab].actions} where={bulkActions[tab].where()} network={network} onAct={setDialog} />
+      )}
+      <PlayerDialogs dialog={dialog} onClose={() => setDialog(undefined)} />
     </>
   )
 }
@@ -136,10 +152,7 @@ function Online({
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label={t("Players online")}>
           {names.map((name) => (
             <li key={name} className="surface flex items-center gap-3 rounded-xl py-2 pr-2 pl-3">
-              <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                {name.replace(/^\./, "")[0]?.toUpperCase()}
-              </span>
-              <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium">{name}</span>
+              <PlayerName name={name} size="md" className="flex-1 text-sm" />
               <PlayerMenu player={{ name, server, network }} onAct={onAct} />
             </li>
           ))}

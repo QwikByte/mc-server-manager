@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	PlayerService_GetPlayerLists_FullMethodName = "/noryx.v1.PlayerService/GetPlayerLists"
 	PlayerService_ChangePlayer_FullMethodName   = "/noryx.v1.PlayerService/ChangePlayer"
+	PlayerService_ChangePlayers_FullMethodName  = "/noryx.v1.PlayerService/ChangePlayers"
 )
 
 // PlayerServiceClient is the client API for PlayerService service.
@@ -36,6 +37,9 @@ type PlayerServiceClient interface {
 	// ChangePlayer runs the command of a change on a running game server. A server that
 	// doesn't run runs it once it does; only a kick fails then.
 	ChangePlayer(ctx context.Context, in *ChangePlayerRequest, opts ...grpc.CallOption) (*ChangePlayerResponse, error)
+	// ChangePlayers makes changes one after the other, e.g. bans several players, each like
+	// ChangePlayer, and tells how each ended. Agents without it know no temporary bans.
+	ChangePlayers(ctx context.Context, in *ChangePlayersRequest, opts ...grpc.CallOption) (*ChangePlayersResponse, error)
 }
 
 type playerServiceClient struct {
@@ -66,6 +70,16 @@ func (c *playerServiceClient) ChangePlayer(ctx context.Context, in *ChangePlayer
 	return out, nil
 }
 
+func (c *playerServiceClient) ChangePlayers(ctx context.Context, in *ChangePlayersRequest, opts ...grpc.CallOption) (*ChangePlayersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ChangePlayersResponse)
+	err := c.cc.Invoke(ctx, PlayerService_ChangePlayers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PlayerServiceServer is the server API for PlayerService service.
 // All implementations must embed UnimplementedPlayerServiceServer
 // for forward compatibility.
@@ -79,6 +93,9 @@ type PlayerServiceServer interface {
 	// ChangePlayer runs the command of a change on a running game server. A server that
 	// doesn't run runs it once it does; only a kick fails then.
 	ChangePlayer(context.Context, *ChangePlayerRequest) (*ChangePlayerResponse, error)
+	// ChangePlayers makes changes one after the other, e.g. bans several players, each like
+	// ChangePlayer, and tells how each ended. Agents without it know no temporary bans.
+	ChangePlayers(context.Context, *ChangePlayersRequest) (*ChangePlayersResponse, error)
 	mustEmbedUnimplementedPlayerServiceServer()
 }
 
@@ -94,6 +111,9 @@ func (UnimplementedPlayerServiceServer) GetPlayerLists(context.Context, *GetPlay
 }
 func (UnimplementedPlayerServiceServer) ChangePlayer(context.Context, *ChangePlayerRequest) (*ChangePlayerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ChangePlayer not implemented")
+}
+func (UnimplementedPlayerServiceServer) ChangePlayers(context.Context, *ChangePlayersRequest) (*ChangePlayersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ChangePlayers not implemented")
 }
 func (UnimplementedPlayerServiceServer) mustEmbedUnimplementedPlayerServiceServer() {}
 func (UnimplementedPlayerServiceServer) testEmbeddedByValue()                       {}
@@ -152,6 +172,24 @@ func _PlayerService_ChangePlayer_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PlayerService_ChangePlayers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChangePlayersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PlayerServiceServer).ChangePlayers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PlayerService_ChangePlayers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PlayerServiceServer).ChangePlayers(ctx, req.(*ChangePlayersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PlayerService_ServiceDesc is the grpc.ServiceDesc for PlayerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -166,6 +204,10 @@ var PlayerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ChangePlayer",
 			Handler:    _PlayerService_ChangePlayer_Handler,
+		},
+		{
+			MethodName: "ChangePlayers",
+			Handler:    _PlayerService_ChangePlayers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

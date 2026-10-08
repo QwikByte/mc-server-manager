@@ -201,7 +201,7 @@ func (s *Service) measureHost() *noryxv1.NodeStats {
 }
 
 func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runtime.Server, now time.Time) *noryxv1.ServerStats {
-	stats := &noryxv1.ServerStats{Id: srv.ID}
+	stats := &noryxv1.ServerStats{Id: srv.ID, Proxy: srv.Type.Proxy()}
 	if srv.State == noryxv1.ServerState_SERVER_STATE_STOPPED {
 		st.reset()
 		return stats

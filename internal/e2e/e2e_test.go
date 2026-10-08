@@ -51,11 +51,13 @@ import (
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/mojang"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/notify"
 	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/overlay"
+	"github.com/QwikByte/noryx/internal/master/player"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/preference"
@@ -225,6 +227,7 @@ type master struct {
 	hangar     *fakeHangar
 	geysermc   *fakeGeyserMC
 	s3         *s3test.Server // S3-compatible storage for copies of backups
+	mojang     *fakeMojang
 	update     update.Options
 	// quick is how long requests wait for their operations; tests get the result right away.
 	quick time.Duration
@@ -254,7 +257,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), s3: s3test.New(t), update: update.Options{DataDir: dir}, quick: time.Minute,
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), s3: s3test.New(t), mojang: startMojang(t), update: update.Options{DataDir: dir}, quick: time.Minute,
 	}
 }
 
@@ -270,7 +273,8 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	networks := network.NewService(m.db, nodes, plugins, overlays, datastores)
 	tags := tag.NewStore(m.db)
 	accessService := access.NewService(m.db)
-	usageStore := usage.NewStore(m.db, nodes, m.settings)
+	sightings := player.NewSightings(m.db, m.settings)
+	usageStore := usage.NewStore(m.db, nodes, m.settings, sightings)
 	copies := backup.NewCopies(m.db, nodes, m.s3.Client().Transport)
 	jobs := backup.NewJobs(nodes, datastores, copies)
 	tasks := schedule.NewService(m.db, nodes, tags, networks, accessService, map[string]schedule.Kind{
@@ -280,9 +284,9 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	fileSets := fileset.NewService(m.db, nodes, networks, tags, datastores, moves)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: accessService, Settings: m.settings, Nodes: nodes, Overlay: overlays,
-		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks, Copies: copies,
+		Networks: networks, Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(m.mojang.URL, m.mojang.URL, m.mojang.URL+"/texture/"), Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks, Copies: copies,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
-		Usage: usageStore, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
+		Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
 		Notify: notify.New(m.db, m.logs, notify.Options{}),
 	}
 }

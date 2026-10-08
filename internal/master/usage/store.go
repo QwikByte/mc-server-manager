@@ -55,19 +55,26 @@ type Config interface {
 	Thresholds() Defaults
 }
 
+// Observer learns of the running servers of every measurement that the store records, e.g. to
+// note which players were online. Their IDs are valid, each once, and at most maxServers.
+type Observer interface {
+	Record(ctx context.Context, nodeID string, at time.Time, servers []*noryxv1.ServerStats) error
+}
+
 // Store keeps what nodes and servers used during the last week, and the measures that are
 // beyond their thresholds.
 type Store struct {
-	db    *sql.DB
-	nodes Nodes
-	conf  Config
+	db        *sql.DB
+	nodes     Nodes
+	conf      Config
+	observers []Observer
 
 	mu        sync.Mutex
 	crossings map[key]*crossing
 }
 
-func NewStore(db *sql.DB, nodes Nodes, conf Config) *Store {
-	return &Store{db: db, nodes: nodes, conf: conf, crossings: map[key]*crossing{}}
+func NewStore(db *sql.DB, nodes Nodes, conf Config, observers ...Observer) *Store {
+	return &Store{db: db, nodes: nodes, conf: conf, observers: observers, crossings: map[key]*crossing{}}
 }
 
 // Run records the latest measurement of every agent each minute until ctx ends.
@@ -110,8 +117,15 @@ func (s *Store) sample(ctx context.Context, now time.Time) {
 			}
 			if err != nil { // offline nodes are left out
 				slog.Debug("Can't record the usage of a node", logging.Nodes, logging.KeyNode, n.ID, "err", err)
-			} else if thErr == nil {
+				return
+			}
+			if thErr == nil {
 				s.checkNode(ctx, n.ID, now, stats, th)
+			}
+			for _, o := range s.observers {
+				if err := o.Record(ctx, n.ID, now, recorded(stats)); err != nil {
+					slog.Warn("Can't record a measurement of a node", logging.Nodes, logging.KeyNode, n.ID, "err", err)
+				}
 			}
 		})
 	}
