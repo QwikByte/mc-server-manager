@@ -22,19 +22,23 @@ const liveImage = "docker.io/library/alpine:3.22"
 // liveContainer creates and starts a container like the agent's for a server, of alpine.
 func liveContainer(t *testing.T, d *Docker, id string, cfg *container.Config, hc *container.HostConfig) {
 	t.Helper()
+	liveContainerIn(t, d, id, sharedNetwork, cfg, hc)
+}
+
+// liveContainerIn is liveContainer in a network of the agent.
+func liveContainerIn(t *testing.T, d *Docker, id, net string, cfg *container.Config, hc *container.HostConfig) {
+	t.Helper()
 	ctx := t.Context()
 	must(t, d.pull(ctx, liveImage))
-	must(t, d.ensureNetwork(ctx, sharedNetwork))
+	must(t, d.ensureNetwork(ctx, net))
 	cfg.Image = liveImage
 	cfg.Labels = map[string]string{labelManaged: "true", labelSpec: `{"id":"` + id + `"}`}
 	_, err := d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: containerName(id), Config: cfg, HostConfig: hc,
-		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{sharedNetwork: {}}},
+		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{net: {}}},
 	})
 	must(t, err)
-	t.Cleanup(func() {
-		_, _ = d.cli.ContainerRemove(context.WithoutCancel(ctx), containerName(id), client.ContainerRemoveOptions{Force: true})
-	})
+	t.Cleanup(func() { _ = d.forceRemove(context.WithoutCancel(ctx), containerName(id)) })
 	_, err = d.cli.ContainerStart(ctx, containerName(id), client.ContainerStartOptions{})
 	must(t, err)
 }
@@ -181,4 +185,79 @@ func TestPodmanLive(t *testing.T) {
 			t.Errorf("lines %v", lines)
 		}
 	})
+}
+
+// TestPodmanNetworksLive checks that containers in two networks of the agent can't reach each
+// other on Podman, also once the networks were inspected through Docker's API, after which
+// some versions no longer keep them apart, and that a network of an older agent without its
+// bridge is only created again once no container uses it. It writes the agent's table between
+// networks, which stays, and runs with NORYX_DOCKER_TEST=podman.
+func TestPodmanNetworksLive(t *testing.T) {
+	d := live(t)
+	if d.podman == nil {
+		t.Skip("Podman only")
+	}
+	ctx := t.Context()
+	must(t, isolate(networkIsolation)) // without the bridge table, which needs nft_meta_bridge
+	a, b := proxyNetwork(runtime.NewID()), proxyNetwork(runtime.NewID())
+	for _, n := range []string{a, b} {
+		t.Cleanup(func() { must(t, d.removeNetwork(context.WithoutCancel(ctx), n)) })
+		must(t, d.ensureNetwork(ctx, n))
+		_, err := d.cli.NetworkInspect(ctx, n, client.NetworkInspectOptions{}) // as anyone may, e.g. the agent in release
+		must(t, err)
+		if got := podmanBridge(t, n); got != bridge(n) {
+			t.Errorf("bridge of %s: %s", n, got)
+		}
+	}
+	listener, inA, inB := runtime.NewID(), runtime.NewID(), runtime.NewID()
+	locked := func() *container.HostConfig {
+		return &container.HostConfig{CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}}
+	}
+	liveContainerIn(t, d, listener, b, &container.Config{Cmd: []string{"sh", "-c", "while true; do echo hi | nc -l -p 8080; done"}}, locked())
+	liveContainerIn(t, d, inA, a, &container.Config{Cmd: []string{"sleep", "300"}}, locked())
+	liveContainerIn(t, d, inB, b, &container.Config{Cmd: []string{"sleep", "300"}}, locked())
+	res, err := d.cli.ContainerInspect(ctx, containerName(listener), client.ContainerInspectOptions{})
+	must(t, err)
+	connect := func(from string) error {
+		cmd := "echo | nc -w 3 " + res.Container.NetworkSettings.Networks[b].IPAddress.String() + " 8080 | grep -q hi"
+		return d.run(ctx, containerName(from), "", []string{"sh", "-c", cmd}, nil, nil, nil)
+	}
+	err = connect(inB)
+	for i := 0; err != nil && i < 5; i++ { // until it listens
+		time.Sleep(time.Second)
+		err = connect(inB)
+	}
+	if err != nil {
+		t.Fatalf("within a network: %v", err)
+	}
+	if err := connect(inA); err == nil {
+		t.Error("reached a container in another network")
+	}
+
+	// A network of an older agent, without the bridge, which a container uses.
+	old, user := proxyNetwork(runtime.NewID()), runtime.NewID()
+	t.Cleanup(func() { must(t, d.removeNetwork(context.WithoutCancel(ctx), old)) })
+	_, err = d.cli.NetworkCreate(ctx, old, client.NetworkCreateOptions{Driver: "bridge", Labels: map[string]string{labelManaged: "true"}})
+	must(t, err)
+	_, err = d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Name: containerName(user), Config: &container.Config{Image: liveImage, Cmd: []string{"true"}},
+		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{old: {}}},
+	})
+	must(t, err)
+	if err := d.ensureNetwork(ctx, old); err == nil || podmanBridge(t, old) == bridge(old) {
+		t.Errorf("replaced a network in use: %v", err)
+	}
+	must(t, d.forceRemove(ctx, containerName(user)))
+	must(t, d.ensureNetwork(ctx, old))
+	if got := podmanBridge(t, old); got != bridge(old) {
+		t.Errorf("bridge of the network created again: %s", got)
+	}
+}
+
+// podmanBridge returns the name of the bridge of a network of Podman.
+func podmanBridge(t *testing.T, name string) string {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "podman", "network", "inspect", name, "--format", "{{.NetworkInterface}}").Output()
+	must(t, err)
+	return strings.TrimSpace(string(out))
 }

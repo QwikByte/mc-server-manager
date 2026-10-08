@@ -253,7 +253,7 @@ set_runtime() {
   if [ "$runtime" = podman ]; then
     sed -i '/^NORYX_AGENT_OPTS=/s/"$/ --runtime podman"/' /etc/noryx/agent.env
     systemctl enable --now --quiet noryx-isolate.service ||
-      die "The servers of Podman can't be kept apart, as the kernel lacks the bridge support of nftables (nft_meta_bridge). Use Docker on this node."
+      die "The servers of Podman can't be kept apart, as the kernel lacks the bridge support or the lookups of routes of nftables (nft_meta_bridge, nft_fib_inet). Use Docker on this node."
   else
     systemctl disable --quiet noryx-isolate.service 2>/dev/null || true
   fi

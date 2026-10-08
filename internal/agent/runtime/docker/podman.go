@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"math"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
@@ -95,6 +97,33 @@ func (d *Docker) accept(libpod string) error {
 	v := "v" + libpod
 	d.podman.version.Store(&v)
 	return nil
+}
+
+// libpod gets path from Podman's own API, e.g. /info, which tells what Docker's leaves out, and
+// decodes the answer into v. It fails with cerrdefs.ErrNotFound for what doesn't exist. Its
+// requests bypass the client of Docker's API, and so check.
+func (d *Docker) libpod(ctx context.Context, path string, v any) error {
+	dial := d.cli.Dialer()
+	api := http.Client{Transport: &http.Transport{
+		DisableKeepAlives: true,
+		DialContext:       func(ctx context.Context, _, _ string) (net.Conn, error) { return dial(ctx) },
+	}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://podman/v4.0.0/libpod"+path, nil)
+	if err != nil {
+		return err
+	}
+	res, err := api.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	switch {
+	case res.StatusCode == http.StatusNotFound:
+		return cerrdefs.ErrNotFound
+	case res.StatusCode != http.StatusOK:
+		return fmt.Errorf("%s: %s", path, res.Status)
+	}
+	return json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(v)
 }
 
 // refusal returns why the agent refuses the runtime, if it does.

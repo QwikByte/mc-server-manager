@@ -118,14 +118,19 @@ backends on the node.
 A node runs its containers with Docker or with Podman as root, and the same holds for both. The agent sets every option
 of a container itself, so that Podman gets the same users, capabilities, limits, health checks and published addresses
 as Docker, and as root it keeps the users of the containers, which own the data on the node, as Docker does. Podman
-ignores the option of a network that keeps its containers apart, so on its nodes the agent names the bridge of
-`noryx-servers` after it and drops whatever the bridge would forward from one container to another, in an nftables table
-of its own (`bridge noryx`): when it starts, before each start of a server, and at boot with `noryx-isolate.service`,
-without which Podman doesn't start the servers. An agent that can't set up the table, e.g. as the kernel lacks
-`nft_meta_bridge`, doesn't run. The agent checks every answer of the runtime's socket and refuses one at which the other
-runtime answers, e.g. Podman behind Docker's socket, or a Podman older than 4.9, as it relies on how each one keeps
-servers apart. With SELinux, e.g. on RHEL, Podman also confines each container to the files labelled for it, and the
-agent has it label the mounts of each container for that container alone (`Z`). Rootless Podman isn't supported.
+ignores the option of a network that keeps its containers apart, and keeps networks apart only while its API remembers
+it: Podman 4.9.3 of Ubuntu 24.04, for one, forgets it once anyone inspects the network through Docker's API, as the agent
+does. So on its nodes, the bridges of the agent's networks are named `noryx-…`, the one of `noryx-servers` after the
+network, and the agent drops in nftables tables of its own whatever this bridge would forward from one container to
+another (`bridge noryx`) and whatever the node would route from one of these bridges to another (`inet
+noryx-networks`): when it starts, before each start of a server, and at boot with `noryx-isolate.service`, without
+which Podman doesn't start the servers. An agent that can't set up the tables, e.g. as the kernel lacks
+`nft_meta_bridge`, doesn't run. A network of the agent without such a bridge, e.g. of an older agent, is created again
+once no container uses it, and no server or datastore starts in it until then. The agent checks every answer of the
+runtime's socket and refuses one at which the other runtime answers, e.g. Podman behind Docker's socket, or a Podman
+older than 4.9, as it relies on how each one keeps servers apart. With SELinux, e.g. on RHEL, Podman also confines each
+container to the files labelled for it, and the agent has it label the mounts of each container for that container
+alone (`Z`). Rootless Podman isn't supported.
 
 ## Agent input
 

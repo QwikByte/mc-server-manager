@@ -311,10 +311,14 @@ func datastoreOptions(spec runtime.DatastoreSpec, dir string) (client.ContainerC
 }
 
 func (d *Docker) StartDatastore(ctx context.Context, id string) error {
-	if _, _, err := d.inspectDatastore(ctx, id); err != nil {
+	c, _, err := d.inspectDatastore(ctx, id)
+	if err != nil {
 		return err
 	}
-	_, err := d.cli.ContainerStart(ctx, datastoreName(id), client.ContainerStartOptions{})
+	if err := d.checkNetworks(ctx, c); err != nil {
+		return err
+	}
+	_, err = d.cli.ContainerStart(ctx, datastoreName(id), client.ContainerStartOptions{})
 	return notFound(err)
 }
 
