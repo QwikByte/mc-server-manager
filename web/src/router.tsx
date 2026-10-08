@@ -443,6 +443,12 @@ const groupRoute = createRoute({
   staticData: { title: msg("Groups") },
   component: lazyRouteComponent(() => import("@/features/access/group-page"), "GroupPage"),
 })
+const notificationsSettingsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "notifications",
+  staticData: { title: msg("Notifications") },
+  component: lazyRouteComponent(() => import("@/features/notify/notifications-page"), "NotificationsSettingsPage"),
+})
 const terminalRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "terminal",
@@ -494,6 +500,7 @@ export const router = createRouter({
         generalSettingsRoute,
         agentsSettingsRoute,
         terminalRoute,
+        notificationsSettingsRoute,
         usersRoute,
         groupsRoute,
         newGroupRoute,
