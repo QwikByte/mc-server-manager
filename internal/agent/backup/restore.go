@@ -141,9 +141,17 @@ func stageUntrusted(ctx context.Context, dir *datadir.Dir, b Archive, paths []st
 // backup left out, and the files of the server with secrets of its own, of its network and
 // of file sets. A backup must not bring back the secret of a network the server left since,
 // nor one of a set that no longer targets it, nor the manifest of file sets, which would
-// hide less; a backup of another server holds none of them.
+// hide less; a backup of another server holds none of them. Restoring an untrusted backup
+// also leaves the other files of the agent as they are, which stageUntrusted leaves out, e.g.
+// the pardons that wait for the end of temporary bans.
 func kept(dir *datadir.Dir, b Archive) []string {
-	return slices.Concat(b.Exclude, fileset.Read(dir).Secrets().Paths())
+	hidden := fileset.Read(dir).Secrets()
+	paths := slices.Concat(b.Exclude, hidden.Paths())
+	if b.Untrusted {
+		top, _ := names(dir, ".") // what can't be listed can't be swapped either
+		paths = append(paths, slices.DeleteFunc(top, func(name string) bool { return !archive.Foreign(hidden)(name) })...)
+	}
+	return paths
 }
 
 // keep gives the staged backup of a server the forwarding settings of its network as they

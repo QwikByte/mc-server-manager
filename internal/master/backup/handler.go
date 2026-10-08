@@ -146,8 +146,10 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("DELETE "+base+"/{backup}", access.OnServer(access.BackupsDelete), h.delete)
 	mux.Handle("GET "+base+"/{backup}/download", access.OnServer(access.BackupsView), h.download)
 	h.registerCopies(mux)
-	// An uploaded backup is there to be restored.
-	mux.Handle("POST "+base+"/upload", access.All(access.OnServer(access.BackupsCreate), access.OnServer(access.BackupsRestore)), h.upload)
+	// An uploaded backup is there to be restored, and can bring any file, e.g. a plugin that
+	// reads the secrets of the server, like the file manager.
+	mux.Handle("POST "+base+"/upload", access.All(access.OnServer(access.BackupsCreate), access.OnServer(access.BackupsRestore),
+		access.OnServer(access.FilesWrite)), h.upload)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -445,7 +447,7 @@ func (h *Handler) copy(ctx context.Context, nodeID string, source *noryxv1.Serve
 	}
 	header := &noryxv1.ImportBackupHeader{ServerId: toServer, Backup: &noryxv1.Backup{
 		Id: noryxv1.NewBackupID(time.Unix(b.GetCreatedUnix(), 0)), Label: cmp.Or(b.GetLabel(), source.GetName()), CreatedUnix: b.GetCreatedUnix(),
-		Size: b.GetSize(), Paths: b.GetPaths(), Exclude: b.GetExclude(), Untrusted: b.GetUntrusted(),
+		Size: hidden(b.GetSize()), Paths: b.GetPaths(), Exclude: b.GetExclude(), Untrusted: b.GetUntrusted(),
 	}}
 	var copied int64
 	res, err := node.Relay(ctx,
@@ -465,6 +467,11 @@ func (h *Handler) copy(ctx context.Context, nodeID string, source *noryxv1.Serve
 		})
 	return res.GetBackup(), err
 }
+
+// hidden is the size that the download of a backup of size bytes with the secrets hidden has at
+// most, which the agent that takes it holds it to: a placeholder can be longer than a secret,
+// and the files with secrets are compressed again.
+func hidden(size int64) int64 { return size + size/10 + 1<<20 }
 
 // restoreOn restores a backup of a server within an operation, and configures the server's
 // network again, as the backup may have the proxy's servers or Geyser's port of another

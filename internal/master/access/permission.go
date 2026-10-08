@@ -106,7 +106,7 @@ var Catalog = []Area{
 	}},
 	{"Servers", []Info{
 		scoped(ServersView, "See servers", "Servers with their state, settings and plugins."),
-		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins, their tags the one to change server settings.", ServersView),
+		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins, their tags the one to change server settings. A server created from an archive brings its plugins, which run with the server and can read its secrets.", ServersView),
 		scoped(ServersStart, "Start servers", "", ServersView),
 		scoped(ServersStop, "Stop servers", "", ServersView),
 		scoped(ServersRestart, "Restart servers", "", ServersView),
@@ -122,7 +122,7 @@ var Catalog = []Area{
 	}},
 	{"Files and configuration", []Info{
 		scoped(FilesRead, "Browse and download files", "Secrets such as the RCON password stay hidden. Also needed to duplicate a server, as the copy contains its files.", ServersView),
-		scoped(FilesWrite, "Change files", "Upload, edit, move and delete files. Uploaded plugins run with the server and can read its secrets, such as the forwarding secret of its network.", FilesRead),
+		scoped(FilesWrite, "Change files", "Upload, edit, move and delete files. Uploaded plugins run with the server and can read its secrets, such as the forwarding secret of its network. Also needed to upload backups, which can bring any file.", FilesRead),
 		scoped(Properties, "Edit server.properties", "", ServersView),
 		scoped(Plugins, "Manage plugins and mods", "Install, update, upload and remove them. They run with the server and can read its secrets.", ServersView),
 	}},

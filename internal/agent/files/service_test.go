@@ -243,6 +243,69 @@ func TestReadPart(t *testing.T) {
 	}
 }
 
+// The temporary files and folders of the agent, e.g. a backup staged with the server's
+// forwarding secret while it is restored, are neither listed nor reachable by any path.
+func TestTemporaryFiles(t *testing.T) {
+	rt := dataRuntime{dir: t.TempDir()}
+	svc, id := NewService(rt), runtime.NewID()
+	data := filepath.Join(rt.dir, id)
+	files(t, data, map[string]string{".noryx-staged/forwarding.secret": "secret", "plugins/.noryx-written": "token: t", "world/level.dat": "level"})
+	ctx := t.Context()
+	list, err := svc.ListFiles(ctx, &noryxv1.ListFilesRequest{ServerId: id, Path: "."})
+	if err != nil || len(list.GetFiles()) != 2 {
+		t.Fatalf("listed %v, %v", list.GetFiles(), err)
+	}
+	for name, call := range map[string]func(string) error{
+		"list": func(p string) error {
+			_, err := svc.ListFiles(ctx, &noryxv1.ListFilesRequest{ServerId: id, Path: p})
+			return err
+		},
+		"read": func(p string) error {
+			return svc.ReadFile(&noryxv1.ReadFileRequest{ServerId: id, Path: p}, &readStream{ctx: ctx})
+		},
+		"write": func(p string) error { _, err := write(svc, id, p, nil, "x"); return err },
+		"delete": func(p string) error {
+			_, err := svc.DeleteFile(ctx, &noryxv1.DeleteFileRequest{ServerId: id, Path: p})
+			return err
+		},
+		"move from": func(p string) error {
+			_, err := svc.MoveFile(ctx, &noryxv1.MoveFileRequest{ServerId: id, From: p, To: "out"})
+			return err
+		},
+		"move to": func(p string) error {
+			_, err := svc.MoveFile(ctx, &noryxv1.MoveFileRequest{ServerId: id, From: "world/level.dat", To: p})
+			return err
+		},
+		"copy from": func(p string) error {
+			_, err := svc.CopyFile(ctx, &noryxv1.CopyFileRequest{ServerId: id, From: p, To: "out"})
+			return err
+		},
+		"download": func(p string) error {
+			return svc.ArchiveDirectory(&noryxv1.ArchiveDirectoryRequest{ServerId: id, Path: p}, &archiveStream{ctx: ctx})
+		},
+		"archive": func(p string) error {
+			return svc.ArchiveDirectory(&noryxv1.ArchiveDirectoryRequest{ServerId: id, Paths: []string{"world", p}}, &archiveStream{ctx: ctx})
+		},
+		"extract into": func(p string) error {
+			_, err := svc.ExtractArchive(ctx, &noryxv1.ExtractArchiveRequest{ServerId: id, Path: "world/level.dat", Destination: p})
+			return err
+		},
+		"search": func(p string) error {
+			_, err := svc.SearchFiles(ctx, &noryxv1.SearchFilesRequest{ServerId: id, Path: p, Query: "secret"})
+			return err
+		},
+	} {
+		for _, p := range []string{".noryx-staged", ".noryx-staged/forwarding.secret", "plugins/.noryx-written"} {
+			if err := call(p); status.Code(err) != codes.InvalidArgument {
+				t.Errorf("%s %s: %v", name, p, err)
+			}
+		}
+	}
+	if got, _ := os.ReadFile(filepath.Join(data, ".noryx-staged/forwarding.secret")); string(got) != "secret" {
+		t.Fatalf("forwarding.secret = %q", got)
+	}
+}
+
 func read(t *testing.T, svc *Service, id, name string) *noryxv1.FileVersion {
 	t.Helper()
 	stream := &readStream{ctx: t.Context()}

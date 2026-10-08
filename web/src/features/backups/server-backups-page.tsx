@@ -76,8 +76,8 @@ export function ServerBackupsPage() {
   const { data: jobList = [] } = useQuery({ ...jobs.coveringQuery(nodeId, serverId), enabled: can("backupjobs.view") })
   const { data: servers = [] } = useQuery(allServersQuery)
   const create = can("backups.create", nodeId, serverId)
-  // An uploaded backup is there to be restored.
-  const upload = create && can("backups.restore", nodeId, serverId)
+  // An uploaded backup is there to be restored, and can bring any file, like the file manager.
+  const upload = create && can("backups.restore", nodeId, serverId) && can("files.write", nodeId, serverId)
   const covering = jobList.filter((j) => j.enabled)
 
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />

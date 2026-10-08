@@ -95,7 +95,9 @@ type Copy struct {
 	JobID      string `json:"jobId,omitempty"`
 	ServerID   string `json:"serverId"`
 	ServerName string `json:"serverName"`
-	// NodeID and NodeName are those of the node that the server was on when it was copied.
+	// NodeID and NodeName are those of the node that the server was on when it was copied, or
+	// moved to since. A copy belongs to the server on its node, as a node tells the IDs of its
+	// servers itself.
 	NodeID   string `json:"nodeId"`
 	NodeName string `json:"nodeName"`
 	Proxy    bool   `json:"proxy"`
@@ -119,8 +121,8 @@ type Copy struct {
 
 // filter selects copies; each field that isn't empty must match.
 type filter struct {
-	id                                 int64
-	serverID, jobID, storage, copyNode string
+	id                                  int64
+	serverID, nodeID, storage, copyNode string
 }
 
 // list returns the copies that a filter selects, newest first.
@@ -132,8 +134,8 @@ func (c *Copies) list(ctx context.Context, f filter) ([]Copy, error) {
 		FROM backup_copies c
 		LEFT JOIN backup_storages s ON s.id = c.storage_id
 		LEFT JOIN nodes n ON n.id = c.copy_node
-		WHERE ? IN (0, c.id) AND ? IN ('', c.server_id) AND ? IN ('', c.task_id) AND ? IN ('', c.storage_id) AND ? IN ('', c.copy_node)
-		ORDER BY c.created_at DESC, c.backup_id DESC`, f.id, f.serverID, f.jobID, f.storage, f.copyNode)
+		WHERE ? IN (0, c.id) AND ? IN ('', c.server_id) AND ? IN ('', c.node_id) AND ? IN ('', c.storage_id) AND ? IN ('', c.copy_node)
+		ORDER BY c.created_at DESC, c.backup_id DESC`, f.id, f.serverID, f.nodeID, f.storage, f.copyNode)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +196,17 @@ func (c *Copies) add(ctx context.Context, cp *Copy) error {
 	return err
 }
 
+// Move keeps the copies of a server that moved to another node with the server.
+func (c *Copies) Move(ctx context.Context, serverID, from, to string) error {
+	_, err := c.db.ExecContext(ctx, `
+		UPDATE backup_copies SET node_id = ?1, node_name = coalesce((SELECT name FROM nodes WHERE id = ?1), node_name)
+		WHERE node_id = ?2 AND server_id = ?3`, to, from, serverID)
+	return err
+}
+
+// Forget keeps the copies of a deleted server, so that it can still be restored.
+func (c *Copies) Forget(context.Context, string, string) error { return nil }
+
 // place is where a job copies backups to, ready to take them.
 type place struct {
 	CopyTo
@@ -226,6 +239,10 @@ func (c *Copies) place(ctx context.Context, to CopyTo) (place, error) {
 // lost its backups takes none of their copies with it. The backups on the node tell which
 // copies are marked to keep. A backup that can't be copied is copied in the next run. It
 // returns what it changed.
+//
+// Nodes tell the IDs of their servers themselves, so a compromised node can claim the ID of a
+// server of another node: Sync only keeps the copies of the server on its node, and replaces
+// no copy of another node or job that has the ID of one of its backups.
 func (c *Copies) Sync(ctx context.Context, t schedule.Task, s JobSettings, srv schedule.Server) (string, error) {
 	if s.Copy.Node == srv.NodeID {
 		return "", schedule.Skipped("Its node keeps the copies of the job. Choose another node for them.")
@@ -245,16 +262,21 @@ func (c *Copies) Sync(ctx context.Context, t schedule.Task, s JobSettings, srv s
 		return "", err
 	}
 	onNode := slices.DeleteFunc(res.GetBackups(), func(b *noryxv1.Backup) bool { return b.GetJobId() != t.ID })
-	copies, err := c.list(ctx, filter{serverID: srv.GetId(), jobID: t.ID, storage: p.Storage, copyNode: p.Node})
+	copies, err := c.list(ctx, filter{serverID: srv.GetId(), storage: p.Storage, copyNode: p.Node})
 	if err != nil {
 		return "", err
 	}
+	theirs := func(cp Copy) bool { return cp.NodeID != srv.NodeID || cp.JobID != t.ID }
+	created := func(b *noryxv1.Backup) string { return time.Unix(b.GetCreatedUnix(), 0).UTC().Format(time.DateTime) }
 	var missing []*noryxv1.Backup
+	var errs []error
 	for _, b := range onNode {
 		i := slices.IndexFunc(copies, func(cp Copy) bool { return cp.BackupID == b.GetId() })
 		switch {
 		case i < 0:
 			missing = append(missing, b)
+		case theirs(copies[i]):
+			errs = append(errs, fmt.Errorf("can't copy the backup of %s: %s keeps a copy of another node or job with its ID", created(b), p.name))
 		case copies[i].Kept != b.GetKept():
 			copies[i].Kept = b.GetKept()
 			if _, err := c.db.ExecContext(ctx, `UPDATE backup_copies SET kept = ? WHERE id = ?`, b.GetKept(), copies[i].ID); err != nil {
@@ -262,12 +284,12 @@ func (c *Copies) Sync(ctx context.Context, t schedule.Task, s JobSettings, srv s
 			}
 		}
 	}
-	var errs []error
+	copies = slices.DeleteFunc(copies, theirs)
 	copied, deleted := 0, 0
 	for _, b := range missing { // newest first
 		made, err := c.copy(ctx, p, t, srv, b)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("can't copy the backup of %s: %s", time.Unix(b.GetCreatedUnix(), 0).UTC().Format(time.DateTime), httpapi.Message(err)))
+			errs = append(errs, fmt.Errorf("can't copy the backup of %s: %s", created(b), httpapi.Message(err)))
 			continue
 		}
 		copies, copied = append(copies, made), copied+1
@@ -346,7 +368,7 @@ func (c *Copies) copy(ctx context.Context, p place, t schedule.Task, srv schedul
 			return cp, err
 		}
 		header := &noryxv1.ImportBackupHeader{ServerId: cp.ServerID, Backup: &noryxv1.Backup{
-			Id: cp.BackupID, Label: cp.Label, CreatedUnix: b.GetCreatedUnix(), Size: b.GetSize(), Location: p.Location, Paths: cp.Paths,
+			Id: cp.BackupID, Label: cp.Label, CreatedUnix: b.GetCreatedUnix(), Size: hidden(b.GetSize()), Location: p.Location, Paths: cp.Paths,
 			Exclude: cp.Exclude, JobId: t.ID, Kept: cp.Kept,
 		}}
 		relay := func() (*noryxv1.ImportCopyResponse, error) {
@@ -512,7 +534,7 @@ func (h *Handler) serverCopies(w http.ResponseWriter, r *http.Request) {
 	_, err := h.server(ctx, r.PathValue("node"), r.PathValue("id"))
 	var list []Copy
 	if err == nil {
-		list, err = h.copies.list(ctx, filter{serverID: r.PathValue("id")})
+		list, err = h.copies.list(ctx, filter{serverID: r.PathValue("id"), nodeID: r.PathValue("node")})
 	}
 	respond(w, r, http.StatusOK, list, err)
 }
@@ -524,7 +546,7 @@ func (h *Handler) copyOf(ctx context.Context, r *http.Request) (Copy, error) {
 	if err != nil || r.PathValue("id") == "" {
 		return cp, err
 	}
-	if cp.ServerID != r.PathValue("id") {
+	if cp.ServerID != r.PathValue("id") || cp.NodeID != r.PathValue("node") {
 		return cp, errNoCopy
 	}
 	_, err = h.server(ctx, r.PathValue("node"), r.PathValue("id"))
@@ -577,7 +599,7 @@ func (h *Handler) restoreCopy(w http.ResponseWriter, r *http.Request) {
 		defer archive.Close()
 		header := &noryxv1.ImportBackupHeader{ServerId: req.Server, Backup: &noryxv1.Backup{
 			Id: noryxv1.NewBackupID(cp.CreatedAt), Label: cmp.Or(cp.Label, cp.ServerName), CreatedUnix: cp.CreatedAt.Unix(), Size: cp.Size,
-			Paths: cp.Paths, Exclude: cp.Exclude,
+			Paths: cp.Paths, Exclude: cp.Exclude, Untrusted: true,
 		}}
 		// The storage or node that keeps the copy can't make it larger than it was.
 		imported, err := upload(ctx, conn, header, io.LimitReader(archive, cp.Size), func(n int64) { operation.Count(ctx, n, cp.Size, "bytes") })
@@ -591,6 +613,9 @@ func (h *Handler) restoreCopy(w http.ResponseWriter, r *http.Request) {
 				slog.Warn("Can't delete the copy of a backup", logging.Backups, logging.KeyNode, req.Node, logging.KeyServer, req.Server, "backup", imported.GetId(), "err", err)
 			}
 		}()
+		if !imported.GetUntrusted() { // an older agent would trust it
+			return nil, httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the node to restore copies of backups into its servers.")
+		}
 		return h.restoreOn(ctx, req.Node, req.Server, imported.GetId(), restoreRequest{SnapshotFirst: req.SnapshotFirst})
 	})
 }

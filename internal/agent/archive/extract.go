@@ -88,6 +88,9 @@ func (a *Archive) Extract(ctx context.Context, dir *datadir.Dir, dest string, o 
 		if err == nil && !e.Modified.IsZero() {
 			err = dir.Chtimes(target, e.Modified, e.Modified)
 		}
+		if err == nil && e.Exec {
+			err = executable(dir, target)
+		}
 		return err
 	}
 	if !a.zip {
@@ -150,6 +153,16 @@ func (a *Archive) plan(dir *datadir.Dir, dest string, o Options) ([]string, Resu
 		}
 	}
 	return targets, res, nil
+}
+
+// executable lets the owner of a file run it, as an entry of the archive says, and gives no other
+// permission, so that it is no more than the server's user could do itself.
+func executable(dir *datadir.Dir, name string) error {
+	info, err := dir.Lstat(name)
+	if err == nil && info.Mode().IsRegular() {
+		err = dir.Chmod(name, info.Mode().Perm()|0o100)
+	}
+	return err
 }
 
 // protected returns the path at or above name that is protected, if any.

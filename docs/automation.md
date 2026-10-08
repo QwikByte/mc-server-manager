@@ -24,7 +24,8 @@ are archived, so players stay connected.
   the top of the archive, checks the archive again, leaves out the files that only hold secrets and those of the agent,
   such as the manifest of file sets, and replaces every secret in the other files with the server's own, besides
   keeping how the server takes part in its network as any restore does. Uploading needs the permissions to back up and
-  to restore the server's backups.
+  to restore the server's backups, and to change its files, as a backup can bring any file, e.g. a plugin, like the
+  file manager.
 - **Jobs.** The **Backups** tab of the **Automation** schedules backup jobs for nodes, servers, tags and networks at
   set times, see [Targets and times](#targets-and-times). A job keeps its newest backups per server, and the newest of
   each of the last days, weeks and months that have backups, in its time zone, e.g. 7 daily and 4 weekly ones; once it

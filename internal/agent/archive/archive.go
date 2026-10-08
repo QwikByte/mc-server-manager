@@ -11,6 +11,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"errors"
 	"io"
 	"io/fs"
@@ -69,7 +70,9 @@ type Entry struct {
 	Dir      bool
 	Size     int64
 	Modified time.Time
-	file     *zip.File
+	// Exec tells that its owner may run the file.
+	Exec bool
+	file *zip.File
 }
 
 // Archive is an untrusted ZIP or .tar.gz archive whose entries were checked.
@@ -108,14 +111,9 @@ func Open(r io.ReaderAt, size int64, limits Limits) (*Archive, error) {
 
 func (a *Archive) listZip() error {
 	a.zip, a.plain = true, true
-	limited := &limitedAt{r: a.r, left: a.limits.Directory}
-	zr, err := zip.NewReader(limited, a.size)
-	limited.left = math.MaxInt64 // the files are read through it later
-	switch {
-	case errors.Is(err, errLimit):
-		return a.tooMany()
-	case err != nil && !errors.Is(err, zip.ErrInsecurePath): // add checks the names
-		return errDamaged
+	zr, err := OpenZip(a.r, a.size, a.limits)
+	if err != nil {
+		return err
 	}
 	kinds := map[string]bool{}
 	for _, f := range zr.File {
@@ -126,13 +124,65 @@ func (a *Archive) listZip() error {
 		if err != nil {
 			return err
 		}
-		e.file = f
+		e.file, e.Exec = f, f.Mode()&0o100 != 0
 		a.plain = a.plain && e.Name != "" && strings.TrimSuffix(f.Name, "/") == e.Name
 		if err := a.add(kinds, e); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// OpenZip opens the ZIP archive in r, which has size bytes, reading at most the directory that
+// limits allow, and refuses one whose end announces more entries or a larger directory than
+// they allow before archive/zip reserves memory for its entries. It doesn't check the entries,
+// as Open does; their names may be unsafe.
+func OpenZip(r io.ReaderAt, size int64, limits Limits) (*zip.Reader, error) {
+	if err := checkEnd(r, size, limits); err != nil {
+		return nil, err
+	}
+	limited := &limitedAt{r: r, left: limits.Directory}
+	zr, err := zip.NewReader(limited, size)
+	limited.left = math.MaxInt64 // the files are read through it later
+	switch {
+	case errors.Is(err, errLimit):
+		return nil, tooMany(limits)
+	case err != nil && !errors.Is(err, zip.ErrInsecurePath):
+		return nil, errDamaged
+	}
+	return zr, nil
+}
+
+// checkEnd refuses a ZIP64 archive whose end announces more entries or a larger directory than
+// limits allow: archive/zip reserves memory for as many entries as the end of the directory
+// announces, up to one per 30 bytes of the archive, before it reads any, and only the end of
+// a ZIP64 archive can announce more than 65,535. Like archive/zip, it looks for the end in the
+// last 65 KiB, where it checks each one with the ZIP64 end that a locator right before it
+// names, so also the one that archive/zip takes.
+func checkEnd(r io.ReaderAt, size int64, limits Limits) error {
+	tail, loc, end64 := make([]byte, min(size, 65<<10)), make([]byte, 20), make([]byte, 56)
+	start := size - int64(len(tail))
+	if !read(r, tail, start) {
+		return errDamaged
+	}
+	le := binary.LittleEndian
+	for i := len(tail) - 22; i >= 0; i-- {
+		at := start + int64(i) - int64(len(loc))
+		if string(tail[i:i+4]) != "PK\x05\x06" || at < 0 || !read(r, loc, at) || string(loc[:4]) != "PK\x06\x07" ||
+			!read(r, end64, int64(le.Uint64(loc[8:]))) || string(end64[:4]) != "PK\x06\x06" { //nolint:gosec // ReadAt refuses negative offsets
+			continue
+		}
+		if le.Uint64(end64[32:]) > uint64(limits.Entries) || le.Uint64(end64[40:]) > uint64(limits.Directory) { //nolint:gosec // positive limits
+			return tooMany(limits)
+		}
+	}
+	return nil
+}
+
+// read reads len(p) bytes at off and tells whether it could.
+func read(r io.ReaderAt, p []byte, off int64) bool {
+	n, err := r.ReadAt(p, off)
+	return n == len(p) && (err == nil || errors.Is(err, io.EOF))
 }
 
 // walkTar reads a .tar.gz archive: without extract, it lists and checks its entries,
@@ -162,6 +212,7 @@ func (a *Archive) walkTar(extract func(i int, r io.Reader) error) error {
 			continue
 		}
 		e, err := a.entry(h.Name, tarType(h.Typeflag), uint64(max(h.Size, 0)), h.ModTime) //nolint:gosec // not negative
+		e.Exec = h.Mode&0o100 != 0
 		switch {
 		case err != nil && extract != nil:
 			return errChanged
@@ -269,8 +320,10 @@ func (a *Archive) tooLarge() error {
 	return refused("The archive unpacks to more than %d times its size, like a zip bomb.", MaxRatio)
 }
 
-func (a *Archive) tooMany() error {
-	return tooLarge("An archive can hold up to %d files and folders.", a.limits.Entries)
+func (a *Archive) tooMany() error { return tooMany(a.limits) }
+
+func tooMany(limits Limits) error {
+	return tooLarge("An archive can hold up to %d files and folders.", limits.Entries)
 }
 
 func refused(format string, args ...any) error {

@@ -125,6 +125,16 @@ func TestCopyFile(t *testing.T) {
 	if err := copyFile("world/level.dat", "level.dat"); err != nil {
 		t.Fatal(err)
 	}
+	// A copy must leave 1 GB free, also of a file with holes, which takes no space yet.
+	if err := os.Truncate(filepath.Join(data, "world/level.dat"), 8<<40); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile("world", "world_large"); status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("copying more than fits: %v", err)
+	}
+	if err := os.Truncate(filepath.Join(data, "world/level.dat"), 5); err != nil {
+		t.Fatal(err)
+	}
 	for c, code := range map[[2]string]codes.Code{
 		{"world", "world_copy"}:                             codes.AlreadyExists,
 		{"world", "world/inside"}:                           codes.InvalidArgument,
@@ -163,6 +173,7 @@ func TestSearchFiles(t *testing.T) {
 		"server.properties":      "motd=Welcome\nrcon.password=welcome-secret\n",
 		".rcon-cli.env":          "password=welcome-secret\n",
 		"plugins/Sync/token.yml": "token: welcome-token\n",
+		"plugins/Sync/.noryx-x":  "token: welcome-token\n", // as a file set writes it
 		"noryx-filesets.json":    `{"marked":["plugins/Sync/token.yml"],"welcome":1}`,
 		"plugins/Essentials.yml": "first-join: WELCOME new players\nother: x\n" + string(make([]byte, 0)),
 		"plugins/data.bin":       "welcome\x00binary",

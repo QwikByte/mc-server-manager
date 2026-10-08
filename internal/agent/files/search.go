@@ -30,8 +30,8 @@ const (
 )
 
 // SearchFiles searches the text files of a folder and those in it for a text, regardless of
-// case, as the panel shows them: files that only hold secrets are left out, others show them
-// as the placeholder, and links aren't followed.
+// case, as the panel shows them: files that only hold secrets and the temporary files of the
+// agent are left out, others show secrets as the placeholder, and links aren't followed.
 func (s *Service) SearchFiles(ctx context.Context, req *noryxv1.SearchFilesRequest) (*noryxv1.SearchFilesResponse, error) {
 	query := strings.ToLower(req.GetQuery())
 	if strings.TrimSpace(query) == "" || utf8.RuneCountInString(query) > maxQuery || strings.ContainsFunc(query, unicode.IsControl) {
@@ -63,7 +63,7 @@ func (s *Service) SearchFiles(ctx context.Context, req *noryxv1.SearchFilesReque
 			return nil //nolint:nilerr // e.g. a folder the agent can't read, which is skipped
 		case e.IsDir() && datadir.IsTemp(e.Name()):
 			return fs.SkipDir
-		case !e.Type().IsRegular():
+		case datadir.IsTemp(e.Name()) || !e.Type().IsRegular(): // a file being written, e.g. with secrets filled in
 			return nil
 		}
 		info, err := e.Info()
