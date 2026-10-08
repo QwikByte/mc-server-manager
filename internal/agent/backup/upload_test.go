@@ -177,3 +177,64 @@ func TestUploadBackup(t *testing.T) {
 		}
 	}
 }
+
+// importStream sends a backup from another node in two chunks.
+type importStream struct {
+	grpc.ServerStream
+	msgs []*noryxv1.ImportBackupRequest
+	res  *noryxv1.ImportBackupResponse
+}
+
+func importing(b *noryxv1.Backup, archive []byte) *importStream {
+	half := len(archive) / 2
+	return &importStream{msgs: []*noryxv1.ImportBackupRequest{
+		{Content: &noryxv1.ImportBackupRequest_Header{Header: &noryxv1.ImportBackupHeader{ServerId: serverID, Backup: b}}},
+		{Content: &noryxv1.ImportBackupRequest_Data{Data: archive[:half]}},
+		{Content: &noryxv1.ImportBackupRequest_Data{Data: archive[half:]}},
+	}}
+}
+
+func (s *importStream) Context() context.Context { return context.Background() }
+
+func (s *importStream) Recv() (*noryxv1.ImportBackupRequest, error) {
+	if len(s.msgs) == 0 {
+		return nil, io.EOF
+	}
+	msg := s.msgs[0]
+	s.msgs = s.msgs[1:]
+	return msg, nil
+}
+
+func (s *importStream) SendAndClose(res *noryxv1.ImportBackupResponse) error {
+	s.res = res
+	return nil
+}
+
+// A backup from another node is untrusted: it is kept once it passed the checks of an uploaded
+// one, with the limits of backups, and may be no larger than announced.
+func TestImportBackup(t *testing.T) {
+	path, _ := paperData(t)
+	s := NewService(&fakeRuntime{dir: path}, storage.New(t.TempDir()))
+	backup := func(size int) *noryxv1.Backup {
+		return &noryxv1.Backup{Id: noryxv1.NewBackupID(time.Now()), CreatedUnix: time.Now().Unix(), Size: int64(size), Paths: []string{"."}}
+	}
+	world := zipped(t, zipEntry{name: "world/level.dat", content: "level"})
+	for name, stream := range map[string]*importStream{
+		"larger than announced": importing(backup(len(world)-1), world),
+		"link":                  importing(backup(1<<20), zipped(t, zipEntry{name: "world", content: "/etc", mode: fs.ModeSymlink})),
+		"./ in names":           importing(backup(1<<20), zipped(t, zipEntry{name: "./world/level.dat", content: "x"})),
+		"too many entries":      importing(backup(1<<20), endOnly(1<<40)),
+	} {
+		if err := s.ImportBackup(stream); status.Code(err) != codes.InvalidArgument && status.Code(err) != codes.ResourceExhausted {
+			t.Errorf("import of %s: %v", name, err)
+		}
+	}
+	if list, _ := s.store.List(serverID); len(list) != 0 {
+		t.Fatalf("backups = %v", list)
+	}
+	stream := importing(backup(len(world)), world)
+	check(t, s.ImportBackup(stream))
+	if !stream.res.GetBackup().GetUntrusted() {
+		t.Fatalf("imported %v", stream.res.GetBackup())
+	}
+}

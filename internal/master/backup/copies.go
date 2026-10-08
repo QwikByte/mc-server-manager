@@ -368,7 +368,7 @@ func (c *Copies) copy(ctx context.Context, p place, t schedule.Task, srv schedul
 			return cp, err
 		}
 		header := &noryxv1.ImportBackupHeader{ServerId: cp.ServerID, Backup: &noryxv1.Backup{
-			Id: cp.BackupID, Label: cp.Label, CreatedUnix: b.GetCreatedUnix(), Size: b.GetSize(), Location: p.Location, Paths: cp.Paths,
+			Id: cp.BackupID, Label: cp.Label, CreatedUnix: b.GetCreatedUnix(), Size: hidden(b.GetSize()), Location: p.Location, Paths: cp.Paths,
 			Exclude: cp.Exclude, JobId: t.ID, Kept: cp.Kept,
 		}}
 		relay := func() (*noryxv1.ImportCopyResponse, error) {

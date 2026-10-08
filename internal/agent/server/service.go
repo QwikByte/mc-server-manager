@@ -379,6 +379,11 @@ func (s *Service) extract(ctx context.Context, id string, stream noryxv1.ServerS
 		return err
 	}
 	defer dir.Close()
+	top, err := dir.Open(".")
+	if err != nil {
+		return err
+	}
+	defer top.Close()
 	tmp := datadir.TempName(".")
 	f, err := dir.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -386,7 +391,7 @@ func (s *Service) extract(ctx context.Context, id string, stream noryxv1.ServerS
 	}
 	defer dir.Remove(tmp) //nolint:errcheck // a leftover is removed with the server
 	defer f.Close()
-	var size int64
+	w, size := storage.Guard(f, top), int64(0) // the old node may send without end
 	for {
 		msg, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -395,7 +400,7 @@ func (s *Service) extract(ctx context.Context, id string, stream noryxv1.ServerS
 		if err != nil {
 			return err
 		}
-		n, err := f.Write(msg.GetData())
+		n, err := w.Write(msg.GetData())
 		if size += int64(n); err != nil {
 			return err
 		}

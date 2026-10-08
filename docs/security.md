@@ -314,7 +314,10 @@ an archive of the file manager (see [File manager](#file-manager)), and marks it
 the agent writes. Restoring an untrusted backup checks it again, with limits for backups (up to 1,000,000 entries and
 1 TB), and extracts it confined like an archive of the file manager, without the files that only hold secrets, the
 manifest of file sets and the files of the agent; it replaces every secret in the other files with the server's own,
-not only placeholders, and keeps the server's network settings like any restore. Listing, downloading and restoring an
+not only placeholders, and keeps the server's network settings like any restore. A backup from another node, moved
+with its server, copied there or a copy restored into a server, is untrusted too: the agent keeps it once it checked it
+like an uploaded one, with the limits for backups, and refuses it once it is larger than the master announced or less
+than 1 GB would stay free, also when the data of a moving server arrive. Listing, downloading and restoring an
 untrusted backup read the directory of its archive within the limits for backups too. The mark moves with the backup to
 another node, and copies for restoring into another server keep it; the master refuses both with agents that would
 drop it. Uploading needs the permissions to back up and to restore the server.
