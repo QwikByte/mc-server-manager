@@ -14,7 +14,7 @@ the image's user.
 
 ## Reaching a datastore
 
-The network's servers on the datastore's node, the proxy included, join its internal Docker network `noryx-db-<id>`,
+The network's servers on the datastore's node, the proxy included, join its internal network `noryx-db-<id>`,
 which has no route to the internet, while they run, and keep it when their container is created again; they reach it by
 the name of its container. Servers of other nodes reach it over the [private network of the
 nodes](networks.md#private-network) if both nodes are part of it: the datastore's node publishes its port there, for the

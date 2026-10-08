@@ -115,13 +115,21 @@ var imageChecks = map[string]*container.HealthConfig{
 // adapt fits the options of a new container to Podman: it gets the health check of its image
 // itself, and before bootPodman, the restart policy always instead of unless-stopped, as
 // Podman wouldn't start it when the node boots otherwise; then a server stopped in the panel
-// starts at boot too.
+// starts at boot too. With SELinux, e.g. on RHEL, Podman confines containers to files labelled
+// for them, which Z does for the mounts of each container alone; elsewhere it changes nothing.
 func (d *Docker) adapt(opts *client.ContainerCreateOptions) {
 	if d.podman == nil {
 		return
 	}
 	if repository, _, _ := strings.Cut(opts.Config.Image, ":"); opts.Config.Healthcheck == nil {
 		opts.Config.Healthcheck = imageChecks[repository]
+	}
+	for i, bind := range opts.HostConfig.Binds {
+		if strings.Count(bind, ":") > 1 {
+			opts.HostConfig.Binds[i] = bind + ",Z"
+		} else {
+			opts.HostConfig.Binds[i] = bind + ":Z"
+		}
 	}
 	if policy := &opts.HostConfig.RestartPolicy; policy.Name == container.RestartPolicyUnlessStopped && !d.podman.newer(bootPodman) {
 		policy.Name = container.RestartPolicyAlways
@@ -173,7 +181,7 @@ type life struct {
 func (d *Docker) podmanEvent(ctx context.Context, msg events.Message, w watched) {
 	id := msg.Actor.ID
 	l := w.lives[id]
-	if l == nil {
+	if l == nil && msg.Action != events.ActionHealthStatus {
 		l = &life{}
 		w.lives[id] = l
 	}

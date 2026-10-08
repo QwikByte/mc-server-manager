@@ -52,7 +52,8 @@ with it the budget of the sign-in rate limit, and the log and the sessions of us
 ## Nodes
 
 Add a node in the panel under **Nodes**. It shows a command that installs the agent in the master's version, offers to
-install Docker if it's missing (`--install-docker` doesn't ask), connects the agent with a join token and starts it:
+install Docker if it's missing (`--install-docker` doesn't ask) or installs [Podman](#docker-or-podman) with
+`--runtime podman`, connects the agent with a join token and starts it:
 
 ```sh
 curl -fsSLO https://github.com/QwikByte/noryx/releases/download/<version>/install.sh && sudo bash install.sh agent --join <join-token>
@@ -64,6 +65,51 @@ open UDP port 51820 (or the one in its settings) between the nodes.
 **Remove node…** in a node's menu stops managing it, also while it is offline or lost. Its servers and datastores keep
 running until they are stopped on the node or the agent is uninstalled. Servers of networks
 [leave their networks](networks.md#deleting-and-removed-nodes) first, once confirmed.
+
+### Docker or Podman
+
+Each node runs all its servers and datastores with one runtime: Docker, or [Podman](https://podman.io) as root, which
+the steps to add a node offer too. With `--runtime podman`, the installer installs Podman from the system's packages if
+it's missing, starts its socket (`podman.socket`), lets `podman-restart.service` start the servers at boot and sets
+the agent to Podman. Podman needs version 4.9 or newer, e.g. of Debian 13, Ubuntu 24.04 or RHEL 9, and a kernel with
+the bridge support of nftables (`nft_meta_bridge`), which current distributions have.
+
+Podman runs the same containers as Docker, from the same images, with the same users, capabilities, limits and networks
+(see [Containers](security.md#containers)), and it needs no daemon of its own. The agent talks to its
+Docker-compatible API and makes up for where Podman behaves differently, e.g. how it tells crashes and health. Plain
+processes without containers aren't offered: the agent would have to download and check Java and the servers itself,
+supervise and restart them, give each one a user of its own and build the isolation of containers again. Only Podman as
+root is supported: the agent runs as root anyway, and rootless Podman forwards published ports through a process of its
+own, past the firewall of the private network that lets only a proxy's node reach a port; its containers have no
+addresses on the node, at which the agent reaches their consoles, and it maps their users to others, which the data
+directories would have to follow.
+
+To set up Podman by hand on a node whose agent is installed:
+
+```sh
+sudo systemctl enable --now podman.socket
+sudo systemctl enable podman-restart.service
+sudo systemctl enable --now noryx-isolate.service   # keeps the servers apart before Podman starts them at boot
+```
+
+Then add `--runtime podman` to `NORYX_AGENT_OPTS` in `/etc/noryx/agent.env` and run
+`sudo systemctl restart noryx-agent`; `--runtime-socket <path>` names another socket than `/run/podman/podman.sock`.
+The agent refuses a socket at which the other runtime answers, e.g. Podman behind Docker's socket through the package
+`podman-docker`, and a Podman before 4.9: calls then fail and say why.
+
+The runtime is chosen per node, not per server, as each runtime keeps its servers apart with networks and firewall
+rules of its own. A node doesn't take its servers along to another runtime: move them to another node first, then
+change the runtime and move them back.
+
+Where Podman behaves differently:
+
+- Podman before 5.8 starts only containers whose restart policy is **Always** at boot, so the agent gives them that
+  policy there: a server or datastore stopped in the panel starts again when the node boots. From 5.8 on, stopped ones
+  stay stopped, like with Docker.
+- At shutdown, `podman-restart.service` stops the servers. Raise its `TimeoutStopSec` like Docker's (see
+  [Settings and images](servers.md#settings-and-images)).
+- Podman before 5.8 tells the time of console lines in whole seconds, so a console that reconnects may show a line
+  again.
 
 ## Everything on one machine
 
@@ -117,7 +163,7 @@ peers.
 
 `apt remove`, `dnf remove` or `pacman -R` with `noryx-master` or `noryx-agent` stops and removes a program but keeps its
 data. Delete `/var/lib/noryx-master`, `/var/lib/noryx-agent` and `/etc/noryx` to remove that too. The Minecraft servers
-of a node keep running in Docker; delete them in the panel before.
+of a node keep running in Docker or Podman; delete them in the panel before.
 
 ## Installing by hand and verifying releases
 

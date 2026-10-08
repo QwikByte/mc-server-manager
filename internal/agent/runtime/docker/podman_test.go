@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -112,8 +113,8 @@ func TestAdapt(t *testing.T) {
 	docker := &Docker{}
 	opts := server()
 	docker.adapt(&opts)
-	if opts.Config.Healthcheck != nil || opts.HostConfig.RestartPolicy.Name != container.RestartPolicyUnlessStopped {
-		t.Errorf("Docker: health check %v, restart policy %s", opts.Config.Healthcheck, opts.HostConfig.RestartPolicy.Name)
+	if opts.Config.Healthcheck != nil || opts.HostConfig.RestartPolicy.Name != container.RestartPolicyUnlessStopped || opts.HostConfig.Binds[0] != "/data:/data" {
+		t.Errorf("Docker: health check %v, restart policy %s, mounts %v", opts.Config.Healthcheck, opts.HostConfig.RestartPolicy.Name, opts.HostConfig.Binds)
 	}
 	for version, policy := range map[string]container.RestartPolicyMode{
 		"":       container.RestartPolicyAlways, // not known yet
@@ -127,7 +128,7 @@ func TestAdapt(t *testing.T) {
 		}
 		opts := server()
 		d.adapt(&opts)
-		if hc := opts.Config.Healthcheck; hc == nil || hc.Test[1] != "mc-health" || opts.HostConfig.RestartPolicy.Name != policy {
+		if hc := opts.Config.Healthcheck; hc == nil || hc.Test[1] != "mc-health" || opts.HostConfig.RestartPolicy.Name != policy || opts.HostConfig.Binds[0] != "/data:/data:Z" {
 			t.Errorf("Podman %s: health check %v, restart policy %s, want %s", version, hc, opts.HostConfig.RestartPolicy.Name, policy)
 		}
 	}
@@ -141,8 +142,9 @@ func TestAdapt(t *testing.T) {
 	ds, err := datastoreOptions(runtime.DatastoreSpec{ID: "d", Engine: noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB, Version: "11.8"}, "/srv/d")
 	must(t, err)
 	d.adapt(&ds)
-	if ds.Config.Healthcheck.Test[1] != "healthcheck.sh" {
-		t.Errorf("Podman, datastore: health check %v", ds.Config.Healthcheck)
+	// SELinux labels the mounts for the container alone.
+	if want := []string{"/srv/d/data-11.8:/var/lib/mysql:Z", "/srv/d/superuser:/run/noryx/superuser:ro,Z"}; ds.Config.Healthcheck.Test[1] != "healthcheck.sh" || !slices.Equal(ds.HostConfig.Binds, want) {
+		t.Errorf("Podman, datastore: health check %v, mounts %v", ds.Config.Healthcheck, ds.HostConfig.Binds)
 	}
 }
 

@@ -36,7 +36,7 @@ func overlayCommands(cfg *config) []*cobra.Command {
 		},
 		{
 			Use:   "up",
-			Short: "Restore the private network of a member, e.g. at boot before Docker starts",
+			Short: "Restore the private network of a member, e.g. at boot before Docker or Podman starts",
 			Args:  cobra.NoArgs,
 			RunE:  func(*cobra.Command, []string) error { return overlay.Up(cfg.dataDir, overlay.Linux{}) },
 		},

@@ -138,7 +138,7 @@ keeps their settings and Floodgate's key for later.
 
 ## Reaching the servers
 
-On its own node, the proxy reaches a server by container name over a Docker network that only the two of them share;
+On its own node, the proxy reaches a server by container name over a network that only the two of them share;
 such a server's port isn't published at all. A server on another node is reached over the private network of the nodes
 if both nodes are part of it (see [Private network](#private-network)). Otherwise it is reached at that node's host and
 the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as ufw, so allow only
@@ -146,7 +146,11 @@ the proxy's node in Docker's `DOCKER-USER` chain on the server's node, e.g. for 
 203.0.113.10:
 `iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 25566 --ctdir ORIGINAL ! -s 203.0.113.10 -j DROP` (and save
 it, e.g. with `netfilter-persistent save`). The panel shows this command with each such server; with Docker's nftables
-firewall there is no `DOCKER-USER` chain, so use the private network instead.
+firewall there is no `DOCKER-USER` chain, so use the private network instead. Podman's rules bypass such firewalls too,
+and it has no such chain either; on its nodes, the panel shows a rule in an nftables table of its own instead, which
+comes before Podman's rules:
+`nft 'add table inet noryx-firewall; add chain inet noryx-firewall forward { type filter hook forward priority -10; }; add rule inet noryx-firewall forward meta l4proto tcp ct status dnat ct original proto-dst 25566 ip saddr != 203.0.113.10 drop'`
+(save it in `/etc/nftables.conf` to keep it after a reboot).
 
 ## Private network
 
@@ -169,7 +173,7 @@ had when the network was applied, so that a node that later gets the address of 
 a key therefore applies the networks with servers on the node and on other nodes again. Apply them again yourself if one
 of their nodes was offline meanwhile, or if a node's key changed otherwise, e.g. as it lost its data. The kernel keeps
 the interface `noryx0` while the agent restarts or updates, and `noryx-overlay.service` restores it at boot, before
-Docker starts the servers.
+Docker or Podman starts the servers.
 
 ## Legacy forwarding
 
