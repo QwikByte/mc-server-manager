@@ -46,6 +46,7 @@ var (
 	Players   = Category("players")
 	Templates = Category("templates")
 	Policies  = Category("policies")
+	Workflows = Category("workflows")
 	Terminal  = Category("terminal")
 	Databases = Category("databases")
 	Usage     = Category("usage")

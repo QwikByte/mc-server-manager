@@ -25,7 +25,8 @@ on any number of dedicated servers, which run the Minecraft servers in Docker or
 - **Databases:** MariaDB and PostgreSQL for the plugins of a network.
 - **Library:** plugins and mods from Modrinth and Hangar with their updates, servers from Modrinth modpacks, templates,
   and file sets that share configuration files between servers.
-- **Automation:** backup jobs, restarts that warn the players, and starts, stops and console commands at set times.
+- **Automation:** backup jobs, restarts that warn the players, starts, stops and console commands at set times, and
+  workflows that chain actions with conditions and loops, started by times, the log, players, measures or webhooks.
 - **Players:** kicks, bans, whitelists and operators across servers and networks, Bedrock players included.
 - **Teams:** users and groups with fine-grained permissions, two-factor authentication and a log of who did what.
 - **Security:** mutual TLS with its own CA, agents that only obey the master, hardened containers and signed releases.
@@ -60,7 +61,7 @@ all nodes while the Minecraft servers keep running.
 | [Networks](docs/networks.md)                              | Proxies, forwarding, routing, maintenance, Bedrock players, private network    |
 | [Databases](docs/databases.md)                            | MariaDB and PostgreSQL datastores of networks                                  |
 | [Templates, file sets, plugins and mods](docs/library.md) | Templates, file sets, Modrinth, Hangar, modpacks                               |
-| [Backups and schedules](docs/automation.md)               | Backups of servers, datastores and the master; scheduled restarts and commands |
+| [Backups, schedules and workflows](docs/automation.md)    | Backups of servers, datastores and the master; schedules; workflows            |
 | [Players](docs/players.md)                                | Kicks, bans, whitelists and operators                                          |
 | [Usage and logs](docs/monitoring.md)                      | Measurements, their history, the log and notifications                         |
 | [Settings, users and permissions](docs/administration.md) | Settings of the master, terminal, users, groups, two-factor authentication     |

@@ -201,9 +201,9 @@ func (s *Service) build(kind string, in Input, by Author) (Task, error) {
 		return t, fmt.Errorf("unknown kind of task %q", kind)
 	}
 	var err error
-	t.Targets, err = targets(in.Targets)
+	t.Targets, err = CheckTargets(in.Targets)
 	optional, _ := k.(OptionalTargets)
-	switch msg := t.Schedule.normalize(); {
+	switch msg := t.Schedule.Normalize(); {
 	case t.Name == "" || len(t.Name) > 64:
 		return t, httpapi.Errorf(http.StatusBadRequest, "Enter a name with up to 64 characters.")
 	case msg != "":
@@ -221,9 +221,9 @@ func (s *Service) build(kind string, in Input, by Author) (Task, error) {
 	return t, err
 }
 
-// targets checks targets and puts them into their canonical form, without duplicates and
+// CheckTargets checks targets and puts them into their canonical form, without duplicates and
 // without single servers of nodes whose servers are all targets anyway.
-func targets(in []Target) ([]Target, error) {
+func CheckTargets(in []Target) ([]Target, error) {
 	if len(in) > maxTargets {
 		return nil, errTargets
 	}

@@ -50,6 +50,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/terminal"
 	"github.com/QwikByte/noryx/internal/master/update"
 	"github.com/QwikByte/noryx/internal/master/usage"
+	"github.com/QwikByte/noryx/internal/master/workflow"
 	"github.com/QwikByte/noryx/internal/pki"
 	"github.com/QwikByte/noryx/web"
 )
@@ -112,7 +113,8 @@ func serve(ctx context.Context, cfg config) error {
 	users := auth.NewService(db)
 	nodes := node.NewService(db, ca, masterCert, conf)
 	defer nodes.Close()
-	logStore := logs.NewStore(db, logs.NewNames(nodes), conf)
+	names := logs.NewNames(nodes)
+	logStore := logs.NewStore(db, names, conf)
 	logFile, err := logging.Setup(cfg.log, logStore.Handler(cfg.log.Level))
 	if err != nil {
 		return err
@@ -159,14 +161,22 @@ func serve(ctx context.Context, cfg config) error {
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
+	notifications := notify.New(db, logStore, notify.Options{})
+	go notifications.Run(ctx)
+	workflows := workflow.NewService(db, workflow.Deps{
+		Nodes: nodes, Targets: tasks, Networks: networks, Players: player.NewService(nodes, networks, geyser), Usage: usageStore,
+		Backups: jobs, Plugins: plugins, Notify: notifications, Logs: logStore, Names: names, Access: accessService,
+	})
+	usageStore.Watch(workflows)
+	if err := workflows.Start(ctx); err != nil {
+		return err
+	}
 	updates := update.New(nodes, conf, update.Options{DataDir: cfg.dataDir})
 	go updates.Run(ctx)
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
 	fileSets := fileset.NewService(db, nodes, networks, tags, datastores, moves)
 	go fileSets.Run(ctx)
-	notifications := notify.New(db, logStore, notify.Options{})
-	go notifications.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}
 	var restart func() error
@@ -189,7 +199,7 @@ func serve(ctx context.Context, cfg config) error {
 			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(mojang.API, mojang.SessionServer, mojang.Textures), Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
-			Tasks:      tasks, Copies: copies, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
+			Tasks:      tasks, Workflows: workflows, Copies: copies, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -261,6 +271,7 @@ type Services struct {
 	// Datastores are the databases of networks.
 	Datastores *datastore.Service
 	Tasks      *schedule.Service
+	Workflows  *workflow.Service
 	Copies     *backup.Copies
 	Logs       *logs.Store
 	Notify     *notify.Service
@@ -297,9 +308,13 @@ func Handler(s Services) http.Handler {
 
 	mux := http.NewServeMux()
 	authHandler.RegisterPublic(mux)
+	workflow.NewHandler(s.Workflows).RegisterPublic(mux)
 	mux.Handle("/api/", authHandler.Require(s.Access.Middleware(api)))
 	mux.Handle("/", web.Handler())
-	return securityHeaders(http.NewCrossOriginProtection().Handler(mux), s.HSTS)
+	// Webhooks are called with a token of their own, not with a session, from anywhere.
+	origins := http.NewCrossOriginProtection()
+	origins.AddInsecureBypassPattern("POST " + workflow.HookPath + "{token}")
+	return securityHeaders(origins.Handler(mux), s.HSTS)
 }
 
 // API returns the routes of the API that act for a user, each with the permission it needs.
@@ -328,6 +343,7 @@ func API(s Services) *http.ServeMux {
 	backup.NewHandler(s.Nodes, s.Networks, s.Operations, s.Moves.Check, s.Copies).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
+	workflow.NewHandler(s.Workflows).Register(m)
 	update.NewHandler(s.Updates).Register(m)
 	usage.NewHandler(s.Usage).Register(m)
 	return api

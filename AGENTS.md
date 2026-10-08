@@ -69,6 +69,8 @@ internal/master/
   backup/              backups of servers, backup jobs as scheduled tasks, and the copies of their backups in
                        S3-compatible storage or on other nodes, with the storages for them
   policy/              the panel's schedules (policies in the API): restarts with warnings, stops, starts, commands
+  workflow/            workflows: triggers, steps with conditions, loops and variables, templates of data, runs and
+                       webhooks
   database/            SQLite and embedded migrations
   logs/                log in the database, logging of API requests, collecting the agents' logs, REST API, CLI
   notify/              notifications of new log entries by rules to Discord, Slack, webhooks and mail, with a dialer

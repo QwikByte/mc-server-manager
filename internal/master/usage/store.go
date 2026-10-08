@@ -68,6 +68,7 @@ type Store struct {
 	nodes     Nodes
 	conf      Config
 	observers []Observer
+	watchers  []Watcher
 
 	mu        sync.Mutex
 	crossings map[key]*crossing
@@ -76,6 +77,15 @@ type Store struct {
 func NewStore(db *sql.DB, nodes Nodes, conf Config, observers ...Observer) *Store {
 	return &Store{db: db, nodes: nodes, conf: conf, observers: observers, crossings: map[key]*crossing{}}
 }
+
+// Watcher learns of every measurement like an Observer, with what the agent told of its node,
+// e.g. its CPU cores, to compare the servers with their thresholds as warnings do.
+type Watcher interface {
+	Measured(ctx context.Context, nodeID string, at time.Time, stats *noryxv1.GetStatsResponse, servers []*noryxv1.ServerStats)
+}
+
+// Watch adds a watcher of the measurements, e.g. the triggers of workflows, before Run.
+func (s *Store) Watch(w Watcher) { s.watchers = append(s.watchers, w) }
 
 // Run records the latest measurement of every agent each minute until ctx ends.
 func (s *Store) Run(ctx context.Context) {
@@ -122,10 +132,14 @@ func (s *Store) sample(ctx context.Context, now time.Time) {
 			if thErr == nil {
 				s.checkNode(ctx, n.ID, now, stats, th)
 			}
+			servers := recorded(stats)
 			for _, o := range s.observers {
-				if err := o.Record(ctx, n.ID, now, recorded(stats)); err != nil {
+				if err := o.Record(ctx, n.ID, now, servers); err != nil {
 					slog.Warn("Can't record a measurement of a node", logging.Nodes, logging.KeyNode, n.ID, "err", err)
 				}
+			}
+			for _, w := range s.watchers {
+				w.Measured(ctx, n.ID, now, stats, servers)
 			}
 		})
 	}

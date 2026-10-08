@@ -38,9 +38,9 @@ type Schedule struct {
 	TimeZone string   `json:"timeZone"`
 }
 
-// normalize sorts the days, dates and times and removes duplicates. It returns a message for
+// Normalize sorts the days, dates and times and removes duplicates. It returns a message for
 // the administrator if the schedule is invalid.
-func (s *Schedule) normalize() string {
+func (s *Schedule) Normalize() string {
 	slices.Sort(s.Days)
 	slices.Sort(s.MonthDays)
 	slices.Sort(s.Dates)
@@ -104,7 +104,7 @@ func (s Schedule) Next(t time.Time) time.Time {
 			return next
 		}
 	}
-	return time.Time{} // all dates passed, or a schedule that normalize rejects
+	return time.Time{} // all dates passed, or a schedule that Normalize rejects
 }
 
 // days yields the days that the schedule runs on from the day of t on, in t's time zone.

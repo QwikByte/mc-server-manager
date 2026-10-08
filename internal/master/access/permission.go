@@ -52,6 +52,8 @@ const (
 	BackupJobsManage Permission = "backupjobs.manage"
 	PoliciesView     Permission = "policies.view"
 	PoliciesManage   Permission = "policies.manage"
+	WorkflowsView    Permission = "workflows.view"
+	WorkflowsManage  Permission = "workflows.manage"
 
 	LogsView            Permission = "logs.view"
 	NotificationsManage Permission = "notifications.manage"
@@ -142,11 +144,13 @@ var Catalog = []Area{
 		global(FileSetsView, "See file sets", "Their files, targets and variables, the names of their secrets, and which servers have them."),
 		global(FileSetsManage, "Manage file sets", "Create, change and delete file sets and set their secrets. File sets configure plugins, which run code and can read the secrets of the sets. Applying a set also needs the permission to change the files of each server it is for, and passwords of databases in a set need the permission to manage databases.", FileSetsView),
 	}},
-	{"Backup jobs and schedules", []Info{
+	{"Backup jobs, schedules and workflows", []Info{
 		global(BackupJobsView, "See backup jobs", ""),
 		global(BackupJobsManage, "Manage backup jobs", "Create, change, delete and run backup jobs for any server. Copying their backups away from the nodes, and managing the storage for the copies, also needs the permission to see and download backups on all servers.", BackupJobsView),
 		global(PoliciesView, "See schedules", ""),
 		global(PoliciesManage, "Manage schedules", "Create, change, delete and run schedules, which restart, stop and start any server or run console commands.", PoliciesView),
+		global(WorkflowsView, "See workflows", "Their triggers and steps, and their runs with what their triggers and steps told, e.g. entries of the log, players and the answers of requests, about any server. Never the secret headers of requests or the URLs of webhooks."),
+		global(WorkflowsManage, "Manage workflows", "Create, change, delete, run and cancel workflows, and create the URLs that start them. Each step needs its own permission on all servers, e.g. to restart servers or send console commands, which the user who saved a workflow last needs for each run; requests to the internet and messages to notification channels need the permission to manage notifications.", WorkflowsView),
 	}},
 	{"Logs", []Info{
 		scoped(LogsView, "See logs", "Actions, warnings and errors of the master and the agents. Entries about users, groups, settings and the master itself need it for all servers."),

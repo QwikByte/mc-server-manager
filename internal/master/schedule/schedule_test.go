@@ -95,16 +95,16 @@ func TestNext(t *testing.T) {
 
 func TestNormalize(t *testing.T) {
 	s := Schedule{Days: []time.Weekday{3, 1, 3}, Times: []string{"16:30", "04:00", "16:30"}, TimeZone: "UTC"}
-	if msg := s.normalize(); msg != "" || !slices.Equal(s.Days, []time.Weekday{1, 3}) || !slices.Equal(s.Times, []string{"04:00", "16:30"}) {
+	if msg := s.Normalize(); msg != "" || !slices.Equal(s.Days, []time.Weekday{1, 3}) || !slices.Equal(s.Times, []string{"04:00", "16:30"}) {
 		t.Fatalf("normalized %+v: %q", s, msg)
 	}
 	every := Schedule{Days: []time.Weekday{0, 1, 2, 3, 4, 5, 6}, Times: []string{"04:00"}, TimeZone: "UTC"}
-	if every.normalize(); len(every.Days) != 0 {
+	if every.Normalize(); len(every.Days) != 0 {
 		t.Fatalf("all weekdays = %v, want none, which means every day", every.Days)
 	}
 	monthly := Schedule{MonthDays: []int{31, 1, 31}, Times: []string{"04:00"}, TimeZone: "UTC"}
 	dates := Schedule{Dates: []string{"2026-12-24", "2026-10-24", "2026-12-24"}, Times: []string{"04:00"}, TimeZone: "UTC"}
-	if monthly.normalize() != "" || !slices.Equal(monthly.MonthDays, []int{1, 31}) || dates.normalize() != "" || !slices.Equal(dates.Dates, []string{"2026-10-24", "2026-12-24"}) {
+	if monthly.Normalize() != "" || !slices.Equal(monthly.MonthDays, []int{1, 31}) || dates.Normalize() != "" || !slices.Equal(dates.Dates, []string{"2026-10-24", "2026-12-24"}) {
 		t.Fatalf("normalized %+v and %+v", monthly, dates)
 	}
 	tooMany := Schedule{Times: []string{"04:00"}, TimeZone: "UTC"}
@@ -129,7 +129,7 @@ func TestNormalize(t *testing.T) {
 		{Dates: []string{"2026-12-24T04:00"}, Times: []string{"04:00"}, TimeZone: "UTC"},
 		tooMany,
 	} {
-		if bad.normalize() == "" {
+		if bad.Normalize() == "" {
 			t.Errorf("accepted %+v", bad)
 		}
 	}
@@ -144,7 +144,7 @@ const (
 )
 
 func TestTargets(t *testing.T) {
-	got, err := targets([]Target{
+	got, err := CheckTargets([]Target{
 		{NodeID: "n1", ServerID: serverA}, {Kind: KindServer, NodeID: "n1"}, {NodeID: "n2", ServerID: serverA, Value: "x"},
 		{Kind: KindServer, NodeID: "n2", ServerID: serverA}, {Kind: KindTag, Value: " Lobby "}, {Kind: KindTag, Value: "lobby", NodeID: "n1"},
 		{Kind: KindNetwork, Value: networkID, Role: RoleProxy}, {Kind: KindNetwork, Value: networkID},
@@ -161,7 +161,7 @@ func TestTargets(t *testing.T) {
 		{{Kind: KindNetwork, Value: "../x"}}, {{Kind: KindNetwork, Value: networkID, Role: "players"}}, {{Kind: "planet"}},
 		slices.Repeat([]Target{{NodeID: "n1"}}, maxTargets+1),
 	} {
-		if _, err := targets(bad); err == nil {
+		if _, err := CheckTargets(bad); err == nil {
 			t.Errorf("accepted %v", bad)
 		}
 	}
