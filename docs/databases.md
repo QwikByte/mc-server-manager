@@ -79,10 +79,11 @@ restore.
 
 **Upload** adds a dump made elsewhere, e.g. when an existing LuckPerms database moves to Noryx: a ZIP archive with a
 `<database>.sql` for each database, named like the databases, or the SQL file of one database, which goes into the
-database chosen. It may have up to 16 GB. The agent keeps it like the dumps it makes, and restoring it loads it the
-same way, which the dialog offers right after the upload; its databases have to be added on the tab first. An archive
-may contain folders and the `__MACOSX` folder that macOS adds, which are left out, but no other files, at most 1000
-entries and 50 databases, and its SQL files may unpack to at most 64 GB and 100 times the size of the archive.
+database chosen. It may have up to 16 GB, as long as 1 GB stays free on the node, also when the browser doesn't tell its
+size in advance. The agent keeps it like the dumps it makes, and restoring it loads it the same way, which the dialog
+offers right after the upload; its databases have to be added on the tab first. An archive may contain folders and the
+`__MACOSX` folder that macOS adds, which are left out, but no other files, at most 1000 entries and 50 databases, and
+its SQL files may unpack to at most 64 GB and 100 times the size of the archive.
 
 A dump is loaded as the database's own user, so it gets no rights that this user doesn't have: make it of one
 database, without its owner and privileges, e.g. with `mariadb-dump luckperms` or

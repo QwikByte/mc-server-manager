@@ -3,6 +3,8 @@ package datastore
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"maps"
@@ -10,10 +12,13 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/sys/unix"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/storage"
 )
 
 // archive returns a ZIP archive with files of the given names and contents, deflated if
@@ -76,5 +81,54 @@ func TestSQLFiles(t *testing.T) {
 		if _, err := read(data); status.Code(err) != codes.InvalidArgument {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// upload sends a dump of unknown size to ImportDump: header, then size bytes that don't
+// compress.
+type upload struct {
+	grpc.ServerStream
+	ctx    context.Context
+	header *noryxv1.ImportDumpHeader
+	block  []byte
+	size   int
+}
+
+func (u *upload) Context() context.Context { return u.ctx }
+
+func (u *upload) Recv() (*noryxv1.ImportDumpRequest, error) {
+	switch {
+	case u.header != nil:
+		h := u.header
+		u.header = nil
+		return &noryxv1.ImportDumpRequest{Content: &noryxv1.ImportDumpRequest_Header{Header: h}}, nil
+	case u.size <= 0:
+		return nil, io.EOF
+	}
+	u.size -= len(u.block)
+	return &noryxv1.ImportDumpRequest{Content: &noryxv1.ImportDumpRequest_Data{Data: u.block}}, nil
+}
+
+func (u *upload) SendAndClose(*noryxv1.ImportDumpResponse) error { return nil }
+
+// An upload without a size stops before it leaves less than storage.MinFree free, both the
+// SQL of a database and an archive. It needs root, to mount a small file system.
+func TestImportKeepsSpaceFree(t *testing.T) {
+	dir := t.TempDir()
+	if err := unix.Mount("tmpfs", dir, "tmpfs", 0, fmt.Sprintf("size=%d", storage.MinFree+32<<20)); err != nil {
+		t.Skipf("can't mount a file system: %v", err)
+	}
+	t.Cleanup(func() { must(t, unix.Unmount(dir, 0)) })
+	s, _, _, id := newServiceIn(t, dir)
+	block := make([]byte, 1<<20)
+	_, _ = rand.Read(block)
+	for _, database := range []string{"", "shop"} {
+		u := &upload{ctx: t.Context(), header: &noryxv1.ImportDumpHeader{Id: id, Database: database}, block: block, size: 256 << 20}
+		if err := s.ImportDump(u); status.Code(err) != codes.ResourceExhausted {
+			t.Errorf("database %q: %v", database, err)
+		}
+	}
+	if dumps, err := s.dumps.List(owner(id)); err != nil || len(dumps) > 0 {
+		t.Errorf("dumps %v, %v", dumps, err)
 	}
 }
