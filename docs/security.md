@@ -151,7 +151,8 @@ file set filled with secrets while it was copied is removed again. Moving, copyi
 at once checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the
 browser only up to 16 MB, so that a small archive can't exhaust the browser's memory. A search shows files as the
 editor does: without the files that only hold secrets and with secrets as `<hidden>`, also those a file set marks while
-it searches, and it doesn't follow links.
+it searches, and it doesn't follow links or read the temporary files of the agent, which can hold the secrets of a file
+being written.
 
 Archives that are extracted, uploaded as backups or imported as servers are untrusted, unlike the backups the agent made
 itself. The agent reads the list of such an archive before it writes anything and refuses it for links, hard links,

@@ -163,6 +163,7 @@ func TestSearchFiles(t *testing.T) {
 		"server.properties":      "motd=Welcome\nrcon.password=welcome-secret\n",
 		".rcon-cli.env":          "password=welcome-secret\n",
 		"plugins/Sync/token.yml": "token: welcome-token\n",
+		"plugins/Sync/.noryx-x":  "token: welcome-token\n", // as a file set writes it
 		"noryx-filesets.json":    `{"marked":["plugins/Sync/token.yml"],"welcome":1}`,
 		"plugins/Essentials.yml": "first-join: WELCOME new players\nother: x\n" + string(make([]byte, 0)),
 		"plugins/data.bin":       "welcome\x00binary",
