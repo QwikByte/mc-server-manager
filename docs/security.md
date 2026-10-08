@@ -278,6 +278,43 @@ back up the server, and letting its job delete it again the one to delete backup
 paths, into another server or with a backup first on nodes whose agent would ignore that, e.g. restore all of a backup
 instead.
 
+## Copies of backups
+
+Copies of backups leave the server's node, so the agent of the node makes them as downloads, with the secrets of the
+server hidden: files that only hold secrets, such as the console password, the forwarding secret of the network,
+Floodgate's key and the files with secrets of file sets, are left out, and secrets in other files, e.g. in
+`server.properties` or the forwarding settings, are `<hidden>`. Restoring a copy works like restoring a backup into
+another server: the agent puts the server's own secrets wherever the copy says `<hidden>`, and keeps the server's
+secrets, those of its network and its forwarding settings, see [Backups](#backups). The rest of the server's data is in
+the copies as in its backups: worlds, plugins with their data and configuration, which can hold passwords that weren't
+set through file sets.
+
+The master doesn't encrypt copies, so whoever runs an S3-compatible storage can read them. It asks the storage to
+encrypt them with its own keys (SSE-S3) unless that is turned off, which only protects them from those who get at its
+disks, not from the provider: choose a storage that you trust with the data of the servers. The master only connects to
+the configured endpoint, over HTTPS with a certificate the system trusts, follows no redirects, signs every request with
+AWS Signature Version 4 including the hash of its body, and accepts the endpoint, region, bucket and folder only in
+strict forms. The secret key of a storage is stored in the master's database like the forwarding secret, is part of
+`noryx-master backup`, and is never returned by the API or logged; endpoint, bucket and access key show to those who may
+see backup jobs. A compromised storage can only hand out archives of its own, which are restored like those of a
+compromised node.
+
+Another node keeps copies apart from the backups of its own servers, out of reach of containers and the file manager,
+and never restores them itself: the master relays them, as agents never connect to each other. Its administrator can
+read them there, like the backups of the servers on their own node. Agents mark every backup that came from elsewhere, a
+copy or one of another node, as untrusted. Before an agent restores one, it checks that what the archive says it unpacks
+to fits on the disk with the space kept free for the servers, as unpacking stops at the size each file claims, and it
+extracts the archive confined to the server's folder and without links, like every backup. So a compromised node or
+storage can change the data of the servers restored from its copies, like a node can change the backups of its own
+servers, but nothing beyond them.
+
+Copies take the backups of all servers away from their nodes, so adding, changing and deleting storages, and saving a
+job that copies, need the permissions to manage backup jobs and to see and download the backups of all servers; each run
+checks that the user who saved the job last still has them. Seeing and restoring the copies of a server needs the
+permission to see its backups, on the node it is on now; those of servers that are gone, whose scope is unknown, need it
+on all servers. Restoring needs the permission to restore backups of the server restored into, which must be of the
+same kind, and deleting a copy the permission to delete backups.
+
 ## Permissions
 
 Every API route states the permission it needs when it is registered, so none can be added without; the terminal checks

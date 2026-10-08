@@ -4,7 +4,7 @@ import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { toast } from "sonner"
 import { BackLink } from "@/components/back-link"
-import { ErrorCallout } from "@/components/callout"
+import { Callout, ErrorCallout } from "@/components/callout"
 import { FormSection } from "@/components/form-section"
 import { PageHeader } from "@/components/page-header"
 import { usePageName } from "@/components/page-title"
@@ -17,6 +17,7 @@ import { RunHistory } from "@/features/schedules/run-history"
 import { TaskForm } from "@/features/schedules/task-form"
 import { emptyJob, type JobSettings, jobs } from "./api"
 import { LocationField, RetentionField, SelectionField } from "./backup-fields"
+import { CopyField } from "./storages"
 
 const route = getRouteApi("/_app/backups/$jobId")
 
@@ -36,6 +37,13 @@ export function BackupJobPage() {
       ) : (
         <>
           <PageHeader icon={ArchiveIcon} tone="info" title={job.name} />
+          {job.settings.copy && (
+            <Callout tone={job.savedBy ? "info" : "warning"} className="mb-6">
+              {job.savedBy
+                ? t("It copies backups with the permissions of {{user}}, who saved it last.", { user: job.savedBy })
+                : t("The user who saved it last was deleted or disabled, so it can't copy backups. Save it again.")}
+            </Callout>
+          )}
           {/* Without the permission to manage jobs, the job is only shown. */}
           <fieldset disabled={!manage} className="contents">
             <JobForm
@@ -105,6 +113,7 @@ function JobForm({
           <DatastoresField value={settings.datastores ?? []} onChange={(datastores) => set({ datastores })} />
           <LocationField locations={locations} value={settings.location} onChange={(location) => set({ location })} />
           <RetentionField value={settings} onChange={set} />
+          <CopyField value={settings.copy} onChange={(copy) => set({ copy })} />
         </FormSection>
       )}
     </TaskForm>

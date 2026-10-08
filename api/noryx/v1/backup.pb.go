@@ -1274,6 +1274,327 @@ func (x *ImportBackupResponse) GetBackup() *Backup {
 	return nil
 }
 
+type ImportCopyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*ImportCopyRequest_Header
+	//	*ImportCopyRequest_Data
+	Content       isImportCopyRequest_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportCopyRequest) Reset() {
+	*x = ImportCopyRequest{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportCopyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportCopyRequest) ProtoMessage() {}
+
+func (x *ImportCopyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportCopyRequest.ProtoReflect.Descriptor instead.
+func (*ImportCopyRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ImportCopyRequest) GetContent() isImportCopyRequest_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *ImportCopyRequest) GetHeader() *ImportBackupHeader {
+	if x != nil {
+		if x, ok := x.Content.(*ImportCopyRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *ImportCopyRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Content.(*ImportCopyRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isImportCopyRequest_Content interface {
+	isImportCopyRequest_Content()
+}
+
+type ImportCopyRequest_Header struct {
+	// server_id names the server of another node that the backup is of.
+	Header *ImportBackupHeader `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type ImportCopyRequest_Data struct {
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*ImportCopyRequest_Header) isImportCopyRequest_Content() {}
+
+func (*ImportCopyRequest_Data) isImportCopyRequest_Content() {}
+
+type ImportCopyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Backup        *Backup                `protobuf:"bytes,1,opt,name=backup,proto3" json:"backup,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportCopyResponse) Reset() {
+	*x = ImportCopyResponse{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportCopyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportCopyResponse) ProtoMessage() {}
+
+func (x *ImportCopyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportCopyResponse.ProtoReflect.Descriptor instead.
+func (*ImportCopyResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ImportCopyResponse) GetBackup() *Backup {
+	if x != nil {
+		return x.Backup
+	}
+	return nil
+}
+
+type DownloadCopyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The server of another node that the backup is of.
+	ServerId      string `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	BackupId      string `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DownloadCopyRequest) Reset() {
+	*x = DownloadCopyRequest{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DownloadCopyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DownloadCopyRequest) ProtoMessage() {}
+
+func (x *DownloadCopyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DownloadCopyRequest.ProtoReflect.Descriptor instead.
+func (*DownloadCopyRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DownloadCopyRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *DownloadCopyRequest) GetBackupId() string {
+	if x != nil {
+		return x.BackupId
+	}
+	return ""
+}
+
+type DownloadCopyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Size of the archive in the first message.
+	Size          int64  `protobuf:"varint,1,opt,name=size,proto3" json:"size,omitempty"`
+	Data          []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DownloadCopyResponse) Reset() {
+	*x = DownloadCopyResponse{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DownloadCopyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DownloadCopyResponse) ProtoMessage() {}
+
+func (x *DownloadCopyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DownloadCopyResponse.ProtoReflect.Descriptor instead.
+func (*DownloadCopyResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *DownloadCopyResponse) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *DownloadCopyResponse) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type DeleteCopyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	BackupId      string                 `protobuf:"bytes,2,opt,name=backup_id,json=backupId,proto3" json:"backup_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteCopyRequest) Reset() {
+	*x = DeleteCopyRequest{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteCopyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteCopyRequest) ProtoMessage() {}
+
+func (x *DeleteCopyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteCopyRequest.ProtoReflect.Descriptor instead.
+func (*DeleteCopyRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *DeleteCopyRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *DeleteCopyRequest) GetBackupId() string {
+	if x != nil {
+		return x.BackupId
+	}
+	return ""
+}
+
+type DeleteCopyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteCopyResponse) Reset() {
+	*x = DeleteCopyResponse{}
+	mi := &file_noryx_v1_backup_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteCopyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteCopyResponse) ProtoMessage() {}
+
+func (x *DeleteCopyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_backup_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteCopyResponse.ProtoReflect.Descriptor instead.
+func (*DeleteCopyResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_backup_proto_rawDescGZIP(), []int{25}
+}
+
 var File_noryx_v1_backup_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_backup_proto_rawDesc = "" +
@@ -1361,7 +1682,23 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
 	"\acontent\"@\n" +
 	"\x14ImportBackupResponse\x12(\n" +
-	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup2\x9a\x05\n" +
+	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup\"l\n" +
+	"\x11ImportCopyRequest\x126\n" +
+	"\x06header\x18\x01 \x01(\v2\x1c.noryx.v1.ImportBackupHeaderH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
+	"\acontent\">\n" +
+	"\x12ImportCopyResponse\x12(\n" +
+	"\x06backup\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x06backup\"O\n" +
+	"\x13DownloadCopyRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
+	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\">\n" +
+	"\x14DownloadCopyResponse\x12\x12\n" +
+	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\"M\n" +
+	"\x11DeleteCopyRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
+	"\tbackup_id\x18\x02 \x01(\tR\bbackupId\"\x14\n" +
+	"\x12DeleteCopyResponse2\xff\x06\n" +
 	"\rBackupService\x12J\n" +
 	"\vListBackups\x12\x1c.noryx.v1.ListBackupsRequest\x1a\x1d.noryx.v1.ListBackupsResponse\x12M\n" +
 	"\fCreateBackup\x12\x1d.noryx.v1.CreateBackupRequest\x1a\x1e.noryx.v1.CreateBackupResponse\x12P\n" +
@@ -1370,7 +1707,12 @@ const file_noryx_v1_backup_proto_rawDesc = "" +
 	"\fUpdateBackup\x12\x1d.noryx.v1.UpdateBackupRequest\x1a\x1e.noryx.v1.UpdateBackupResponse\x12V\n" +
 	"\x0fListBackupFiles\x12 .noryx.v1.ListBackupFilesRequest\x1a!.noryx.v1.ListBackupFilesResponse\x12U\n" +
 	"\x0eDownloadBackup\x12\x1f.noryx.v1.DownloadBackupRequest\x1a .noryx.v1.DownloadBackupResponse0\x01\x12O\n" +
-	"\fImportBackup\x12\x1d.noryx.v1.ImportBackupRequest\x1a\x1e.noryx.v1.ImportBackupResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
+	"\fImportBackup\x12\x1d.noryx.v1.ImportBackupRequest\x1a\x1e.noryx.v1.ImportBackupResponse(\x01\x12I\n" +
+	"\n" +
+	"ImportCopy\x12\x1b.noryx.v1.ImportCopyRequest\x1a\x1c.noryx.v1.ImportCopyResponse(\x01\x12O\n" +
+	"\fDownloadCopy\x12\x1d.noryx.v1.DownloadCopyRequest\x1a\x1e.noryx.v1.DownloadCopyResponse0\x01\x12G\n" +
+	"\n" +
+	"DeleteCopy\x12\x1b.noryx.v1.DeleteCopyRequest\x1a\x1c.noryx.v1.DeleteCopyResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_backup_proto_rawDescOnce sync.Once
@@ -1384,7 +1726,7 @@ func file_noryx_v1_backup_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_backup_proto_rawDescData
 }
 
-var file_noryx_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_noryx_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_noryx_v1_backup_proto_goTypes = []any{
 	(*BackupSelection)(nil),         // 0: noryx.v1.BackupSelection
 	(*BackupRetention)(nil),         // 1: noryx.v1.BackupRetention
@@ -1406,7 +1748,13 @@ var file_noryx_v1_backup_proto_goTypes = []any{
 	(*ImportBackupHeader)(nil),      // 17: noryx.v1.ImportBackupHeader
 	(*ImportBackupRequest)(nil),     // 18: noryx.v1.ImportBackupRequest
 	(*ImportBackupResponse)(nil),    // 19: noryx.v1.ImportBackupResponse
-	(*FileInfo)(nil),                // 20: noryx.v1.FileInfo
+	(*ImportCopyRequest)(nil),       // 20: noryx.v1.ImportCopyRequest
+	(*ImportCopyResponse)(nil),      // 21: noryx.v1.ImportCopyResponse
+	(*DownloadCopyRequest)(nil),     // 22: noryx.v1.DownloadCopyRequest
+	(*DownloadCopyResponse)(nil),    // 23: noryx.v1.DownloadCopyResponse
+	(*DeleteCopyRequest)(nil),       // 24: noryx.v1.DeleteCopyRequest
+	(*DeleteCopyResponse)(nil),      // 25: noryx.v1.DeleteCopyResponse
+	(*FileInfo)(nil),                // 26: noryx.v1.FileInfo
 }
 var file_noryx_v1_backup_proto_depIdxs = []int32{
 	2,  // 0: noryx.v1.ListBackupsResponse.backups:type_name -> noryx.v1.Backup
@@ -1415,31 +1763,39 @@ var file_noryx_v1_backup_proto_depIdxs = []int32{
 	2,  // 3: noryx.v1.CreateBackupResponse.backup:type_name -> noryx.v1.Backup
 	2,  // 4: noryx.v1.RestoreBackupResponse.snapshot:type_name -> noryx.v1.Backup
 	2,  // 5: noryx.v1.UpdateBackupResponse.backup:type_name -> noryx.v1.Backup
-	20, // 6: noryx.v1.ListBackupFilesResponse.files:type_name -> noryx.v1.FileInfo
+	26, // 6: noryx.v1.ListBackupFilesResponse.files:type_name -> noryx.v1.FileInfo
 	2,  // 7: noryx.v1.ImportBackupHeader.backup:type_name -> noryx.v1.Backup
 	17, // 8: noryx.v1.ImportBackupRequest.header:type_name -> noryx.v1.ImportBackupHeader
 	2,  // 9: noryx.v1.ImportBackupResponse.backup:type_name -> noryx.v1.Backup
-	3,  // 10: noryx.v1.BackupService.ListBackups:input_type -> noryx.v1.ListBackupsRequest
-	5,  // 11: noryx.v1.BackupService.CreateBackup:input_type -> noryx.v1.CreateBackupRequest
-	7,  // 12: noryx.v1.BackupService.RestoreBackup:input_type -> noryx.v1.RestoreBackupRequest
-	9,  // 13: noryx.v1.BackupService.DeleteBackup:input_type -> noryx.v1.DeleteBackupRequest
-	11, // 14: noryx.v1.BackupService.UpdateBackup:input_type -> noryx.v1.UpdateBackupRequest
-	13, // 15: noryx.v1.BackupService.ListBackupFiles:input_type -> noryx.v1.ListBackupFilesRequest
-	15, // 16: noryx.v1.BackupService.DownloadBackup:input_type -> noryx.v1.DownloadBackupRequest
-	18, // 17: noryx.v1.BackupService.ImportBackup:input_type -> noryx.v1.ImportBackupRequest
-	4,  // 18: noryx.v1.BackupService.ListBackups:output_type -> noryx.v1.ListBackupsResponse
-	6,  // 19: noryx.v1.BackupService.CreateBackup:output_type -> noryx.v1.CreateBackupResponse
-	8,  // 20: noryx.v1.BackupService.RestoreBackup:output_type -> noryx.v1.RestoreBackupResponse
-	10, // 21: noryx.v1.BackupService.DeleteBackup:output_type -> noryx.v1.DeleteBackupResponse
-	12, // 22: noryx.v1.BackupService.UpdateBackup:output_type -> noryx.v1.UpdateBackupResponse
-	14, // 23: noryx.v1.BackupService.ListBackupFiles:output_type -> noryx.v1.ListBackupFilesResponse
-	16, // 24: noryx.v1.BackupService.DownloadBackup:output_type -> noryx.v1.DownloadBackupResponse
-	19, // 25: noryx.v1.BackupService.ImportBackup:output_type -> noryx.v1.ImportBackupResponse
-	18, // [18:26] is the sub-list for method output_type
-	10, // [10:18] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	17, // 10: noryx.v1.ImportCopyRequest.header:type_name -> noryx.v1.ImportBackupHeader
+	2,  // 11: noryx.v1.ImportCopyResponse.backup:type_name -> noryx.v1.Backup
+	3,  // 12: noryx.v1.BackupService.ListBackups:input_type -> noryx.v1.ListBackupsRequest
+	5,  // 13: noryx.v1.BackupService.CreateBackup:input_type -> noryx.v1.CreateBackupRequest
+	7,  // 14: noryx.v1.BackupService.RestoreBackup:input_type -> noryx.v1.RestoreBackupRequest
+	9,  // 15: noryx.v1.BackupService.DeleteBackup:input_type -> noryx.v1.DeleteBackupRequest
+	11, // 16: noryx.v1.BackupService.UpdateBackup:input_type -> noryx.v1.UpdateBackupRequest
+	13, // 17: noryx.v1.BackupService.ListBackupFiles:input_type -> noryx.v1.ListBackupFilesRequest
+	15, // 18: noryx.v1.BackupService.DownloadBackup:input_type -> noryx.v1.DownloadBackupRequest
+	18, // 19: noryx.v1.BackupService.ImportBackup:input_type -> noryx.v1.ImportBackupRequest
+	20, // 20: noryx.v1.BackupService.ImportCopy:input_type -> noryx.v1.ImportCopyRequest
+	22, // 21: noryx.v1.BackupService.DownloadCopy:input_type -> noryx.v1.DownloadCopyRequest
+	24, // 22: noryx.v1.BackupService.DeleteCopy:input_type -> noryx.v1.DeleteCopyRequest
+	4,  // 23: noryx.v1.BackupService.ListBackups:output_type -> noryx.v1.ListBackupsResponse
+	6,  // 24: noryx.v1.BackupService.CreateBackup:output_type -> noryx.v1.CreateBackupResponse
+	8,  // 25: noryx.v1.BackupService.RestoreBackup:output_type -> noryx.v1.RestoreBackupResponse
+	10, // 26: noryx.v1.BackupService.DeleteBackup:output_type -> noryx.v1.DeleteBackupResponse
+	12, // 27: noryx.v1.BackupService.UpdateBackup:output_type -> noryx.v1.UpdateBackupResponse
+	14, // 28: noryx.v1.BackupService.ListBackupFiles:output_type -> noryx.v1.ListBackupFilesResponse
+	16, // 29: noryx.v1.BackupService.DownloadBackup:output_type -> noryx.v1.DownloadBackupResponse
+	19, // 30: noryx.v1.BackupService.ImportBackup:output_type -> noryx.v1.ImportBackupResponse
+	21, // 31: noryx.v1.BackupService.ImportCopy:output_type -> noryx.v1.ImportCopyResponse
+	23, // 32: noryx.v1.BackupService.DownloadCopy:output_type -> noryx.v1.DownloadCopyResponse
+	25, // 33: noryx.v1.BackupService.DeleteCopy:output_type -> noryx.v1.DeleteCopyResponse
+	23, // [23:34] is the sub-list for method output_type
+	12, // [12:23] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_backup_proto_init() }
@@ -1453,13 +1809,17 @@ func file_noryx_v1_backup_proto_init() {
 		(*ImportBackupRequest_Header)(nil),
 		(*ImportBackupRequest_Data)(nil),
 	}
+	file_noryx_v1_backup_proto_msgTypes[20].OneofWrappers = []any{
+		(*ImportCopyRequest_Header)(nil),
+		(*ImportCopyRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_backup_proto_rawDesc), len(file_noryx_v1_backup_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -51,6 +51,15 @@ export interface JobSettings {
   keepDays?: number
   keepWeeks?: number
   keepMonths?: number
+  /** Where the job copies its backups of servers to, away from their nodes; none for nowhere. */
+  copy?: CopyTo
+}
+
+/** S3-compatible storage, or another node in one of its storage locations (empty for the default one). */
+export interface CopyTo {
+  storage?: string
+  node?: string
+  location?: string
 }
 
 export const jobs = taskApi<JobSettings>("/backup-jobs")
@@ -172,5 +181,100 @@ export function useBackups(nodeId: string, serverId: string) {
         Promise.all([nodeId, into?.nodeId].map((node) => node && queryClient.invalidateQueries({ queryKey: ["nodes", node, "servers"] }))),
     }),
     remove: useMutation({ mutationFn: (id: string) => api(`${base(nodeId, serverId)}/${id}`, { method: "DELETE" }), onSettled }),
+  }
+}
+
+/** S3-compatible storage that jobs copy backups to. Its secret key is never shown. */
+export interface Storage extends StorageSettings {
+  id: string
+  /** How many copies it holds. */
+  copies: number
+}
+
+export interface StorageSettings {
+  name: string
+  /** The host, with a port unless it is 443; the master only connects over HTTPS. */
+  endpoint: string
+  region: string
+  bucket: string
+  /** Folder of the copies in the bucket; empty for its top. */
+  prefix: string
+  accessKey: string
+  /** Addresses the bucket in the path rather than in the host, e.g. for MinIO. */
+  pathStyle: boolean
+  /** Asks the storage to encrypt the copies with its own keys. */
+  encrypt: boolean
+}
+
+export const storagesQuery = queryOptions({
+  queryKey: ["backup-storages"],
+  queryFn: () => api<Storage[]>("/backup-storages"),
+})
+
+/** Whether a query is about copies or storages, which deleting copies or storages changes. */
+const aboutCopies = ({ queryKey }: { queryKey: readonly unknown[] }) => queryKey.includes("copies") || queryKey[0] === "backup-storages"
+
+/** Adds, changes and deletes storages; an empty secret key keeps the one a storage has. */
+export function useStorages() {
+  const queryClient = useQueryClient()
+  return {
+    save: useMutation({
+      mutationFn: ({ id, ...input }: StorageSettings & { id?: string; secretKey: string }) =>
+        api<Storage>(id ? `/backup-storages/${id}` : "/backup-storages", { method: id ? "PUT" : "POST", body: input }),
+      onSettled: () => queryClient.invalidateQueries({ queryKey: storagesQuery.queryKey }),
+    }),
+    // The master forgets the copies of a deleted storage.
+    remove: useMutation({
+      mutationFn: (id: string) => api(`/backup-storages/${id}`, { method: "DELETE" }),
+      onSettled: () => queryClient.invalidateQueries({ predicate: aboutCopies }),
+    }),
+  }
+}
+
+/** A copy of a backup of a server away from its node, which the server can be restored from, also once it is gone. */
+export interface Copy extends Pick<Backup, "label" | "createdAt" | "size" | "paths" | "exclude" | "kept"> {
+  id: number
+  /** The job that made it; none once the job is deleted. */
+  jobId?: string
+  serverId: string
+  serverName: string
+  /** The node that the server was on when it was copied. */
+  nodeId: string
+  nodeName: string
+  proxy: boolean
+  backupId: string
+  copiedAt: string
+  /** The storage that holds it, or the node, in its storage location. */
+  storageId?: string
+  copyNodeId?: string
+  location?: string
+  /** The name of the storage or node. */
+  where: string
+}
+
+const copiesBase = (server?: ServerFiles) => (server ? `/nodes/${server.nodeId}/servers/${server.serverId}/copies` : "/backup-copies")
+
+/** The copies of a server, or of all servers without one, e.g. of those that are gone. */
+export const copiesQuery = (server?: ServerFiles) =>
+  queryOptions({
+    queryKey: server ? ["nodes", server.nodeId, "servers", server.serverId, "copies"] : ["backup-copies"],
+    queryFn: () => api<Copy[]>(copiesBase(server)),
+    refetchInterval: 60_000, // jobs add some
+  })
+
+/** Restores and deletes copies, through the routes of a server or, without one, those of all copies. */
+export function useCopies(server?: ServerFiles) {
+  const queryClient = useQueryClient()
+  return {
+    restore: useMutation({
+      mutationFn: ({ id, into, snapshotFirst, onStart }: { id: number; into: ServerFiles; snapshotFirst: boolean; onStart?: (op: Operation) => void }) =>
+        operate<Restored>(`${copiesBase(server)}/${id}/restore`, { body: { node: into.nodeId, server: into.serverId, snapshotFirst } }, onStart),
+      // The server restored into got the backup of what was replaced.
+      onSettled: (_, __, { into }) => queryClient.invalidateQueries({ queryKey: ["nodes", into.nodeId, "servers"] }),
+    }),
+    remove: useMutation({
+      mutationFn: (id: number) => api(`${copiesBase(server)}/${id}`, { method: "DELETE" }),
+      onSettled: () => queryClient.invalidateQueries({ predicate: aboutCopies }),
+    }),
   }
 }

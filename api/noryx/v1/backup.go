@@ -32,6 +32,47 @@ func (r *BackupRetention) KeepsAll() bool {
 	return r.GetLast() == 0 && r.GetDays() == 0 && r.GetWeeks() == 0 && r.GetMonths() == 0
 }
 
+// Keeps tells which of backups created at the given times, newest first, a retention keeps:
+// the newest ones, and the newest of each of the last days, weeks and months that have
+// backups. Backups that are kept anyway, e.g. marked to keep, don't count.
+func (r *BackupRetention) Keeps(created []time.Time) []bool {
+	keep := make([]bool, len(created))
+	if r.KeepsAll() {
+		for i := range keep {
+			keep[i] = true
+		}
+		return keep
+	}
+	loc, err := time.LoadLocation(r.GetTimeZone())
+	if err != nil {
+		loc = time.UTC
+	}
+	for i := range min(int(r.GetLast()), len(created)) {
+		keep[i] = true
+	}
+	for _, rule := range []struct {
+		count  uint32
+		period func(time.Time) [3]int
+	}{
+		{r.GetDays(), func(t time.Time) [3]int { y, m, d := t.Date(); return [3]int{y, int(m), d} }},
+		{r.GetWeeks(), func(t time.Time) [3]int { y, w := t.ISOWeek(); return [3]int{y, w} }},
+		{r.GetMonths(), func(t time.Time) [3]int { y, m, _ := t.Date(); return [3]int{y, int(m)} }},
+	} {
+		seen := map[[3]int]bool{}
+		for i, t := range created {
+			period := rule.period(t.In(loc))
+			if seen[period] {
+				continue
+			}
+			if len(seen) == int(rule.count) {
+				break
+			}
+			seen[period], keep[i] = true, true
+		}
+	}
+	return keep
+}
+
 // Problem returns what is wrong with a retention, or "".
 func (r *BackupRetention) Problem() string {
 	switch {

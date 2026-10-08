@@ -23,8 +23,8 @@ import (
 )
 
 // A backup is kept as <backups of the location>/<owner>/<ID>.zip, with its details in
-// <ID>.json next to it. The owner is the ID of a server, or datastores/<ID> for the dumps of
-// a datastore.
+// <ID>.json next to it. The owner is the ID of a server, datastores/<ID> for the dumps of a
+// datastore, or copies/<ID> for the copies of backups of a server of another node.
 
 // idPattern matches backup IDs, which start with the time of creation; see noryxv1.NewBackupID.
 var idPattern = regexp.MustCompile(`^\d{8}-\d{6}-[a-z2-7]{6}$`)
@@ -39,7 +39,13 @@ type Details struct {
 	JobID   string   `json:"jobId,omitempty"`
 	// Kept backups are never deleted by their job.
 	Kept bool `json:"kept,omitempty"`
+	// Untrusted backups weren't made by this agent but came from elsewhere, e.g. from another
+	// node or a copy of a backup, so restoring them trusts nothing that their archive tells.
+	Untrusted bool `json:"untrusted,omitempty"`
 }
+
+// copies returns the owner of the copies of backups of a server of another node.
+func copies(serverID string) string { return filepath.Join("copies", serverID) }
 
 // Archive is a kept backup, a ZIP archive.
 type Archive struct {
@@ -250,38 +256,13 @@ func (s Store) Prune(owner, jobID string, r *noryxv1.BackupRetention) error {
 	return err
 }
 
-// retained tells which of backups, newest first, a retention keeps: the newest ones, and the
-// newest of each of the last days, weeks and months that have backups.
+// retained tells which of backups, newest first, a retention keeps, see BackupRetention.Keeps.
 func retained(backups []Archive, r *noryxv1.BackupRetention) []bool {
-	loc, err := time.LoadLocation(r.GetTimeZone())
-	if err != nil {
-		loc = time.UTC
+	created := make([]time.Time, len(backups))
+	for i, b := range backups {
+		created[i] = b.Created
 	}
-	keep := make([]bool, len(backups))
-	for i := range min(int(r.GetLast()), len(backups)) {
-		keep[i] = true
-	}
-	for _, rule := range []struct {
-		count  uint32
-		period func(time.Time) [3]int
-	}{
-		{r.GetDays(), func(t time.Time) [3]int { y, m, d := t.Date(); return [3]int{y, int(m), d} }},
-		{r.GetWeeks(), func(t time.Time) [3]int { y, w := t.ISOWeek(); return [3]int{y, w} }},
-		{r.GetMonths(), func(t time.Time) [3]int { y, m, _ := t.Date(); return [3]int{y, int(m)} }},
-	} {
-		seen := map[[3]int]bool{}
-		for i, b := range backups {
-			period := rule.period(b.Created.In(loc))
-			if seen[period] {
-				continue
-			}
-			if len(seen) == int(rule.count) {
-				break
-			}
-			seen[period], keep[i] = true, true
-		}
-	}
-	return keep
+	return r.Keeps(created)
 }
 
 // RemoveAll deletes all backups of an owner.

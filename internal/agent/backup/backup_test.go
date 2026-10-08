@@ -2,9 +2,12 @@ package backup
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
+	"hash/crc32"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -70,7 +73,7 @@ func restore(t *testing.T, dir *datadir.Dir, typ noryxv1.ServerType, b Archive, 
 	defer zr.Close()
 	paths, err = chosen(&zr.Reader, b, paths)
 	check(t, err)
-	staged, err := stage(t.Context(), dir, &zr.Reader, paths)
+	staged, err := stage(t.Context(), dir, &zr.Reader, paths, false)
 	defer dir.RemoveAll(staged) //nolint:errcheck // a temporary folder
 	check(t, err)
 	check(t, keep(dir, typ, staged))
@@ -446,6 +449,33 @@ func TestRestoreHiddenSecrets(t *testing.T) {
 	}
 	if read(path, ".rcon-cli.env") != "secret" || read(path, network.ForwardingSecretFile) != "" {
 		t.Error("restoring changed the files with secrets")
+	}
+}
+
+// An archive from elsewhere that tells it unpacks to more than fits on the disk isn't unpacked.
+func TestUntrustedArchive(t *testing.T) {
+	path, dir := paperData(t)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, size := range map[string]uint64{"world/level.dat": 4, "world/region/r.0.0.mca": math.MaxUint64 - 2} {
+		w, err := zw.CreateRaw(&zip.FileHeader{Name: name, Method: zip.Store, CRC32: crc32.ChecksumIEEE([]byte("bomb")), CompressedSize64: 4, UncompressedSize64: size})
+		check(t, err)
+		_, err = w.Write([]byte("bomb"))
+		check(t, err)
+	}
+	check(t, zw.Close())
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	check(t, err)
+	staged, err := stage(t.Context(), dir, zr, []string{"world"}, true)
+	if !errors.As(err, new(storage.FullError)) || staged != "" {
+		t.Fatalf("stage = %q, %v", staged, err)
+	}
+	staged, err = stage(t.Context(), dir, zr, []string{"world/level.dat"}, true)
+	if staged != "" {
+		defer dir.RemoveAll(staged) //nolint:errcheck // a temporary folder
+	}
+	if err != nil || read(path, filepath.Join(staged, "world/level.dat")) != "bomb" {
+		t.Fatalf("stage = %v", err)
 	}
 }
 

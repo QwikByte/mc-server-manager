@@ -41,6 +41,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Restore a backup of {{name}}", { name: subject })
     case "backup.restore-into":
       return t("Restore a backup into {{name}}", { name: subject })
+    case "backup.restore-copy":
+      return t("Restore a copy of a backup into {{name}}", { name: subject })
     case "network.create":
       return t("Create the network {{name}}", { name: subject })
     case "network.update":
@@ -151,6 +153,7 @@ export function stepOf(op: Operation, step: string): string {
       return t("Save the worlds")
     case "copy":
     case "copying":
+      if (op.kind === "backup.restore-copy") return t("Fetch the copy")
       return op.kind === "backup.restore-into" ? t("Copy the backup") : t("Copy the data")
     case "archive":
       return op.kind.startsWith("backup.restore") ? t("Back up what is replaced") : t("Pack the backup")

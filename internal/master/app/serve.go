@@ -149,7 +149,8 @@ func serve(ctx context.Context, cfg config) error {
 	tags := tag.NewStore(db)
 	accessService := access.NewService(db)
 	usageStore := usage.NewStore(db, nodes, conf)
-	jobs := backup.NewJobs(nodes, datastores)
+	copies := backup.NewCopies(db, nodes, nil)
+	jobs := backup.NewJobs(nodes, datastores, copies)
 	tasks := schedule.NewService(db, nodes, tags, networks, accessService, map[string]schedule.Kind{
 		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins),
 	}, moves.Busy)
@@ -186,7 +187,7 @@ func serve(ctx context.Context, cfg config) error {
 			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
 			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
-			Tasks:      tasks, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
+			Tasks:      tasks, Copies: copies, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -256,6 +257,7 @@ type Services struct {
 	// Datastores are the databases of networks.
 	Datastores *datastore.Service
 	Tasks      *schedule.Service
+	Copies     *backup.Copies
 	Logs       *logs.Store
 	Notify     *notify.Service
 	Updates    *update.Service
@@ -317,7 +319,7 @@ func API(s Services) *http.ServeMux {
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
 	datastore.NewHandler(s.Datastores, s.Operations).Register(m)
-	backup.NewHandler(s.Nodes, s.Networks, s.Operations, s.Moves.Check).Register(m)
+	backup.NewHandler(s.Nodes, s.Networks, s.Operations, s.Moves.Check, s.Copies).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
 	update.NewHandler(s.Updates).Register(m)

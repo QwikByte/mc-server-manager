@@ -8,8 +8,11 @@ import { TabIntro } from "@/components/hub-layout"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
+import { nodesQuery } from "@/features/nodes/api"
 import { TaskCard } from "@/features/schedules/task-card"
-import { describeRetention, describeSelection, jobs, nothingSelected } from "./api"
+import { type CopyTo, describeRetention, describeSelection, jobs, nothingSelected, storagesQuery } from "./api"
+import { GoneCopies } from "./copies"
+import { StoragesSection } from "./storages"
 
 function NewJob() {
   return (
@@ -25,6 +28,11 @@ function NewJob() {
 export function BackupJobsPage() {
   const manage = useAccess().can("backupjobs.manage")
   const { data: list, isPending, error } = useQuery(jobs.tasksQuery)
+  const { data: storages = [] } = useQuery(storagesQuery)
+  const { data: nodes = [] } = useQuery(nodesQuery)
+  /** Where a job copies its backups to, by name. */
+  const copiesTo = ({ storage, node }: CopyTo) =>
+    t("copies to {{where}}", { where: (storage ? storages.find((s) => s.id === storage) : nodes.find((n) => n.id === node))?.name ?? "…" })
   return (
     <>
       <TabIntro actions={manage && <NewJob />}>
@@ -62,6 +70,7 @@ export function BackupJobsPage() {
                 job.settings.datastores?.length &&
                   t("{{count}} datastores", { count: job.settings.datastores.length, defaultValue_one: "{{count}} datastore" }),
                 describeRetention(job.settings),
+                job.settings.copy && copiesTo(job.settings.copy),
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -77,6 +86,8 @@ export function BackupJobsPage() {
           ))}
         </ul>
       )}
+      <StoragesSection />
+      <GoneCopies />
     </>
   )
 }

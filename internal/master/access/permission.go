@@ -144,7 +144,7 @@ var Catalog = []Area{
 	}},
 	{"Backup jobs and schedules", []Info{
 		global(BackupJobsView, "See backup jobs", ""),
-		global(BackupJobsManage, "Manage backup jobs", "Create, change, delete and run backup jobs for any server.", BackupJobsView),
+		global(BackupJobsManage, "Manage backup jobs", "Create, change, delete and run backup jobs for any server. Copying their backups away from the nodes, and managing the storage for the copies, also needs the permission to see and download backups on all servers.", BackupJobsView),
 		global(PoliciesView, "See schedules", ""),
 		global(PoliciesManage, "Manage schedules", "Create, change, delete and run schedules, which restart, stop and start any server or run console commands.", PoliciesView),
 	}},
