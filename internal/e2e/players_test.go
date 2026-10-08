@@ -130,6 +130,8 @@ func TestMaintenance(t *testing.T) {
 			write("config.yml", "maintenance-enabled: false\n")
 		case what == "maintenance add Steve":
 			write("WhitelistedPlayers.yml", "8667ba71-b85a-4004-af54-457a9734eed7: Steve\n")
+		case what == "maintenance on lobby":
+			write("config.yml", "maintenance-enabled: false\nproxied-maintenance-servers:\n  lobby: default\n")
 		}
 	}
 
@@ -156,6 +158,32 @@ func TestMaintenance(t *testing.T) {
 		t.Fatalf("maintenance after turning it off = %+v", got)
 	}
 	want := []string{"maintenance on", "maintenance add Steve", "maintenance off"}
+	if cmds := a.runtime.commandsTo(proxy.ServerID); !slices.Equal(cmds, want) {
+		t.Fatalf("proxy commands = %q, want %q", cmds, want)
+	}
+
+	// A server of the network goes into maintenance on its own for an hour: the plugin saves
+	// that it is, and keeps the timer that ends it to itself.
+	check(t, os.WriteFile(filepath.Join(a.runtime.dir, proxy.ServerID, "velocity.toml"), []byte("[servers]\nlobby = \"lobby:25565\"\ntry = [\"lobby\"]\n"), 0o600))
+	api.do("POST", path, map[string]any{"enabled": true, "server": "lobby", "duration": 60}, http.StatusOK, &got)
+	if got.Enabled || !slices.Equal(got.Servers, []string{"lobby"}) || !got.ServersAndTimers {
+		t.Fatalf("maintenance of lobby = %+v", got)
+	}
+	// The whole network goes into maintenance in 5 minutes, and a timer is aborted.
+	api.do("POST", path, map[string]any{"enabled": true, "delay": 5}, http.StatusOK, &got)
+	api.do("POST", path+"/abort", map[string]any{"server": "lobby"}, http.StatusOK, &got)
+	// Only servers of the network, and times of up to 28 days.
+	for _, invalid := range []map[string]any{
+		{"enabled": true, "server": "elsewhere"},
+		{"enabled": true, "delay": 40321},
+		{"enabled": false, "duration": 60},
+		{"enabled": true, "delay": "5"},
+	} {
+		api.do("POST", path, invalid, http.StatusBadRequest, nil)
+	}
+	api.do("POST", path+"/abort", map[string]any{"server": "elsewhere"}, http.StatusBadRequest, nil)
+	want = append(want, "maintenance on lobby", "maintenance aborttimer lobby", "maintenance endtimer lobby 60",
+		"maintenance aborttimer", "maintenance starttimer 5", "maintenance aborttimer lobby")
 	if cmds := a.runtime.commandsTo(proxy.ServerID); !slices.Equal(cmds, want) {
 		t.Fatalf("proxy commands = %q, want %q", cmds, want)
 	}

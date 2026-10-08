@@ -101,7 +101,9 @@ longer send players to its servers. The node itself isn't contacted, and if a se
 configured, the node stays. Only deleting a network whose proxy's node doesn't answer skips the proxy and the servers
 on that node, which then only trust each other, and says so. The forwarding mods come from Modrinth like other mods,
 checked against their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent
-writes to through Docker; no RCON plugin is added.
+writes to through Docker; no RCON plugin is added. The commands of the Maintenance plugin only take what the agent
+checked itself: names of players, the name of a server that its configuration of the proxy has, and timers as whole
+minutes up to 28 days, so nothing else becomes part of a command.
 
 ## Containers
 
@@ -252,7 +254,9 @@ Copying never follows symbolic links, so a copy can't pull in files from outside
 Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a copied game server stops
 trusting the proxy, so a copy can't impersonate a server of a network. Copied proxies also lose Floodgate's key, with
 which Geyser vouches for Bedrock players, and copied game servers demand signed chat again. A copied Fabric or Quilt
-server keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab.
+server keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab. A copy of a game server
+of a network only joins the network, and gets its forwarding secret, if the user who copies it may also manage networks;
+it stays on the node of the original, so it is as exposed as the original is.
 
 ## Backups
 

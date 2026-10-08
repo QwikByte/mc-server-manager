@@ -161,9 +161,13 @@ export function useCreateServer() {
 export function useDuplicateServer(nodeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, name, port, onStart }: { id: string; name: string; port: number } & Followed) =>
-      operate<Server>(`/nodes/${nodeId}/servers/${id}/duplicate`, { body: { name, port } }, onStart),
-    onSettled: () => refreshServers(queryClient, nodeId),
+    /** With network, the copy of a game server of a network joins the network next to it. */
+    mutationFn: ({ id, onStart, ...body }: { id: string; name: string; port: number; network: boolean } & Followed) =>
+      operate<Server>(`/nodes/${nodeId}/servers/${id}/duplicate`, { body }, onStart),
+    onSettled: (_data, _error, { network }) => {
+      void refreshServers(queryClient, nodeId)
+      if (network) void queryClient.invalidateQueries({ queryKey: ["networks"] })
+    },
   })
 }
 

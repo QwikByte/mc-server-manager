@@ -129,7 +129,9 @@ unhealthy and healthy again. It still counts as running: its console, restarts, 
 
 A server can be duplicated on its node: the copy gets all files, worlds and settings under a new name and port, and
 starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
-players stay connected. The copy keeps the original's modpack, but doesn't take over its place in a network.
+players stay connected. The copy keeps the original's modpack, but doesn't take over its place in a network unless **Add
+the copy to the network** is chosen for a game server of one, e.g. for a second lobby: the copy then joins the network
+next to the original, see [Networks](networks.md#copies-of-servers).
 
 ## Moving to another node
 

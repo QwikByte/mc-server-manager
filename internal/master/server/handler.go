@@ -53,6 +53,12 @@ type Networks interface {
 	Move(ctx context.Context, serverID, from, to string) error
 	// Reapply configures the network of a server again, e.g. as its port changed.
 	Reapply(ctx context.Context, serverID string) error
+	// CheckCopy fails unless a copy of a server can join its network, as the server is a
+	// game server of one that has room for another.
+	CheckCopy(ctx context.Context, nodeID, serverID string) error
+	// AddCopy adds the copy of a game server to the network of the original, in its place,
+	// and configures the network.
+	AddCopy(ctx context.Context, nodeID, originalID, copyID string) error
 }
 
 // Tags label servers, e.g. lobby, and notes describe them, so that the panel finds and groups
@@ -462,11 +468,14 @@ func newTags(grants access.Grants, nodeID string, tags []string) ([]string, erro
 }
 
 // duplicate copies a server with its data into a new server on the same node, as an
-// operation, which takes a while for big worlds.
+// operation, which takes a while for big worlds. The copy of a game server of a network can
+// join the network in the place of the original, which needs the permission to manage
+// networks too.
 func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
-		Port uint32 `json:"port"`
+		Name    string `json:"name"`
+		Port    uint32 `json:"port"`
+		Network bool   `json:"network"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
@@ -475,6 +484,19 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 	nodeID, id := r.PathValue("node"), r.PathValue("id")
 	ctx, cancel := context.WithTimeout(r.Context(), queryTimeout)
 	defer cancel()
+	need := duplicateNeed
+	if req.Network {
+		need = access.All(duplicateNeed, access.Everywhere(access.NetworksManage))
+		p, ok := need(r, access.From(r.Context()))
+		err := access.Denied(p)
+		if ok {
+			err = h.networks.CheckCopy(ctx, nodeID, id)
+		}
+		if err != nil {
+			httpapi.WriteError(w, r, err)
+			return
+		}
+	}
 	c, err := h.client(ctx, r)
 	var list *noryxv1.ListServersResponse
 	if err == nil {
@@ -499,9 +521,12 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 	if source.GetState() != noryxv1.ServerState_SERVER_STATE_STOPPED && !source.GetType().Proxy() {
 		steps = append([]string{"save"}, steps...) // it saves its worlds first
 	}
+	if req.Network {
+		steps = append(steps, "servers", "proxy") // the network is configured
+	}
 	spec := operation.Spec{
 		Kind: "server.duplicate", Subject: req.Name, NodeID: nodeID, ServerID: id, Steps: steps, Status: http.StatusCreated,
-		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id), Cancel: duplicateNeed,
+		Timeout: createTimeout, Category: logging.Servers, Visible: viewable(nodeID, id), Cancel: need,
 	}
 	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
 		defer release()
@@ -524,8 +549,28 @@ func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		if err := h.modpacks.Copy(ctx, nodeID, id, copied.GetId()); err != nil {
 			slog.Warn("The copy of a server didn't get its modpack", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, copied.GetId(), "err", err)
 		}
+		if req.Network {
+			// Once it configures the network, the operation finishes.
+			err := operation.Keep(ctx)
+			if err == nil {
+				err = h.networks.AddCopy(ctx, nodeID, id, copied.GetId())
+			}
+			if err != nil {
+				return nil, notJoined(copied.GetName(), err)
+			}
+		}
 		return toView(copied), nil
 	})
+}
+
+// notJoined tells that a copy was created, but didn't join the network of the original, or
+// that the network could not be configured, as err tells.
+func notJoined(name string, err error) error {
+	status := http.StatusBadGateway
+	if e := (*httpapi.Error)(nil); errors.As(err, &e) {
+		status = e.Status
+	}
+	return httpapi.Errorf(status, "%s was created. %s", name, httpapi.Message(err))
 }
 
 // update changes the settings of a server as an operation: the agent creates its container

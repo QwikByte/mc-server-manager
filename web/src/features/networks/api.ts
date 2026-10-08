@@ -156,7 +156,24 @@ export interface Maintenance {
   enabled: boolean
   /** Who may join during maintenance. */
   players: { name: string; uuid: string }[]
+  /** The servers of the network in maintenance on their own, by name. */
+  servers: string[]
+  /** When maintenance of the whole network ends, if the plugin keeps its end timer; it keeps other timers to itself. */
+  endsAt?: string
   proxyRunning: boolean
+  /** The agent of the proxy's node starts timers and changes the maintenance of single servers. */
+  serversAndTimers: boolean
+}
+
+/** Turns maintenance on or off, for the whole network or one of its servers, now or later, and for how long. */
+export interface MaintenanceChange {
+  enabled: boolean
+  /** The name of a server of the network; none for the whole network. */
+  server?: string
+  /** Minutes until maintenance starts or ends; 0 for now. */
+  delay?: number
+  /** Minutes that maintenance lasts which starts; 0 until it is ended. */
+  duration?: number
 }
 
 export const maintenanceQuery = (id: string) =>
@@ -167,14 +184,23 @@ export const maintenanceQuery = (id: string) =>
     refetchInterval: 15_000, // it can be changed in the game too
   })
 
-/** Turns maintenance of a network on or off. */
+/** Changes the maintenance of a network or one of its servers. */
 export function useSetMaintenance(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ enabled, onStart }: { enabled: boolean } & Followed) =>
-      operate<Maintenance>(`/networks/${id}/maintenance`, { body: { enabled } }, onStart),
+    mutationFn: ({ onStart, ...change }: MaintenanceChange & Followed) =>
+      operate<Maintenance>(`/networks/${id}/maintenance`, { body: change }, onStart),
     onSuccess: (m) => queryClient.setQueryData(maintenanceQuery(id).queryKey, m),
     onSettled: () => queryClient.invalidateQueries({ queryKey: maintenanceQuery(id).queryKey }),
+  })
+}
+
+/** Aborts the timer of the Maintenance plugin for a network, or one of its servers by name. */
+export function useAbortMaintenanceTimer(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (server: string) => api<Maintenance>(`/networks/${id}/maintenance/abort`, { body: { server } }),
+    onSuccess: (m) => queryClient.setQueryData(maintenanceQuery(id).queryKey, m),
   })
 }
 
