@@ -11,6 +11,7 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/google/nftables v0.3.0
 	github.com/jsimonetti/rtnetlink/v2 v2.2.0
+	github.com/mdlayher/netlink v1.8.0
 	github.com/moby/moby/api v1.56.0
 	github.com/moby/moby/client v0.6.0
 	github.com/pelletier/go-toml/v2 v2.4.3
@@ -45,7 +46,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mdlayher/genetlink v1.3.2 // indirect
-	github.com/mdlayher/netlink v1.8.0 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

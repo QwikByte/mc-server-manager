@@ -213,7 +213,7 @@ func (s *Service) Join(ctx context.Context, nodeID, endpoint string) (Member, er
 	}
 	// A node that can't take the configuration, e.g. as the range overlaps its own networks, doesn't join.
 	ctx = context.WithoutCancel(ctx)
-	if err := s.configure(ctx, settings, append(members, m), m); err != nil {
+	if err := s.configure(ctx, settings, append(members, m), m, nil); err != nil {
 		_, dbErr := s.db.ExecContext(ctx, `DELETE FROM overlay_nodes WHERE node_id = ?`, nodeID)
 		return Member{}, errors.Join(httpapi.Errorf(http.StatusConflict, "%s can't join: %s", n.Name, httpapi.Message(err)), dbErr)
 	}
@@ -346,28 +346,26 @@ func (s *Service) reconcile(ctx context.Context) {
 		slog.Error("Can't configure the private network of the nodes", logging.Nodes, "err", err)
 		return
 	}
-	states := make([]*noryxv1.GetOverlayResponse, len(members))
+	reports, errs := s.reports(ctx, members)
 	health := make([]Member, len(members))
-	each(members, func(i int, m Member) {
-		res, err := s.get(ctx, m.NodeID)
+	for i, err := range errs {
 		if err != nil {
 			health[i].Problem = httpapi.Message(err)
 		}
-		states[i] = res
-	})
+	}
 	// A member whose agent lost its key, e.g. as its data was restored, made a new one.
 	for i, m := range members {
-		if key := states[i].GetPublicKey(); key != "" && key != m.PublicKey {
+		if key := reports[m.NodeID].GetPublicKey(); key != "" && key != m.PublicKey {
 			if _, err := s.db.ExecContext(ctx, `UPDATE overlay_nodes SET public_key = ? WHERE node_id = ?`, key, m.NodeID); err == nil {
 				members[i].PublicKey = key
 			}
 		}
 	}
 	for i, m := range members {
-		health[i].Unreached = unreached(states[i], m, members)
+		health[i].Unreached = unreached(reports[m.NodeID], m, members)
 	}
 	each(members, func(i int, m Member) {
-		if err := s.configure(ctx, settings, members, m); err != nil && health[i].Problem == "" {
+		if err := s.configure(ctx, settings, members, m, reports); err != nil && health[i].Problem == "" {
 			health[i].Problem = httpapi.Message(err)
 		}
 	})
@@ -400,8 +398,38 @@ func unreached(res *noryxv1.GetOverlayResponse, m Member, members []Member) []st
 	return nodes
 }
 
-// configure gives member m its address and the other members as peers.
-func (s *Service) configure(ctx context.Context, settings Settings, members []Member, m Member) error {
+// reports asks the members for their part in the network, all at the same time. Those that
+// don't answer have none, and their errors are in the order of members.
+func (s *Service) reports(ctx context.Context, members []Member) (map[string]*noryxv1.GetOverlayResponse, []error) {
+	list, errs := make([]*noryxv1.GetOverlayResponse, len(members)), make([]error, len(members))
+	each(members, func(i int, m Member) { list[i], errs[i] = s.get(ctx, m.NodeID) })
+	reports := make(map[string]*noryxv1.GetOverlayResponse, len(members))
+	for i, m := range members {
+		reports[m.NodeID] = list[i]
+	}
+	return reports, errs
+}
+
+// publishedFor returns the ports that a member, by its report, publishes for m.
+func publishedFor(report *noryxv1.GetOverlayResponse, m Member) []*noryxv1.OverlayPublished {
+	var list []*noryxv1.OverlayPublished
+	for _, p := range report.GetPublished() {
+		if p.GetPort() == 0 || p.GetPort() > 65535 { // which m would refuse, with all of its configuration
+			continue
+		}
+		for _, c := range p.GetClients() {
+			if c.GetAddress() == m.Address && c.GetPublicKey() == m.PublicKey {
+				list = append(list, p)
+				break
+			}
+		}
+	}
+	return list
+}
+
+// configure gives member m its address and the other members as peers, with the ports they
+// publish for it by their reports, which tests connect to.
+func (s *Service) configure(ctx context.Context, settings Settings, members []Member, m Member, reports map[string]*noryxv1.GetOverlayResponse) error {
 	subnet := netip.MustParsePrefix(settings.Subnet)
 	req := &noryxv1.ConfigureOverlayRequest{Address: fmt.Sprintf("%s/%d", m.Address, subnet.Bits()), Port: settings.Port, Mtu: settings.MTU}
 	for _, peer := range members {
@@ -412,7 +440,11 @@ func (s *Service) configure(ctx context.Context, settings Settings, members []Me
 		if err != nil {
 			return err
 		}
-		req.Peers = append(req.Peers, &noryxv1.OverlayPeer{PublicKey: peer.PublicKey, Address: peer.Address, Endpoint: endpoint})
+		p := &noryxv1.OverlayPeer{PublicKey: peer.PublicKey, Address: peer.Address, Endpoint: endpoint}
+		for _, published := range publishedFor(reports[peer.NodeID], m) {
+			p.Ports = append(p.Ports, published.GetPort())
+		}
+		req.Peers = append(req.Peers, p)
 	}
 	return s.call(ctx, m.NodeID, func(ctx context.Context, c noryxv1.OverlayServiceClient) error {
 		_, err := c.ConfigureOverlay(ctx, req)
@@ -444,6 +476,30 @@ type Status struct {
 	// Fingerprint is the beginning of the node's public key, e.g. to compare it with noryx-agent overlay status.
 	Fingerprint string `json:"fingerprint,omitempty"`
 	Peers       []Peer `json:"peers"`
+	// Firewall tells whether the firewall rules of a member are in_place, missing or
+	// incomplete, and FirewallProblem what differs; older agents don't tell.
+	Firewall        string `json:"firewall,omitempty"`
+	FirewallProblem string `json:"firewallProblem,omitempty"`
+	// Published are the ports that a member publishes in the network.
+	Published []Published `json:"published"`
+}
+
+// Published is a port that a member publishes in the network, for a server or a datastore.
+type Published struct {
+	Port        uint32   `json:"port"`
+	ServerID    string   `json:"serverId,omitempty"`
+	DatastoreID string   `json:"datastoreId,omitempty"`
+	Clients     []Client `json:"clients"`
+}
+
+// Client is a member that reaches a published port.
+type Client struct {
+	// NodeID is the member at the address, if one has it.
+	NodeID  string `json:"nodeId,omitempty"`
+	Address string `json:"address"`
+	// Stale tells that the member at the address has another key than the one let in, e.g.
+	// as it was offline while that changed: it reaches the port once the network is applied again.
+	Stale bool `json:"stale,omitempty"`
 }
 
 // Peer is another member, as a member sees it.
@@ -462,10 +518,24 @@ func (s *Service) Status(ctx context.Context, nodeID string) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	st := Status{Allowed: res.GetAllowed(), Unsupported: res.GetUnsupported(), Peers: []Peer{}, Fingerprint: res.GetPublicKey()[:min(len(res.GetPublicKey()), 8)]}
+	st := Status{
+		Allowed: res.GetAllowed(), Unsupported: res.GetUnsupported(), Peers: []Peer{}, Fingerprint: res.GetPublicKey()[:min(len(res.GetPublicKey()), 8)],
+		Firewall: res.GetFirewall().Slug(), FirewallProblem: res.GetFirewallProblem(), Published: []Published{},
+	}
 	members, err := s.Members(ctx)
 	if err != nil {
 		return st, err
+	}
+	for _, p := range res.GetPublished() {
+		published := Published{Port: p.GetPort(), ServerID: p.GetServerId(), DatastoreID: p.GetDatastoreId(), Clients: []Client{}}
+		for _, c := range p.GetClients() {
+			client := Client{Address: c.GetAddress()}
+			if i := slices.IndexFunc(members, func(m Member) bool { return m.Address == c.GetAddress() }); i >= 0 {
+				client.NodeID, client.Stale = members[i].NodeID, members[i].PublicKey != c.GetPublicKey()
+			}
+			published.Clients = append(published.Clients, client)
+		}
+		st.Published = append(st.Published, published)
 	}
 	for _, m := range members {
 		if m.NodeID == nodeID {

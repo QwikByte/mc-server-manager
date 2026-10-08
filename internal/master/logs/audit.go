@@ -58,6 +58,7 @@ var actions = map[string]action{
 	"PUT /api/nodes/{id}/overlay":                              {logging.Nodes, "Change endpoint in private network"},
 	"DELETE /api/nodes/{id}/overlay":                           {logging.Nodes, "Remove node from private network"},
 	"POST /api/nodes/{id}/overlay/rotate":                      {logging.Nodes, "Rotate key in private network"},
+	"POST /api/nodes/{id}/overlay/peers/{peer}/test":           {logging.Nodes, "Test connections in private network"},
 	"PUT /api/nodes/{node}/usage/thresholds":                   {logging.Nodes, "Change usage warnings of node"},
 	"POST /api/nodes/{node}/servers":                           {logging.Servers, "Create server"},
 	"POST /api/servers/actions":                                {logging.Servers, "Run action on servers"},

@@ -110,8 +110,8 @@ datastore and `logs -f` the agent's own log.
 `backup list <id>`, `backup create <id>` and `backup restore <id> <backup-id>` work while the master is unreachable too.
 `storage add ssd /mnt/ssd/noryx` allows another directory for server data, e.g. on a faster disk; new servers can then
 be created there from the panel, and backup jobs can keep their backups there. `overlay allow` lets the panel add the
-node to the private network of the nodes, `overlay deny` takes that back, and `overlay status` shows its address and
-peers.
+node to the private network of the nodes, `overlay deny` takes that back, and `overlay status` shows its address,
+peers, firewall rules and the ports it publishes there.
 
 ## Removing
 

@@ -44,6 +44,15 @@ func (p RestartPolicy) Slug() string {
 	return slug(p.String(), "RESTART_POLICY_")
 }
 
+// Slug returns the short lower-case name, e.g. "in_place" for OVERLAY_FIREWALL_IN_PLACE, or
+// "" if older agents didn't tell it.
+func (f OverlayFirewall) Slug() string {
+	if f == OverlayFirewall_OVERLAY_FIREWALL_UNSPECIFIED {
+		return ""
+	}
+	return slug(f.String(), "OVERLAY_FIREWALL_")
+}
+
 // ParseRestartPolicy returns the policy with the given slug, or RESTART_POLICY_UNSPECIFIED.
 func ParseRestartPolicy(slug string) RestartPolicy {
 	return RestartPolicy(RestartPolicy_value["RESTART_POLICY_"+strings.ToUpper(slug)])

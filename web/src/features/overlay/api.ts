@@ -41,6 +41,27 @@ export interface OverlayPeer {
   sentBytes: number
 }
 
+/** A member that reaches a published port. */
+export interface OverlayClient {
+  /** The member at the address, if one has it. */
+  nodeId?: string
+  address: string
+  /** The member has another key than the one let in, e.g. as it was offline meanwhile: it reaches the port once the network is applied again. */
+  stale?: boolean
+}
+
+/** A port that a member publishes in the private network, for a server or a datastore, each named only if the user may see it. */
+export interface PublishedPort {
+  port: number
+  serverId?: string
+  datastoreId?: string
+  /** The members on the nodes the user may see that reach it. */
+  clients: OverlayClient[]
+}
+
+/** Whether the nftables rules of a member are in place, as its agent checked them. */
+export type FirewallState = "in_place" | "missing" | "incomplete"
+
 /** A node's part in the private network, as its agent tells it. */
 export interface NodeOverlay {
   /** The node's administrator lets it join, with noryx-agent overlay allow. */
@@ -53,6 +74,22 @@ export interface NodeOverlay {
   /** The beginning of its public key, as noryx-agent overlay status shows it. */
   fingerprint?: string
   peers: OverlayPeer[]
+  /** Older agents don't tell it. */
+  firewall?: FirewallState
+  /** What differs, if the rules are incomplete. */
+  firewallProblem?: string
+  published: PublishedPort[]
+}
+
+/** The result of connecting to a port that a peer publishes for a node, for a server or a datastore the user may see. */
+export interface PortTest {
+  port: number
+  serverId?: string
+  datastoreId?: string
+  /** Why no connection came about; empty if one did. */
+  error?: string
+  /** How long connecting took, or failing. */
+  millis: number
 }
 
 export const overlayQuery = queryOptions({
@@ -99,6 +136,10 @@ export const useSetOverlayEndpoint = (nodeId: string) =>
 /** Replaces a member's key; the networks with servers on it and on other nodes are applied again, as the others only let in the key a node had when it got access. */
 export const useRotateOverlayKey = (nodeId: string) =>
   useOverlayChange(({ onStart }: Followed) => operate<OverlayMember>(`/nodes/${nodeId}/overlay/rotate`, { method: "POST" }, onStart))
+
+/** Connects from a node to the ports that a peer publishes for it, and closes each connection at once. */
+export const useTestOverlayPeer = (nodeId: string) =>
+  useMutation({ mutationFn: (peerId: string) => api<PortTest[]>(`/nodes/${nodeId}/overlay/peers/${peerId}/test`, { method: "POST" }) })
 
 /** Removes a node from the private network; the networks that reached its servers over it are applied again. */
 export const useLeaveOverlay = (nodeId: string) =>

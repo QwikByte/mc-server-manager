@@ -21,6 +21,59 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type OverlayFirewall int32
+
+const (
+	OverlayFirewall_OVERLAY_FIREWALL_UNSPECIFIED OverlayFirewall = 0
+	OverlayFirewall_OVERLAY_FIREWALL_IN_PLACE    OverlayFirewall = 1
+	OverlayFirewall_OVERLAY_FIREWALL_MISSING     OverlayFirewall = 2
+	// The table exists, but chains or rules are missing or differ.
+	OverlayFirewall_OVERLAY_FIREWALL_INCOMPLETE OverlayFirewall = 3
+)
+
+// Enum value maps for OverlayFirewall.
+var (
+	OverlayFirewall_name = map[int32]string{
+		0: "OVERLAY_FIREWALL_UNSPECIFIED",
+		1: "OVERLAY_FIREWALL_IN_PLACE",
+		2: "OVERLAY_FIREWALL_MISSING",
+		3: "OVERLAY_FIREWALL_INCOMPLETE",
+	}
+	OverlayFirewall_value = map[string]int32{
+		"OVERLAY_FIREWALL_UNSPECIFIED": 0,
+		"OVERLAY_FIREWALL_IN_PLACE":    1,
+		"OVERLAY_FIREWALL_MISSING":     2,
+		"OVERLAY_FIREWALL_INCOMPLETE":  3,
+	}
+)
+
+func (x OverlayFirewall) Enum() *OverlayFirewall {
+	p := new(OverlayFirewall)
+	*p = x
+	return p
+}
+
+func (x OverlayFirewall) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OverlayFirewall) Descriptor() protoreflect.EnumDescriptor {
+	return file_noryx_v1_overlay_proto_enumTypes[0].Descriptor()
+}
+
+func (OverlayFirewall) Type() protoreflect.EnumType {
+	return &file_noryx_v1_overlay_proto_enumTypes[0]
+}
+
+func (x OverlayFirewall) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OverlayFirewall.Descriptor instead.
+func (OverlayFirewall) EnumDescriptor() ([]byte, []int) {
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{0}
+}
+
 type GetOverlayRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -67,10 +120,17 @@ type GetOverlayResponse struct {
 	PublicKey string `protobuf:"bytes,3,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
 	// The node's address with the prefix of the network, e.g. 10.213.0.3/24; empty unless it
 	// is a member.
-	Address       string               `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
-	Peers         []*OverlayPeerStatus `protobuf:"bytes,5,rep,name=peers,proto3" json:"peers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Address string               `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
+	Peers   []*OverlayPeerStatus `protobuf:"bytes,5,rep,name=peers,proto3" json:"peers,omitempty"`
+	// The ports the node publishes at its address in the network, and for whom.
+	Published []*OverlayPublished `protobuf:"bytes,6,rep,name=published,proto3" json:"published,omitempty"`
+	// Whether the nftables table of the network is in place; unspecified unless the node is a
+	// member, and from older agents.
+	Firewall OverlayFirewall `protobuf:"varint,7,opt,name=firewall,proto3,enum=noryx.v1.OverlayFirewall" json:"firewall,omitempty"`
+	// What is missing or differs, if the table is incomplete.
+	FirewallProblem string `protobuf:"bytes,8,opt,name=firewall_problem,json=firewallProblem,proto3" json:"firewall_problem,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetOverlayResponse) Reset() {
@@ -138,6 +198,152 @@ func (x *GetOverlayResponse) GetPeers() []*OverlayPeerStatus {
 	return nil
 }
 
+func (x *GetOverlayResponse) GetPublished() []*OverlayPublished {
+	if x != nil {
+		return x.Published
+	}
+	return nil
+}
+
+func (x *GetOverlayResponse) GetFirewall() OverlayFirewall {
+	if x != nil {
+		return x.Firewall
+	}
+	return OverlayFirewall_OVERLAY_FIREWALL_UNSPECIFIED
+}
+
+func (x *GetOverlayResponse) GetFirewallProblem() string {
+	if x != nil {
+		return x.FirewallProblem
+	}
+	return ""
+}
+
+// OverlayPublished is a port that the node publishes in the network.
+type OverlayPublished struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The TCP port.
+	Port uint32 `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	// The server whose port it is, or else the datastore.
+	ServerId    string `protobuf:"bytes,2,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	DatastoreId string `protobuf:"bytes,3,opt,name=datastore_id,json=datastoreId,proto3" json:"datastore_id,omitempty"`
+	// The peers that reach it, with the key each had when it was let in.
+	Clients       []*OverlayClient `protobuf:"bytes,4,rep,name=clients,proto3" json:"clients,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OverlayPublished) Reset() {
+	*x = OverlayPublished{}
+	mi := &file_noryx_v1_overlay_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OverlayPublished) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverlayPublished) ProtoMessage() {}
+
+func (x *OverlayPublished) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_overlay_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverlayPublished.ProtoReflect.Descriptor instead.
+func (*OverlayPublished) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *OverlayPublished) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *OverlayPublished) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *OverlayPublished) GetDatastoreId() string {
+	if x != nil {
+		return x.DatastoreId
+	}
+	return ""
+}
+
+func (x *OverlayPublished) GetClients() []*OverlayClient {
+	if x != nil {
+		return x.Clients
+	}
+	return nil
+}
+
+type OverlayClient struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Its address in the network, e.g. 10.213.0.4.
+	Address       string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	PublicKey     string `protobuf:"bytes,2,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OverlayClient) Reset() {
+	*x = OverlayClient{}
+	mi := &file_noryx_v1_overlay_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OverlayClient) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverlayClient) ProtoMessage() {}
+
+func (x *OverlayClient) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_overlay_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverlayClient.ProtoReflect.Descriptor instead.
+func (*OverlayClient) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OverlayClient) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *OverlayClient) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
 type OverlayPeerStatus struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	PublicKey string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
@@ -153,7 +359,7 @@ type OverlayPeerStatus struct {
 
 func (x *OverlayPeerStatus) Reset() {
 	*x = OverlayPeerStatus{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[2]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -165,7 +371,7 @@ func (x *OverlayPeerStatus) String() string {
 func (*OverlayPeerStatus) ProtoMessage() {}
 
 func (x *OverlayPeerStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[2]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -178,7 +384,7 @@ func (x *OverlayPeerStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverlayPeerStatus.ProtoReflect.Descriptor instead.
 func (*OverlayPeerStatus) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{2}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *OverlayPeerStatus) GetPublicKey() string {
@@ -231,7 +437,7 @@ type ConfigureOverlayRequest struct {
 
 func (x *ConfigureOverlayRequest) Reset() {
 	*x = ConfigureOverlayRequest{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[3]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +449,7 @@ func (x *ConfigureOverlayRequest) String() string {
 func (*ConfigureOverlayRequest) ProtoMessage() {}
 
 func (x *ConfigureOverlayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[3]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,7 +462,7 @@ func (x *ConfigureOverlayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureOverlayRequest.ProtoReflect.Descriptor instead.
 func (*ConfigureOverlayRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{3}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ConfigureOverlayRequest) GetAddress() string {
@@ -293,14 +499,17 @@ type OverlayPeer struct {
 	// Its address in the network, e.g. 10.213.0.4, the only one it may send from.
 	Address string `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
 	// host:port at which it is reached; the agent resolves host names.
-	Endpoint      string `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Endpoint string `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	// The TCP ports at which the peer publishes servers or datastores for this node, the only
+	// ones TestOverlayPeer connects to. Older masters send none.
+	Ports         []uint32 `protobuf:"varint,4,rep,packed,name=ports,proto3" json:"ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *OverlayPeer) Reset() {
 	*x = OverlayPeer{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[4]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -312,7 +521,7 @@ func (x *OverlayPeer) String() string {
 func (*OverlayPeer) ProtoMessage() {}
 
 func (x *OverlayPeer) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[4]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -325,7 +534,7 @@ func (x *OverlayPeer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverlayPeer.ProtoReflect.Descriptor instead.
 func (*OverlayPeer) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{4}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *OverlayPeer) GetPublicKey() string {
@@ -349,6 +558,13 @@ func (x *OverlayPeer) GetEndpoint() string {
 	return ""
 }
 
+func (x *OverlayPeer) GetPorts() []uint32 {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
 type ConfigureOverlayResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -357,7 +573,7 @@ type ConfigureOverlayResponse struct {
 
 func (x *ConfigureOverlayResponse) Reset() {
 	*x = ConfigureOverlayResponse{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[5]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -369,7 +585,7 @@ func (x *ConfigureOverlayResponse) String() string {
 func (*ConfigureOverlayResponse) ProtoMessage() {}
 
 func (x *ConfigureOverlayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[5]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -382,7 +598,7 @@ func (x *ConfigureOverlayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigureOverlayResponse.ProtoReflect.Descriptor instead.
 func (*ConfigureOverlayResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{5}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{7}
 }
 
 type RotateOverlayKeyRequest struct {
@@ -393,7 +609,7 @@ type RotateOverlayKeyRequest struct {
 
 func (x *RotateOverlayKeyRequest) Reset() {
 	*x = RotateOverlayKeyRequest{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[6]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -405,7 +621,7 @@ func (x *RotateOverlayKeyRequest) String() string {
 func (*RotateOverlayKeyRequest) ProtoMessage() {}
 
 func (x *RotateOverlayKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[6]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -418,7 +634,7 @@ func (x *RotateOverlayKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateOverlayKeyRequest.ProtoReflect.Descriptor instead.
 func (*RotateOverlayKeyRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{6}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{8}
 }
 
 type RotateOverlayKeyResponse struct {
@@ -430,7 +646,7 @@ type RotateOverlayKeyResponse struct {
 
 func (x *RotateOverlayKeyResponse) Reset() {
 	*x = RotateOverlayKeyResponse{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[7]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -442,7 +658,7 @@ func (x *RotateOverlayKeyResponse) String() string {
 func (*RotateOverlayKeyResponse) ProtoMessage() {}
 
 func (x *RotateOverlayKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[7]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +671,7 @@ func (x *RotateOverlayKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateOverlayKeyResponse.ProtoReflect.Descriptor instead.
 func (*RotateOverlayKeyResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{7}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RotateOverlayKeyResponse) GetPublicKey() string {
@@ -473,7 +689,7 @@ type LeaveOverlayRequest struct {
 
 func (x *LeaveOverlayRequest) Reset() {
 	*x = LeaveOverlayRequest{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[8]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +701,7 @@ func (x *LeaveOverlayRequest) String() string {
 func (*LeaveOverlayRequest) ProtoMessage() {}
 
 func (x *LeaveOverlayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[8]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +714,7 @@ func (x *LeaveOverlayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveOverlayRequest.ProtoReflect.Descriptor instead.
 func (*LeaveOverlayRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{8}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{10}
 }
 
 type LeaveOverlayResponse struct {
@@ -509,7 +725,7 @@ type LeaveOverlayResponse struct {
 
 func (x *LeaveOverlayResponse) Reset() {
 	*x = LeaveOverlayResponse{}
-	mi := &file_noryx_v1_overlay_proto_msgTypes[9]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -521,7 +737,7 @@ func (x *LeaveOverlayResponse) String() string {
 func (*LeaveOverlayResponse) ProtoMessage() {}
 
 func (x *LeaveOverlayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_overlay_proto_msgTypes[9]
+	mi := &file_noryx_v1_overlay_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -534,7 +750,168 @@ func (x *LeaveOverlayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveOverlayResponse.ProtoReflect.Descriptor instead.
 func (*LeaveOverlayResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{9}
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{11}
+}
+
+type TestOverlayPeerRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The peer's public key.
+	PublicKey string `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	// The ports to test, at most 32, each one that the peer publishes for this node.
+	Ports         []uint32 `protobuf:"varint,2,rep,packed,name=ports,proto3" json:"ports,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestOverlayPeerRequest) Reset() {
+	*x = TestOverlayPeerRequest{}
+	mi := &file_noryx_v1_overlay_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestOverlayPeerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestOverlayPeerRequest) ProtoMessage() {}
+
+func (x *TestOverlayPeerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_overlay_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestOverlayPeerRequest.ProtoReflect.Descriptor instead.
+func (*TestOverlayPeerRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *TestOverlayPeerRequest) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+func (x *TestOverlayPeerRequest) GetPorts() []uint32 {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
+type TestOverlayPeerResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The results, in the order of the ports.
+	Results       []*OverlayPortTest `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestOverlayPeerResponse) Reset() {
+	*x = TestOverlayPeerResponse{}
+	mi := &file_noryx_v1_overlay_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestOverlayPeerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestOverlayPeerResponse) ProtoMessage() {}
+
+func (x *TestOverlayPeerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_overlay_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestOverlayPeerResponse.ProtoReflect.Descriptor instead.
+func (*TestOverlayPeerResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *TestOverlayPeerResponse) GetResults() []*OverlayPortTest {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+type OverlayPortTest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Port  uint32                 `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	// Why no connection came about, e.g. as it was refused or timed out; empty if one did.
+	Error string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	// How long connecting took, or failing.
+	DurationMicros uint32 `protobuf:"varint,3,opt,name=duration_micros,json=durationMicros,proto3" json:"duration_micros,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *OverlayPortTest) Reset() {
+	*x = OverlayPortTest{}
+	mi := &file_noryx_v1_overlay_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OverlayPortTest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverlayPortTest) ProtoMessage() {}
+
+func (x *OverlayPortTest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_overlay_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverlayPortTest.ProtoReflect.Descriptor instead.
+func (*OverlayPortTest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_overlay_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *OverlayPortTest) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *OverlayPortTest) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *OverlayPortTest) GetDurationMicros() uint32 {
+	if x != nil {
+		return x.DurationMicros
+	}
+	return 0
 }
 
 var File_noryx_v1_overlay_proto protoreflect.FileDescriptor
@@ -542,14 +919,26 @@ var File_noryx_v1_overlay_proto protoreflect.FileDescriptor
 const file_noryx_v1_overlay_proto_rawDesc = "" +
 	"\n" +
 	"\x16noryx/v1/overlay.proto\x12\bnoryx.v1\"\x13\n" +
-	"\x11GetOverlayRequest\"\xbc\x01\n" +
+	"\x11GetOverlayRequest\"\xd8\x02\n" +
 	"\x12GetOverlayResponse\x12\x18\n" +
 	"\aallowed\x18\x01 \x01(\bR\aallowed\x12 \n" +
 	"\vunsupported\x18\x02 \x01(\tR\vunsupported\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x03 \x01(\tR\tpublicKey\x12\x18\n" +
 	"\aaddress\x18\x04 \x01(\tR\aaddress\x121\n" +
-	"\x05peers\x18\x05 \x03(\v2\x1b.noryx.v1.OverlayPeerStatusR\x05peers\"\xc8\x01\n" +
+	"\x05peers\x18\x05 \x03(\v2\x1b.noryx.v1.OverlayPeerStatusR\x05peers\x128\n" +
+	"\tpublished\x18\x06 \x03(\v2\x1a.noryx.v1.OverlayPublishedR\tpublished\x125\n" +
+	"\bfirewall\x18\a \x01(\x0e2\x19.noryx.v1.OverlayFirewallR\bfirewall\x12)\n" +
+	"\x10firewall_problem\x18\b \x01(\tR\x0ffirewallProblem\"\x99\x01\n" +
+	"\x10OverlayPublished\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\rR\x04port\x12\x1b\n" +
+	"\tserver_id\x18\x02 \x01(\tR\bserverId\x12!\n" +
+	"\fdatastore_id\x18\x03 \x01(\tR\vdatastoreId\x121\n" +
+	"\aclients\x18\x04 \x03(\v2\x17.noryx.v1.OverlayClientR\aclients\"H\n" +
+	"\rOverlayClient\x12\x18\n" +
+	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x02 \x01(\tR\tpublicKey\"\xc8\x01\n" +
 	"\x11OverlayPeerStatus\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x1a\n" +
@@ -562,25 +951,42 @@ const file_noryx_v1_overlay_proto_rawDesc = "" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x10\n" +
 	"\x03mtu\x18\x03 \x01(\rR\x03mtu\x12+\n" +
-	"\x05peers\x18\x04 \x03(\v2\x15.noryx.v1.OverlayPeerR\x05peers\"b\n" +
+	"\x05peers\x18\x04 \x03(\v2\x15.noryx.v1.OverlayPeerR\x05peers\"x\n" +
 	"\vOverlayPeer\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12\x1a\n" +
-	"\bendpoint\x18\x03 \x01(\tR\bendpoint\"\x1a\n" +
+	"\bendpoint\x18\x03 \x01(\tR\bendpoint\x12\x14\n" +
+	"\x05ports\x18\x04 \x03(\rR\x05ports\"\x1a\n" +
 	"\x18ConfigureOverlayResponse\"\x19\n" +
 	"\x17RotateOverlayKeyRequest\"9\n" +
 	"\x18RotateOverlayKeyResponse\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\"\x15\n" +
 	"\x13LeaveOverlayRequest\"\x16\n" +
-	"\x14LeaveOverlayResponse2\xde\x02\n" +
+	"\x14LeaveOverlayResponse\"M\n" +
+	"\x16TestOverlayPeerRequest\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x14\n" +
+	"\x05ports\x18\x02 \x03(\rR\x05ports\"N\n" +
+	"\x17TestOverlayPeerResponse\x123\n" +
+	"\aresults\x18\x01 \x03(\v2\x19.noryx.v1.OverlayPortTestR\aresults\"d\n" +
+	"\x0fOverlayPortTest\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\rR\x04port\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12'\n" +
+	"\x0fduration_micros\x18\x03 \x01(\rR\x0edurationMicros*\x91\x01\n" +
+	"\x0fOverlayFirewall\x12 \n" +
+	"\x1cOVERLAY_FIREWALL_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19OVERLAY_FIREWALL_IN_PLACE\x10\x01\x12\x1c\n" +
+	"\x18OVERLAY_FIREWALL_MISSING\x10\x02\x12\x1f\n" +
+	"\x1bOVERLAY_FIREWALL_INCOMPLETE\x10\x032\xb6\x03\n" +
 	"\x0eOverlayService\x12G\n" +
 	"\n" +
 	"GetOverlay\x12\x1b.noryx.v1.GetOverlayRequest\x1a\x1c.noryx.v1.GetOverlayResponse\x12Y\n" +
 	"\x10ConfigureOverlay\x12!.noryx.v1.ConfigureOverlayRequest\x1a\".noryx.v1.ConfigureOverlayResponse\x12Y\n" +
 	"\x10RotateOverlayKey\x12!.noryx.v1.RotateOverlayKeyRequest\x1a\".noryx.v1.RotateOverlayKeyResponse\x12M\n" +
-	"\fLeaveOverlay\x12\x1d.noryx.v1.LeaveOverlayRequest\x1a\x1e.noryx.v1.LeaveOverlayResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
+	"\fLeaveOverlay\x12\x1d.noryx.v1.LeaveOverlayRequest\x1a\x1e.noryx.v1.LeaveOverlayResponse\x12V\n" +
+	"\x0fTestOverlayPeer\x12 .noryx.v1.TestOverlayPeerRequest\x1a!.noryx.v1.TestOverlayPeerResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_overlay_proto_rawDescOnce sync.Once
@@ -594,35 +1000,48 @@ func file_noryx_v1_overlay_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_overlay_proto_rawDescData
 }
 
-var file_noryx_v1_overlay_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_noryx_v1_overlay_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_noryx_v1_overlay_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_noryx_v1_overlay_proto_goTypes = []any{
-	(*GetOverlayRequest)(nil),        // 0: noryx.v1.GetOverlayRequest
-	(*GetOverlayResponse)(nil),       // 1: noryx.v1.GetOverlayResponse
-	(*OverlayPeerStatus)(nil),        // 2: noryx.v1.OverlayPeerStatus
-	(*ConfigureOverlayRequest)(nil),  // 3: noryx.v1.ConfigureOverlayRequest
-	(*OverlayPeer)(nil),              // 4: noryx.v1.OverlayPeer
-	(*ConfigureOverlayResponse)(nil), // 5: noryx.v1.ConfigureOverlayResponse
-	(*RotateOverlayKeyRequest)(nil),  // 6: noryx.v1.RotateOverlayKeyRequest
-	(*RotateOverlayKeyResponse)(nil), // 7: noryx.v1.RotateOverlayKeyResponse
-	(*LeaveOverlayRequest)(nil),      // 8: noryx.v1.LeaveOverlayRequest
-	(*LeaveOverlayResponse)(nil),     // 9: noryx.v1.LeaveOverlayResponse
+	(OverlayFirewall)(0),             // 0: noryx.v1.OverlayFirewall
+	(*GetOverlayRequest)(nil),        // 1: noryx.v1.GetOverlayRequest
+	(*GetOverlayResponse)(nil),       // 2: noryx.v1.GetOverlayResponse
+	(*OverlayPublished)(nil),         // 3: noryx.v1.OverlayPublished
+	(*OverlayClient)(nil),            // 4: noryx.v1.OverlayClient
+	(*OverlayPeerStatus)(nil),        // 5: noryx.v1.OverlayPeerStatus
+	(*ConfigureOverlayRequest)(nil),  // 6: noryx.v1.ConfigureOverlayRequest
+	(*OverlayPeer)(nil),              // 7: noryx.v1.OverlayPeer
+	(*ConfigureOverlayResponse)(nil), // 8: noryx.v1.ConfigureOverlayResponse
+	(*RotateOverlayKeyRequest)(nil),  // 9: noryx.v1.RotateOverlayKeyRequest
+	(*RotateOverlayKeyResponse)(nil), // 10: noryx.v1.RotateOverlayKeyResponse
+	(*LeaveOverlayRequest)(nil),      // 11: noryx.v1.LeaveOverlayRequest
+	(*LeaveOverlayResponse)(nil),     // 12: noryx.v1.LeaveOverlayResponse
+	(*TestOverlayPeerRequest)(nil),   // 13: noryx.v1.TestOverlayPeerRequest
+	(*TestOverlayPeerResponse)(nil),  // 14: noryx.v1.TestOverlayPeerResponse
+	(*OverlayPortTest)(nil),          // 15: noryx.v1.OverlayPortTest
 }
 var file_noryx_v1_overlay_proto_depIdxs = []int32{
-	2, // 0: noryx.v1.GetOverlayResponse.peers:type_name -> noryx.v1.OverlayPeerStatus
-	4, // 1: noryx.v1.ConfigureOverlayRequest.peers:type_name -> noryx.v1.OverlayPeer
-	0, // 2: noryx.v1.OverlayService.GetOverlay:input_type -> noryx.v1.GetOverlayRequest
-	3, // 3: noryx.v1.OverlayService.ConfigureOverlay:input_type -> noryx.v1.ConfigureOverlayRequest
-	6, // 4: noryx.v1.OverlayService.RotateOverlayKey:input_type -> noryx.v1.RotateOverlayKeyRequest
-	8, // 5: noryx.v1.OverlayService.LeaveOverlay:input_type -> noryx.v1.LeaveOverlayRequest
-	1, // 6: noryx.v1.OverlayService.GetOverlay:output_type -> noryx.v1.GetOverlayResponse
-	5, // 7: noryx.v1.OverlayService.ConfigureOverlay:output_type -> noryx.v1.ConfigureOverlayResponse
-	7, // 8: noryx.v1.OverlayService.RotateOverlayKey:output_type -> noryx.v1.RotateOverlayKeyResponse
-	9, // 9: noryx.v1.OverlayService.LeaveOverlay:output_type -> noryx.v1.LeaveOverlayResponse
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	5,  // 0: noryx.v1.GetOverlayResponse.peers:type_name -> noryx.v1.OverlayPeerStatus
+	3,  // 1: noryx.v1.GetOverlayResponse.published:type_name -> noryx.v1.OverlayPublished
+	0,  // 2: noryx.v1.GetOverlayResponse.firewall:type_name -> noryx.v1.OverlayFirewall
+	4,  // 3: noryx.v1.OverlayPublished.clients:type_name -> noryx.v1.OverlayClient
+	7,  // 4: noryx.v1.ConfigureOverlayRequest.peers:type_name -> noryx.v1.OverlayPeer
+	15, // 5: noryx.v1.TestOverlayPeerResponse.results:type_name -> noryx.v1.OverlayPortTest
+	1,  // 6: noryx.v1.OverlayService.GetOverlay:input_type -> noryx.v1.GetOverlayRequest
+	6,  // 7: noryx.v1.OverlayService.ConfigureOverlay:input_type -> noryx.v1.ConfigureOverlayRequest
+	9,  // 8: noryx.v1.OverlayService.RotateOverlayKey:input_type -> noryx.v1.RotateOverlayKeyRequest
+	11, // 9: noryx.v1.OverlayService.LeaveOverlay:input_type -> noryx.v1.LeaveOverlayRequest
+	13, // 10: noryx.v1.OverlayService.TestOverlayPeer:input_type -> noryx.v1.TestOverlayPeerRequest
+	2,  // 11: noryx.v1.OverlayService.GetOverlay:output_type -> noryx.v1.GetOverlayResponse
+	8,  // 12: noryx.v1.OverlayService.ConfigureOverlay:output_type -> noryx.v1.ConfigureOverlayResponse
+	10, // 13: noryx.v1.OverlayService.RotateOverlayKey:output_type -> noryx.v1.RotateOverlayKeyResponse
+	12, // 14: noryx.v1.OverlayService.LeaveOverlay:output_type -> noryx.v1.LeaveOverlayResponse
+	14, // 15: noryx.v1.OverlayService.TestOverlayPeer:output_type -> noryx.v1.TestOverlayPeerResponse
+	11, // [11:16] is the sub-list for method output_type
+	6,  // [6:11] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_overlay_proto_init() }
@@ -635,13 +1054,14 @@ func file_noryx_v1_overlay_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_overlay_proto_rawDesc), len(file_noryx_v1_overlay_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   10,
+			NumEnums:      1,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_noryx_v1_overlay_proto_goTypes,
 		DependencyIndexes: file_noryx_v1_overlay_proto_depIdxs,
+		EnumInfos:         file_noryx_v1_overlay_proto_enumTypes,
 		MessageInfos:      file_noryx_v1_overlay_proto_msgTypes,
 	}.Build()
 	File_noryx_v1_overlay_proto = out.File

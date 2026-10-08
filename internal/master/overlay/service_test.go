@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"google.golang.org/grpc"
 
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/node"
 )
@@ -37,5 +39,32 @@ func TestDatabaseErrors(t *testing.T) {
 	}
 	if err := s.Leave(ctx, "node"); !errors.Is(err, context.Canceled) {
 		t.Errorf("leave: %v", err)
+	}
+}
+
+// A member gets the ports that another publishes for its address with its current key, and
+// none that it would refuse, so that one member's report can't break another's configuration.
+func TestPublishedFor(t *testing.T) {
+	m := Member{Address: "10.213.0.1", PublicKey: "key"}
+	client := func(address, key string) []*noryxv1.OverlayClient {
+		return []*noryxv1.OverlayClient{{Address: "10.213.0.9", PublicKey: "other"}, {Address: address, PublicKey: key}}
+	}
+	report := &noryxv1.GetOverlayResponse{Published: []*noryxv1.OverlayPublished{
+		{Port: 25570, ServerId: "survival", Clients: client("10.213.0.1", "key")},
+		{Port: 25571, ServerId: "old key", Clients: client("10.213.0.1", "rotated")},
+		{Port: 25572, ServerId: "another node", Clients: client("10.213.0.2", "key")},
+		{Port: 0, ServerId: "no port", Clients: client("10.213.0.1", "key")},
+		{Port: 65536, ServerId: "beyond", Clients: client("10.213.0.1", "key")},
+		{Port: 3306, DatastoreId: "main", Clients: client("10.213.0.1", "key")},
+	}}
+	var got []uint32
+	for _, p := range publishedFor(report, m) {
+		got = append(got, p.GetPort())
+	}
+	if !slices.Equal(got, []uint32{25570, 3306}) {
+		t.Errorf("ports %v", got)
+	}
+	if publishedFor(nil, m) != nil {
+		t.Error("ports of a member that didn't answer")
 	}
 }

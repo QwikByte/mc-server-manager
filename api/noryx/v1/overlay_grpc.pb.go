@@ -23,6 +23,7 @@ const (
 	OverlayService_ConfigureOverlay_FullMethodName = "/noryx.v1.OverlayService/ConfigureOverlay"
 	OverlayService_RotateOverlayKey_FullMethodName = "/noryx.v1.OverlayService/RotateOverlayKey"
 	OverlayService_LeaveOverlay_FullMethodName     = "/noryx.v1.OverlayService/LeaveOverlay"
+	OverlayService_TestOverlayPeer_FullMethodName  = "/noryx.v1.OverlayService/TestOverlayPeer"
 )
 
 // OverlayServiceClient is the client API for OverlayService service.
@@ -44,6 +45,11 @@ type OverlayServiceClient interface {
 	RotateOverlayKey(ctx context.Context, in *RotateOverlayKeyRequest, opts ...grpc.CallOption) (*RotateOverlayKeyResponse, error)
 	// LeaveOverlay removes the interface and its firewall rules. The key stays.
 	LeaveOverlay(ctx context.Context, in *LeaveOverlayRequest, opts ...grpc.CallOption) (*LeaveOverlayResponse, error)
+	// TestOverlayPeer opens TCP connections through the interface to a peer's address in the
+	// network, at ports that the peer publishes for this node, and closes them at once without
+	// sending anything. The agent connects only to the address that its configuration gives
+	// the peer, and only to the ports that its configuration says the peer publishes for it.
+	TestOverlayPeer(ctx context.Context, in *TestOverlayPeerRequest, opts ...grpc.CallOption) (*TestOverlayPeerResponse, error)
 }
 
 type overlayServiceClient struct {
@@ -94,6 +100,16 @@ func (c *overlayServiceClient) LeaveOverlay(ctx context.Context, in *LeaveOverla
 	return out, nil
 }
 
+func (c *overlayServiceClient) TestOverlayPeer(ctx context.Context, in *TestOverlayPeerRequest, opts ...grpc.CallOption) (*TestOverlayPeerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TestOverlayPeerResponse)
+	err := c.cc.Invoke(ctx, OverlayService_TestOverlayPeer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OverlayServiceServer is the server API for OverlayService service.
 // All implementations must embed UnimplementedOverlayServiceServer
 // for forward compatibility.
@@ -113,6 +129,11 @@ type OverlayServiceServer interface {
 	RotateOverlayKey(context.Context, *RotateOverlayKeyRequest) (*RotateOverlayKeyResponse, error)
 	// LeaveOverlay removes the interface and its firewall rules. The key stays.
 	LeaveOverlay(context.Context, *LeaveOverlayRequest) (*LeaveOverlayResponse, error)
+	// TestOverlayPeer opens TCP connections through the interface to a peer's address in the
+	// network, at ports that the peer publishes for this node, and closes them at once without
+	// sending anything. The agent connects only to the address that its configuration gives
+	// the peer, and only to the ports that its configuration says the peer publishes for it.
+	TestOverlayPeer(context.Context, *TestOverlayPeerRequest) (*TestOverlayPeerResponse, error)
 	mustEmbedUnimplementedOverlayServiceServer()
 }
 
@@ -134,6 +155,9 @@ func (UnimplementedOverlayServiceServer) RotateOverlayKey(context.Context, *Rota
 }
 func (UnimplementedOverlayServiceServer) LeaveOverlay(context.Context, *LeaveOverlayRequest) (*LeaveOverlayResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LeaveOverlay not implemented")
+}
+func (UnimplementedOverlayServiceServer) TestOverlayPeer(context.Context, *TestOverlayPeerRequest) (*TestOverlayPeerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TestOverlayPeer not implemented")
 }
 func (UnimplementedOverlayServiceServer) mustEmbedUnimplementedOverlayServiceServer() {}
 func (UnimplementedOverlayServiceServer) testEmbeddedByValue()                        {}
@@ -228,6 +252,24 @@ func _OverlayService_LeaveOverlay_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OverlayService_TestOverlayPeer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TestOverlayPeerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OverlayServiceServer).TestOverlayPeer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OverlayService_TestOverlayPeer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OverlayServiceServer).TestOverlayPeer(ctx, req.(*TestOverlayPeerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OverlayService_ServiceDesc is the grpc.ServiceDesc for OverlayService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -250,6 +292,10 @@ var OverlayService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LeaveOverlay",
 			Handler:    _OverlayService_LeaveOverlay_Handler,
+		},
+		{
+			MethodName: "TestOverlayPeer",
+			Handler:    _OverlayService_TestOverlayPeer_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

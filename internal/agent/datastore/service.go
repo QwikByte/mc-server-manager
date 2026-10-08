@@ -27,6 +27,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/backup"
+	"github.com/QwikByte/noryx/internal/agent/overlay"
 	"github.com/QwikByte/noryx/internal/agent/progress"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/agent/storage"
@@ -41,7 +42,7 @@ const (
 	maxRows     = 200
 	// overlayPrefix keeps the datastores apart from the servers among the clients of the
 	// private network of the nodes.
-	overlayPrefix = "db-"
+	overlayPrefix = overlay.DatastorePrefix
 )
 
 // Runtime runs the datastores; the servers it lists keep their ports.

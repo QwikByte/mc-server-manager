@@ -368,6 +368,22 @@ that changes otherwise, e.g. as a node lost its data, needs its networks applied
 master could add a peer of its own, but it can already reconfigure every server. If the interface is missing, e.g.
 after a failed boot, the ports of these servers are reachable nowhere.
 
+A test of the connections to a peer can't be turned into a scanner of other hosts. The agent connects only to the
+address that its own configuration gives the peer with the key the master names, which lies in the private range
+checked above, and only if WireGuard sends that address to that peer; the socket is bound to `noryx0`, so no connection
+leaves the node another way, e.g. into its local network, to the internet or to its own services. It connects only to
+the ports that the master's last configuration says the peer publishes for this node, which the master takes from that
+peer's own report, so a compromised node can only make others test its own address. A test connects to at most 32
+ports, each within 3 seconds, and the agent opens 64 test connections at once and then 4 a second; it sends nothing and
+closes each connection at once. What remains: a compromised master can claim any ports for a peer and so probe the TCP
+ports of the peers' addresses in the network at that rate, but each peer's firewall lets this node reach only the ports
+published for it, and such a master can already run code in the servers, which reach these addresses anyway. Only those
+who may manage the private network test, and only towards nodes they may see. The agent finds its firewall rules by the
+comments it writes with them, as the nftables package can't read rules with these conntrack matches; only root on the
+node could change rules and keep their comments. A node's page names published ports with only the servers, datastores
+and nodes that the user may see, and `overlay status` in the panel's terminal needs the permissions to see the node and
+all its servers.
+
 ## Storage locations
 
 Only the node's administrator decides where server data may be stored (`noryx-agent storage add`). The panel can only

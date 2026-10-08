@@ -82,23 +82,65 @@ func TestOverlay(t *testing.T) {
 	if status.Member == nil || len(status.Peers) != 1 || status.Peers[0].NodeID != a2.node.ID || status.Peers[0].LatestHandshake == nil {
 		t.Fatalf("status = %+v", status)
 	}
-	// Like the overview, the status names only the peers on the nodes a user may see.
-	var group access.Group
-	api.do("POST", "/api/groups", map[string]any{"name": "Node 1", "permissions": []string{"nodes.view"}, "targets": []access.Target{{NodeID: a1.node.ID}}}, http.StatusCreated, &group)
-	var invited struct{ User auth.User }
-	api.do("POST", "/api/users", map[string]any{"username": "viewer", "groups": []string{group.ID}}, http.StatusCreated, &invited)
-	grants, err := access.NewService(m.db).Grants(t.Context(), invited.User.ID)
-	check(t, err)
+	// node-2 tells that it publishes survival's port for node-1, and whether its firewall is in place.
+	api.do("GET", path(a2), nil, http.StatusOK, &status)
+	published := []overlay.Published{{Port: 25570, ServerID: survival.ServerID, Clients: []overlay.Client{{NodeID: a1.node.ID, Address: "10.213.0.1"}}}}
+	if status.Firewall != "in_place" || !reflect.DeepEqual(status.Published, published) {
+		t.Fatalf("node-2 = %+v", status)
+	}
+	a2.kernel.set(agentoverlay.ErrNoTable)
+	if api.do("GET", path(a2), nil, http.StatusOK, &status); status.Firewall != "missing" {
+		t.Fatalf("node-2 without its firewall = %+v", status)
+	}
+	a2.kernel.set(nil)
+	// node-1 tests the port: refused while nothing listens there, reached once something does.
+	// It learns the port as one that node-2 publishes for it.
+	test := func() []overlay.PortTest {
+		t.Helper()
+		var tests []overlay.PortTest
+		api.do("POST", path(a1)+"/peers/"+a2.node.ID+"/test", nil, http.StatusOK, &tests)
+		return tests
+	}
+	if got := test(); len(got) != 1 || got[0].Port != 25570 || got[0].ServerID != survival.ServerID || got[0].Error != "connection refused" {
+		t.Fatalf("tests %+v", got)
+	}
+	if ports := a1.kernel.applied().Peers[0].Ports; !slices.Equal(ports, []uint16{25570}) {
+		t.Fatalf("node-1 has the ports %v of node-2", ports)
+	}
+	a1.kernel.set(nil, netip.MustParseAddrPort("10.213.0.2:25570"))
+	if got := test(); len(got) != 1 || got[0].Error != "" {
+		t.Fatalf("tests %+v", got)
+	}
+	api.do("POST", path(a1)+"/peers/"+a3.node.ID+"/test", nil, http.StatusNotFound, nil)
+	// Like the overview, the status names only the peers on the nodes a user may see, and only
+	// the servers the user may see.
 	viewerAPI := masterapp.API(m.services(t))
-	viewer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		viewerAPI.ServeHTTP(w, r.WithContext(access.WithGrants(r.Context(), grants)))
-	}))
-	t.Cleanup(viewer.Close)
+	viewer := func(name string, nodeID string) apiClient {
+		t.Helper()
+		var group access.Group
+		api.do("POST", "/api/groups", map[string]any{"name": name, "permissions": []string{"nodes.view"}, "targets": []access.Target{{NodeID: nodeID}}}, http.StatusCreated, &group)
+		var invited struct{ User auth.User }
+		api.do("POST", "/api/users", map[string]any{"username": name, "groups": []string{group.ID}}, http.StatusCreated, &invited)
+		grants, err := access.NewService(m.db).Grants(t.Context(), invited.User.ID)
+		check(t, err)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			viewerAPI.ServeHTTP(w, r.WithContext(access.WithGrants(r.Context(), grants)))
+		}))
+		t.Cleanup(srv.Close)
+		return apiClient{t: t, url: srv.URL}
+	}
 	var seen overlay.Status
-	apiClient{t: t, url: viewer.URL}.do("GET", path(a1), nil, http.StatusOK, &seen)
+	viewer1 := viewer("viewer1", a1.node.ID)
+	viewer1.do("GET", path(a1), nil, http.StatusOK, &seen)
 	if seen.Member == nil || len(seen.Peers) != 0 {
 		t.Fatalf("status for a user who sees node-1 only = %+v", seen)
 	}
+	viewer("viewer2", a2.node.ID).do("GET", path(a2), nil, http.StatusOK, &seen)
+	if len(seen.Published) != 1 || seen.Published[0].ServerID != "" || len(seen.Published[0].Clients) != 0 {
+		t.Fatalf("published for a user who sees node-2 but not its servers = %+v", seen.Published)
+	}
+	// Only those who manage the private network test it.
+	viewer1.do("POST", path(a1)+"/peers/"+a2.node.ID+"/test", nil, http.StatusForbidden, nil)
 	// A new key of node-2 reaches node-1.
 	before := a1.kernel.applied().Peers[0].PublicKey
 	api.do("POST", path(a2)+"/rotate", nil, http.StatusOK, nil)
