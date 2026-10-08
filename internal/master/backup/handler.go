@@ -146,8 +146,10 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("DELETE "+base+"/{backup}", access.OnServer(access.BackupsDelete), h.delete)
 	mux.Handle("GET "+base+"/{backup}/download", access.OnServer(access.BackupsView), h.download)
 	h.registerCopies(mux)
-	// An uploaded backup is there to be restored.
-	mux.Handle("POST "+base+"/upload", access.All(access.OnServer(access.BackupsCreate), access.OnServer(access.BackupsRestore)), h.upload)
+	// An uploaded backup is there to be restored, and can bring any file, e.g. a plugin that
+	// reads the secrets of the server, like the file manager.
+	mux.Handle("POST "+base+"/upload", access.All(access.OnServer(access.BackupsCreate), access.OnServer(access.BackupsRestore),
+		access.OnServer(access.FilesWrite)), h.upload)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

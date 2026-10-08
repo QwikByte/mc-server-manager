@@ -113,16 +113,19 @@ func TestUploadBackup(t *testing.T) {
 	}
 	data.write("world/level.dat", "griefed")
 
-	// Uploading needs the permissions to back up and to restore.
-	for _, perms := range [][]string{{"backups.view", "backups.create"}, {"backups.view", "backups.restore"}} {
-		user := m.withGrants(t, map[string]any{"name": strings.Join(perms, " "), "permissions": perms, "targets": []network.Ref{srv}})
-		user.do("POST", base+"/upload", []byte(downloaded), http.StatusForbidden, nil)
+	// Uploading needs the permissions to back up, to restore and, as a backup can bring any
+	// file, to change files.
+	grant := func(perms ...string) apiClient {
+		return m.withGrants(t, map[string]any{"name": strings.Join(perms, " "), "permissions": perms, "targets": []network.Ref{srv}})
+	}
+	for _, perms := range [][]string{{"backups.create", "files.write"}, {"backups.restore", "files.write"}, {"backups.create", "backups.restore"}} {
+		grant(perms...).do("POST", base+"/upload", []byte(downloaded), http.StatusForbidden, nil)
 	}
 	var uploaded struct {
 		backupView
 		Untrusted bool `json:"untrusted"`
 	}
-	api.do("POST", base+"/upload?label=Downloaded", []byte(downloaded), http.StatusCreated, &uploaded)
+	grant("backups.create", "backups.restore", "files.write").do("POST", base+"/upload?label=Downloaded", []byte(downloaded), http.StatusCreated, &uploaded)
 	if !uploaded.Untrusted || uploaded.Label != "Downloaded" || !slices.Contains(uploaded.Paths, "world") {
 		t.Fatalf("uploaded %+v", uploaded)
 	}

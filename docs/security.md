@@ -320,7 +320,9 @@ like an uploaded one, with the limits for backups, and refuses it once it is lar
 than 1 GB would stay free, also when the data of a moving server arrive. Listing, downloading and restoring an
 untrusted backup read the directory of its archive within the limits for backups too. The mark moves with the backup to
 another node, and copies for restoring into another server keep it; the master refuses both with agents that would
-drop it. Uploading needs the permissions to back up and to restore the server.
+drop it. Uploading needs the permissions to back up and to restore the server, and to change its files: an uploaded
+backup can bring any file, e.g. a plugin, which runs with the server and can read its secrets once it is restored, such
+as the forwarding secret of its network, like a plugin uploaded with the file manager.
 
 ## Copies of backups
 
@@ -485,7 +487,9 @@ A server created from an archive of a server from elsewhere gets the archive che
 before anything of it is used: links, paths outside the data and too much data delete the new server again. It leaves
 out the files that only hold secrets, the manifest of file sets and the files of the agent, empties the secrets in the
 other files, and removes the forwarding settings, so that the server trusts no proxy and runs in online mode, until a
-network configures it. It needs the permission to create servers on the node.
+network configures it. It needs the permission to create servers on the node, which is enough to bring any plugin with
+the archive: such a plugin runs with the server and can read the secrets it gets later, e.g. the forwarding secret of a
+network it joins, or a file set's.
 
 ## Console
 
