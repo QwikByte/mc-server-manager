@@ -51,6 +51,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/mojang"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
@@ -223,6 +224,7 @@ type master struct {
 	modrinth   *fakeModrinth
 	hangar     *fakeHangar
 	geysermc   *fakeGeyserMC
+	mojang     *fakeMojang
 	update     update.Options
 	// quick is how long requests wait for their operations; tests get the result right away.
 	quick time.Duration
@@ -252,7 +254,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), update: update.Options{DataDir: dir}, quick: time.Minute,
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), mojang: startMojang(t), update: update.Options{DataDir: dir}, quick: time.Minute,
 	}
 }
 
@@ -278,7 +280,7 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	fileSets := fileset.NewService(m.db, nodes, networks, tags, datastores, moves)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: accessService, Settings: m.settings, Nodes: nodes, Overlay: overlays,
-		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Networks: networks, Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(m.mojang.URL, m.mojang.URL, m.mojang.URL+"/texture/"), Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
 		Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
 	}

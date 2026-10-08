@@ -15,13 +15,13 @@ import { type NodeServer, useServer } from "@/features/servers/api"
 import { type ServerUsage, useServerUsage } from "@/features/usage/api"
 import { sortingOf } from "@/lib/sort"
 import { PlayerMenu } from "./online-players"
-import { PlayerActionDialog } from "./player-action-dialog"
-import { PlayerName } from "./player-name"
+import { PlayerBulkBar } from "./player-bulk-bar"
+import { type PlayerDialog, PlayerDialogs } from "./player-dialog"
 import { type ListKind, PlayerListTab } from "./player-lists"
-import type { PlayerDialog } from "./players-page"
+import { PlayerName } from "./player-name"
 import { listSorts, type PlayerSearch, seenSorts } from "./search"
 import { SeenPlayers } from "./seen-players"
-import { SendDialog } from "./send-dialog"
+import { bulkActions, useSelection } from "./selection"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/players")
 
@@ -35,6 +35,7 @@ export function ServerPlayersPage() {
   const { usage, isPending, error } = useServerUsage(nodeId, serverId)
   const network = useNetworkOf()({ nodeId, serverId })
   const [dialog, setDialog] = useState<PlayerDialog>()
+  const selection = useSelection()
   if (!server) return null
 
   const tab = search.tab ?? "online"
@@ -49,7 +50,10 @@ export function ServerPlayersPage() {
           label={t("List")}
           className="max-w-full overflow-x-auto"
           value={tab}
-          onChange={(tab) => set({ tab: tab === "online" ? undefined : tab })}
+          onChange={(tab) => {
+            selection.clear()
+            set({ tab: tab === "online" ? undefined : tab })
+          }}
           options={[
             { value: "online", label: t("Online") },
             { value: "seen", label: t("Seen") },
@@ -72,7 +76,14 @@ export function ServerPlayersPage() {
         </InputGroup>
       </div>
       {tab === "seen" ? (
-        <SeenPlayers network={network} server={nodeServer} query={query} sorting={sortingOf(search, seenSorts, set)} onAct={setDialog} />
+        <SeenPlayers
+          network={network}
+          server={nodeServer}
+          query={query}
+          sorting={sortingOf(search, seenSorts, set)}
+          selection={selection}
+          onAct={setDialog}
+        />
       ) : tab !== "online" ? (
         <PlayerListTab
           kind={tab}
@@ -80,6 +91,7 @@ export function ServerPlayersPage() {
           server={nodeServer}
           query={query}
           sorting={sortingOf(search, listSorts, set)}
+          selection={selection}
           onAct={setDialog}
         />
       ) : error ? (
@@ -89,12 +101,10 @@ export function ServerPlayersPage() {
       ) : (
         <Online server={nodeServer} network={network} usage={usage} query={query} onAct={setDialog} />
       )}
-      {dialog &&
-        ("send" in dialog ? (
-          <SendDialog name={dialog.send} network={dialog.network} from={dialog.from} onClose={() => setDialog(undefined)} />
-        ) : (
-          <PlayerActionDialog action={dialog.action} name={dialog.name} scopes={dialog.scopes} onClose={() => setDialog(undefined)} />
-        ))}
+      {tab !== "online" && (
+        <PlayerBulkBar selection={selection} actions={bulkActions[tab].actions} where={bulkActions[tab].where()} network={network} onAct={setDialog} />
+      )}
+      <PlayerDialogs dialog={dialog} onClose={() => setDialog(undefined)} />
     </>
   )
 }

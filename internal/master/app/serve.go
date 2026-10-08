@@ -31,6 +31,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/mojang"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
@@ -182,7 +183,7 @@ func serve(ctx context.Context, cfg config) error {
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
 			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
-			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
+			Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(mojang.API, mojang.SessionServer, mojang.Textures), Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
 			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
@@ -240,14 +241,16 @@ func serve(ctx context.Context, cfg config) error {
 
 // Services are what the master serves over HTTP.
 type Services struct {
-	Users     *auth.Service
-	Access    *access.Service
-	Settings  *settings.Service
-	Nodes     *node.Service
-	Networks  *network.Service
-	Overlay   *overlay.Service
-	Plugins   *plugin.Service
-	GeyserMC  *geysermc.Client
+	Users    *auth.Service
+	Access   *access.Service
+	Settings *settings.Service
+	Nodes    *node.Service
+	Networks *network.Service
+	Overlay  *overlay.Service
+	Plugins  *plugin.Service
+	GeyserMC *geysermc.Client
+	// Mojang knows the skins of players.
+	Mojang    *mojang.Client
 	Modpacks  *modpack.Service
 	Templates *template.Service
 	FileSets  *fileset.Service
@@ -307,7 +310,7 @@ func API(s Services) *http.ServeMux {
 	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins, s.Sightings).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations, s.FileSets).Register(m)
-	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Sightings, s.Operations).Register(m)
+	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Sightings, player.NewFaces(s.Mojang, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
 	plugin.NewHandler(s.Plugins, s.Operations, s.Networks).Register(m)

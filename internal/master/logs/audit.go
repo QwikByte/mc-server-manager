@@ -120,6 +120,7 @@ var actions = map[string]action{
 	"POST /api/networks/{id}/players/send":                     {logging.Players, "Send player to server"},
 	"POST /api/networks/{id}/players/move":                     {logging.Players, "Send players to another server"},
 	"POST /api/players/actions":                                {logging.Players, "Change player"},
+	"POST /api/players/message":                                {logging.Players, "Send message to players"},
 	"POST /api/templates":                                      {logging.Templates, "Create template"},
 	"POST /api/templates/import":                               {logging.Templates, "Import template"},
 	"GET /api/templates/{id}/export":                           {logging.Templates, "Export template"},

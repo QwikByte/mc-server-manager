@@ -336,6 +336,18 @@ names of players (16 letters, digits and `_`, or Floodgate's dot before), at mos
 10,000 players and servers of a node per day, so that it can't fill the database. Users only see where players played
 on the servers they may see.
 
+The faces of players send their names to Mojang, and those of Bedrock players to GeyserMC; the master asks for them,
+only over HTTPS and from fixed hosts, and fetches skins only from Minecraft's textures server by the ID of a texture,
+not by an address that a profile names. As names come from users and from agents, the master keeps up to 5000 faces,
+looks up at most 30 at once and then one every 2 seconds, and decodes only skins of up to 256 KiB that are images of 64
+by 64 or 64 by 32 pixels; it serves the face it drew itself as an image with a sandboxing CSP, so the browser never
+contacts them. Messages to players need the permission to send console commands on each server, like the network's
+message; their text becomes JSON with an encoder, never by hand, so it can't add components or commands. A temporary ban
+ends with a pardon that waits in `noryx-pending-players.json` in the server's data like the changes for stopped servers:
+a compromised server can change its own waiting pardons, which only affects itself, as it could pardon anyone anyway.
+The names of the players who joined come from the server's cache of players (`usercache.json`), which the server writes,
+so the agent reads at most 8 MiB and 10,000 entries of it, like the lists, and only names of players.
+
 ## Moving servers
 
 Agents never connect to each other: the master relays the server's archive and backups between them over its mutually

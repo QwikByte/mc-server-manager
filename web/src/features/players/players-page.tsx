@@ -11,23 +11,20 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { SelectItem } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
-import { type Network, networksQuery } from "@/features/networks/api"
+import { networksQuery } from "@/features/networks/api"
 import { sortingOf } from "@/lib/sort"
-import type { PlayerAction } from "./api"
 import { useOnlinePlayers } from "./online"
 import { OnlinePlayers } from "./online-players"
-import { PlayerActionDialog, type Scope } from "./player-action-dialog"
+import { PlayerBulkBar } from "./player-bulk-bar"
+import { type PlayerDialog, PlayerDialogs } from "./player-dialog"
 import { type ListKind, PlayerListTab } from "./player-lists"
 import { listSorts, onlineSorts, type PlayerSearch, seenSorts } from "./search"
 import { SeenPlayers } from "./seen-players"
-import { SendDialog } from "./send-dialog"
+import { bulkActions, useSelection } from "./selection"
 
 const route = getRouteApi("/_app/players")
 
-/** What a page about players asks of a dialog: an action on a player, or sending one to another server. */
-export type PlayerDialog = { action: PlayerAction; name?: string; scopes: Scope[] } | { send: string; network: Network; from?: string }
-
-/** The players online on all servers, and who is banned, whitelisted and operator, to act on them. */
+/** The players online on all servers, those seen, and who is banned, whitelisted and operator, to act on them, also on several at once. */
 export function PlayersPage() {
   const search = route.useSearch()
   const navigate = route.useNavigate()
@@ -35,6 +32,7 @@ export function PlayersPage() {
   const { data: networks = [] } = useQuery({ ...networksQuery, enabled: can("networks.view") })
   const { players, unnamed, isPending } = useOnlinePlayers()
   const [dialog, setDialog] = useState<PlayerDialog>()
+  const selection = useSelection()
   const network = networks.find((n) => n.id === search.network)
   const tab = search.tab ?? "online"
   const query = (search.q ?? "").toLowerCase()
@@ -57,7 +55,10 @@ export function PlayersPage() {
           label={t("List")}
           className="max-w-full overflow-x-auto"
           value={tab}
-          onChange={(tab) => set({ tab: tab === "online" ? undefined : tab })}
+          onChange={(tab) => {
+            selection.clear()
+            set({ tab: tab === "online" ? undefined : tab })
+          }}
           options={[
             { value: "online", label: t("Online") },
             { value: "seen", label: t("Seen") },
@@ -67,7 +68,15 @@ export function PlayersPage() {
           ]}
         />
         {networks.length > 0 && (
-          <Choice label={t("Network")} value={network?.id} onChange={(network) => set({ network })} everything={t("All servers")}>
+          <Choice
+            label={t("Network")}
+            value={network?.id}
+            onChange={(network) => {
+              selection.clear()
+              set({ network })
+            }}
+            everything={t("All servers")}
+          >
             {networks.map((n) => (
               <SelectItem key={n.id} value={n.id}>
                 {n.name}
@@ -101,20 +110,23 @@ export function PlayersPage() {
           {isPending ? (
             <Skeleton className="h-64 rounded-xl" />
           ) : (
-            <OnlinePlayers players={online} sorting={sortingOf(search, onlineSorts, set)} onAct={setDialog} />
+            <OnlinePlayers players={online} sorting={sortingOf(search, onlineSorts, set)} selection={selection} onAct={setDialog} />
           )}
         </>
       ) : tab === "seen" ? (
-        <SeenPlayers network={network} query={query} sorting={sortingOf(search, seenSorts, set)} onAct={setDialog} />
+        <SeenPlayers network={network} query={query} sorting={sortingOf(search, seenSorts, set)} selection={selection} onAct={setDialog} />
       ) : (
-        <PlayerListTab kind={tab} network={network} query={query} sorting={sortingOf(search, listSorts, set)} onAct={setDialog} />
+        <PlayerListTab
+          kind={tab}
+          network={network}
+          query={query}
+          sorting={sortingOf(search, listSorts, set)}
+          selection={selection}
+          onAct={setDialog}
+        />
       )}
-      {dialog &&
-        ("send" in dialog ? (
-          <SendDialog name={dialog.send} network={dialog.network} from={dialog.from} onClose={() => setDialog(undefined)} />
-        ) : (
-          <PlayerActionDialog action={dialog.action} name={dialog.name} scopes={dialog.scopes} onClose={() => setDialog(undefined)} />
-        ))}
+      <PlayerBulkBar selection={selection} actions={bulkActions[tab].actions} where={bulkActions[tab].where()} network={network} onAct={setDialog} />
+      <PlayerDialogs dialog={dialog} onClose={() => setDialog(undefined)} />
     </>
   )
 }

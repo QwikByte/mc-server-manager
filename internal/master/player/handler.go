@@ -2,6 +2,7 @@ package player
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -18,65 +19,96 @@ import (
 )
 
 const (
-	maxServers    = 500
+	maxServers = 500
+	// MaxPlayers is the most players of an action or message, each of which can go to
+	// hundreds of servers.
+	MaxPlayers    = 50
+	maxBanYears   = 10
 	changeTimeout = 10 * time.Minute
 	moveTimeout   = time.Minute
 )
 
 type Handler struct {
-	svc  *Service
-	seen *Sightings
-	ops  *operation.Operations
+	svc   *Service
+	seen  *Sightings
+	faces *Faces
+	ops   *operation.Operations
 }
 
-func NewHandler(svc *Service, seen *Sightings, ops *operation.Operations) *Handler {
-	return &Handler{svc: svc, seen: seen, ops: ops}
+func NewHandler(svc *Service, seen *Sightings, faces *Faces, ops *operation.Operations) *Handler {
+	return &Handler{svc: svc, seen: seen, faces: faces, ops: ops}
 }
 
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/players/actions", access.SignedIn, h.change)
+	mux.Handle("POST /api/players/message", access.SignedIn, h.message)
 	mux.Handle("GET /api/players/lists", access.SignedIn, h.lists)
 	// Only the sightings on the servers the user may see count.
 	mux.Handle("GET /api/players/seen", access.SignedIn, h.seenPlayers)
 	mux.Handle("GET /api/players/seen/{name}", access.SignedIn, h.history)
+	mux.Handle("GET /api/players/faces/{name}", access.SignedIn, h.face)
 	mux.Handle("POST /api/networks/{id}/players/send", access.Everywhere(access.NetworksView), h.send)
 	mux.Handle("POST /api/networks/{id}/players/move", access.Everywhere(access.NetworksView), h.move)
 }
 
-// change kicks, bans, pardons, whitelists or makes operator a player on servers, or turns
-// their whitelist on or off, as an operation that tells how it ended on each.
+// change kicks, bans, pardons, whitelists or makes operator up to MaxPlayers players on
+// servers, or turns their whitelist on or off, as an operation that tells how it ended on
+// each. A ban with an end (until) is pardoned then.
 func (h *Handler) change(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Action  string        `json:"action"`
+		Action string `json:"action"`
+		// Name is one player, Names several.
 		Name    string        `json:"name"`
+		Names   []string      `json:"names"`
 		Reason  string        `json:"reason"`
+		Until   *time.Time    `json:"until"`
 		Servers []network.Ref `json:"servers"`
 	}
 	if err := httpapi.ReadJSON(w, r, &req); err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	c := &noryxv1.PlayerChange{Action: noryxv1.ParsePlayerAction(req.Action), Name: strings.TrimSpace(req.Name), Reason: strings.TrimSpace(req.Reason)}
-	if msg := c.Problem(); msg != "" {
-		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "%s", msg))
-		return
+	action := noryxv1.ParsePlayerAction(req.Action)
+	names, err := playerNames(append(req.Names, req.Name), !action.Global())
+	var ends int64
+	switch {
+	case err != nil:
+	case req.Until != nil && action != noryxv1.PlayerAction_PLAYER_ACTION_BAN:
+		err = httpapi.Errorf(http.StatusBadRequest, "Only bans end at a time.")
+	case req.Until != nil && (req.Until.Before(time.Now().Add(time.Minute)) || req.Until.After(time.Now().AddDate(maxBanYears, 0, 0))):
+		err = httpapi.Errorf(http.StatusBadRequest, "A ban ends between a minute and %d years from now.", maxBanYears)
+	case req.Until != nil:
+		ends = req.Until.Unix()
+	}
+	changes := make([]*noryxv1.PlayerChange, len(names))
+	for i, name := range names {
+		changes[i] = &noryxv1.PlayerChange{Action: action, Name: name, Reason: strings.TrimSpace(req.Reason), EndsUnix: ends}
+		if msg := changes[i].Problem(); msg != "" && err == nil {
+			err = httpapi.Errorf(http.StatusBadRequest, "%s", msg)
+		}
 	}
 	// Operators may run any command in the game.
 	need := []access.Permission{access.PlayersManage}
-	if c.GetAction() == noryxv1.PlayerAction_PLAYER_ACTION_OP || c.GetAction() == noryxv1.PlayerAction_PLAYER_ACTION_DEOP {
+	if action == noryxv1.PlayerAction_PLAYER_ACTION_OP || action == noryxv1.PlayerAction_PLAYER_ACTION_DEOP {
 		need = append(need, access.ConsoleCommands)
 	}
-	if err := check(r, req.Servers, need...); err != nil {
+	if err == nil {
+		err = check(r, req.Servers, need...)
+	}
+	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	logging.Note(r.Context(), slog.String("action", req.Action), slog.String("player", c.GetName()), slog.Int("servers", len(req.Servers)))
-	subject := c.GetName()
-	if c.GetAction().Global() {
+	logging.Note(r.Context(), slog.String("action", req.Action), slog.Any("players", names), slog.Int("servers", len(req.Servers)))
+	if req.Until != nil {
+		logging.Note(r.Context(), slog.Time("until", *req.Until))
+	}
+	subject := subjectOf(names)
+	if action.Global() {
 		subject = strconv.Itoa(len(req.Servers))
 	}
 	h.ops.Run(w, r, operation.Spec{
-		Kind: "players." + c.GetAction().Slug(), Subject: subject, Steps: []string{"servers"},
+		Kind: "players." + action.Slug(), Subject: subject, Steps: []string{"servers"},
 		Status: http.StatusOK, Timeout: changeTimeout, Category: logging.Players,
 		Visible: func(g access.Grants) bool { return onAll(g, access.ServersView, req.Servers) },
 		Cancel: func(_ *http.Request, g access.Grants) (access.Permission, bool) {
@@ -88,11 +120,50 @@ func (h *Handler) change(w http.ResponseWriter, r *http.Request) {
 			return "", true
 		},
 	}, func(ctx context.Context) (any, error) {
-		if err := h.svc.identify(ctx, c); err != nil {
-			return nil, err
+		for _, c := range changes {
+			if err := h.svc.identify(ctx, c); err != nil {
+				return nil, err
+			}
 		}
-		return map[string]any{"results": h.svc.Change(ctx, c, req.Servers)}, nil
+		return map[string]any{"results": h.svc.Change(ctx, changes, req.Servers)}, nil
 	})
+}
+
+// playerNames returns the valid names of up to MaxPlayers players, each once regardless of
+// case, leaving out empty ones; none, or one empty name, if wanted is false.
+func playerNames(given []string, wanted bool) ([]string, error) {
+	if len(given) > MaxPlayers+1 { // with the one of name
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Enter 1 to %d players.", MaxPlayers)
+	}
+	var names []string
+	for _, name := range given {
+		if name = strings.TrimSpace(name); name != "" && !slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, name) }) {
+			names = append(names, name)
+		}
+	}
+	switch {
+	case !wanted && len(names) > 0:
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Turning the whitelist on or off takes no player.")
+	case !wanted:
+		return []string{""}, nil
+	case len(names) == 0 || len(names) > MaxPlayers:
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Enter 1 to %d players.", MaxPlayers)
+	}
+	for _, name := range names {
+		if !noryxv1.ValidPlayerName(name) {
+			return nil, httpapi.Errorf(http.StatusBadRequest, "%q isn't the name of a player: up to 16 letters, digits and underscores.", name)
+		}
+	}
+	return names, nil
+}
+
+// subjectOf names the players of an operation, the first few of many.
+func subjectOf(names []string) string {
+	const shown = 3
+	if len(names) <= shown {
+		return strings.Join(names, ", ")
+	}
+	return strings.Join(names[:shown], ", ") + " +" + strconv.Itoa(len(names)-shown)
 }
 
 // lists returns the lists of the game servers of a network (?network=), of one server
@@ -134,7 +205,59 @@ func (h *Handler) lists(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, h.svc.Lists(ctx, servers))
+	lists := h.svc.Lists(ctx, servers)
+	if !q.Has("joined") {
+		lists.Joined = nil // only asked for, as servers can have many
+	}
+	httpapi.WriteJSON(w, http.StatusOK, lists)
+}
+
+// message shows a message to players on servers: in the chat, as a title or above the hotbar.
+// Like the message to a network, it needs the permission to send console commands to each.
+func (h *Handler) message(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		network.Message
+		Names   []string      `json:"names"`
+		Servers []network.Ref `json:"servers"`
+	}
+	err := httpapi.ReadJSON(w, r, &req)
+	var names []string
+	if err == nil {
+		names, err = playerNames(req.Names, true)
+	}
+	if err == nil {
+		err = check(r, req.Servers, access.ConsoleCommands)
+	}
+	var results []Result
+	if err == nil {
+		logging.Note(r.Context(), slog.String("kind", req.Kind), slog.Any("players", names), slog.Int("servers", len(req.Servers)))
+		results, err = h.svc.Message(r.Context(), req.Message, names, req.Servers)
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// face serves the face of a player as a PNG image, so that the browser contacts neither
+// Mojang nor GeyserMC.
+func (h *Handler) face(w http.ResponseWriter, r *http.Request) {
+	data, err := h.faces.Face(r.Context(), r.PathValue("name"))
+	switch {
+	case errors.Is(err, ErrNoFace):
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+	case err != nil:
+		w.Header().Set("Cache-Control", "no-store")
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Security-Policy", "sandbox")
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	_, _ = w.Write(data) //nolint:gosec // a PNG image the master drew itself, sandboxed
 }
 
 // seenPlayers returns the players seen on the servers the user may see, of a network

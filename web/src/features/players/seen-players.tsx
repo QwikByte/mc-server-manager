@@ -13,17 +13,22 @@ import { formatAgo, formatDateTime, formatMinutes } from "@/lib/format"
 import { type Sorting, sortBy } from "@/lib/sort"
 import { useDebounced } from "@/lib/use-debounced"
 import { useNow } from "@/lib/use-now"
+import { cn } from "@/lib/utils"
 import { type SeenPlayer, seenPlayersQuery } from "./api"
 import { PlayerMenu } from "./online-players"
+import { SelectCell, SelectHead } from "./player-bulk-bar"
+import type { PlayerDialog } from "./player-dialog"
 import { PlayerName } from "./player-name"
-import type { PlayerDialog } from "./players-page"
 import type { SeenSort } from "./search"
+import type { Picked, Selection } from "./selection"
 
 const values: Record<SeenSort, (p: SeenPlayer) => string | number> = {
   seen: (p) => Date.parse(p.lastSeen),
   name: (p) => p.name,
   playtime: (p) => p.minutes,
 }
+
+const picked = (p: SeenPlayer): Picked => ({ name: p.name, servers: p.servers.map(({ nodeId, serverId }) => ({ nodeId, serverId })) })
 
 /**
  * The players seen online on the game servers the user may see, of a network, of one server or all, with when they
@@ -34,12 +39,14 @@ export function SeenPlayers({
   server,
   query,
   sorting,
+  selection,
   onAct,
 }: {
   network?: Network
   server?: NodeServer
   query: string
   sorting: Sorting<SeenSort>
+  selection?: Selection
   onAct: (dialog: PlayerDialog) => void
 }) {
   const q = useDebounced(query.trim())
@@ -80,7 +87,10 @@ export function SeenPlayers({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <SortableHead sorting={sorting} column="name" className="pl-4">{t("Player")}</SortableHead>
+              <SelectHead selection={selection} players={sorted.map(picked)} />
+              <SortableHead sorting={sorting} column="name" className={cn(!selection && "pl-4")}>
+                {t("Player")}
+              </SortableHead>
               <SortableHead sorting={sorting} column="seen">{t("Last seen")}</SortableHead>
               <SortableHead sorting={sorting} column="playtime" className="text-right max-sm:hidden">{t("Playtime")}</SortableHead>
               {!server && <TableHead className="max-md:hidden">{t("Servers")}</TableHead>}
@@ -91,8 +101,9 @@ export function SeenPlayers({
           </TableHeader>
           <TableBody>
             {sorted.map((p) => (
-              <TableRow key={p.name}>
-                <TableCell className="pl-4">
+              <TableRow key={p.name} data-state={selection?.has(p.name) ? "selected" : undefined}>
+                <SelectCell selection={selection} player={picked(p)} />
+                <TableCell className={cn(!selection && "pl-4")}>
                   <PlayerName name={p.name} />
                 </TableCell>
                 <TableCell className="text-muted-foreground" title={formatDateTime(p.lastSeen)}>

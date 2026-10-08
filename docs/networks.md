@@ -91,7 +91,8 @@ decides, such as the servers, are locked. Saving reloads a running proxy.
 ## Actions
 
 **Servers** starts all servers of the network before the proxy, so that players find them, and stops the proxy first, so
-that all players leave at once. **Message** sends a chat message to all running game servers.
+that all players leave at once. **Message** shows a message to the players of all running game servers: in the chat
+(`say`), as a title with an optional subtitle, or above the hotbar, see [Players](players.md#actions).
 
 ## Restart server by server
 

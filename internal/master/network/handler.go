@@ -111,15 +111,13 @@ func (h *Handler) Register(mux access.Mux) {
 		})
 	}
 	mux.Handle("POST /api/networks/{id}/broadcast", view, func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Message string `json:"message"`
-		}
+		var m Message
 		n, err := h.allowed(r, access.ConsoleCommands)
 		if err == nil {
-			err = httpapi.ReadJSON(w, r, &req)
+			err = httpapi.ReadJSON(w, r, &m)
 		}
 		if err == nil {
-			err = h.svc.Broadcast(r.Context(), n, req.Message)
+			err = h.svc.Broadcast(r.Context(), n, m)
 		}
 		write(w, r, http.StatusNoContent, nil, err)
 	})

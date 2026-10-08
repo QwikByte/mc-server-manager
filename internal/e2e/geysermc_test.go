@@ -13,7 +13,7 @@ import (
 
 // fakeGeyserMC serves the parts of GeyserMC's download server and global API (/v2) the
 // master uses: the newest build of Floodgate, which a test can replace with publish, its
-// files, and the XUID of the Bedrock player Tim 203.
+// files, and the XUID and skin of the Bedrock player Tim 203.
 type fakeGeyserMC struct {
 	*httptest.Server
 	mu    sync.Mutex
@@ -57,6 +57,13 @@ func startGeyserMC(t *testing.T) *fakeGeyserMC {
 			return
 		}
 		writeJSON(w, map[string]any{"xuid": 2535432196048835})
+	})
+	mux.HandleFunc("GET /v2/skin/{xuid}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("xuid") != "2535432196048835" {
+			writeJSON(w, map[string]any{})
+			return
+		}
+		writeJSON(w, map[string]any{"texture_id": alexSkin, "is_steve": false})
 	})
 	return f
 }

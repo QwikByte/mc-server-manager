@@ -1,5 +1,6 @@
 import {
   CalendarBlankIcon,
+  ChatCircleTextIcon,
   ClockCounterClockwiseIcon,
   CrownSimpleIcon,
   DotsThreeIcon,
@@ -37,11 +38,9 @@ import { needs, playerActions } from "./actions"
 import { type Listed, type PlayerAction, type PlayerHistory, playerHistoryQuery, playerListsQuery, validPlayerName } from "./api"
 import { useOnlinePlayers } from "./online"
 import type { PlayerAt } from "./online-players"
-import { PlayerActionDialog } from "./player-action-dialog"
+import { type PlayerDialog, PlayerDialogs } from "./player-dialog"
 import { PlayerAvatar } from "./player-name"
-import type { PlayerDialog } from "./players-page"
 import { useScopes } from "./scopes"
-import { SendDialog } from "./send-dialog"
 
 const route = getRouteApi("/_app/players/$name")
 
@@ -177,12 +176,7 @@ function Player({ name }: { name: string }) {
           <Entries entries={entries} total={lists.servers.length} nameOf={nameOf} />
         </Section>
       )}
-      {dialog &&
-        ("send" in dialog ? (
-          <SendDialog name={dialog.send} network={dialog.network} from={dialog.from} onClose={() => setDialog(undefined)} />
-        ) : (
-          <PlayerActionDialog action={dialog.action} name={dialog.name} scopes={dialog.scopes} onClose={() => setDialog(undefined)} />
-        ))}
+      <PlayerDialogs dialog={dialog} onClose={() => setDialog(undefined)} />
     </>
   )
 }
@@ -281,7 +275,8 @@ function PlayerActions({ at, entries, onAct }: { at: PlayerAt; entries: Entries;
   const allowed = actions.filter((a) => a.scopes.length > 0)
   const from = server && network?.backends.find((b) => key(b) === key(refOf(server)))?.name
   const sends = server && !offline && network && network.backends.length > 1 && can("players.manage", network.proxy.nodeId, network.proxy.serverId)
-  if (allowed.length === 0 && !sends) return null
+  const messages = server && !offline && can("console.commands", server.nodeId, server.id)
+  if (allowed.length === 0 && !sends && !messages) return null
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -291,6 +286,12 @@ function PlayerActions({ at, entries, onAct }: { at: PlayerAt; entries: Entries;
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
+        {messages && (
+          <DropdownMenuItem onSelect={() => onAct({ message: [name], servers: [refOf(server)] })}>
+            <ChatCircleTextIcon />
+            {t("Message…")}
+          </DropdownMenuItem>
+        )}
         {sends && (
           <DropdownMenuItem onSelect={() => onAct({ send: name, network, from })}>
             <PaperPlaneTiltIcon />
@@ -300,7 +301,7 @@ function PlayerActions({ at, entries, onAct }: { at: PlayerAt; entries: Entries;
         {allowed.map(({ action, scopes }) => {
           const { icon: Icon, label, destructive } = playerActions[action]
           return (
-            <DropdownMenuItem key={action} variant={destructive ? "destructive" : "default"} onSelect={() => onAct({ action, name, scopes })}>
+            <DropdownMenuItem key={action} variant={destructive ? "destructive" : "default"} onSelect={() => onAct({ action, names: [name], scopes })}>
               <Icon />
               {label()}
             </DropdownMenuItem>

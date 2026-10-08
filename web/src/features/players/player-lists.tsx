@@ -19,10 +19,12 @@ import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 import { needs, playerActions } from "./actions"
 import { type Listed, type PlayerAction, type PlayerLists, playerListsQuery } from "./api"
+import { SelectCell, SelectHead } from "./player-bulk-bar"
+import type { PlayerDialog } from "./player-dialog"
 import { PlayerName } from "./player-name"
-import type { PlayerDialog } from "./players-page"
 import { useScopes } from "./scopes"
 import type { ListSort, PlayerSearch } from "./search"
+import type { Picked, Selection } from "./selection"
 
 export type ListKind = Exclude<NonNullable<PlayerSearch["tab"]>, "seen">
 
@@ -63,6 +65,7 @@ export function PlayerListTab({
   server,
   query,
   sorting,
+  selection,
   onAct,
 }: {
   kind: ListKind
@@ -70,6 +73,7 @@ export function PlayerListTab({
   server?: NodeServer
   query: string
   sorting: Sorting<ListSort>
+  selection?: Selection
   onAct: (dialog: PlayerDialog) => void
 }) {
   const { can } = useAccess()
@@ -90,6 +94,7 @@ export function PlayerListTab({
   const nameOf = (ref: ServerRef) => findServer(servers, ref)?.name ?? ref.serverId
   const failed = data.servers.filter((s) => s.error)
   const pending = data.servers.flatMap((s) => s.pending.map((p) => ({ ...p, server: nameOf(s) })))
+  const picked = (e: Listed): Picked => ({ name: e.name, servers: e.servers })
   const addScopes = scopesFor(add, { server, network })
   const allowed = (refs: ServerRef[]) => refs.filter((r) => needs(remove).every((p) => can(p, r.nodeId, r.serverId)))
   const AddIcon = playerActions[add].icon
@@ -135,15 +140,16 @@ export function PlayerListTab({
       {pending.length > 0 && (
         <Callout
           icon={ClockIcon}
-          title={t("{{count}} changes wait for stopped servers", {
+          title={t("{{count}} changes wait for stopped servers or their time", {
             count: pending.length,
-            defaultValue_one: "A change waits for a stopped server",
+            defaultValue_one: "A change waits for a stopped server or its time",
           })}
         >
           <ul className="mt-1 grid gap-0.5">
             {pending.slice(0, 10).map((p, i) => (
               <li key={i}>
                 {p.server}: {playerActions[p.action].title(p.name ?? "")}
+                {p.due && ` · ${formatDateTime(p.due)}`}
               </li>
             ))}
           </ul>
@@ -156,7 +162,10 @@ export function PlayerListTab({
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <SortableHead sorting={sorting} column="name" className="pl-4">{t("Player")}</SortableHead>
+                <SelectHead selection={selection} players={entries.map(picked)} />
+                <SortableHead sorting={sorting} column="name" className={cn(!selection && "pl-4")}>
+                  {t("Player")}
+                </SortableHead>
                 {kind === "banned" && <TableHead className="max-md:hidden">{t("Reason")}</TableHead>}
                 {!server && (
                   <SortableHead sorting={sorting} column="servers">
@@ -173,6 +182,7 @@ export function PlayerListTab({
                 <ListRow
                   key={entry.name}
                   entry={entry}
+                  selection={selection}
                   total={total}
                   banned={kind === "banned"}
                   names={server ? undefined : entry.servers.map(nameOf)}
@@ -181,7 +191,7 @@ export function PlayerListTab({
                       ? () =>
                           onAct({
                             action: remove,
-                            name: entry.name,
+                            names: [entry.name],
                             scopes: [{ label: where(entry.name), servers: allowed(entry.servers) }],
                           })
                       : undefined
@@ -199,6 +209,7 @@ export function PlayerListTab({
 
 function ListRow({
   entry,
+  selection,
   total,
   banned,
   names,
@@ -206,6 +217,7 @@ function ListRow({
   remove,
 }: {
   entry: Listed
+  selection?: Selection
   total: number
   banned: boolean
   /** The servers whose list has the player, unless the list is of one server. */
@@ -217,8 +229,9 @@ function ListRow({
   const now = useNow(entry.until !== undefined, 60_000)
   const ended = entry.until !== undefined && Date.parse(entry.until) <= now
   return (
-    <TableRow className={cn(ended && "text-muted-foreground")}>
-      <TableCell className="pl-4">
+    <TableRow className={cn(ended && "text-muted-foreground")} data-state={selection?.has(entry.name) ? "selected" : undefined}>
+      <SelectCell selection={selection} player={{ name: entry.name, servers: entry.servers }} />
+      <TableCell className={cn(!selection && "pl-4")}>
         <span className="flex items-center gap-2">
           <PlayerName name={entry.name} />
           {banned && entry.until && <Pill tone={ended ? "neutral" : "warning"}>{ended ? t("Ended") : t("Temporary")}</Pill>}
