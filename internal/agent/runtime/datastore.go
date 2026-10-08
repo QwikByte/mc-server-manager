@@ -15,6 +15,8 @@ var (
 	ErrDatastoreNotRunning = errors.New("the datastore isn't running")
 	// ErrNoTable is returned for a table that a database lacks.
 	ErrNoTable = errors.New("table not found")
+	// ErrNoColumn is returned for a column to sort or filter by that a table lacks.
+	ErrNoColumn = errors.New("column not found")
 )
 
 // DatastoreSpec describes a datastore: a MariaDB or PostgreSQL server of a network.
@@ -39,6 +41,14 @@ type Datastore struct {
 	State noryxv1.DatastoreState
 	// Size is the size of its data in bytes.
 	Size int64
+}
+
+// DatastoreUsage is what a running datastore uses.
+type DatastoreUsage struct {
+	Usage
+	// Connections are the clients connected, without the runtime itself; -1 while the
+	// datastore can't tell, e.g. as it starts.
+	Connections int
 }
 
 // Datastores runs datastores. Each database has a user of the same name with rights on it
@@ -67,14 +77,20 @@ type Datastores interface {
 	// Dump writes an SQL dump of a database to w, without its owner and privileges.
 	Dump(ctx context.Context, id, name string, w io.Writer) error
 	// Load creates a database anew and loads a dump into it as the database's user, so that
-	// the dump gets no more rights than the user has. The user keeps its password.
+	// the dump gets no more rights than the user has. The user keeps its password. The
+	// commands of the engine's client itself are off, so that a dump from elsewhere can't
+	// run programs, read files or connect to another database.
 	Load(ctx context.Context, id, name string, r io.Reader) error
 	// Tables returns the tables of a database, sorted.
 	Tables(ctx context.Context, id, name string) ([]*noryxv1.Table, error)
-	// Browse returns the columns of a table and at most limit of its rows from offset on, in
-	// the order of its primary key if it has one, as text with long values cut short. It only
-	// reads, with names that noryxv1.TableName matches.
-	Browse(ctx context.Context, id, name, schema, table string, offset uint64, limit uint32) (*noryxv1.BrowseTableResponse, error)
+	// Browse returns the columns of a table of the database req names and at most its limit
+	// of rows from its offset on, as text with long values cut short: those that its filter
+	// matches, in the order of its sort column and then of the primary key, if the table has
+	// one. It only reads, with names that noryxv1.TableName matches, and fails with
+	// ErrNoColumn for a column the table lacks.
+	Browse(ctx context.Context, id string, req *noryxv1.BrowseTableRequest) (*noryxv1.BrowseTableResponse, error)
+	// DatastoreUsage returns what a running datastore uses, or ErrDatastoreNotRunning.
+	DatastoreUsage(ctx context.Context, id string) (DatastoreUsage, error)
 	// DatastoreLogs yields the last tail lines of the log of a datastore's container written
 	// after the time after, if it isn't zero, then follows the log until the container stops
 	// or ctx is cancelled. The lines are as the engine wrote them, with any passwords.

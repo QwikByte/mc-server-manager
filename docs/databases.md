@@ -33,11 +33,25 @@ set](library.md#databases) fills in all of them for each server, e.g. `{{datasto
 out of sight. **New password** gives a user another one, which the plugins that use the database need then; the file
 sets that use it show their servers as outdated until they are applied again.
 
+## Usage
+
+Each datastore on the tab shows its CPU, its memory of its limit and its connections now, with small lines of the last
+24 hours; **History** charts them and the size of its data over the last day or week, like the history of a server.
+The agent measures them every 5 seconds next to those of the servers: CPU and memory like `docker stats`, and the
+clients connected to the engine, without its own query, which it builds itself (`information_schema.PROCESSLIST` of
+MariaDB, `pg_stat_activity` of PostgreSQL); a datastore that isn't ready yet tells no connections. The master records
+them every minute while the datastore runs and keeps them for a week, and deleting the datastore deletes them. Those who
+may see datastores see its usage.
+
 ## Browsing
 
 **Browse** looks into a database: its tables with their estimated rows and size, and their columns and rows 50 at a
-time, in the order of the primary key, with values cut to 200 characters and binary ones in hexadecimal. It only reads,
-also only for those who may manage datastores.
+time, with values cut to 200 characters and binary ones in hexadecimal. Rows come in the order of the primary key, or
+of a column whose header is clicked, first ascending, then descending, and then in the order of the primary key again.
+The filter above the rows shows those whose value of a column contains a text, ignoring case, or is exactly a text: the
+value as text, as the page shows it, binary values in hexadecimal like `0x00FF` for MariaDB and `\x00ff` for PostgreSQL.
+The table, the first row, the sort and the filter are in the page's address. Browsing only reads, also only for those
+who may manage datastores, and the agent checks the columns to sort and filter by against those of the table.
 
 ## Log
 
@@ -59,6 +73,24 @@ as each database's own user; one that was dropped since has to be added again fi
 their connection meanwhile, so their servers are best stopped first. Dumps can be downloaded. Locally,
 `noryx-agent datastore list|backup|backups|restore` works without the master, and the panel's terminal does all but
 restore.
+
+### Uploading a dump
+
+**Upload** adds a dump made elsewhere, e.g. when an existing LuckPerms database moves to Noryx: a ZIP archive with a
+`<database>.sql` for each database, named like the databases, or the SQL file of one database, which goes into the
+database chosen. It may have up to 16 GB. The agent keeps it like the dumps it makes, and restoring it loads it the
+same way, which the dialog offers right after the upload; its databases have to be added on the tab first. An archive
+may contain folders and the `__MACOSX` folder that macOS adds, which are left out, but no other files, at most 1000
+entries and 50 databases, and its SQL files may unpack to at most 64 GB and 100 times the size of the archive.
+
+A dump is loaded as the database's own user, so it gets no rights that this user doesn't have: make it of one
+database, without its owner and privileges, e.g. with `mariadb-dump luckperms` or
+`pg_dump --no-owner --no-privileges luckperms`. Statements that need more, e.g. `CREATE DATABASE` or `USE` of another
+database, a `DEFINER` of another user or `ALTER … OWNER TO` another role, fail the restore at that statement. The
+commands of the clients themselves are refused, as are files that MariaDB's client would send for `LOAD DATA LOCAL`:
+MariaDB's client runs in binary mode and its sandbox, which only allow `DELIMITER`, and psql in its restricted mode,
+which refuses `\!`, `\connect`, `\copy`, `\i`, `\o` and all others. Dumps of `pg_dump` since PostgreSQL 17.6 wrap
+themselves in `\restrict` and `\unrestrict`, which the agent leaves out at their start and end.
 
 ## Upgrades and changes
 

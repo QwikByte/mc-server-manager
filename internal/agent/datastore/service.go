@@ -1,9 +1,9 @@
 // Package datastore implements the DatastoreService of the agent, which runs the MariaDB and
 // PostgreSQL servers of networks with the runtime, keeps dumps of their databases like the
-// backups of servers, and shows the rows of their tables. The agent never stores the passwords
-// of the databases' users: it restores dumps as the users themselves, and upgrades keep the
-// hashes of their passwords, so that backing up and restoring also works with the local CLI
-// alone.
+// backups of servers, also those uploaded from elsewhere, and shows the rows of their tables.
+// The agent never stores the passwords of the databases' users: it restores dumps as the users
+// themselves, and upgrades keep the hashes of their passwords, so that backing up and restoring
+// also works with the local CLI alone.
 package datastore
 
 import (
@@ -447,15 +447,20 @@ func (s *Service) ListTables(ctx context.Context, req *noryxv1.ListTablesRequest
 
 // BrowseTable returns rows of a table, which the runtime only reads.
 func (s *Service) BrowseTable(ctx context.Context, req *noryxv1.BrowseTableRequest) (*noryxv1.BrowseTableResponse, error) {
-	if !noryxv1.TableName.MatchString(req.GetTable()) || req.GetSchema() != "" && !noryxv1.TableName.MatchString(req.GetSchema()) {
+	switch {
+	case !noryxv1.TableName.MatchString(req.GetTable()) || req.GetSchema() != "" && !noryxv1.TableName.MatchString(req.GetSchema()):
 		return nil, status.Error(codes.InvalidArgument, "Noryx only shows tables whose names have letters, digits, _, $ and -.")
+	case req.GetSort() != "" && !noryxv1.TableName.MatchString(req.GetSort()):
+		return nil, toStatus(runtime.ErrNoColumn)
+	case req.GetFilter() != nil && req.GetFilter().Problem() != "":
+		return nil, status.Error(codes.InvalidArgument, req.GetFilter().Problem())
 	}
 	ds, err := s.database(ctx, req.GetId(), req.GetDatabase())
 	if err != nil {
 		return nil, err
 	}
-	limit := min(cmp.Or(req.GetLimit(), defaultRows), maxRows)
-	res, err := s.rt.Browse(ctx, ds.ID, req.GetDatabase(), req.GetSchema(), req.GetTable(), req.GetOffset(), limit)
+	req.Limit = min(cmp.Or(req.GetLimit(), defaultRows), maxRows)
+	res, err := s.rt.Browse(ctx, ds.ID, req)
 	return res, toStatus(err)
 }
 
@@ -532,6 +537,8 @@ func toStatus(err error) error {
 		return status.Error(codes.NotFound, "Datastore not found.")
 	case errors.Is(err, runtime.ErrNoTable):
 		return status.Error(codes.NotFound, "Table not found.")
+	case errors.Is(err, runtime.ErrNoColumn):
+		return status.Error(codes.InvalidArgument, "The table has no such column.")
 	case errors.Is(err, runtime.ErrDatastoreNotRunning):
 		return status.Error(codes.FailedPrecondition, "The datastore isn't ready. Start it, or look at its log for why it isn't.")
 	case errors.Is(err, fs.ErrNotExist):

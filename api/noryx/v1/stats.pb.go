@@ -60,9 +60,11 @@ func (*GetStatsRequest) Descriptor() ([]byte, []int) {
 type GetStatsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// When the agent measured. Rates are averages since the measurement before.
-	TimeUnix      int64          `protobuf:"varint,1,opt,name=time_unix,json=timeUnix,proto3" json:"time_unix,omitempty"`
-	Node          *NodeStats     `protobuf:"bytes,2,opt,name=node,proto3" json:"node,omitempty"`
-	Servers       []*ServerStats `protobuf:"bytes,3,rep,name=servers,proto3" json:"servers,omitempty"`
+	TimeUnix int64          `protobuf:"varint,1,opt,name=time_unix,json=timeUnix,proto3" json:"time_unix,omitempty"`
+	Node     *NodeStats     `protobuf:"bytes,2,opt,name=node,proto3" json:"node,omitempty"`
+	Servers  []*ServerStats `protobuf:"bytes,3,rep,name=servers,proto3" json:"servers,omitempty"`
+	// The datastores of the node. Agents of older versions send none.
+	Datastores    []*DatastoreStats `protobuf:"bytes,4,rep,name=datastores,proto3" json:"datastores,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,6 +116,13 @@ func (x *GetStatsResponse) GetNode() *NodeStats {
 func (x *GetStatsResponse) GetServers() []*ServerStats {
 	if x != nil {
 		return x.Servers
+	}
+	return nil
+}
+
+func (x *GetStatsResponse) GetDatastores() []*DatastoreStats {
+	if x != nil {
+		return x.Datastores
 	}
 	return nil
 }
@@ -392,16 +401,126 @@ func (x *Players) GetNames() []string {
 	return nil
 }
 
+type DatastoreStats struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Stopped datastores only have the size of their data.
+	Running bool `protobuf:"varint,2,opt,name=running,proto3" json:"running,omitempty"`
+	// CPU time used, in thousandths of a core.
+	CpuMillis   uint32 `protobuf:"varint,3,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	MemoryBytes uint64 `protobuf:"varint,4,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
+	// Most memory the datastore may use.
+	MemoryLimitBytes uint64 `protobuf:"varint,5,opt,name=memory_limit_bytes,json=memoryLimitBytes,proto3" json:"memory_limit_bytes,omitempty"`
+	// Most CPU time the datastore may use, in thousandths of a core; 0 if it isn't limited.
+	CpuLimitMillis uint32 `protobuf:"varint,6,opt,name=cpu_limit_millis,json=cpuLimitMillis,proto3" json:"cpu_limit_millis,omitempty"`
+	// Clients connected to the datastore, without the agent itself. Missing while it isn't
+	// ready to tell, e.g. as it starts.
+	Connections *uint32 `protobuf:"varint,7,opt,name=connections,proto3,oneof" json:"connections,omitempty"`
+	// Size of its data, measured every few minutes.
+	DiskBytes     uint64 `protobuf:"varint,8,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatastoreStats) Reset() {
+	*x = DatastoreStats{}
+	mi := &file_noryx_v1_stats_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatastoreStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatastoreStats) ProtoMessage() {}
+
+func (x *DatastoreStats) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_stats_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatastoreStats.ProtoReflect.Descriptor instead.
+func (*DatastoreStats) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_stats_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DatastoreStats) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DatastoreStats) GetRunning() bool {
+	if x != nil {
+		return x.Running
+	}
+	return false
+}
+
+func (x *DatastoreStats) GetCpuMillis() uint32 {
+	if x != nil {
+		return x.CpuMillis
+	}
+	return 0
+}
+
+func (x *DatastoreStats) GetMemoryBytes() uint64 {
+	if x != nil {
+		return x.MemoryBytes
+	}
+	return 0
+}
+
+func (x *DatastoreStats) GetMemoryLimitBytes() uint64 {
+	if x != nil {
+		return x.MemoryLimitBytes
+	}
+	return 0
+}
+
+func (x *DatastoreStats) GetCpuLimitMillis() uint32 {
+	if x != nil {
+		return x.CpuLimitMillis
+	}
+	return 0
+}
+
+func (x *DatastoreStats) GetConnections() uint32 {
+	if x != nil && x.Connections != nil {
+		return *x.Connections
+	}
+	return 0
+}
+
+func (x *DatastoreStats) GetDiskBytes() uint64 {
+	if x != nil {
+		return x.DiskBytes
+	}
+	return 0
+}
+
 var File_noryx_v1_stats_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_stats_proto_rawDesc = "" +
 	"\n" +
 	"\x14noryx/v1/stats.proto\x12\bnoryx.v1\"\x11\n" +
-	"\x0fGetStatsRequest\"\x89\x01\n" +
+	"\x0fGetStatsRequest\"\xc3\x01\n" +
 	"\x10GetStatsResponse\x12\x1b\n" +
 	"\ttime_unix\x18\x01 \x01(\x03R\btimeUnix\x12'\n" +
 	"\x04node\x18\x02 \x01(\v2\x13.noryx.v1.NodeStatsR\x04node\x12/\n" +
-	"\aservers\x18\x03 \x03(\v2\x15.noryx.v1.ServerStatsR\aservers\"\xa1\x01\n" +
+	"\aservers\x18\x03 \x03(\v2\x15.noryx.v1.ServerStatsR\aservers\x128\n" +
+	"\n" +
+	"datastores\x18\x04 \x03(\v2\x18.noryx.v1.DatastoreStatsR\n" +
+	"datastores\"\xa1\x01\n" +
 	"\tNodeStats\x12\x1d\n" +
 	"\n" +
 	"cpu_millis\x18\x01 \x01(\rR\tcpuMillis\x12\x1b\n" +
@@ -427,7 +546,19 @@ const file_noryx_v1_stats_proto_rawDesc = "" +
 	"\aPlayers\x12\x16\n" +
 	"\x06online\x18\x01 \x01(\rR\x06online\x12\x10\n" +
 	"\x03max\x18\x02 \x01(\rR\x03max\x12\x14\n" +
-	"\x05names\x18\x03 \x03(\tR\x05names2Q\n" +
+	"\x05names\x18\x03 \x03(\tR\x05names\"\xaa\x02\n" +
+	"\x0eDatastoreStats\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\arunning\x18\x02 \x01(\bR\arunning\x12\x1d\n" +
+	"\n" +
+	"cpu_millis\x18\x03 \x01(\rR\tcpuMillis\x12!\n" +
+	"\fmemory_bytes\x18\x04 \x01(\x04R\vmemoryBytes\x12,\n" +
+	"\x12memory_limit_bytes\x18\x05 \x01(\x04R\x10memoryLimitBytes\x12(\n" +
+	"\x10cpu_limit_millis\x18\x06 \x01(\rR\x0ecpuLimitMillis\x12%\n" +
+	"\vconnections\x18\a \x01(\rH\x00R\vconnections\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"disk_bytes\x18\b \x01(\x04R\tdiskBytesB\x0e\n" +
+	"\f_connections2Q\n" +
 	"\fStatsService\x12A\n" +
 	"\bGetStats\x12\x19.noryx.v1.GetStatsRequest\x1a\x1a.noryx.v1.GetStatsResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
@@ -443,25 +574,27 @@ func file_noryx_v1_stats_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_stats_proto_rawDescData
 }
 
-var file_noryx_v1_stats_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_noryx_v1_stats_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_noryx_v1_stats_proto_goTypes = []any{
 	(*GetStatsRequest)(nil),  // 0: noryx.v1.GetStatsRequest
 	(*GetStatsResponse)(nil), // 1: noryx.v1.GetStatsResponse
 	(*NodeStats)(nil),        // 2: noryx.v1.NodeStats
 	(*ServerStats)(nil),      // 3: noryx.v1.ServerStats
 	(*Players)(nil),          // 4: noryx.v1.Players
+	(*DatastoreStats)(nil),   // 5: noryx.v1.DatastoreStats
 }
 var file_noryx_v1_stats_proto_depIdxs = []int32{
 	2, // 0: noryx.v1.GetStatsResponse.node:type_name -> noryx.v1.NodeStats
 	3, // 1: noryx.v1.GetStatsResponse.servers:type_name -> noryx.v1.ServerStats
-	4, // 2: noryx.v1.ServerStats.players:type_name -> noryx.v1.Players
-	0, // 3: noryx.v1.StatsService.GetStats:input_type -> noryx.v1.GetStatsRequest
-	1, // 4: noryx.v1.StatsService.GetStats:output_type -> noryx.v1.GetStatsResponse
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 2: noryx.v1.GetStatsResponse.datastores:type_name -> noryx.v1.DatastoreStats
+	4, // 3: noryx.v1.ServerStats.players:type_name -> noryx.v1.Players
+	0, // 4: noryx.v1.StatsService.GetStats:input_type -> noryx.v1.GetStatsRequest
+	1, // 5: noryx.v1.StatsService.GetStats:output_type -> noryx.v1.GetStatsResponse
+	5, // [5:6] is the sub-list for method output_type
+	4, // [4:5] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_stats_proto_init() }
@@ -469,13 +602,14 @@ func file_noryx_v1_stats_proto_init() {
 	if File_noryx_v1_stats_proto != nil {
 		return
 	}
+	file_noryx_v1_stats_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_stats_proto_rawDesc), len(file_noryx_v1_stats_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

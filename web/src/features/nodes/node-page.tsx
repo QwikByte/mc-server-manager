@@ -25,7 +25,7 @@ import { NodeActivity } from "@/features/logs/activity"
 import { OverlaySection } from "@/features/overlay/overlay-section"
 import { assignedMemoryMb, serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
-import { usageQuery } from "@/features/usage/api"
+import { historyQuery, usageQuery } from "@/features/usage/api"
 import { formatCores } from "@/features/usage/format"
 import { UsageWarnings } from "@/features/usage/thresholds"
 import { UsageHistory } from "@/features/usage/usage-history"
@@ -87,7 +87,7 @@ export function NodePage() {
               />
               {can("nodes.view", node.id) && (
                 <UsageHistory
-                  nodeId={node.id}
+                  history={(range) => historyQuery(node.id, undefined, range)}
                   charts={[
                     {
                       title: t("CPU"),

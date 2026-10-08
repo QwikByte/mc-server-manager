@@ -17,6 +17,8 @@ message GetStatsResponse {
   int64 time_unix = 1;
   NodeStats node = 2;
   repeated ServerStats servers = 3;
+  // The datastores of the node. Agents of older versions send none.
+  repeated DatastoreStats datastores = 4;
 }
 
 message NodeStats {
@@ -59,4 +61,22 @@ message Players {
   // Names of the players online: of all, up to 1000, if the console of a game server
   // answers, otherwise of some, as the server lists them.
   repeated string names = 3;
+}
+
+message DatastoreStats {
+  string id = 1;
+  // Stopped datastores only have the size of their data.
+  bool running = 2;
+  // CPU time used, in thousandths of a core.
+  uint32 cpu_millis = 3;
+  uint64 memory_bytes = 4;
+  // Most memory the datastore may use.
+  uint64 memory_limit_bytes = 5;
+  // Most CPU time the datastore may use, in thousandths of a core; 0 if it isn't limited.
+  uint32 cpu_limit_millis = 6;
+  // Clients connected to the datastore, without the agent itself. Missing while it isn't
+  // ready to tell, e.g. as it starts.
+  optional uint32 connections = 7;
+  // Size of its data, measured every few minutes.
+  uint64 disk_bytes = 8;
 }

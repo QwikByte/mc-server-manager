@@ -30,11 +30,26 @@ export interface ServerUsage {
   offlineMode?: boolean
 }
 
-/** The latest measurement of a node's agent, with what the user may see. */
+/** What a datastore uses; stopped ones only have the size of their data. */
+export interface DatastoreUsage {
+  id: string
+  running: boolean
+  cpuMillis: number
+  /** 0 if it isn't limited. */
+  cpuLimitMillis: number
+  memoryBytes: number
+  memoryLimitBytes: number
+  /** Clients connected; missing while the datastore can't tell, e.g. as it starts. */
+  connections?: number
+  diskBytes: number
+}
+
+/** The latest measurement of a node's agent, with what the user may see: datastores only for those who may see them. */
 export interface Usage {
   time: string
   node?: NodeUsage
   servers: ServerUsage[]
+  datastores?: DatastoreUsage[]
 }
 
 export const usageQuery = (nodeId: string) =>
@@ -68,9 +83,13 @@ export const ranges: Record<UsageRange, { label: string; span: number }> = {
   week: { label: msg("7 days"), span: 7 * 24 * 3_600_000 },
 }
 
-/** The average usage over a step; players is the most during the step. */
-export interface UsagePoint {
+/** A step of a history, whose measures depend on what it is of. */
+export interface HistoryPoint {
   time: string
+}
+
+/** The average usage of a node or server over a step; players is the most during the step. */
+export interface UsagePoint extends HistoryPoint {
   cpuMillis: number
   memoryBytes: number
   networkReceived: number
@@ -80,23 +99,42 @@ export interface UsagePoint {
   tps: number | null
 }
 
-export interface UsageHistory {
-  /** Length of the steps in seconds. Steps in which nothing ran are missing. */
-  step: number
-  points: UsagePoint[]
+/** The average usage of a datastore over a step; connections is the most during the step. */
+export interface DatastorePoint extends HistoryPoint {
+  cpuMillis: number
+  memoryBytes: number
+  connections: number | null
+  diskBytes: number
 }
 
-/** The history of a node, or of one of its servers. */
-export const historyQuery = (nodeId: string, serverId: string | undefined, range: UsageRange) =>
+export interface UsageHistory<P extends HistoryPoint = UsagePoint> {
+  /** Length of the steps in seconds. Steps in which nothing ran are missing. */
+  step: number
+  points: P[]
+}
+
+const usageHistoryQuery = <P extends HistoryPoint>(queryKey: string[], path: string, range: UsageRange) =>
   queryOptions({
-    queryKey: ["nodes", nodeId, "usage", serverId ?? "", range],
-    queryFn: () =>
-      api<UsageHistory>(
-        serverId ? `/nodes/${nodeId}/servers/${serverId}/usage/history?range=${range}` : `/nodes/${nodeId}/usage/history?range=${range}`,
-      ),
+    queryKey: [...queryKey, range],
+    queryFn: () => api<UsageHistory<P>>(`${path}?range=${range}`),
     refetchInterval: 60_000,
     placeholderData: keepPreviousData,
   })
+
+/** The query of a history over a range. */
+export type HistoryQuery<P extends HistoryPoint> = ReturnType<typeof usageHistoryQuery<P>>
+
+/** The history of a node, or of one of its servers. */
+export const historyQuery = (nodeId: string, serverId: string | undefined, range: UsageRange) =>
+  usageHistoryQuery<UsagePoint>(
+    ["nodes", nodeId, "usage", serverId ?? ""],
+    serverId ? `/nodes/${nodeId}/servers/${serverId}/usage/history` : `/nodes/${nodeId}/usage/history`,
+    range,
+  )
+
+/** The history of a datastore. */
+export const datastoreHistoryQuery = (id: string, range: UsageRange) =>
+  usageHistoryQuery<DatastorePoint>(["datastores", id, "usage"], `/datastores/${id}/usage/history`, range)
 
 /** What thresholds apply to: CPU, memory and ticks per second of servers, CPU, memory and storage of nodes. */
 export type Measure = "cpu" | "memory" | "tps" | "storage"

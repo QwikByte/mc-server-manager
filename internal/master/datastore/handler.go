@@ -2,11 +2,13 @@ package datastore
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
+	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
@@ -104,10 +106,19 @@ func (h *Handler) Register(mux access.Mux) {
 		tables, err := h.svc.Tables(r.Context(), r.PathValue("id"), r.PathValue("name"))
 		write(w, r, http.StatusOK, tables, err)
 	})
+	// Rows from offset on, sorted by the column sort, descending with descending=true, and
+	// those whose column filter equals value, or contains it with contains=true.
 	mux.Handle("GET /api/datastores/{id}/databases/{name}/tables/{table}", manage, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		offset, _ := strconv.ParseUint(q.Get("offset"), 10, 64)
-		page, err := h.svc.Browse(r.Context(), r.PathValue("id"), r.PathValue("name"), q.Get("schema"), r.PathValue("table"), offset)
+		req := &noryxv1.BrowseTableRequest{
+			Database: r.PathValue("name"), Schema: q.Get("schema"), Table: r.PathValue("table"), Offset: offset,
+			Sort: q.Get("sort"), Descending: q.Get("descending") == "true",
+		}
+		if q.Has("filter") {
+			req.Filter = &noryxv1.TableFilter{Column: q.Get("filter"), Value: q.Get("value"), Contains: q.Get("contains") == "true"}
+		}
+		page, err := h.svc.Browse(r.Context(), r.PathValue("id"), req)
 		w.Header().Set("Cache-Control", "no-store")
 		write(w, r, http.StatusOK, page, err)
 	})
@@ -122,6 +133,17 @@ func (h *Handler) Register(mux access.Mux) {
 				return h.svc.Dump(ctx, r.PathValue("id"), req)
 			})
 		}
+	})
+	// The body is a ZIP archive with a <database>.sql for each database, or the SQL of the
+	// database that the query names.
+	mux.Handle("POST /api/datastores/{id}/backups/upload", manage, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		logging.Note(r.Context(), slog.String("database", q.Get("database")), slog.String("label", q.Get("label")))
+		dump, err := h.svc.Upload(r.Context(), r.PathValue("id"), q.Get("database"), q.Get("label"), r.ContentLength, http.MaxBytesReader(w, r.Body, noryxv1.MaxImportedDump))
+		if errors.As(err, new(*http.MaxBytesError)) {
+			err = errTooLarge
+		}
+		write(w, r, http.StatusCreated, dump, err)
 	})
 	mux.Handle("POST /api/datastores/{id}/backups/{backup}/restore", manage, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
