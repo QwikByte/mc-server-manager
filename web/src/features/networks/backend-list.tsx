@@ -1,4 +1,5 @@
 import { CaretDownIcon, CubeIcon, MagnifyingGlassIcon, ShieldWarningIcon, TrashIcon } from "@phosphor-icons/react"
+import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { useState } from "react"
@@ -11,6 +12,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Switch } from "@/components/ui/switch"
+import { nodeQuery } from "@/features/nodes/api"
 import type { NodeServer } from "@/features/servers/api"
 import { displayVersion, serverLook, serverType } from "@/features/servers/server-types"
 import { TagList } from "@/features/servers/tags"
@@ -234,7 +236,7 @@ export function BackendList({
                         <ShieldWarningIcon className="size-4" weight="duotone" />
                         {t("Let only the proxy reach port {{port}} on {{node}}:", { port: server.port, node: server.nodeName })}
                       </p>
-                      <CopyField value={firewallCommand(server.port, proxyHost)} label={t("firewall command")} prefix="#" />
+                      <FirewallCommand server={server} proxyHost={proxyHost} />
                     </div>
                   )}
                 </div>
@@ -245,4 +247,10 @@ export function BackendList({
       </ul>
     </Section>
   )
+}
+
+/** The firewall command for the runtime of the server's node, Docker's until it is known. */
+function FirewallCommand({ server, proxyHost }: { server: NodeServer; proxyHost: string }) {
+  const runtime = useQuery(nodeQuery(server.nodeId)).data?.info?.runtimeName
+  return <CopyField value={firewallCommand(server.port, proxyHost, runtime)} label={t("firewall command")} prefix="#" />
 }

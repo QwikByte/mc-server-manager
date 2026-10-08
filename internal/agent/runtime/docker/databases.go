@@ -139,8 +139,13 @@ const maxStderr = 4 << 10
 // with what the command wrote to its standard error, without the secrets, as clients repeat
 // the statement that failed.
 func (d *Docker) exec(ctx context.Context, id string, cmd, env []string, in io.Reader, out io.Writer, secrets ...string) error {
-	res, err := d.cli.ExecCreate(ctx, datastoreName(id), client.ExecCreateOptions{
-		User: datastoreUser, Cmd: cmd, Env: env, AttachStdin: in != nil, AttachStdout: true, AttachStderr: true,
+	return d.run(ctx, datastoreName(id), datastoreUser, cmd, env, in, out, secrets...)
+}
+
+// run runs a command in a container as user, like exec.
+func (d *Docker) run(ctx context.Context, name, user string, cmd, env []string, in io.Reader, out io.Writer, secrets ...string) error {
+	res, err := d.cli.ExecCreate(ctx, name, client.ExecCreateOptions{
+		User: user, Cmd: cmd, Env: env, AttachStdin: in != nil, AttachStdout: true, AttachStderr: true,
 	})
 	if err != nil {
 		return notFound(err)

@@ -6,6 +6,7 @@
 package agentcli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -41,8 +42,14 @@ func Commands(agent Agent) []*cobra.Command {
 
 type cli struct{ agent Agent }
 
-// errNoRuntime tells the node's administrator what to do while Docker is down.
-var errNoRuntime = errors.New("can't reach Docker on this node, see: systemctl status docker")
+// errNoRuntime tells the node's administrator what to do while the runtime is down.
+func errNoRuntime(name string) error {
+	unit := "docker"
+	if name == noryxv1.RuntimePodman {
+		unit = "podman.socket" // the service starts on demand
+	}
+	return fmt.Errorf("can't reach %s on this node, see: systemctl status %s", noryxv1.RuntimeTitle(name), unit)
+}
 
 // call runs fn with the time limit of commands that answer right away.
 func (c cli) call(cmd *cobra.Command, fn func(context.Context, grpc.ClientConnInterface) error) error {
@@ -81,8 +88,9 @@ func (c cli) status() *cobra.Command {
 					return err
 				}
 				out := cmd.OutOrStdout()
-				running := info.GetRuntime() != noryxv1.RuntimeUnavailable
-				fmt.Fprintf(out, "Node     %s\nAgent    %s\nRuntime  %s\n", info.GetHostname(), info.GetAgentVersion(), info.GetRuntime())
+				name, version := info.RuntimeOf()
+				running := version != ""
+				fmt.Fprintf(out, "Node     %s\nAgent    %s\nRuntime  %s %s\n", info.GetHostname(), info.GetAgentVersion(), noryxv1.RuntimeTitle(name), cmp.Or(version, noryxv1.RuntimeUnavailable))
 				if running {
 					fmt.Fprintf(out, "System   %s, %d CPUs, %.1f GiB\n", info.GetOs(), info.GetCpuCount(), float64(info.GetMemoryBytes())/(1<<30))
 				}
@@ -91,7 +99,7 @@ func (c cli) status() *cobra.Command {
 				}
 				fmt.Fprintln(out)
 				if !running {
-					return errNoRuntime
+					return errNoRuntime(name)
 				}
 				return printServers(ctx, conn, out)
 			})

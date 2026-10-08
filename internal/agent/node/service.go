@@ -32,11 +32,12 @@ func NewService(rt runtime.Runtime, identity *Identity, locations *storage.Locat
 func (s *Service) GetInfo(ctx context.Context, _ *noryxv1.GetInfoRequest) (*noryxv1.GetInfoResponse, error) {
 	hostname, _ := os.Hostname()
 	res := &noryxv1.GetInfoResponse{
-		AgentVersion: buildinfo.Version, Hostname: hostname, Runtime: noryxv1.RuntimeUnavailable,
+		AgentVersion: buildinfo.Version, Hostname: hostname, Runtime: noryxv1.RuntimeUnavailable, RuntimeName: s.rt.Name(),
 		CertificateNotAfterUnix: s.identity.Get().Leaf.NotAfter.Unix(),
 	}
 	if info, err := s.rt.Info(ctx); err == nil {
-		res.Os, res.CpuCount, res.MemoryBytes, res.Runtime = info.OS, info.CPUs, info.MemoryBytes, info.Name
+		res.Os, res.CpuCount, res.MemoryBytes, res.RuntimeVersion = info.OS, info.CPUs, info.MemoryBytes, info.Version
+		res.Runtime = res.RuntimeName + " " + info.Version // for older masters
 	}
 	locations, err := s.storage.List()
 	if err != nil {

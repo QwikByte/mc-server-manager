@@ -26,10 +26,11 @@ func TestNodeErrors(t *testing.T) {
 	type nodeView struct {
 		Status               string
 		CertificateExpiresAt *time.Time
+		Info                 struct{ RuntimeName, RuntimeVersion string }
 	}
 	var online nodeView
 	api.do("GET", path, nil, http.StatusOK, &online)
-	if online.Status != "online" || online.CertificateExpiresAt == nil {
+	if online.Status != "online" || online.CertificateExpiresAt == nil || online.Info.RuntimeName != "docker" || online.Info.RuntimeVersion != "fake" {
 		t.Fatalf("online node = %+v", online)
 	}
 
@@ -38,6 +39,17 @@ func TestNodeErrors(t *testing.T) {
 	a.runtime.mu.Unlock()
 	if body := api.do("GET", path+"/servers", nil, http.StatusBadGateway, nil); !strings.Contains(body, "Docker isn't running on node-1, or its agent can't connect to it.") {
 		t.Errorf("while Docker is down: %s", body)
+	}
+	a.runtime.mu.Lock()
+	a.runtime.podman = true
+	a.runtime.mu.Unlock()
+	if body := api.do("GET", path+"/servers", nil, http.StatusBadGateway, nil); !strings.Contains(body, "Podman isn't running on node-1, or its agent can't connect to it.") {
+		t.Errorf("while Podman is down: %s", body)
+	}
+	var down nodeView
+	api.do("GET", path, nil, http.StatusOK, &down)
+	if down.Info.RuntimeName != "podman" || down.Info.RuntimeVersion != "" {
+		t.Errorf("node while Podman is down = %+v", down)
 	}
 
 	gone := listen(t)
