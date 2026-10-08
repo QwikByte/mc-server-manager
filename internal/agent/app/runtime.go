@@ -43,7 +43,7 @@ func isolateCommand() *cobra.Command {
 
 func isolate() error {
 	if err := docker.Isolate(); err != nil {
-		return fmt.Errorf("can't keep the servers of Podman apart, which needs the bridge support of nftables in the kernel (nft_meta_bridge): %w", err)
+		return fmt.Errorf("can't keep the servers of Podman apart, which needs nftables with its bridge support (nft_meta_bridge) and its lookups of routes (nft_fib_inet) in the kernel: %w", err)
 	}
 	return nil
 }

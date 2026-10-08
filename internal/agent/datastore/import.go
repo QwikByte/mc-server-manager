@@ -58,12 +58,14 @@ func (s *Service) ImportDump(stream noryxv1.DatastoreService_ImportDumpServer) e
 	d := backup.Details{Label: label, Created: time.Now(), Paths: []string{h.GetDatabase()}}
 	location, id := cmp.Or(h.GetLocation(), storage.Default), noryxv1.NewBackupID(d.Created)
 	var b backup.Archive
+	// An upload without a size, e.g. of a chunked request, stops where it would leave too little
+	// free space.
 	if h.GetDatabase() != "" {
-		b, err = s.dumps.Add(owner(ds.ID), location, id, d, h.GetSize(), func(w io.Writer) error {
-			zw := zip.NewWriter(w)
-			f, err := zw.CreateHeader(&zip.FileHeader{Name: h.GetDatabase() + ".sql", Method: zip.Deflate, Modified: d.Created})
+		b, err = s.dumps.AddFile(owner(ds.ID), location, id, d, h.GetSize(), func(f *os.File, _ *backup.Details) error {
+			zw := zip.NewWriter(storage.Guard(f, f))
+			w, err := zw.CreateHeader(&zip.FileHeader{Name: h.GetDatabase() + ".sql", Method: zip.Deflate, Modified: d.Created})
 			if err == nil {
-				_, err = io.Copy(f, data)
+				_, err = io.Copy(w, data)
 			}
 			return cmp.Or(err, zw.Close())
 		})
@@ -85,7 +87,7 @@ func (s *Service) importArchive(datastoreID, location, id string, d backup.Detai
 	}
 	defer os.Remove(tmp.Name())
 	defer tmp.Close()
-	n, err := io.Copy(tmp, data)
+	n, err := io.Copy(storage.Guard(tmp, tmp), data)
 	if err != nil {
 		return backup.Archive{}, err
 	}

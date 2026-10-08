@@ -72,7 +72,8 @@ Each node runs all its servers and datastores with one runtime: Docker, or [Podm
 the steps to add a node offer too. With `--runtime podman`, the installer installs Podman from the system's packages if
 it's missing, starts its socket (`podman.socket`), lets `podman-restart.service` start the servers at boot and sets
 the agent to Podman. Podman needs version 4.9 or newer, e.g. of Debian 13, Ubuntu 24.04 or RHEL 9, and a kernel with
-the bridge support of nftables (`nft_meta_bridge`), which current distributions have.
+the bridge support and the lookups of routes of nftables (`nft_meta_bridge`, `nft_fib_inet`), which current
+distributions have.
 
 Podman runs the same containers as Docker, from the same images, with the same users, capabilities, limits and networks
 (see [Containers](security.md#containers)), and it needs no daemon of its own. The agent talks to its
@@ -95,7 +96,7 @@ sudo systemctl enable --now noryx-isolate.service   # keeps the servers apart be
 Then add `--runtime podman` to `NORYX_AGENT_OPTS` in `/etc/noryx/agent.env` and run
 `sudo systemctl restart noryx-agent`; `--runtime-socket <path>` names another socket than `/run/podman/podman.sock`.
 The agent refuses a socket at which the other runtime answers, e.g. Podman behind Docker's socket through the package
-`podman-docker`, and a Podman before 4.9: calls then fail and say why.
+`podman-docker`, a Podman before 4.9 and rootless Podman: calls then fail and say why.
 
 The runtime is chosen per node, not per server, as each runtime keeps its servers apart with networks and firewall
 rules of its own. A node doesn't take its servers along to another runtime: move them to another node first, then

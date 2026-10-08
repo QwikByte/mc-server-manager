@@ -72,3 +72,16 @@ func TestMovingServers(t *testing.T) {
 		t.Errorf("without permission: %v", err)
 	}
 }
+
+// overlay status names the datastores of the node too, so it needs the permission to see them.
+func TestOverlayStatusNeedsDatastores(t *testing.T) {
+	check := agentChecks("n1", nil)["overlay status"]
+	nodeAndServers := access.Admin().Only([]access.Permission{access.NodesView, access.ServersView})
+	if check.run(t.Context(), nodeAndServers, nil) == nil || check.offer(nodeAndServers) {
+		t.Error("allowed without the permission to see datastores")
+	}
+	all := access.Admin().Only([]access.Permission{access.NodesView, access.ServersView, access.DatastoresView})
+	if err := check.run(t.Context(), all, nil); err != nil || !check.offer(all) {
+		t.Errorf("refused with all permissions: %v", err)
+	}
+}

@@ -50,8 +50,9 @@ time, with values cut to 200 characters and binary ones in hexadecimal. Rows com
 of a column whose header is clicked, first ascending, then descending, and then in the order of the primary key again.
 The filter above the rows shows those whose value of a column contains a text, ignoring case, or is exactly a text: the
 value as text, as the page shows it, binary values in hexadecimal like `0x00FF` for MariaDB and `\x00ff` for PostgreSQL.
-The table, the first row, the sort and the filter are in the page's address. Browsing only reads, also only for those
-who may manage datastores, and the agent checks the columns to sort and filter by against those of the table.
+The table, the first row, the sort and the filter are in the page's address. Browsing only reads, with no more rights
+than the database's user, also only for those who may manage datastores, and the agent checks the columns to sort and
+filter by against those of the table.
 
 ## Log
 
@@ -78,10 +79,11 @@ restore.
 
 **Upload** adds a dump made elsewhere, e.g. when an existing LuckPerms database moves to Noryx: a ZIP archive with a
 `<database>.sql` for each database, named like the databases, or the SQL file of one database, which goes into the
-database chosen. It may have up to 16 GB. The agent keeps it like the dumps it makes, and restoring it loads it the
-same way, which the dialog offers right after the upload; its databases have to be added on the tab first. An archive
-may contain folders and the `__MACOSX` folder that macOS adds, which are left out, but no other files, at most 1000
-entries and 50 databases, and its SQL files may unpack to at most 64 GB and 100 times the size of the archive.
+database chosen. It may have up to 16 GB, as long as 1 GB stays free on the node, also when the browser doesn't tell its
+size in advance. The agent keeps it like the dumps it makes, and restoring it loads it the same way, which the dialog
+offers right after the upload; its databases have to be added on the tab first. An archive may contain folders and the
+`__MACOSX` folder that macOS adds, which are left out, but no other files, at most 1000 entries and 50 databases, and
+its SQL files may unpack to at most 64 GB and 100 times the size of the archive.
 
 A dump is loaded as the database's own user, so it gets no rights that this user doesn't have: make it of one
 database, without its owner and privileges, e.g. with `mariadb-dump luckperms` or

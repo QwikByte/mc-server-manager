@@ -118,14 +118,20 @@ backends on the node.
 A node runs its containers with Docker or with Podman as root, and the same holds for both. The agent sets every option
 of a container itself, so that Podman gets the same users, capabilities, limits, health checks and published addresses
 as Docker, and as root it keeps the users of the containers, which own the data on the node, as Docker does. Podman
-ignores the option of a network that keeps its containers apart, so on its nodes the agent names the bridge of
-`noryx-servers` after it and drops whatever the bridge would forward from one container to another, in an nftables table
-of its own (`bridge noryx`): when it starts, before each start of a server, and at boot with `noryx-isolate.service`,
-without which Podman doesn't start the servers. An agent that can't set up the table, e.g. as the kernel lacks
-`nft_meta_bridge`, doesn't run. The agent checks every answer of the runtime's socket and refuses one at which the other
-runtime answers, e.g. Podman behind Docker's socket, or a Podman older than 4.9, as it relies on how each one keeps
-servers apart. With SELinux, e.g. on RHEL, Podman also confines each container to the files labelled for it, and the
-agent has it label the mounts of each container for that container alone (`Z`). Rootless Podman isn't supported.
+ignores the option of a network that keeps its containers apart, and keeps networks apart only while its API remembers
+it: Podman 4.9.3 of Ubuntu 24.04, for one, forgets it once anyone inspects the network through Docker's API, as the agent
+does. So on its nodes, the bridges of the agent's networks are named `noryx-…`, the one of `noryx-servers` after the
+network, and the agent drops in nftables tables of its own whatever this bridge would forward from one container to
+another (`bridge noryx`) and whatever the node would route from one of these bridges to another (`inet
+noryx-networks`): when it starts, before each start of a server, and at boot with `noryx-isolate.service`, without
+which Podman doesn't start the servers. An agent that can't set up the tables, e.g. as the kernel lacks
+`nft_meta_bridge`, doesn't run. A network of the agent without such a bridge, e.g. of an older agent, is created again
+once no container uses it, and no server or datastore starts in it until then. The agent checks every answer of the
+runtime's socket and refuses one at which the other runtime answers, e.g. Podman behind Docker's socket, or a Podman
+older than 4.9 or rootless, as it relies on how each one keeps servers apart; whether Podman runs rootless, which
+Docker's API doesn't tell, it asks Podman's own API once for each version. With SELinux, e.g. on RHEL, Podman also
+confines each container to the files labelled for it, and the agent has it label the mounts of each container for that
+container alone (`Z`).
 
 ## Agent input
 
@@ -264,9 +270,13 @@ e.g. the superuser's password, or connect to another database or as another user
 is kept: a single SQL file goes into a database the master knows, and a ZIP archive may only hold a `<database>.sql`
 with a valid name for each database besides folders and macOS's `__MACOSX`, up to 1000 entries, 50 databases and SQL
 files of 64 GB and 100 times its size together, all read to their ends to check their checksums; the agent keeps only
-these SQL files, and uploads have at most 16 GB. The agent never stores the passwords of users: upgrades keep the
-hashes, which it checks before it uses them in a statement. Dumps are kept like backups and checked before a restore
-drops anything, so a damaged one changes nothing. Browsing reads as the superuser in a session that only reads and stops
+these SQL files, and uploads have at most 16 GB and stop before they leave less than 1 GB free, also those whose size
+the master doesn't know in advance. The agent never stores the passwords of users: upgrades keep the hashes, which it
+checks before it uses them in a statement. Dumps are kept like backups and checked before a restore drops anything, so
+a damaged one changes nothing. Browsing never reads as the superuser, as reading runs what the database's user may have
+written, e.g. casts to text, functions and views: on PostgreSQL it reads as the database's own user, and on MariaDB,
+which signs in users only with their passwords, as a user that may only read the database, signs in only on the
+container with a random password and exists only while the agent reads. It reads in a session that only reads and stops
 each statement after 10 seconds, with statements the agent builds itself from names that need no escaping: tables,
 schemas and columns whose names don't match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, the columns to sort and filter by
 must be the table's, the value of a filter, at most 1 KiB of UTF-8 without NUL, goes into the statement in hexadecimal,
@@ -544,8 +554,8 @@ published for it, and such a master can already run code in the servers, which r
 who may manage the private network test, and only towards nodes they may see. The agent finds its firewall rules by the
 comments it writes with them, as the nftables package can't read rules with these conntrack matches; only root on the
 node could change rules and keep their comments. A node's page names published ports with only the servers, datastores
-and nodes that the user may see, and `overlay status` in the panel's terminal needs the permissions to see the node and
-all its servers.
+and nodes that the user may see, and `overlay status` in the panel's terminal needs the permissions to see the node, all
+its servers and the datastores.
 
 ## Storage locations
 
