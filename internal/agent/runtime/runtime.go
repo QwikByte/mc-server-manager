@@ -1,5 +1,5 @@
-// Package runtime abstracts how Minecraft servers are executed on a node, so that
-// further runtimes (e.g. plain processes) can be added next to Docker.
+// Package runtime abstracts how Minecraft servers are executed on a node: in containers of
+// Docker or Podman, whose differences the package docker keeps to itself.
 package runtime
 
 import (
@@ -192,7 +192,7 @@ type LogLine struct {
 
 // Info describes the runtime and the machine it runs on.
 type Info struct {
-	Name        string // e.g. "docker 29.0.0"
+	Version     string // of the runtime, e.g. "29.0.0"
 	OS          string
 	CPUs        uint32
 	MemoryBytes uint64
@@ -202,6 +202,9 @@ type Info struct {
 // when the agent restarts.
 type Runtime interface {
 	Datastores
+	// Name names the runtime, e.g. "docker" (see noryxv1.RuntimeDocker), also while it can't
+	// be reached.
+	Name() string
 	Info(ctx context.Context) (Info, error)
 	List(ctx context.Context) ([]Server, error)
 	Create(ctx context.Context, spec Spec) error

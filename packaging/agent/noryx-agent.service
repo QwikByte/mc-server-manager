@@ -1,11 +1,11 @@
 [Unit]
 Description=Noryx agent
 Documentation=https://github.com/QwikByte/noryx
-After=network-online.target docker.service
+After=network-online.target docker.service podman.socket
 Wants=network-online.target docker.service
 
 [Service]
-# Access to the Docker socket is equivalent to root, so the agent runs as root.
+# Access to the socket of Docker or Podman is equivalent to root, so the agent runs as root.
 EnvironmentFile=-/etc/noryx/agent.env
 ExecStart=/usr/bin/noryx-agent --data-dir /var/lib/noryx-agent serve $NORYX_AGENT_OPTS
 StateDirectory=noryx-agent

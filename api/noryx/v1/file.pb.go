@@ -1122,6 +1122,424 @@ func (x *HashFilesResponse) GetSha512() map[string]string {
 	return nil
 }
 
+type ExtractArchiveRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	// The archive, a file of the server.
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The folder to extract into, which is created if it is missing; empty for the server's
+	// folder.
+	Destination string `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination,omitempty"`
+	// Replace existing files; otherwise an archive with a file that exists already is refused.
+	Overwrite     bool `protobuf:"varint,4,opt,name=overwrite,proto3" json:"overwrite,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExtractArchiveRequest) Reset() {
+	*x = ExtractArchiveRequest{}
+	mi := &file_noryx_v1_file_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExtractArchiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExtractArchiveRequest) ProtoMessage() {}
+
+func (x *ExtractArchiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExtractArchiveRequest.ProtoReflect.Descriptor instead.
+func (*ExtractArchiveRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ExtractArchiveRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *ExtractArchiveRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ExtractArchiveRequest) GetDestination() string {
+	if x != nil {
+		return x.Destination
+	}
+	return ""
+}
+
+func (x *ExtractArchiveRequest) GetOverwrite() bool {
+	if x != nil {
+		return x.Overwrite
+	}
+	return false
+}
+
+type ExtractArchiveResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The files extracted, and their size.
+	Files         int64 `protobuf:"varint,1,opt,name=files,proto3" json:"files,omitempty"`
+	Size          int64 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExtractArchiveResponse) Reset() {
+	*x = ExtractArchiveResponse{}
+	mi := &file_noryx_v1_file_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExtractArchiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExtractArchiveResponse) ProtoMessage() {}
+
+func (x *ExtractArchiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExtractArchiveResponse.ProtoReflect.Descriptor instead.
+func (*ExtractArchiveResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ExtractArchiveResponse) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *ExtractArchiveResponse) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+type CopyFileRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	From     string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	// Where the copy goes, which must not exist.
+	To            string `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CopyFileRequest) Reset() {
+	*x = CopyFileRequest{}
+	mi := &file_noryx_v1_file_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CopyFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CopyFileRequest) ProtoMessage() {}
+
+func (x *CopyFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CopyFileRequest.ProtoReflect.Descriptor instead.
+func (*CopyFileRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *CopyFileRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *CopyFileRequest) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *CopyFileRequest) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+type CopyFileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CopyFileResponse) Reset() {
+	*x = CopyFileResponse{}
+	mi := &file_noryx_v1_file_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CopyFileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CopyFileResponse) ProtoMessage() {}
+
+func (x *CopyFileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CopyFileResponse.ProtoReflect.Descriptor instead.
+func (*CopyFileResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{22}
+}
+
+type SearchFilesRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	// The folder to search, with the folders in it; empty for the server's folder.
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The text to find, regardless of case.
+	Query         string `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchFilesRequest) Reset() {
+	*x = SearchFilesRequest{}
+	mi := &file_noryx_v1_file_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchFilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchFilesRequest) ProtoMessage() {}
+
+func (x *SearchFilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchFilesRequest.ProtoReflect.Descriptor instead.
+func (*SearchFilesRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SearchFilesRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *SearchFilesRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *SearchFilesRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+// SearchMatch is a line of a file that holds the text searched for.
+type SearchMatch struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Relative to the server's folder.
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// The number of the line, from 1.
+	Line int64 `protobuf:"varint,2,opt,name=line,proto3" json:"line,omitempty"`
+	// The line, shortened if it is long.
+	Text          string `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchMatch) Reset() {
+	*x = SearchMatch{}
+	mi := &file_noryx_v1_file_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchMatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchMatch) ProtoMessage() {}
+
+func (x *SearchMatch) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchMatch.ProtoReflect.Descriptor instead.
+func (*SearchMatch) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SearchMatch) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *SearchMatch) GetLine() int64 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *SearchMatch) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type SearchFilesResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Matches []*SearchMatch         `protobuf:"bytes,1,rep,name=matches,proto3" json:"matches,omitempty"`
+	// Set if the search stopped before it searched all files: after many matches or a while.
+	Truncated bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// The files searched, and those left out as they are too large.
+	Files         int64 `protobuf:"varint,3,opt,name=files,proto3" json:"files,omitempty"`
+	TooLarge      int64 `protobuf:"varint,4,opt,name=too_large,json=tooLarge,proto3" json:"too_large,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchFilesResponse) Reset() {
+	*x = SearchFilesResponse{}
+	mi := &file_noryx_v1_file_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchFilesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchFilesResponse) ProtoMessage() {}
+
+func (x *SearchFilesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_file_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchFilesResponse.ProtoReflect.Descriptor instead.
+func (*SearchFilesResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_file_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SearchFilesResponse) GetMatches() []*SearchMatch {
+	if x != nil {
+		return x.Matches
+	}
+	return nil
+}
+
+func (x *SearchFilesResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *SearchFilesResponse) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *SearchFilesResponse) GetTooLarge() int64 {
+	if x != nil {
+		return x.TooLarge
+	}
+	return 0
+}
+
 var File_noryx_v1_file_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_file_proto_rawDesc = "" +
@@ -1195,7 +1613,33 @@ const file_noryx_v1_file_proto_rawDesc = "" +
 	"\x06sha512\x18\x01 \x03(\v2'.noryx.v1.HashFilesResponse.Sha512EntryR\x06sha512\x1a9\n" +
 	"\vSha512Entry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xe7\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x01\n" +
+	"\x15ExtractArchiveRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12 \n" +
+	"\vdestination\x18\x03 \x01(\tR\vdestination\x12\x1c\n" +
+	"\toverwrite\x18\x04 \x01(\bR\toverwrite\"B\n" +
+	"\x16ExtractArchiveResponse\x12\x14\n" +
+	"\x05files\x18\x01 \x01(\x03R\x05files\x12\x12\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\"R\n" +
+	"\x0fCopyFileRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
+	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\"\x12\n" +
+	"\x10CopyFileResponse\"[\n" +
+	"\x12SearchFilesRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x14\n" +
+	"\x05query\x18\x03 \x01(\tR\x05query\"I\n" +
+	"\vSearchMatch\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
+	"\x04line\x18\x02 \x01(\x03R\x04line\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\"\x97\x01\n" +
+	"\x13SearchFilesResponse\x12/\n" +
+	"\amatches\x18\x01 \x03(\v2\x15.noryx.v1.SearchMatchR\amatches\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12\x14\n" +
+	"\x05files\x18\x03 \x01(\x03R\x05files\x12\x1b\n" +
+	"\ttoo_large\x18\x04 \x01(\x03R\btooLarge2\xcb\x06\n" +
 	"\vFileService\x12D\n" +
 	"\tListFiles\x12\x1a.noryx.v1.ListFilesRequest\x1a\x1b.noryx.v1.ListFilesResponse\x12C\n" +
 	"\bReadFile\x12\x19.noryx.v1.ReadFileRequest\x1a\x1a.noryx.v1.ReadFileResponse0\x01\x12F\n" +
@@ -1205,7 +1649,10 @@ const file_noryx_v1_file_proto_rawDesc = "" +
 	"\bMoveFile\x12\x19.noryx.v1.MoveFileRequest\x1a\x1a.noryx.v1.MoveFileResponse\x12G\n" +
 	"\n" +
 	"DeleteFile\x12\x1b.noryx.v1.DeleteFileRequest\x1a\x1c.noryx.v1.DeleteFileResponse\x12D\n" +
-	"\tHashFiles\x12\x1a.noryx.v1.HashFilesRequest\x1a\x1b.noryx.v1.HashFilesResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
+	"\tHashFiles\x12\x1a.noryx.v1.HashFilesRequest\x1a\x1b.noryx.v1.HashFilesResponse\x12S\n" +
+	"\x0eExtractArchive\x12\x1f.noryx.v1.ExtractArchiveRequest\x1a .noryx.v1.ExtractArchiveResponse\x12A\n" +
+	"\bCopyFile\x12\x19.noryx.v1.CopyFileRequest\x1a\x1a.noryx.v1.CopyFileResponse\x12J\n" +
+	"\vSearchFiles\x12\x1c.noryx.v1.SearchFilesRequest\x1a\x1d.noryx.v1.SearchFilesResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_file_proto_rawDescOnce sync.Once
@@ -1219,7 +1666,7 @@ func file_noryx_v1_file_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_file_proto_rawDescData
 }
 
-var file_noryx_v1_file_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_noryx_v1_file_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_noryx_v1_file_proto_goTypes = []any{
 	(*FileInfo)(nil),                 // 0: noryx.v1.FileInfo
 	(*ListFilesRequest)(nil),         // 1: noryx.v1.ListFilesRequest
@@ -1240,7 +1687,14 @@ var file_noryx_v1_file_proto_goTypes = []any{
 	(*DeleteFileResponse)(nil),       // 16: noryx.v1.DeleteFileResponse
 	(*HashFilesRequest)(nil),         // 17: noryx.v1.HashFilesRequest
 	(*HashFilesResponse)(nil),        // 18: noryx.v1.HashFilesResponse
-	nil,                              // 19: noryx.v1.HashFilesResponse.Sha512Entry
+	(*ExtractArchiveRequest)(nil),    // 19: noryx.v1.ExtractArchiveRequest
+	(*ExtractArchiveResponse)(nil),   // 20: noryx.v1.ExtractArchiveResponse
+	(*CopyFileRequest)(nil),          // 21: noryx.v1.CopyFileRequest
+	(*CopyFileResponse)(nil),         // 22: noryx.v1.CopyFileResponse
+	(*SearchFilesRequest)(nil),       // 23: noryx.v1.SearchFilesRequest
+	(*SearchMatch)(nil),              // 24: noryx.v1.SearchMatch
+	(*SearchFilesResponse)(nil),      // 25: noryx.v1.SearchFilesResponse
+	nil,                              // 26: noryx.v1.HashFilesResponse.Sha512Entry
 }
 var file_noryx_v1_file_proto_depIdxs = []int32{
 	0,  // 0: noryx.v1.ListFilesResponse.files:type_name -> noryx.v1.FileInfo
@@ -1249,28 +1703,35 @@ var file_noryx_v1_file_proto_depIdxs = []int32{
 	5,  // 3: noryx.v1.WriteFileHeader.expected:type_name -> noryx.v1.FileVersion
 	0,  // 4: noryx.v1.WriteFileResponse.file:type_name -> noryx.v1.FileInfo
 	5,  // 5: noryx.v1.WriteFileResponse.version:type_name -> noryx.v1.FileVersion
-	19, // 6: noryx.v1.HashFilesResponse.sha512:type_name -> noryx.v1.HashFilesResponse.Sha512Entry
-	1,  // 7: noryx.v1.FileService.ListFiles:input_type -> noryx.v1.ListFilesRequest
-	3,  // 8: noryx.v1.FileService.ReadFile:input_type -> noryx.v1.ReadFileRequest
-	6,  // 9: noryx.v1.FileService.WriteFile:input_type -> noryx.v1.WriteFileRequest
-	9,  // 10: noryx.v1.FileService.ArchiveDirectory:input_type -> noryx.v1.ArchiveDirectoryRequest
-	11, // 11: noryx.v1.FileService.CreateDirectory:input_type -> noryx.v1.CreateDirectoryRequest
-	13, // 12: noryx.v1.FileService.MoveFile:input_type -> noryx.v1.MoveFileRequest
-	15, // 13: noryx.v1.FileService.DeleteFile:input_type -> noryx.v1.DeleteFileRequest
-	17, // 14: noryx.v1.FileService.HashFiles:input_type -> noryx.v1.HashFilesRequest
-	2,  // 15: noryx.v1.FileService.ListFiles:output_type -> noryx.v1.ListFilesResponse
-	4,  // 16: noryx.v1.FileService.ReadFile:output_type -> noryx.v1.ReadFileResponse
-	8,  // 17: noryx.v1.FileService.WriteFile:output_type -> noryx.v1.WriteFileResponse
-	10, // 18: noryx.v1.FileService.ArchiveDirectory:output_type -> noryx.v1.ArchiveDirectoryResponse
-	12, // 19: noryx.v1.FileService.CreateDirectory:output_type -> noryx.v1.CreateDirectoryResponse
-	14, // 20: noryx.v1.FileService.MoveFile:output_type -> noryx.v1.MoveFileResponse
-	16, // 21: noryx.v1.FileService.DeleteFile:output_type -> noryx.v1.DeleteFileResponse
-	18, // 22: noryx.v1.FileService.HashFiles:output_type -> noryx.v1.HashFilesResponse
-	15, // [15:23] is the sub-list for method output_type
-	7,  // [7:15] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	26, // 6: noryx.v1.HashFilesResponse.sha512:type_name -> noryx.v1.HashFilesResponse.Sha512Entry
+	24, // 7: noryx.v1.SearchFilesResponse.matches:type_name -> noryx.v1.SearchMatch
+	1,  // 8: noryx.v1.FileService.ListFiles:input_type -> noryx.v1.ListFilesRequest
+	3,  // 9: noryx.v1.FileService.ReadFile:input_type -> noryx.v1.ReadFileRequest
+	6,  // 10: noryx.v1.FileService.WriteFile:input_type -> noryx.v1.WriteFileRequest
+	9,  // 11: noryx.v1.FileService.ArchiveDirectory:input_type -> noryx.v1.ArchiveDirectoryRequest
+	11, // 12: noryx.v1.FileService.CreateDirectory:input_type -> noryx.v1.CreateDirectoryRequest
+	13, // 13: noryx.v1.FileService.MoveFile:input_type -> noryx.v1.MoveFileRequest
+	15, // 14: noryx.v1.FileService.DeleteFile:input_type -> noryx.v1.DeleteFileRequest
+	17, // 15: noryx.v1.FileService.HashFiles:input_type -> noryx.v1.HashFilesRequest
+	19, // 16: noryx.v1.FileService.ExtractArchive:input_type -> noryx.v1.ExtractArchiveRequest
+	21, // 17: noryx.v1.FileService.CopyFile:input_type -> noryx.v1.CopyFileRequest
+	23, // 18: noryx.v1.FileService.SearchFiles:input_type -> noryx.v1.SearchFilesRequest
+	2,  // 19: noryx.v1.FileService.ListFiles:output_type -> noryx.v1.ListFilesResponse
+	4,  // 20: noryx.v1.FileService.ReadFile:output_type -> noryx.v1.ReadFileResponse
+	8,  // 21: noryx.v1.FileService.WriteFile:output_type -> noryx.v1.WriteFileResponse
+	10, // 22: noryx.v1.FileService.ArchiveDirectory:output_type -> noryx.v1.ArchiveDirectoryResponse
+	12, // 23: noryx.v1.FileService.CreateDirectory:output_type -> noryx.v1.CreateDirectoryResponse
+	14, // 24: noryx.v1.FileService.MoveFile:output_type -> noryx.v1.MoveFileResponse
+	16, // 25: noryx.v1.FileService.DeleteFile:output_type -> noryx.v1.DeleteFileResponse
+	18, // 26: noryx.v1.FileService.HashFiles:output_type -> noryx.v1.HashFilesResponse
+	20, // 27: noryx.v1.FileService.ExtractArchive:output_type -> noryx.v1.ExtractArchiveResponse
+	22, // 28: noryx.v1.FileService.CopyFile:output_type -> noryx.v1.CopyFileResponse
+	25, // 29: noryx.v1.FileService.SearchFiles:output_type -> noryx.v1.SearchFilesResponse
+	19, // [19:30] is the sub-list for method output_type
+	8,  // [8:19] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_file_proto_init() }
@@ -1288,7 +1749,7 @@ func file_noryx_v1_file_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_file_proto_rawDesc), len(file_noryx_v1_file_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

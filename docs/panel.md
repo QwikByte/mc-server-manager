@@ -45,6 +45,9 @@ readable in both themes (WCAG AA), while the colours of states, such as running 
 tightens all spacing, e.g. for long lists of servers, on screens used with a mouse or touchpad; touch screens keep the
 comfortable one.
 
+Users who may see the log can also turn on [desktop notifications](monitoring.md#everywhere-else) there, in each
+browser.
+
 The master keeps these choices for each user, as well as the view, sort and grouping of server lists chosen last, so
 that they apply in all their browsers. Each browser remembers the look and the clock it showed last and uses them until
 someone signs in; what a user never chose follows the browser. `GET /api/preferences` returns a user's settings with the
@@ -54,10 +57,10 @@ know.
 
 ## Search
 
-**Ctrl+K** (⌘K) or `/` searches servers, also by tag and notes, players online, networks, nodes and pages from anywhere in the
-panel, and, once something is typed, templates, file sets, backup jobs, schedules and users; each only for those who may
-see them. Before anything is typed, it offers what was opened last: servers, networks, nodes, templates, file sets,
-backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user
+**Ctrl+K** (⌘K) or `/` searches servers, also by tag and notes, players online, networks, nodes and pages from anywhere
+in the panel, and, once something is typed, players seen before, templates, file sets, backup jobs, schedules and users;
+each only for those who may see them. Before anything is typed, it offers what was opened last: servers, networks,
+nodes, templates, file sets, backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user
 may still see are offered. A search that starts with an action, e.g. `restart lobby`, starts, restarts or stops a server
 or opens its console. **Create server**, **Create network** and **Add node** open their dialogs from the search too.
 

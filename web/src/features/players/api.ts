@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ServerRef } from "@/features/networks/api"
 import { operate } from "@/features/operations/api"
 import type { Followed } from "@/features/servers/api"
@@ -18,6 +18,8 @@ export type PlayerAction =
 
 /** How a change ended on a server. */
 export interface PlayerResult extends ServerRef {
+  /** The player, unless the change was of the whole server. */
+  name?: string
   /** The server doesn't run and changes the player once it does. */
   pending?: boolean
   output?: string
@@ -40,23 +42,28 @@ export interface Listed {
 /** What the lists of a server don't tell. */
 export interface ServerLists extends ServerRef {
   whitelistEnabled: boolean
-  /** Changes that wait for the server to run. */
-  pending: { action: PlayerAction; name?: string; reason?: string }[]
+  /** Changes that wait for the server to run, or until due, e.g. the pardon at the end of a temporary ban. */
+  pending: { action: PlayerAction; name?: string; reason?: string; due?: string }[]
   /** Why the lists of the server are missing. */
   error?: string
 }
 
-/** The lists of servers, joined by player. */
+/** The lists of servers, joined by player, and if asked for the players who joined them. */
 export interface PlayerLists {
   servers: ServerLists[]
   banned: Listed[]
   whitelisted: Listed[]
   operators: Listed[]
+  joined?: Listed[]
 }
 
-/** The lists of the game servers of a network, of one game server, or of all game servers the user may see. */
-export function playerListsQuery({ network, server }: { network?: string; server?: ServerRef } = {}) {
+/**
+ * The lists of the game servers of a network, of one game server, or of all game servers the user may see; with
+ * joined, also the players who joined them, whom the servers keep in their cache.
+ */
+export function playerListsQuery({ network, server, joined }: { network?: string; server?: ServerRef; joined?: boolean } = {}) {
   const filter = new URLSearchParams(server ? { node: server.nodeId, server: server.serverId } : network ? { network } : {})
+  if (joined) filter.set("joined", "1")
   return queryOptions({
     queryKey: ["players", "lists", filter.toString()],
     queryFn: () => api<PlayerLists>(`/players/lists?${filter}`),
@@ -64,14 +71,65 @@ export function playerListsQuery({ network, server }: { network?: string; server
   })
 }
 
+
+/** When a player was first and last seen online, and for how many minutes. */
+export interface Span {
+  firstSeen: string
+  lastSeen: string
+  minutes: number
+}
+
+/** A player seen online, with the servers, those seen last first. */
+export interface SeenPlayer extends Span {
+  name: string
+  servers: (ServerRef & Span)[]
+}
+
+/** Where and when a player was online, with the minutes of each day (as 2026-10-01, in UTC). */
+export interface PlayerHistory extends SeenPlayer {
+  days: { day: string; minutes: number }[]
+}
+
+/** The players seen on the servers the user may see, of a network, of one server or all, those seen last first. */
+export function seenPlayersQuery({ q = "", network, server, limit }: { q?: string; network?: string; server?: ServerRef; limit?: number } = {}) {
+  const search = new URLSearchParams({
+    q,
+    ...(network && { network }),
+    ...(server && { node: server.nodeId, server: server.serverId }),
+    ...(limit && { limit: String(limit) }),
+  })
+  return queryOptions({
+    queryKey: ["players", "seen", search.toString()],
+    queryFn: () => api<{ players: SeenPlayer[]; total: number }>(`/players/seen?${search}`),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000, // the master notes the players online every minute
+  })
+}
+
+export const playerHistoryQuery = (name: string) =>
+  queryOptions({
+    queryKey: ["players", "seen", "player", name.toLowerCase()],
+    queryFn: () => api<PlayerHistory>(`/players/seen/${encodeURIComponent(name)}`),
+    refetchInterval: 60_000,
+  })
+
+/** Whether a name is that of a player that the master and the agents take: of Java players, or of Bedrock players with Floodgate's dot. */
+export const validPlayerName = (name: string) => /^\.?[A-Za-z0-9_]{1,16}$/.test(name)
+
+/** The most players of an action or a message. */
+export const maxPlayers = 50
+
 export interface PlayerChange {
   action: PlayerAction
-  name?: string
+  /** The players; none for turning the whitelist on or off. */
+  names?: string[]
   reason?: string
+  /** When a ban ends, as an ISO time; none for good. */
+  until?: string
   servers: ServerRef[]
 }
 
-/** Changes a player on servers: at once on those that run, on the others once they do. */
+/** Changes players on servers: at once on those that run, on the others once they do. */
 export function useChangePlayer() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -80,6 +138,27 @@ export function useChangePlayer() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["players"] }),
   })
 }
+
+/** Where a message shows: in the chat, as a title in the middle of the screen, or above the hotbar. */
+export type MessageKind = "chat" | "title" | "actionbar"
+
+export interface Message {
+  kind: MessageKind
+  message: string
+  /** Only titles have one. */
+  subtitle?: string
+}
+
+/** Shows a message to players on the servers they're on; the chat gets a whisper of the server. */
+export function useMessagePlayers() {
+  return useMutation({
+    mutationFn: (body: Message & { names: string[]; servers: ServerRef[] }) =>
+      api<{ results: PlayerResult[] }>("/players/message", { body }).then((r) => r.results),
+  })
+}
+
+/** The address of a player's face, which the master cuts from their skin. */
+export const faceUrl = (name: string) => `/api/players/faces/${encodeURIComponent(name)}`
 
 /** Sends a player to another server of a network, through its proxy. */
 export function useSendPlayer(networkId: string) {

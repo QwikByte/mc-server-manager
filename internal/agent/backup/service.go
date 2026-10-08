@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,9 +27,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/archive"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/agent/secrets"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/logging"
 
@@ -139,12 +142,16 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	zr, err := zip.OpenReader(b.Path())
+	f, err := os.Open(b.Path())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	defer zr.Close()
-	paths, err := chosen(&zr.Reader, b, req.GetPaths())
+	defer f.Close()
+	zr, err := zipOf(f, b)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	paths, err := chosen(zr, b, req.GetPaths())
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +160,12 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 		return nil, toStatus(err)
 	}
 	defer data.Close()
-	staged, err := stage(ctx, data, &zr.Reader, paths)
+	var staged string
+	if b.Untrusted {
+		staged, err = stageUntrusted(ctx, data, b, paths)
+	} else {
+		staged, err = stage(ctx, data, zr, paths)
+	}
 	if staged != "" {
 		defer data.RemoveAll(staged) //nolint:errcheck // best effort; the result of restoring matters
 	}
@@ -173,7 +185,7 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 			return nil, toStatus(err)
 		}
 	}
-	err = keep(data, srv.Type, staged)
+	err = keep(data, srv.Type, staged, b.Untrusted)
 	if err == nil {
 		err = swap(data, staged, paths, kept(data, b))
 	}
@@ -260,12 +272,16 @@ func (s *Service) ListBackupFiles(ctx context.Context, req *noryxv1.ListBackupFi
 	}
 	hidden := fileset.Read(data).Secrets()
 	data.Close()
-	zr, err := zip.OpenReader(b.Path())
+	f, err := os.Open(b.Path())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	defer zr.Close()
-	files, ok := list(&zr.Reader, folder, hidden)
+	defer f.Close()
+	zr, err := zipOf(f, b)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	files, ok := list(zr, folder, hidden)
 	if !ok {
 		return nil, status.Error(codes.NotFound, "The backup has no such folder.")
 	}
@@ -295,7 +311,7 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 		}
 		hidden := fileset.Read(data).Secrets()
 		data.Close()
-		zr, err := zip.NewReader(f, b.Size)
+		zr, err := zipOf(f, b)
 		if err != nil {
 			return toStatus(err)
 		}
@@ -307,6 +323,15 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 	return Send(r, size, func(size int64, data []byte) error {
 		return stream.Send(&noryxv1.DownloadBackupResponse{Size: size, Data: data})
 	})
+}
+
+// zipOf reads the directory of the archive of a backup in f. That of an untrusted one, from
+// elsewhere, is read within the limits of backups, which it passed when it was added.
+func zipOf(f *os.File, b Archive) (*zip.Reader, error) {
+	if b.Untrusted {
+		return archive.OpenZip(f, b.Size, archive.Backups)
+	}
+	return zip.NewReader(f, b.Size)
 }
 
 // Send sends what r reads in chunks, the first with size, until its end.
@@ -350,42 +375,187 @@ func (s *Service) ImportBackup(stream noryxv1.BackupService_ImportBackupServer) 
 		return err
 	}
 	h := first.GetHeader()
-	b := h.GetBackup()
-	if b == nil {
+	if h.GetBackup() == nil {
 		return status.Error(codes.InvalidArgument, "the first message must describe the backup")
-	}
-	d, err := importedDetails(b)
-	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	srv, release, err := s.lock(stream.Context(), h.GetServerId())
 	if err != nil {
 		return err
 	}
 	defer release()
-	imported, err := s.store.Add(srv.ID, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, b.GetSize(), func(w io.Writer) error {
-		for {
-			msg, err := stream.Recv()
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if _, err := w.Write(msg.GetData()); err != nil {
-				return err
-			}
-		}
+	imported, err := s.importArchive(srv.ID, h.GetBackup(), func() ([]byte, error) {
+		msg, err := stream.Recv()
+		return msg.GetData(), err
 	})
 	if err != nil {
-		return toStatus(err)
+		return err
 	}
 	return stream.SendAndClose(&noryxv1.ImportBackupResponse{Backup: imported.Proto()})
 }
 
+// ImportCopy keeps a copy of a backup of a server of another node, apart from the backups of
+// the servers here, which the master relays from there.
+func (s *Service) ImportCopy(stream noryxv1.BackupService_ImportCopyServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	switch {
+	case h.GetBackup() == nil:
+		return status.Error(codes.InvalidArgument, "the first message must describe the backup")
+	case !runtime.ValidID(h.GetServerId()):
+		return status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	imported, err := s.importArchive(copies(h.GetServerId()), h.GetBackup(), func() ([]byte, error) {
+		msg, err := stream.Recv()
+		return msg.GetData(), err
+	})
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(&noryxv1.ImportCopyResponse{Backup: imported.Proto()})
+}
+
+// importArchive adds the archive that recv receives, until io.EOF, as a backup of owner that
+// b describes. It came from elsewhere, so it is untrusted: it may have the size that b tells
+// at most, while 1 GB stays free, and is kept once it passed the checks of an uploaded backup
+// with the limits of backups.
+func (s *Service) importArchive(owner string, b *noryxv1.Backup, recv func() ([]byte, error)) (Archive, error) {
+	d, err := importedDetails(b)
+	if err != nil {
+		return Archive{}, status.Error(codes.InvalidArgument, err.Error())
+	}
+	d.Untrusted = true
+	imported, err := s.store.AddFile(owner, cmp.Or(b.GetLocation(), storage.Default), b.GetId(), d, b.GetSize(), func(f *os.File, _ *Details) error {
+		w, size := storage.Guard(f, f), int64(0)
+		for {
+			data, err := recv()
+			switch {
+			case errors.Is(err, io.EOF):
+				return checkImported(f, size)
+			case err != nil:
+				return err
+			}
+			if size += int64(len(data)); size > b.GetSize() {
+				return status.Error(codes.InvalidArgument, "The archive of the backup is larger than announced.")
+			}
+			if _, err := w.Write(data); err != nil {
+				return err
+			}
+		}
+	})
+	return imported, toStatus(err)
+}
+
+// checkImported checks the archive of a backup from elsewhere in f, which has size bytes, like
+// an uploaded one, with the limits of backups.
+func checkImported(f *os.File, size int64) error {
+	a, err := archive.Open(f, size, archive.Backups)
+	if err == nil && !a.Plain() {
+		err = status.Error(codes.InvalidArgument, "The archive of the backup isn't one of a backup.")
+	}
+	return err
+}
+
+// DownloadCopy sends the archive of a copy that ImportCopy keeps.
+func (s *Service) DownloadCopy(req *noryxv1.DownloadCopyRequest, stream noryxv1.BackupService_DownloadCopyServer) error {
+	if !runtime.ValidID(req.GetServerId()) {
+		return status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	b, err := s.store.Find(copies(req.GetServerId()), req.GetBackupId())
+	if err != nil {
+		return toStatus(err)
+	}
+	f, err := os.Open(b.Path())
+	if err != nil {
+		return toStatus(err)
+	}
+	defer f.Close()
+	return Send(f, b.Size, func(size int64, data []byte) error {
+		return stream.Send(&noryxv1.DownloadCopyResponse{Size: size, Data: data})
+	})
+}
+
+// DeleteCopy deletes a copy that ImportCopy keeps.
+func (s *Service) DeleteCopy(_ context.Context, req *noryxv1.DeleteCopyRequest) (*noryxv1.DeleteCopyResponse, error) {
+	if !runtime.ValidID(req.GetServerId()) {
+		return nil, status.Error(codes.InvalidArgument, "invalid server ID")
+	}
+	b, err := s.store.Find(copies(req.GetServerId()), req.GetBackupId())
+	if err == nil {
+		err = s.store.Remove(b)
+	}
+	return &noryxv1.DeleteCopyResponse{}, toStatus(err)
+}
+
+// UploadBackup adds an archive from elsewhere as an untrusted backup of a server once it checked
+// it like an archive of the file manager.
+func (s *Service) UploadBackup(stream noryxv1.BackupService_UploadBackupServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	if h == nil {
+		return status.Error(codes.InvalidArgument, "the first message must describe the backup")
+	}
+	label := strings.TrimSpace(h.GetLabel())
+	if err := CheckDetails(label, "", nil); err != nil {
+		return err
+	}
+	srv, err := s.find(stream.Context(), h.GetServerId())
+	if err != nil {
+		return err
+	}
+	d := Details{Label: label, Created: time.Now(), Untrusted: true}
+	b, err := s.store.AddFile(srv.ID, cmp.Or(h.GetLocation(), storage.Default), noryxv1.NewBackupID(d.Created), d, h.GetSize(), func(f *os.File, d *Details) error {
+		_, err := archive.Receive(stream.Recv, storage.Guard(f, f))
+		if err == nil {
+			d.Paths, err = uploadedPaths(f)
+		}
+		return err
+	})
+	if err != nil {
+		return toStatus(err)
+	}
+	return stream.SendAndClose(&noryxv1.UploadBackupResponse{Backup: b.Proto()})
+}
+
+// uploadedPaths checks the archive of an uploaded backup in f like one of the file manager,
+// and returns the files and folders at its top, which restoring it replaces, without those a
+// server never takes from an archive. Its entries have clean names, as listing and restoring
+// parts of backups need them.
+func uploadedPaths(f *os.File) ([]string, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	a, err := archive.Open(f, info.Size(), archive.Uploads)
+	switch {
+	case err != nil:
+		return nil, err
+	case !a.Plain():
+		return nil, status.Error(codes.InvalidArgument, "Upload a ZIP archive of files and folders of a server, e.g. a backup downloaded before, whose paths don't start with ./ or use backslashes.")
+	}
+	foreign := archive.Foreign(secrets.With(fileset.ManifestFile))
+	var paths []string
+	for _, e := range a.Entries {
+		top, _, _ := strings.Cut(e.Name, "/")
+		if !foreign(top) {
+			paths = append(paths, filepath.FromSlash(top))
+		}
+	}
+	slices.Sort(paths)
+	if paths = slices.Compact(paths); len(paths) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "The archive holds no files of a server.")
+	}
+	return paths, nil
+}
+
 // importedDetails validates a backup from another node like those made here.
 func importedDetails(b *noryxv1.Backup) (Details, error) {
-	d := Details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId(), Kept: b.GetKept()}
+	d := Details{Label: b.GetLabel(), Created: time.Unix(b.GetCreatedUnix(), 0), JobID: b.GetJobId(), Kept: b.GetKept(), Untrusted: b.GetUntrusted()}
 	for _, p := range b.GetPaths() {
 		name, ok := datadir.Name(p)
 		if !ok {

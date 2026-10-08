@@ -13,8 +13,7 @@ import {
 } from "@phosphor-icons/react"
 import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
-import { type FormEvent, useState } from "react"
-import { toast } from "sonner"
+import { useState } from "react"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Segmented } from "@/components/segmented"
 import { Button } from "@/components/ui/button"
@@ -28,11 +27,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { FieldError } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import type { Permission } from "@/features/access/permissions"
 import { useAccess } from "@/features/access/use-access"
 import { useOperation } from "@/features/operations/use-operation"
+import { MessageDialog } from "@/features/players/message-dialog"
 import { type Deleted, type Network, type NetworkAction, useNetworkAction } from "./api"
 import { SwapProxyDialog } from "./swap-proxy-dialog"
 
@@ -194,10 +192,11 @@ export function NetworkActions({ network }: { network: Network }) {
         />
       )}
       {dialog === "broadcast" && (
-        <BroadcastDialog
-          network={network}
-          onOpenChange={close}
-          onSend={(message) => action.mutateAsync({ action: "broadcast", message })}
+        <MessageDialog
+          title={t("Message to {{name}}", { name: network.name })}
+          chat={t("Every running server of the network shows it in the chat, with say.")}
+          onClose={() => close(false)}
+          onSend={(message) => action.mutateAsync({ action: "broadcast", ...message }).then(() => undefined)}
         />
       )}
     </>
@@ -243,64 +242,6 @@ function RollingRestartDialog({ network, onClose, onStart }: { network: Network;
             {t("Restart")}
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Sends a chat message to the players of all servers of a network. */
-function BroadcastDialog({
-  network,
-  onOpenChange,
-  onSend,
-}: {
-  network: Network
-  onOpenChange: (open: boolean) => void
-  onSend: (message: string) => Promise<unknown>
-}) {
-  const [message, setMessage] = useState("")
-  const [error, setError] = useState<string>()
-
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    onSend(message.trim()).then(
-      () => {
-        toast.success(t("Sent to the players of {{name}}", { name: network.name }))
-        onOpenChange(false)
-      },
-      (e: Error) => setError(e.message),
-    )
-  }
-
-  return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={submit} className="grid gap-6">
-          <DialogHeader>
-            <DialogTitle>{t("Message to {{name}}", { name: network.name })}</DialogTitle>
-            <DialogDescription>{t("Every running server of the network shows it in the chat, with say.")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Input
-              autoFocus
-              value={message}
-              maxLength={256}
-              aria-label={t("Message")}
-              placeholder={t("The network restarts in 5 minutes")}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-            {error && <FieldError>{error}</FieldError>}
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">{t("Cancel")}</Button>
-            </DialogClose>
-            <Button type="submit" disabled={!message.trim()}>
-              <MegaphoneIcon />
-              {t("Send")}
-            </Button>
-          </DialogFooter>
-        </form>
       </DialogContent>
     </Dialog>
   )

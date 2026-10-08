@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
+import { t } from "i18next"
 import { type Operation, operate } from "@/features/operations/api"
-import { api } from "@/lib/api"
+import { ApiError, api } from "@/lib/api"
 
 export type Engine = "mariadb" | "postgres"
 
@@ -124,13 +125,35 @@ export const tablesQuery = (id: string, database: string) =>
     queryFn: () => api<Table[]>(`${databasePath(id, database)}/tables`),
   })
 
-export const pageQuery = (id: string, database: string, table: Table, offset: number) =>
+/** Rows whose value of a column, as text like a page shows it, equals a value or contains it, ignoring case. */
+export interface TableFilter {
+  column: string
+  value: string
+  contains: boolean
+}
+
+/** Which rows of a table a page shows: from offset on, sorted by a column and then by the primary key, and those that a filter matches. */
+export interface TableView {
+  offset: number
+  sort?: string
+  descending?: boolean
+  filter?: TableFilter
+}
+
+export const pageQuery = (id: string, database: string, table: Table, view: TableView) =>
   queryOptions({
-    queryKey: ["datastores", id, "databases", database, "tables", table.schema, table.name, offset],
-    queryFn: () =>
-      api<Page>(
-        `${databasePath(id, database)}/tables/${encodeURIComponent(table.name)}?${new URLSearchParams({ schema: table.schema ?? "", offset: String(offset) })}`,
-      ),
+    queryKey: ["datastores", id, "databases", database, "tables", table.schema, table.name, view],
+    queryFn: () => {
+      const query = new URLSearchParams({ schema: table.schema ?? "", offset: String(view.offset) })
+      if (view.sort) query.set("sort", view.sort)
+      if (view.sort && view.descending) query.set("descending", "true")
+      if (view.filter) {
+        query.set("filter", view.filter.column)
+        query.set("value", view.filter.value)
+        if (view.filter.contains) query.set("contains", "true")
+      }
+      return api<Page>(`${databasePath(id, database)}/tables/${encodeURIComponent(table.name)}?${query}`)
+    },
     placeholderData: (previous) => previous,
   })
 
@@ -141,6 +164,35 @@ export const dumpsQuery = (id: string) =>
   })
 
 export const downloadUrl = (id: string, dump: string) => `/api/datastores/${id}/backups/${dump}/download`
+
+/** The most bytes of an uploaded dump, as the master allows. */
+export const maxUpload = 16 * 1024 ** 3
+
+/**
+ * Uploads a dump made elsewhere with progress reports, which fetch can't make: the SQL of database, or a ZIP archive
+ * with a <database>.sql for each database without.
+ */
+function uploadDump(
+  id: string,
+  file: File,
+  { database, label, onProgress, signal }: { database?: string; label: string; onProgress?: (fraction: number) => void; signal?: AbortSignal },
+): Promise<Dump> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `/api/datastores/${id}/backups/upload?${new URLSearchParams({ label, ...(database && { database }) })}`)
+    xhr.setRequestHeader("Content-Type", "application/octet-stream")
+    xhr.responseType = "json"
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
+    xhr.onload = () =>
+      xhr.status === 201
+        ? resolve(xhr.response as Dump)
+        : reject(new ApiError(xhr.status, xhr.response?.error ?? t("The upload failed with status {{status}}.", { status: xhr.status })))
+    xhr.onerror = () => reject(new Error(t("The connection to the panel was lost.")))
+    xhr.onabort = () => reject(new DOMException(t("The upload was cancelled."), "AbortError"))
+    signal?.addEventListener("abort", () => xhr.abort())
+    xhr.send(file)
+  })
+}
 
 type Started = { onStart?: (op: Operation) => void }
 
@@ -181,5 +233,6 @@ export function useDatastore(id: string) {
       },
     }),
     removeDump: useMutation({ mutationFn: (dump: string) => api(`${base}/backups/${dump}`, { method: "DELETE" }), onSettled }),
+    upload: useMutation({ mutationFn: ({ file, ...options }: { file: File } & Parameters<typeof uploadDump>[2]) => uploadDump(id, file, options), onSettled }),
   }
 }

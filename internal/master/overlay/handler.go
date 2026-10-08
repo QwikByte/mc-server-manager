@@ -59,17 +59,51 @@ func (h *Handler) Register(mux access.Mux) {
 		}
 		write(w, r, s, err)
 	})
-	// Like the overview, the status only names the peers on the nodes the user may see.
+	// Like the overview, the status only names the peers on the nodes the user may see, and
+	// the servers and datastores the user may see.
 	mux.Handle("GET /api/nodes/{id}/overlay", access.OnNode(access.NodesView, "id"), func(w http.ResponseWriter, r *http.Request) {
-		st, err := h.svc.Status(r.Context(), r.PathValue("id"))
+		id := r.PathValue("id")
+		st, err := h.svc.Status(r.Context(), id)
 		grants := access.From(r.Context())
 		st.Peers = slices.DeleteFunc(st.Peers, func(p Peer) bool { return !grants.SeesNode(p.NodeID) })
+		for i, p := range st.Published {
+			st.Published[i].ServerID, st.Published[i].DatastoreID = visible(grants, id, p.ServerID, p.DatastoreID)
+			st.Published[i].Clients = slices.DeleteFunc(p.Clients, func(c Client) bool { return c.NodeID != "" && !grants.SeesNode(c.NodeID) })
+		}
 		write(w, r, st, err)
 	})
 	mux.Handle("POST /api/nodes/{id}/overlay", manage, h.withEndpoint(h.svc.Join))
 	mux.Handle("PUT /api/nodes/{id}/overlay", manage, h.withEndpoint(h.svc.SetEndpoint))
 	mux.Handle("POST /api/nodes/{id}/overlay/rotate", manage, h.rotate)
 	mux.Handle("DELETE /api/nodes/{id}/overlay", manage, h.leave)
+	mux.Handle("POST /api/nodes/{id}/overlay/peers/{peer}/test", access.All(manage, access.OnNode(access.NodesView, "id")), h.test)
+}
+
+// test connects from a member to the ports that another one, which the user may see,
+// publishes for it.
+func (h *Handler) test(w http.ResponseWriter, r *http.Request) {
+	grants, peer := access.From(r.Context()), r.PathValue("peer")
+	if !grants.SeesNode(peer) {
+		httpapi.WriteError(w, r, errPeerNotMember)
+		return
+	}
+	tests, err := h.svc.Test(r.Context(), r.PathValue("id"), peer)
+	for i, t := range tests {
+		tests[i].ServerID, tests[i].DatastoreID = visible(grants, peer, t.ServerID, t.DatastoreID)
+	}
+	write(w, r, tests, err)
+}
+
+// visible returns the server and the datastore of a port on a node, each only if the user may
+// see it.
+func visible(g access.Grants, nodeID, serverID, datastoreID string) (string, string) {
+	if !g.On(access.ServersView, nodeID, serverID) {
+		serverID = ""
+	}
+	if !g.Has(access.DatastoresView) {
+		datastoreID = ""
+	}
+	return serverID, datastoreID
 }
 
 func (h *Handler) withEndpoint(fn func(ctx context.Context, nodeID, endpoint string) (Member, error)) http.HandlerFunc {

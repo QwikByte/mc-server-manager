@@ -14,6 +14,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
 	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/network"
 	masterserver "github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/tag"
@@ -35,6 +36,11 @@ func TestMoveServer(t *testing.T) {
 	api.do("POST", "/api/groups", map[string]any{"name": "Lobby moderators", "permissions": []string{"servers.restart"}, "targets": []network.Ref{lobby}},
 		http.StatusCreated, &mods)
 	api.do("POST", path(lobby)+"/start", nil, http.StatusNoContent, nil)
+	_, err := m.db.ExecContext(t.Context(), `
+		INSERT INTO backup_copies (copy_node, location, server_id, server_name, proxy, node_id, node_name, backup_id, label, created_at, size, paths,
+			exclude, kept, copied_at)
+		VALUES (?, '', ?, 'Lobby', 0, ?, 'node-1', '20240101-000000-aaaaaa', '', 0, 1, '["."]', '[]', 0, 0)`, a2.node.ID, lobby.ServerID, a1.node.ID)
+	check(t, err)
 
 	// What would fail is refused before the server stops.
 	api.do("POST", path(lobby)+"/move", map[string]any{"node": a1.node.ID}, http.StatusBadRequest, nil)
@@ -68,6 +74,11 @@ func TestMoveServer(t *testing.T) {
 	api.do("GET", "/api/groups/"+mods.ID, nil, http.StatusOK, &mods)
 	if len(mods.Targets) != 1 || mods.Targets[0].NodeID != a2.node.ID {
 		t.Fatalf("group targets = %+v", mods.Targets)
+	}
+	var copies []backup.Copy // of its backups, which belong to the server on its node
+	api.do("GET", path(moved)+"/copies", nil, http.StatusOK, &copies)
+	if len(copies) != 1 || copies[0].NodeID != a2.node.ID || copies[0].NodeName != "node-2" {
+		t.Fatalf("copies = %+v", copies)
 	}
 
 	// The settings and notes move with the server, also the version of a mod loader.

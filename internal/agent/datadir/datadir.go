@@ -30,6 +30,9 @@ const (
 
 var errSpecial = errors.New("neither a regular file nor a folder")
 
+// ErrLink refuses paths that lead through a symbolic link; see Direct.
+var ErrLink = errors.New("the path leads through a link")
+
 // Name turns a slash-separated path relative to a data directory into a name in it, "."
 // for the directory itself. os.Root rejects escaping paths too, but ".." has no use here,
 // so such paths are refused upfront, like backslashes.
@@ -186,6 +189,23 @@ func openPlain(root *os.Root, name string) (*os.File, error) {
 		return nil, errors.Join(err, f.Close())
 	}
 	return f, nil
+}
+
+// Direct returns ErrLink unless name leads to its file or folder without a link: name, if it
+// exists, and the folders on its path are no links. Paths stay in the directory anyway, but a
+// link of the server could lead to a file that holds secrets under another name.
+func (d *Dir) Direct(name string) error {
+	for p := name; p != "."; p = filepath.Dir(p) {
+		info, err := d.Lstat(p)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+		case err != nil:
+			return err
+		case info.Mode()&fs.ModeSymlink != 0:
+			return &fs.PathError{Op: "open", Path: name, Err: ErrLink}
+		}
+	}
+	return nil
 }
 
 // ReadOptional reads a file; a missing file reads as empty.

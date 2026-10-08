@@ -28,6 +28,8 @@ import { Segmented } from "@/components/segmented"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccess } from "@/features/access/use-access"
+import { DesktopNotificationsSetting } from "@/features/notify/desktop-setting"
 import { useSettings } from "@/features/preferences/api"
 import { formatAgo, formatDateTime } from "@/lib/format"
 import { type Clock, clock, languageName, languages, msg, timeWith } from "@/lib/i18n"
@@ -52,6 +54,7 @@ import { PasswordDialog } from "./password-dialog"
 /** The signed-in user's own account: how they sign in, and how the panel looks for them. */
 export function AccountPage() {
   const { data: user } = useQuery(meQuery)
+  const { canSomewhere } = useAccess()
   if (!user) return null
   return (
     <>
@@ -79,6 +82,11 @@ export function AccountPage() {
         <FormSection title={t("Panel")}>
           <PanelSettings user={user} />
         </FormSection>
+        {canSomewhere("logs.view") && (
+          <FormSection title={t("Notifications")}>
+            <DesktopNotificationsSetting />
+          </FormSection>
+        )}
       </div>
     </>
   )

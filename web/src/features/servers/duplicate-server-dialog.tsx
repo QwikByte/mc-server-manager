@@ -3,16 +3,19 @@ import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useAccess } from "@/features/access/use-access"
+import { copyName, key, useNetworkOf } from "@/features/networks/servers"
 import { nodeQuery } from "@/features/nodes/api"
 import { OperationStatus } from "@/features/operations/operation-status"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { type Server, serversQuery, useDuplicateServer } from "./api"
 import { nextName, serverType, suggestPort, usedPorts } from "./server-types"
 
-/** Copies a server with all its data into a new server on the same node. */
+/** Copies a server with all its data into a new server on the same node; the copy of a game server of a network can join it. */
 export function DuplicateServerDialog({
   nodeId,
   server,
@@ -28,9 +31,16 @@ export function DuplicateServerDialog({
   const { data: servers = [] } = useQuery(serversQuery(nodeId))
   const [name, setName] = useState<string>()
   const [port, setPort] = useState<number>()
+  const [join, setJoin] = useState(false)
   const duplicate = useDuplicateServer(nodeId)
   const operation = useOperation()
   const navigate = useNavigate()
+  const { can } = useAccess()
+  const ref = { nodeId, serverId: server.id }
+  const network = useNetworkOf()(ref)
+  // A game server of a network, whose copy may join the network, as which.
+  const backend = can("networks.manage") ? network?.backends.find((b) => key(b) === key(ref)) : undefined
+  const joined = network && backend && copyName(backend.name, network.backends.map((b) => b.name))
   const saves = server.state !== "stopped" && !serverType(server.type).proxy
   const values = {
     name:
@@ -47,6 +57,7 @@ export function DuplicateServerDialog({
         node?.portMin ?? undefined,
         node?.portMax ?? undefined,
       ),
+    network: join && !!joined,
   }
 
   const title = t("Create {{name}} as a copy", { name: values.name })
@@ -58,6 +69,7 @@ export function DuplicateServerDialog({
       operation.reset()
       setName(undefined)
       setPort(undefined)
+      setJoin(false)
     }
   }
 
@@ -67,7 +79,10 @@ export function DuplicateServerDialog({
     operation.run((onStart) => duplicate.mutateAsync({ id: server.id, ...values, onStart }), {
       title,
       done: (copy) => ({
-        message: t("Created {{copy}}, a copy of {{name}}", { copy: copy.name, name: server.name }),
+        message:
+          values.network && network
+            ? t("Created {{copy}}, a copy of {{name}}, in {{network}}", { copy: copy.name, name: server.name, network: network.name })
+            : t("Created {{copy}}, a copy of {{name}}", { copy: copy.name, name: server.name }),
         action: { label: t("Open"), onClick: () => void open(copy.id) },
       }),
       then: (copy) => {
@@ -98,9 +113,11 @@ export function DuplicateServerDialog({
             <DialogHeader>
               <DialogTitle>{t("Duplicate {{name}}", { name: server.name })}</DialogTitle>
               <DialogDescription>
-                {t("The copy gets the worlds, plugins and settings of {{name}}, but not its place in a network, so it authenticates its players itself. It stays stopped until you start it.", {
-                  name: server.name,
-                })}
+                {values.network
+                  ? t("The copy gets the worlds, plugins and settings of {{name}}. It stays stopped until you start it.", { name: server.name })
+                  : t("The copy gets the worlds, plugins and settings of {{name}}, but not its place in a network, so it authenticates its players itself. It stays stopped until you start it.", {
+                      name: server.name,
+                    })}
               </DialogDescription>
             </DialogHeader>
             <FieldGroup>
@@ -122,6 +139,20 @@ export function DuplicateServerDialog({
                 />
                 <FieldDescription>{t("Every server on a node needs its own port.")}</FieldDescription>
               </Field>
+              {network && backend && (
+                <Field orientation="horizontal">
+                  <Checkbox id="duplicate-network" checked={join} onCheckedChange={(on) => setJoin(on === true)} />
+                  <div>
+                    <FieldLabel htmlFor="duplicate-network">{t("Add the copy to the network {{network}}", { network: network.name })}</FieldLabel>
+                    <FieldDescription>
+                      {t(
+                        "It joins as {{copy}} right after {{original}}, also among the servers players join and those of host names if {{original}} is one of them. Then the network is applied.",
+                        { copy: joined, original: backend.name },
+                      )}
+                    </FieldDescription>
+                  </div>
+                </Field>
+              )}
               {saves && (
                 <FieldDescription>
                   {t("The server saves its worlds first and pauses saving while they are copied. Players stay connected.")}

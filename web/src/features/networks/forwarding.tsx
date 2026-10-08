@@ -81,7 +81,7 @@ export function FirewallConfirmation({
   return (
     <Callout tone="warning" icon={ShieldWarningIcon} title={t("Servers on other nodes are reachable from outside")}>
       <p>
-        {t("With legacy forwarding, anyone who reaches such a server can join it as any player, also as an operator. Docker bypasses firewalls such as ufw, so add a rule to Docker's DOCKER-USER chain on each of these nodes, as shown with the servers.")}
+        {t("With legacy forwarding, anyone who reaches such a server can join it as any player, also as an operator. Docker and Podman bypass firewalls such as ufw, so add the rule shown with the servers on each of these nodes.")}
       </p>
       <Field orientation="horizontal" className="mt-3">
         <Checkbox id="firewalled" checked={checked} disabled={disabled} onCheckedChange={(on) => onChange(on === true)} />

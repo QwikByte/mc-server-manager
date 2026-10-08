@@ -1,7 +1,7 @@
 # Noryx
 
 Manage Minecraft servers and whole networks from one admin panel. A **master** serves the panel and controls **agents**
-on any number of dedicated servers, which run the Minecraft servers in Docker.
+on any number of dedicated servers, which run the Minecraft servers in Docker or Podman.
 
 ```
                                    ┌──────────────── node: dedicated server ───────────────┐
@@ -11,10 +11,10 @@ on any number of dedicated servers, which run the Minecraft servers in Docker.
                     SQLite, CA     └────────────────────────────────────────────────────────┘
 ```
 
-| Program        | Runs on              | Responsibility                                                                                     |
-| -------------- | -------------------- | -------------------------------------------------------------------------------------------------- |
-| `noryx-master` | the panel host       | Admin panel (embedded), REST API, node registry, certificate authority, enrollment endpoint        |
-| `noryx-agent`  | every dedicated host | Runs the Minecraft servers through a runtime (Docker), accepts commands from the master or its CLI |
+| Program        | Runs on              | Responsibility                                                                                               |
+| -------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `noryx-master` | the panel host       | Admin panel (embedded), REST API, node registry, certificate authority, enrollment endpoint                  |
+| `noryx-agent`  | every dedicated host | Runs the Minecraft servers through a runtime (Docker or Podman), accepts commands from the master or its CLI |
 
 ## Features
 
@@ -30,7 +30,7 @@ on any number of dedicated servers, which run the Minecraft servers in Docker.
 - **Teams:** users and groups with fine-grained permissions, two-factor authentication and a log of who did what.
 - **Security:** mutual TLS with its own CA, agents that only obey the master, hardened containers and signed releases.
 
-The panel speaks English and German. Servers run in Docker; more runtimes, such as plain processes, are planned.
+The panel speaks English and German. Servers run in Docker, or in Podman as root.
 
 ## Installation
 
@@ -62,7 +62,7 @@ all nodes while the Minecraft servers keep running.
 | [Templates, file sets, plugins and mods](docs/library.md) | Templates, file sets, Modrinth, Hangar, modpacks                               |
 | [Backups and schedules](docs/automation.md)               | Backups of servers, datastores and the master; scheduled restarts and commands |
 | [Players](docs/players.md)                                | Kicks, bans, whitelists and operators                                          |
-| [Usage and logs](docs/monitoring.md)                      | Measurements, their history and the log                                        |
+| [Usage and logs](docs/monitoring.md)                      | Measurements, their history, the log and notifications                         |
 | [Settings, users and permissions](docs/administration.md) | Settings of the master, terminal, users, groups, two-factor authentication     |
 | [REST API and API tokens](docs/api.md)                    | Scripts with API tokens, the description of the API                            |
 | [Security model](docs/security.md)                        | How master, agents and servers are protected                                   |

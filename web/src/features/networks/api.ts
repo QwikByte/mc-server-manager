@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { operate } from "@/features/operations/api"
+import type { Message } from "@/features/players/api"
 import type { Followed } from "@/features/servers/api"
 import { api } from "@/lib/api"
 
@@ -120,7 +121,8 @@ export interface Deleted {
 
 export type NetworkAction =
   | { action: "apply" | "delete" | "start" | "stop" | "restart" }
-  | { action: "broadcast"; message: string }
+  /** A message to the players of all game servers, in the chat, as a title or above the hotbar. */
+  | ({ action: "broadcast" } & Message)
   /** Restarts the running game servers a batch at a time, or only those named, e.g. one safely. */
   | { action: "rolling-restart"; batch: number; servers?: ServerRef[] }
 
@@ -134,7 +136,7 @@ export function useNetworkAction(id: string) {
         case "delete":
           return operate<Deleted>(path, { method: "DELETE" }, a.onStart)
         case "broadcast":
-          return api(`${path}/broadcast`, { body: { message: a.message } })
+          return api(`${path}/broadcast`, { body: { kind: a.kind, message: a.message, subtitle: a.subtitle } })
         case "rolling-restart":
           return operate(`${path}/rolling-restart`, { body: { batch: a.batch, servers: a.servers } }, a.onStart)
         default:
@@ -156,7 +158,24 @@ export interface Maintenance {
   enabled: boolean
   /** Who may join during maintenance. */
   players: { name: string; uuid: string }[]
+  /** The servers of the network in maintenance on their own, by name. */
+  servers: string[]
+  /** When maintenance of the whole network ends, if the plugin keeps its end timer; it keeps other timers to itself. */
+  endsAt?: string
   proxyRunning: boolean
+  /** The agent of the proxy's node starts timers and changes the maintenance of single servers. */
+  serversAndTimers: boolean
+}
+
+/** Turns maintenance on or off, for the whole network or one of its servers, now or later, and for how long. */
+export interface MaintenanceChange {
+  enabled: boolean
+  /** The name of a server of the network; none for the whole network. */
+  server?: string
+  /** Minutes until maintenance starts or ends; 0 for now. */
+  delay?: number
+  /** Minutes that maintenance lasts which starts; 0 until it is ended. */
+  duration?: number
 }
 
 export const maintenanceQuery = (id: string) =>
@@ -167,14 +186,23 @@ export const maintenanceQuery = (id: string) =>
     refetchInterval: 15_000, // it can be changed in the game too
   })
 
-/** Turns maintenance of a network on or off. */
+/** Changes the maintenance of a network or one of its servers. */
 export function useSetMaintenance(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ enabled, onStart }: { enabled: boolean } & Followed) =>
-      operate<Maintenance>(`/networks/${id}/maintenance`, { body: { enabled } }, onStart),
+    mutationFn: ({ onStart, ...change }: MaintenanceChange & Followed) =>
+      operate<Maintenance>(`/networks/${id}/maintenance`, { body: change }, onStart),
     onSuccess: (m) => queryClient.setQueryData(maintenanceQuery(id).queryKey, m),
     onSettled: () => queryClient.invalidateQueries({ queryKey: maintenanceQuery(id).queryKey }),
+  })
+}
+
+/** Aborts the timer of the Maintenance plugin for a network, or one of its servers by name. */
+export function useAbortMaintenanceTimer(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (server: string) => api<Maintenance>(`/networks/${id}/maintenance/abort`, { body: { server } }),
+    onSuccess: (m) => queryClient.setQueryData(maintenanceQuery(id).queryKey, m),
   })
 }
 

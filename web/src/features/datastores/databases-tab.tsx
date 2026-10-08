@@ -38,7 +38,8 @@ import { formatBytes, formatDateTime, formatMegabytes } from "@/lib/format"
 import { type Database, type Datastore, downloadUrl, type Dump, dumpsQuery, networkDatastoresQuery, passwordQuery, useDatastore } from "./api"
 import { ChangeDatastoreDialog, CreateDatastoreDialog, DeleteDatastoreDialog } from "./datastore-dialogs"
 import { DatastoreLog } from "./datastore-log"
-import { BackUpDialog, RestoreDialog } from "./dump-dialogs"
+import { DatastoreUsage } from "./datastore-usage"
+import { BackUpDialog, RestoreDialog, UploadDialog } from "./dump-dialogs"
 import { engines, states } from "./labels"
 
 const route = getRouteApi("/_app/networks/$networkId/databases")
@@ -219,6 +220,7 @@ function DatastoreCard({ datastore: ds }: { datastore: Datastore }) {
             )}
           </Callout>
         )}
+        <DatastoreUsage datastore={ds} />
         <Databases datastore={ds} />
         <Dumps datastore={ds} />
         {manage && <DatastoreLog ref={log} datastore={ds} open={logOpen} onOpenChange={setLogOpen} />}
@@ -435,9 +437,14 @@ function Dumps({ datastore: ds }: { datastore: Datastore }) {
 
   return (
     <section aria-label={t("Backups")} className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">{t("Backups")}</h3>
-        {can("datastores.manage") && <BackUpDialog datastore={ds} />}
+        {can("datastores.manage") && (
+          <div className="flex flex-wrap gap-1.5">
+            <UploadDialog datastore={ds} />
+            <BackUpDialog datastore={ds} />
+          </div>
+        )}
       </div>
       {isPending ? (
         <Skeleton className="h-12 rounded-lg" />

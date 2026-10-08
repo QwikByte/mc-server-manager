@@ -1,6 +1,7 @@
 package network
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"net/http"
@@ -111,15 +112,13 @@ func (h *Handler) Register(mux access.Mux) {
 		})
 	}
 	mux.Handle("POST /api/networks/{id}/broadcast", view, func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Message string `json:"message"`
-		}
+		var m Message
 		n, err := h.allowed(r, access.ConsoleCommands)
 		if err == nil {
-			err = httpapi.ReadJSON(w, r, &req)
+			err = httpapi.ReadJSON(w, r, &m)
 		}
 		if err == nil {
-			err = h.svc.Broadcast(r.Context(), n, req.Message)
+			err = h.svc.Broadcast(r.Context(), n, m)
 		}
 		write(w, r, http.StatusNoContent, nil, err)
 	})
@@ -156,12 +155,10 @@ func (h *Handler) Register(mux access.Mux) {
 		write(w, r, http.StatusOK, m, err)
 	})
 	mux.Handle("POST /api/networks/{id}/maintenance", manage, func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Enabled bool `json:"enabled"`
-		}
+		var c MaintenanceChange
 		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
 		if err == nil {
-			err = httpapi.ReadJSON(w, r, &req)
+			err = httpapi.ReadJSON(w, r, &c)
 		}
 		var m Maintenance
 		if err == nil {
@@ -171,17 +168,41 @@ func (h *Handler) Register(mux access.Mux) {
 			httpapi.WriteError(w, r, err)
 			return
 		}
-		logging.Note(r.Context(), slog.String("name", n.Name), slog.Bool("enabled", req.Enabled))
-		steps, kind := []string{"maintenance"}, "network.maintenance-off"
-		if req.Enabled {
+		logging.Note(r.Context(), slog.String("name", n.Name), slog.Bool("enabled", c.Enabled), slog.String("server", c.Server),
+			slog.Any("delay", c.Delay), slog.Any("duration", c.Duration))
+		// A timer that starts or ends maintenance later is planned; the operation names the
+		// server of the network that it is about.
+		steps, kind, subject := []string{"maintenance"}, "network.maintenance-off", cmp.Or(c.Server, n.Name)
+		switch {
+		case c.Delay > 0 && c.Enabled:
+			kind = "network.maintenance-timer"
+		case c.Delay > 0:
+			kind = "network.maintenance-end"
+		case c.Enabled:
 			kind = "network.maintenance-on"
-			if !m.Installed {
-				steps = []string{"plugin", "proxy-restart", "maintenance"}
-			}
 		}
-		h.run(w, r, kind, n.Name, n.ID, http.StatusOK, func(ctx context.Context) (any, error) {
-			return h.svc.SetMaintenance(ctx, n, req.Enabled)
+		if c.Enabled && !m.Installed {
+			steps = []string{"plugin", "proxy-restart", "maintenance"}
+		}
+		h.run(w, r, kind, subject, n.ID, http.StatusOK, func(ctx context.Context) (any, error) {
+			return h.svc.SetMaintenance(ctx, n, c)
 		}, steps...)
+	})
+	mux.Handle("POST /api/networks/{id}/maintenance/abort", manage, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			// Server is the name of a game server of the network; empty for the whole network.
+			Server string `json:"server"`
+		}
+		n, err := h.svc.Get(r.Context(), r.PathValue("id"))
+		if err == nil {
+			err = httpapi.ReadJSON(w, r, &req)
+		}
+		var m Maintenance
+		if err == nil {
+			logging.Note(r.Context(), slog.String("name", n.Name), slog.String("server", req.Server))
+			m, err = h.svc.AbortMaintenanceTimer(r.Context(), n, req.Server)
+		}
+		write(w, r, http.StatusOK, m, err)
 	})
 	mux.Handle("POST /api/networks/{id}/maintenance/players", manage, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {

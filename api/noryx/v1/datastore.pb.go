@@ -1723,6 +1723,211 @@ func (x *DownloadDumpResponse) GetData() []byte {
 	return nil
 }
 
+type ImportDumpRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*ImportDumpRequest_Header
+	//	*ImportDumpRequest_Data
+	Content       isImportDumpRequest_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDumpRequest) Reset() {
+	*x = ImportDumpRequest{}
+	mi := &file_noryx_v1_datastore_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDumpRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDumpRequest) ProtoMessage() {}
+
+func (x *ImportDumpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_datastore_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDumpRequest.ProtoReflect.Descriptor instead.
+func (*ImportDumpRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ImportDumpRequest) GetContent() isImportDumpRequest_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *ImportDumpRequest) GetHeader() *ImportDumpHeader {
+	if x != nil {
+		if x, ok := x.Content.(*ImportDumpRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *ImportDumpRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Content.(*ImportDumpRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isImportDumpRequest_Content interface {
+	isImportDumpRequest_Content()
+}
+
+type ImportDumpRequest_Header struct {
+	Header *ImportDumpHeader `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type ImportDumpRequest_Data struct {
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*ImportDumpRequest_Header) isImportDumpRequest_Content() {}
+
+func (*ImportDumpRequest_Data) isImportDumpRequest_Content() {}
+
+type ImportDumpHeader struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Label    string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Location string                 `protobuf:"bytes,3,opt,name=location,proto3" json:"location,omitempty"`
+	// The database whose SQL follows; empty for a ZIP archive.
+	Database string `protobuf:"bytes,4,opt,name=database,proto3" json:"database,omitempty"`
+	// Bytes that follow, at most MaxImportedDump; 0 if unknown.
+	Size          int64 `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDumpHeader) Reset() {
+	*x = ImportDumpHeader{}
+	mi := &file_noryx_v1_datastore_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDumpHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDumpHeader) ProtoMessage() {}
+
+func (x *ImportDumpHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_datastore_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDumpHeader.ProtoReflect.Descriptor instead.
+func (*ImportDumpHeader) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ImportDumpHeader) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ImportDumpHeader) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *ImportDumpHeader) GetLocation() string {
+	if x != nil {
+		return x.Location
+	}
+	return ""
+}
+
+func (x *ImportDumpHeader) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *ImportDumpHeader) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+type ImportDumpResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Its paths are the databases in it.
+	Dump          *Backup `protobuf:"bytes,1,opt,name=dump,proto3" json:"dump,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDumpResponse) Reset() {
+	*x = ImportDumpResponse{}
+	mi := &file_noryx_v1_datastore_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDumpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDumpResponse) ProtoMessage() {}
+
+func (x *ImportDumpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_datastore_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDumpResponse.ProtoReflect.Descriptor instead.
+func (*ImportDumpResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ImportDumpResponse) GetDump() *Backup {
+	if x != nil {
+		return x.Dump
+	}
+	return nil
+}
+
 type ListTablesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1733,7 +1938,7 @@ type ListTablesRequest struct {
 
 func (x *ListTablesRequest) Reset() {
 	*x = ListTablesRequest{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[30]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1745,7 +1950,7 @@ func (x *ListTablesRequest) String() string {
 func (*ListTablesRequest) ProtoMessage() {}
 
 func (x *ListTablesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[30]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1758,7 +1963,7 @@ func (x *ListTablesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTablesRequest.ProtoReflect.Descriptor instead.
 func (*ListTablesRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{30}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListTablesRequest) GetId() string {
@@ -1790,7 +1995,7 @@ type Table struct {
 
 func (x *Table) Reset() {
 	*x = Table{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[31]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1802,7 +2007,7 @@ func (x *Table) String() string {
 func (*Table) ProtoMessage() {}
 
 func (x *Table) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[31]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1815,7 +2020,7 @@ func (x *Table) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Table.ProtoReflect.Descriptor instead.
 func (*Table) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{31}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Table) GetSchema() string {
@@ -1855,7 +2060,7 @@ type ListTablesResponse struct {
 
 func (x *ListTablesResponse) Reset() {
 	*x = ListTablesResponse{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[32]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1867,7 +2072,7 @@ func (x *ListTablesResponse) String() string {
 func (*ListTablesResponse) ProtoMessage() {}
 
 func (x *ListTablesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[32]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1880,7 +2085,7 @@ func (x *ListTablesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTablesResponse.ProtoReflect.Descriptor instead.
 func (*ListTablesResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{32}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListTablesResponse) GetTables() []*Table {
@@ -1896,17 +2101,23 @@ type BrowseTableRequest struct {
 	Database string                 `protobuf:"bytes,2,opt,name=database,proto3" json:"database,omitempty"`
 	Schema   string                 `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"`
 	Table    string                 `protobuf:"bytes,4,opt,name=table,proto3" json:"table,omitempty"`
-	// Rows skipped, in the order of the primary key if the table has one.
+	// Rows skipped, in the order of the sort column if there is one, and then of the primary
+	// key if the table has one.
 	Offset uint64 `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
 	// Rows returned at most.
-	Limit         uint32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit uint32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	// A column to sort the rows by; empty for none. Agents of older versions ignore it.
+	Sort       string `protobuf:"bytes,7,opt,name=sort,proto3" json:"sort,omitempty"`
+	Descending bool   `protobuf:"varint,8,opt,name=descending,proto3" json:"descending,omitempty"`
+	// Leaves out the rows that don't match; none for all rows.
+	Filter        *TableFilter `protobuf:"bytes,9,opt,name=filter,proto3" json:"filter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BrowseTableRequest) Reset() {
 	*x = BrowseTableRequest{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[33]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1918,7 +2129,7 @@ func (x *BrowseTableRequest) String() string {
 func (*BrowseTableRequest) ProtoMessage() {}
 
 func (x *BrowseTableRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[33]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1931,7 +2142,7 @@ func (x *BrowseTableRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowseTableRequest.ProtoReflect.Descriptor instead.
 func (*BrowseTableRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{33}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *BrowseTableRequest) GetId() string {
@@ -1976,6 +2187,90 @@ func (x *BrowseTableRequest) GetLimit() uint32 {
 	return 0
 }
 
+func (x *BrowseTableRequest) GetSort() string {
+	if x != nil {
+		return x.Sort
+	}
+	return ""
+}
+
+func (x *BrowseTableRequest) GetDescending() bool {
+	if x != nil {
+		return x.Descending
+	}
+	return false
+}
+
+func (x *BrowseTableRequest) GetFilter() *TableFilter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+// TableFilter matches the rows whose value of a column, as text like a page shows it, equals
+// a value or contains it.
+type TableFilter struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Column string                 `protobuf:"bytes,1,opt,name=column,proto3" json:"column,omitempty"`
+	Value  string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	// Matches values that contain value, ignoring case, instead of those that equal it.
+	Contains      bool `protobuf:"varint,3,opt,name=contains,proto3" json:"contains,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TableFilter) Reset() {
+	*x = TableFilter{}
+	mi := &file_noryx_v1_datastore_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TableFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TableFilter) ProtoMessage() {}
+
+func (x *TableFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_datastore_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TableFilter.ProtoReflect.Descriptor instead.
+func (*TableFilter) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *TableFilter) GetColumn() string {
+	if x != nil {
+		return x.Column
+	}
+	return ""
+}
+
+func (x *TableFilter) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *TableFilter) GetContains() bool {
+	if x != nil {
+		return x.Contains
+	}
+	return false
+}
+
 type TableColumn struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1988,7 +2283,7 @@ type TableColumn struct {
 
 func (x *TableColumn) Reset() {
 	*x = TableColumn{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[34]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2000,7 +2295,7 @@ func (x *TableColumn) String() string {
 func (*TableColumn) ProtoMessage() {}
 
 func (x *TableColumn) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[34]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2013,7 +2308,7 @@ func (x *TableColumn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TableColumn.ProtoReflect.Descriptor instead.
 func (*TableColumn) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{34}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *TableColumn) GetName() string {
@@ -2049,7 +2344,7 @@ type TableValue struct {
 
 func (x *TableValue) Reset() {
 	*x = TableValue{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[35]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2061,7 +2356,7 @@ func (x *TableValue) String() string {
 func (*TableValue) ProtoMessage() {}
 
 func (x *TableValue) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[35]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2074,7 +2369,7 @@ func (x *TableValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TableValue.ProtoReflect.Descriptor instead.
 func (*TableValue) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{35}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *TableValue) GetText() string {
@@ -2108,7 +2403,7 @@ type TableRow struct {
 
 func (x *TableRow) Reset() {
 	*x = TableRow{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[36]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2120,7 +2415,7 @@ func (x *TableRow) String() string {
 func (*TableRow) ProtoMessage() {}
 
 func (x *TableRow) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[36]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2133,7 +2428,7 @@ func (x *TableRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TableRow.ProtoReflect.Descriptor instead.
 func (*TableRow) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{36}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TableRow) GetValues() []*TableValue {
@@ -2148,14 +2443,16 @@ type BrowseTableResponse struct {
 	Columns []*TableColumn         `protobuf:"bytes,1,rep,name=columns,proto3" json:"columns,omitempty"`
 	Rows    []*TableRow            `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows,omitempty"`
 	// The table has more rows after these.
-	More          bool `protobuf:"varint,3,opt,name=more,proto3" json:"more,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	More bool `protobuf:"varint,3,opt,name=more,proto3" json:"more,omitempty"`
+	// The agent sorted and filtered the rows as asked; agents of older versions don't.
+	SortedAndFiltered bool `protobuf:"varint,4,opt,name=sorted_and_filtered,json=sortedAndFiltered,proto3" json:"sorted_and_filtered,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *BrowseTableResponse) Reset() {
 	*x = BrowseTableResponse{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[37]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2167,7 +2464,7 @@ func (x *BrowseTableResponse) String() string {
 func (*BrowseTableResponse) ProtoMessage() {}
 
 func (x *BrowseTableResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[37]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2180,7 +2477,7 @@ func (x *BrowseTableResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowseTableResponse.ProtoReflect.Descriptor instead.
 func (*BrowseTableResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{37}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *BrowseTableResponse) GetColumns() []*TableColumn {
@@ -2204,6 +2501,13 @@ func (x *BrowseTableResponse) GetMore() bool {
 	return false
 }
 
+func (x *BrowseTableResponse) GetSortedAndFiltered() bool {
+	if x != nil {
+		return x.SortedAndFiltered
+	}
+	return false
+}
+
 type StreamDatastoreLogsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -2218,7 +2522,7 @@ type StreamDatastoreLogsRequest struct {
 
 func (x *StreamDatastoreLogsRequest) Reset() {
 	*x = StreamDatastoreLogsRequest{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[38]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2230,7 +2534,7 @@ func (x *StreamDatastoreLogsRequest) String() string {
 func (*StreamDatastoreLogsRequest) ProtoMessage() {}
 
 func (x *StreamDatastoreLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[38]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2243,7 +2547,7 @@ func (x *StreamDatastoreLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamDatastoreLogsRequest.ProtoReflect.Descriptor instead.
 func (*StreamDatastoreLogsRequest) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{38}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *StreamDatastoreLogsRequest) GetId() string {
@@ -2278,7 +2582,7 @@ type StreamDatastoreLogsResponse struct {
 
 func (x *StreamDatastoreLogsResponse) Reset() {
 	*x = StreamDatastoreLogsResponse{}
-	mi := &file_noryx_v1_datastore_proto_msgTypes[39]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2290,7 +2594,7 @@ func (x *StreamDatastoreLogsResponse) String() string {
 func (*StreamDatastoreLogsResponse) ProtoMessage() {}
 
 func (x *StreamDatastoreLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_noryx_v1_datastore_proto_msgTypes[39]
+	mi := &file_noryx_v1_datastore_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2303,7 +2607,7 @@ func (x *StreamDatastoreLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamDatastoreLogsResponse.ProtoReflect.Descriptor instead.
 func (*StreamDatastoreLogsResponse) Descriptor() ([]byte, []int) {
-	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{39}
+	return file_noryx_v1_datastore_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *StreamDatastoreLogsResponse) GetLine() string {
@@ -2422,7 +2726,19 @@ const file_noryx_v1_datastore_proto_rawDesc = "" +
 	"\adump_id\x18\x02 \x01(\tR\x06dumpId\">\n" +
 	"\x14DownloadDumpResponse\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\x03R\x04size\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\"?\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\"j\n" +
+	"\x11ImportDumpRequest\x124\n" +
+	"\x06header\x18\x01 \x01(\v2\x1a.noryx.v1.ImportDumpHeaderH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
+	"\acontent\"\x84\x01\n" +
+	"\x10ImportDumpHeader\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x1a\n" +
+	"\blocation\x18\x03 \x01(\tR\blocation\x12\x1a\n" +
+	"\bdatabase\x18\x04 \x01(\tR\bdatabase\x12\x12\n" +
+	"\x04size\x18\x05 \x01(\x03R\x04size\":\n" +
+	"\x12ImportDumpResponse\x12$\n" +
+	"\x04dump\x18\x01 \x01(\v2\x10.noryx.v1.BackupR\x04dump\"?\n" +
 	"\x11ListTablesRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bdatabase\x18\x02 \x01(\tR\bdatabase\"[\n" +
@@ -2432,14 +2748,23 @@ const file_noryx_v1_datastore_proto_rawDesc = "" +
 	"\x04rows\x18\x03 \x01(\x03R\x04rows\x12\x12\n" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\"=\n" +
 	"\x12ListTablesResponse\x12'\n" +
-	"\x06tables\x18\x01 \x03(\v2\x0f.noryx.v1.TableR\x06tables\"\x9c\x01\n" +
+	"\x06tables\x18\x01 \x03(\v2\x0f.noryx.v1.TableR\x06tables\"\xff\x01\n" +
 	"\x12BrowseTableRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x16\n" +
 	"\x06schema\x18\x03 \x01(\tR\x06schema\x12\x14\n" +
 	"\x05table\x18\x04 \x01(\tR\x05table\x12\x16\n" +
 	"\x06offset\x18\x05 \x01(\x04R\x06offset\x12\x14\n" +
-	"\x05limit\x18\x06 \x01(\rR\x05limit\"V\n" +
+	"\x05limit\x18\x06 \x01(\rR\x05limit\x12\x12\n" +
+	"\x04sort\x18\a \x01(\tR\x04sort\x12\x1e\n" +
+	"\n" +
+	"descending\x18\b \x01(\bR\n" +
+	"descending\x12-\n" +
+	"\x06filter\x18\t \x01(\v2\x15.noryx.v1.TableFilterR\x06filter\"W\n" +
+	"\vTableFilter\x12\x16\n" +
+	"\x06column\x18\x01 \x01(\tR\x06column\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1a\n" +
+	"\bcontains\x18\x03 \x01(\bR\bcontains\"V\n" +
 	"\vTableColumn\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1f\n" +
@@ -2451,11 +2776,12 @@ const file_noryx_v1_datastore_proto_rawDesc = "" +
 	"\x04null\x18\x02 \x01(\bR\x04null\x12\x1c\n" +
 	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"8\n" +
 	"\bTableRow\x12,\n" +
-	"\x06values\x18\x01 \x03(\v2\x14.noryx.v1.TableValueR\x06values\"\x82\x01\n" +
+	"\x06values\x18\x01 \x03(\v2\x14.noryx.v1.TableValueR\x06values\"\xb2\x01\n" +
 	"\x13BrowseTableResponse\x12/\n" +
 	"\acolumns\x18\x01 \x03(\v2\x15.noryx.v1.TableColumnR\acolumns\x12&\n" +
 	"\x04rows\x18\x02 \x03(\v2\x12.noryx.v1.TableRowR\x04rows\x12\x12\n" +
-	"\x04more\x18\x03 \x01(\bR\x04more\"h\n" +
+	"\x04more\x18\x03 \x01(\bR\x04more\x12.\n" +
+	"\x13sorted_and_filtered\x18\x04 \x01(\bR\x11sortedAndFiltered\"h\n" +
 	"\x1aStreamDatastoreLogsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04tail\x18\x02 \x01(\rR\x04tail\x12&\n" +
@@ -2472,7 +2798,7 @@ const file_noryx_v1_datastore_proto_rawDesc = "" +
 	"\x17DATASTORE_STATE_STOPPED\x10\x01\x12\x1c\n" +
 	"\x18DATASTORE_STATE_STARTING\x10\x02\x12\x1b\n" +
 	"\x17DATASTORE_STATE_RUNNING\x10\x03\x12\x1d\n" +
-	"\x19DATASTORE_STATE_UNHEALTHY\x10\x042\x85\v\n" +
+	"\x19DATASTORE_STATE_UNHEALTHY\x10\x042\xd0\v\n" +
 	"\x10DatastoreService\x12S\n" +
 	"\x0eListDatastores\x12\x1f.noryx.v1.ListDatastoresRequest\x1a .noryx.v1.ListDatastoresResponse\x12V\n" +
 	"\x0fCreateDatastore\x12 .noryx.v1.CreateDatastoreRequest\x1a!.noryx.v1.CreateDatastoreResponse\x12S\n" +
@@ -2489,7 +2815,9 @@ const file_noryx_v1_datastore_proto_rawDesc = "" +
 	"\vRestoreDump\x12\x1c.noryx.v1.RestoreDumpRequest\x1a\x1d.noryx.v1.RestoreDumpResponse\x12G\n" +
 	"\n" +
 	"DeleteDump\x12\x1b.noryx.v1.DeleteDumpRequest\x1a\x1c.noryx.v1.DeleteDumpResponse\x12O\n" +
-	"\fDownloadDump\x12\x1d.noryx.v1.DownloadDumpRequest\x1a\x1e.noryx.v1.DownloadDumpResponse0\x01\x12G\n" +
+	"\fDownloadDump\x12\x1d.noryx.v1.DownloadDumpRequest\x1a\x1e.noryx.v1.DownloadDumpResponse0\x01\x12I\n" +
+	"\n" +
+	"ImportDump\x12\x1b.noryx.v1.ImportDumpRequest\x1a\x1c.noryx.v1.ImportDumpResponse(\x01\x12G\n" +
 	"\n" +
 	"ListTables\x12\x1b.noryx.v1.ListTablesRequest\x1a\x1c.noryx.v1.ListTablesResponse\x12J\n" +
 	"\vBrowseTable\x12\x1c.noryx.v1.BrowseTableRequest\x1a\x1d.noryx.v1.BrowseTableResponse\x12d\n" +
@@ -2508,7 +2836,7 @@ func file_noryx_v1_datastore_proto_rawDescGZIP() []byte {
 }
 
 var file_noryx_v1_datastore_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_noryx_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_noryx_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_noryx_v1_datastore_proto_goTypes = []any{
 	(DatastoreEngine)(0),                // 0: noryx.v1.DatastoreEngine
 	(DatastoreState)(0),                 // 1: noryx.v1.DatastoreState
@@ -2542,18 +2870,22 @@ var file_noryx_v1_datastore_proto_goTypes = []any{
 	(*DeleteDumpResponse)(nil),          // 29: noryx.v1.DeleteDumpResponse
 	(*DownloadDumpRequest)(nil),         // 30: noryx.v1.DownloadDumpRequest
 	(*DownloadDumpResponse)(nil),        // 31: noryx.v1.DownloadDumpResponse
-	(*ListTablesRequest)(nil),           // 32: noryx.v1.ListTablesRequest
-	(*Table)(nil),                       // 33: noryx.v1.Table
-	(*ListTablesResponse)(nil),          // 34: noryx.v1.ListTablesResponse
-	(*BrowseTableRequest)(nil),          // 35: noryx.v1.BrowseTableRequest
-	(*TableColumn)(nil),                 // 36: noryx.v1.TableColumn
-	(*TableValue)(nil),                  // 37: noryx.v1.TableValue
-	(*TableRow)(nil),                    // 38: noryx.v1.TableRow
-	(*BrowseTableResponse)(nil),         // 39: noryx.v1.BrowseTableResponse
-	(*StreamDatastoreLogsRequest)(nil),  // 40: noryx.v1.StreamDatastoreLogsRequest
-	(*StreamDatastoreLogsResponse)(nil), // 41: noryx.v1.StreamDatastoreLogsResponse
-	(*BackupRetention)(nil),             // 42: noryx.v1.BackupRetention
-	(*Backup)(nil),                      // 43: noryx.v1.Backup
+	(*ImportDumpRequest)(nil),           // 32: noryx.v1.ImportDumpRequest
+	(*ImportDumpHeader)(nil),            // 33: noryx.v1.ImportDumpHeader
+	(*ImportDumpResponse)(nil),          // 34: noryx.v1.ImportDumpResponse
+	(*ListTablesRequest)(nil),           // 35: noryx.v1.ListTablesRequest
+	(*Table)(nil),                       // 36: noryx.v1.Table
+	(*ListTablesResponse)(nil),          // 37: noryx.v1.ListTablesResponse
+	(*BrowseTableRequest)(nil),          // 38: noryx.v1.BrowseTableRequest
+	(*TableFilter)(nil),                 // 39: noryx.v1.TableFilter
+	(*TableColumn)(nil),                 // 40: noryx.v1.TableColumn
+	(*TableValue)(nil),                  // 41: noryx.v1.TableValue
+	(*TableRow)(nil),                    // 42: noryx.v1.TableRow
+	(*BrowseTableResponse)(nil),         // 43: noryx.v1.BrowseTableResponse
+	(*StreamDatastoreLogsRequest)(nil),  // 44: noryx.v1.StreamDatastoreLogsRequest
+	(*StreamDatastoreLogsResponse)(nil), // 45: noryx.v1.StreamDatastoreLogsResponse
+	(*BackupRetention)(nil),             // 46: noryx.v1.BackupRetention
+	(*Backup)(nil),                      // 47: noryx.v1.Backup
 }
 var file_noryx_v1_datastore_proto_depIdxs = []int32{
 	0,  // 0: noryx.v1.Datastore.engine:type_name -> noryx.v1.DatastoreEngine
@@ -2564,52 +2896,57 @@ var file_noryx_v1_datastore_proto_depIdxs = []int32{
 	0,  // 5: noryx.v1.CreateDatastoreRequest.engine:type_name -> noryx.v1.DatastoreEngine
 	2,  // 6: noryx.v1.CreateDatastoreResponse.datastore:type_name -> noryx.v1.Datastore
 	2,  // 7: noryx.v1.UpdateDatastoreResponse.datastore:type_name -> noryx.v1.Datastore
-	42, // 8: noryx.v1.CreateDumpRequest.retention:type_name -> noryx.v1.BackupRetention
-	43, // 9: noryx.v1.CreateDumpResponse.dump:type_name -> noryx.v1.Backup
-	43, // 10: noryx.v1.ListDumpsResponse.dumps:type_name -> noryx.v1.Backup
-	33, // 11: noryx.v1.ListTablesResponse.tables:type_name -> noryx.v1.Table
-	37, // 12: noryx.v1.TableRow.values:type_name -> noryx.v1.TableValue
-	36, // 13: noryx.v1.BrowseTableResponse.columns:type_name -> noryx.v1.TableColumn
-	38, // 14: noryx.v1.BrowseTableResponse.rows:type_name -> noryx.v1.TableRow
-	4,  // 15: noryx.v1.DatastoreService.ListDatastores:input_type -> noryx.v1.ListDatastoresRequest
-	6,  // 16: noryx.v1.DatastoreService.CreateDatastore:input_type -> noryx.v1.CreateDatastoreRequest
-	8,  // 17: noryx.v1.DatastoreService.StartDatastore:input_type -> noryx.v1.StartDatastoreRequest
-	10, // 18: noryx.v1.DatastoreService.StopDatastore:input_type -> noryx.v1.StopDatastoreRequest
-	12, // 19: noryx.v1.DatastoreService.UpdateDatastore:input_type -> noryx.v1.UpdateDatastoreRequest
-	14, // 20: noryx.v1.DatastoreService.PublishDatastore:input_type -> noryx.v1.PublishDatastoreRequest
-	16, // 21: noryx.v1.DatastoreService.DeleteDatastore:input_type -> noryx.v1.DeleteDatastoreRequest
-	18, // 22: noryx.v1.DatastoreService.EnsureDatabase:input_type -> noryx.v1.EnsureDatabaseRequest
-	20, // 23: noryx.v1.DatastoreService.DropDatabase:input_type -> noryx.v1.DropDatabaseRequest
-	22, // 24: noryx.v1.DatastoreService.CreateDump:input_type -> noryx.v1.CreateDumpRequest
-	24, // 25: noryx.v1.DatastoreService.ListDumps:input_type -> noryx.v1.ListDumpsRequest
-	26, // 26: noryx.v1.DatastoreService.RestoreDump:input_type -> noryx.v1.RestoreDumpRequest
-	28, // 27: noryx.v1.DatastoreService.DeleteDump:input_type -> noryx.v1.DeleteDumpRequest
-	30, // 28: noryx.v1.DatastoreService.DownloadDump:input_type -> noryx.v1.DownloadDumpRequest
-	32, // 29: noryx.v1.DatastoreService.ListTables:input_type -> noryx.v1.ListTablesRequest
-	35, // 30: noryx.v1.DatastoreService.BrowseTable:input_type -> noryx.v1.BrowseTableRequest
-	40, // 31: noryx.v1.DatastoreService.StreamDatastoreLogs:input_type -> noryx.v1.StreamDatastoreLogsRequest
-	5,  // 32: noryx.v1.DatastoreService.ListDatastores:output_type -> noryx.v1.ListDatastoresResponse
-	7,  // 33: noryx.v1.DatastoreService.CreateDatastore:output_type -> noryx.v1.CreateDatastoreResponse
-	9,  // 34: noryx.v1.DatastoreService.StartDatastore:output_type -> noryx.v1.StartDatastoreResponse
-	11, // 35: noryx.v1.DatastoreService.StopDatastore:output_type -> noryx.v1.StopDatastoreResponse
-	13, // 36: noryx.v1.DatastoreService.UpdateDatastore:output_type -> noryx.v1.UpdateDatastoreResponse
-	15, // 37: noryx.v1.DatastoreService.PublishDatastore:output_type -> noryx.v1.PublishDatastoreResponse
-	17, // 38: noryx.v1.DatastoreService.DeleteDatastore:output_type -> noryx.v1.DeleteDatastoreResponse
-	19, // 39: noryx.v1.DatastoreService.EnsureDatabase:output_type -> noryx.v1.EnsureDatabaseResponse
-	21, // 40: noryx.v1.DatastoreService.DropDatabase:output_type -> noryx.v1.DropDatabaseResponse
-	23, // 41: noryx.v1.DatastoreService.CreateDump:output_type -> noryx.v1.CreateDumpResponse
-	25, // 42: noryx.v1.DatastoreService.ListDumps:output_type -> noryx.v1.ListDumpsResponse
-	27, // 43: noryx.v1.DatastoreService.RestoreDump:output_type -> noryx.v1.RestoreDumpResponse
-	29, // 44: noryx.v1.DatastoreService.DeleteDump:output_type -> noryx.v1.DeleteDumpResponse
-	31, // 45: noryx.v1.DatastoreService.DownloadDump:output_type -> noryx.v1.DownloadDumpResponse
-	34, // 46: noryx.v1.DatastoreService.ListTables:output_type -> noryx.v1.ListTablesResponse
-	39, // 47: noryx.v1.DatastoreService.BrowseTable:output_type -> noryx.v1.BrowseTableResponse
-	41, // 48: noryx.v1.DatastoreService.StreamDatastoreLogs:output_type -> noryx.v1.StreamDatastoreLogsResponse
-	32, // [32:49] is the sub-list for method output_type
-	15, // [15:32] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	46, // 8: noryx.v1.CreateDumpRequest.retention:type_name -> noryx.v1.BackupRetention
+	47, // 9: noryx.v1.CreateDumpResponse.dump:type_name -> noryx.v1.Backup
+	47, // 10: noryx.v1.ListDumpsResponse.dumps:type_name -> noryx.v1.Backup
+	33, // 11: noryx.v1.ImportDumpRequest.header:type_name -> noryx.v1.ImportDumpHeader
+	47, // 12: noryx.v1.ImportDumpResponse.dump:type_name -> noryx.v1.Backup
+	36, // 13: noryx.v1.ListTablesResponse.tables:type_name -> noryx.v1.Table
+	39, // 14: noryx.v1.BrowseTableRequest.filter:type_name -> noryx.v1.TableFilter
+	41, // 15: noryx.v1.TableRow.values:type_name -> noryx.v1.TableValue
+	40, // 16: noryx.v1.BrowseTableResponse.columns:type_name -> noryx.v1.TableColumn
+	42, // 17: noryx.v1.BrowseTableResponse.rows:type_name -> noryx.v1.TableRow
+	4,  // 18: noryx.v1.DatastoreService.ListDatastores:input_type -> noryx.v1.ListDatastoresRequest
+	6,  // 19: noryx.v1.DatastoreService.CreateDatastore:input_type -> noryx.v1.CreateDatastoreRequest
+	8,  // 20: noryx.v1.DatastoreService.StartDatastore:input_type -> noryx.v1.StartDatastoreRequest
+	10, // 21: noryx.v1.DatastoreService.StopDatastore:input_type -> noryx.v1.StopDatastoreRequest
+	12, // 22: noryx.v1.DatastoreService.UpdateDatastore:input_type -> noryx.v1.UpdateDatastoreRequest
+	14, // 23: noryx.v1.DatastoreService.PublishDatastore:input_type -> noryx.v1.PublishDatastoreRequest
+	16, // 24: noryx.v1.DatastoreService.DeleteDatastore:input_type -> noryx.v1.DeleteDatastoreRequest
+	18, // 25: noryx.v1.DatastoreService.EnsureDatabase:input_type -> noryx.v1.EnsureDatabaseRequest
+	20, // 26: noryx.v1.DatastoreService.DropDatabase:input_type -> noryx.v1.DropDatabaseRequest
+	22, // 27: noryx.v1.DatastoreService.CreateDump:input_type -> noryx.v1.CreateDumpRequest
+	24, // 28: noryx.v1.DatastoreService.ListDumps:input_type -> noryx.v1.ListDumpsRequest
+	26, // 29: noryx.v1.DatastoreService.RestoreDump:input_type -> noryx.v1.RestoreDumpRequest
+	28, // 30: noryx.v1.DatastoreService.DeleteDump:input_type -> noryx.v1.DeleteDumpRequest
+	30, // 31: noryx.v1.DatastoreService.DownloadDump:input_type -> noryx.v1.DownloadDumpRequest
+	32, // 32: noryx.v1.DatastoreService.ImportDump:input_type -> noryx.v1.ImportDumpRequest
+	35, // 33: noryx.v1.DatastoreService.ListTables:input_type -> noryx.v1.ListTablesRequest
+	38, // 34: noryx.v1.DatastoreService.BrowseTable:input_type -> noryx.v1.BrowseTableRequest
+	44, // 35: noryx.v1.DatastoreService.StreamDatastoreLogs:input_type -> noryx.v1.StreamDatastoreLogsRequest
+	5,  // 36: noryx.v1.DatastoreService.ListDatastores:output_type -> noryx.v1.ListDatastoresResponse
+	7,  // 37: noryx.v1.DatastoreService.CreateDatastore:output_type -> noryx.v1.CreateDatastoreResponse
+	9,  // 38: noryx.v1.DatastoreService.StartDatastore:output_type -> noryx.v1.StartDatastoreResponse
+	11, // 39: noryx.v1.DatastoreService.StopDatastore:output_type -> noryx.v1.StopDatastoreResponse
+	13, // 40: noryx.v1.DatastoreService.UpdateDatastore:output_type -> noryx.v1.UpdateDatastoreResponse
+	15, // 41: noryx.v1.DatastoreService.PublishDatastore:output_type -> noryx.v1.PublishDatastoreResponse
+	17, // 42: noryx.v1.DatastoreService.DeleteDatastore:output_type -> noryx.v1.DeleteDatastoreResponse
+	19, // 43: noryx.v1.DatastoreService.EnsureDatabase:output_type -> noryx.v1.EnsureDatabaseResponse
+	21, // 44: noryx.v1.DatastoreService.DropDatabase:output_type -> noryx.v1.DropDatabaseResponse
+	23, // 45: noryx.v1.DatastoreService.CreateDump:output_type -> noryx.v1.CreateDumpResponse
+	25, // 46: noryx.v1.DatastoreService.ListDumps:output_type -> noryx.v1.ListDumpsResponse
+	27, // 47: noryx.v1.DatastoreService.RestoreDump:output_type -> noryx.v1.RestoreDumpResponse
+	29, // 48: noryx.v1.DatastoreService.DeleteDump:output_type -> noryx.v1.DeleteDumpResponse
+	31, // 49: noryx.v1.DatastoreService.DownloadDump:output_type -> noryx.v1.DownloadDumpResponse
+	34, // 50: noryx.v1.DatastoreService.ImportDump:output_type -> noryx.v1.ImportDumpResponse
+	37, // 51: noryx.v1.DatastoreService.ListTables:output_type -> noryx.v1.ListTablesResponse
+	43, // 52: noryx.v1.DatastoreService.BrowseTable:output_type -> noryx.v1.BrowseTableResponse
+	45, // 53: noryx.v1.DatastoreService.StreamDatastoreLogs:output_type -> noryx.v1.StreamDatastoreLogsResponse
+	36, // [36:54] is the sub-list for method output_type
+	18, // [18:36] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_datastore_proto_init() }
@@ -2618,13 +2955,17 @@ func file_noryx_v1_datastore_proto_init() {
 		return
 	}
 	file_noryx_v1_backup_proto_init()
+	file_noryx_v1_datastore_proto_msgTypes[30].OneofWrappers = []any{
+		(*ImportDumpRequest_Header)(nil),
+		(*ImportDumpRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_datastore_proto_rawDesc), len(file_noryx_v1_datastore_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   40,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

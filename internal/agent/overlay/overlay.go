@@ -4,7 +4,7 @@
 // whose administrator allowed it with the local CLI, and the checks of the agent keep the
 // master from pulling other traffic of the node into the tunnel or opening the node's own
 // services to it. The interface outlives the agent, and noryx-agent overlay up restores it
-// at boot, before Docker starts the backends.
+// at boot, before Docker or Podman starts the backends.
 package overlay
 
 import (
@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,11 +50,17 @@ type Service struct {
 	supported   bool
 	checked     time.Time
 	unsupported error
+	// tests limits the connections that TestOverlayPeer opens.
+	tests *rate.Limiter
 }
 
 func NewService(dataDir string, kernel Kernel) *Service {
-	return &Service{dir: Dir(dataDir), kernel: kernel}
+	return &Service{dir: Dir(dataDir), kernel: kernel, tests: rate.NewLimiter(testRate, testBurst)}
 }
+
+// DatastorePrefix keeps the datastores apart from the servers among the clients: a
+// datastore is admitted as DatastorePrefix and its ID, a server by its ID.
+const DatastorePrefix = "db-"
 
 // Dir returns the folder of the network in the agent's data directory.
 func Dir(dataDir string) string { return filepath.Join(dataDir, "overlay") }
@@ -80,7 +87,8 @@ func (s *Service) GetOverlay(context.Context, *noryxv1.GetOverlayRequest) (*nory
 		}
 		return res, nil
 	}
-	res.Address = st.Address.String()
+	res.Address, res.Published = st.Address.String(), published(st.Clients)
+	res.Firewall, res.FirewallProblem = firewallState(s.kernel.Firewall(*st))
 	peers, err := s.kernel.Peers()
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -92,6 +100,38 @@ func (s *Service) GetOverlay(context.Context, *noryxv1.GetOverlayRequest) (*nory
 		})
 	}
 	return res, nil
+}
+
+// published returns the ports that clients reach, in their order.
+func published(clients map[string]Client) []*noryxv1.OverlayPublished {
+	list := make([]*noryxv1.OverlayPublished, 0, len(clients))
+	for id, c := range clients {
+		p := &noryxv1.OverlayPublished{Port: uint32(c.Port), ServerId: id}
+		if ds, ok := strings.CutPrefix(id, DatastorePrefix); ok {
+			p.ServerId, p.DatastoreId = "", ds
+		}
+		for i, a := range c.addresses() {
+			client := &noryxv1.OverlayClient{Address: a.String()}
+			if i < len(c.Keys) {
+				client.PublicKey = c.Keys[i]
+			}
+			p.Clients = append(p.Clients, client)
+		}
+		list = append(list, p)
+	}
+	slices.SortFunc(list, func(a, b *noryxv1.OverlayPublished) int { return cmp.Compare(a.GetPort(), b.GetPort()) })
+	return list
+}
+
+// firewallState tells the master about the firewall rules, as Kernel.Firewall found them.
+func firewallState(err error) (noryxv1.OverlayFirewall, string) {
+	switch {
+	case err == nil:
+		return noryxv1.OverlayFirewall_OVERLAY_FIREWALL_IN_PLACE, ""
+	case errors.Is(err, ErrNoTable):
+		return noryxv1.OverlayFirewall_OVERLAY_FIREWALL_MISSING, ""
+	}
+	return noryxv1.OverlayFirewall_OVERLAY_FIREWALL_INCOMPLETE, err.Error()
 }
 
 func (s *Service) ConfigureOverlay(ctx context.Context, req *noryxv1.ConfigureOverlayRequest) (*noryxv1.ConfigureOverlayResponse, error) {
@@ -327,7 +367,7 @@ func Deny(dataDir string) error {
 	return nil
 }
 
-// Up restores the interface and firewall rules of a member, e.g. at boot before Docker
+// Up restores the interface and firewall rules of a member, e.g. at boot before the runtime
 // starts the containers whose ports are published in the network.
 func Up(dataDir string, kernel Kernel) error {
 	s := NewService(dataDir, kernel)

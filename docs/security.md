@@ -101,15 +101,37 @@ longer send players to its servers. The node itself isn't contacted, and if a se
 configured, the node stays. Only deleting a network whose proxy's node doesn't answer skips the proxy and the servers
 on that node, which then only trust each other, and says so. The forwarding mods come from Modrinth like other mods,
 checked against their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent
-writes to through Docker; no RCON plugin is added.
+writes to through the runtime; no RCON plugin is added. Podman closes that input once anyone attached to it leaves, so
+there a shell of the proxy's user in its container writes the command to the input of the proxy's process, taking it on
+its own input rather than as an argument. The commands of the Maintenance plugin only take what the agent checked
+itself: names of players, the name of a server that its configuration of the proxy has, and timers as whole minutes up
+to 28 days, so nothing else becomes part of a command.
 
 ## Containers
 
 Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images need to hand the
 data to the server's user: `CHOWN`, `SETUID` and `SETGID`. Proxies run as the user of their image (uid 1000) from the
-start, which owns their data, without any capabilities. Servers of a node can't reach each other: they share a Docker
-network without communication between containers (`noryx-servers`), and a Velocity proxy shares another one only with
-its backends on the node.
+start, which owns their data, without any capabilities. Servers of a node can't reach each other: they share a network
+without communication between containers (`noryx-servers`), and a Velocity proxy shares another one only with its
+backends on the node.
+
+A node runs its containers with Docker or with Podman as root, and the same holds for both. The agent sets every option
+of a container itself, so that Podman gets the same users, capabilities, limits, health checks and published addresses
+as Docker, and as root it keeps the users of the containers, which own the data on the node, as Docker does. Podman
+ignores the option of a network that keeps its containers apart, and keeps networks apart only while its API remembers
+it: Podman 4.9.3 of Ubuntu 24.04, for one, forgets it once anyone inspects the network through Docker's API, as the agent
+does. So on its nodes, the bridges of the agent's networks are named `noryx-…`, the one of `noryx-servers` after the
+network, and the agent drops in nftables tables of its own whatever this bridge would forward from one container to
+another (`bridge noryx`) and whatever the node would route from one of these bridges to another (`inet
+noryx-networks`): when it starts, before each start of a server, and at boot with `noryx-isolate.service`, without
+which Podman doesn't start the servers. An agent that can't set up the tables, e.g. as the kernel lacks
+`nft_meta_bridge`, doesn't run. A network of the agent without such a bridge, e.g. of an older agent, is created again
+once no container uses it, and no server or datastore starts in it until then. The agent checks every answer of the
+runtime's socket and refuses one at which the other runtime answers, e.g. Podman behind Docker's socket, or a Podman
+older than 4.9 or rootless, as it relies on how each one keeps servers apart; whether Podman runs rootless, which
+Docker's API doesn't tell, it asks Podman's own API once for each version. With SELinux, e.g. on RHEL, Podman also
+confines each container to the files labelled for it, and the agent has it label the mounts of each container for that
+container alone (`Z`).
 
 ## Agent input
 
@@ -127,12 +149,34 @@ zone as `TZ`, once the agent found it among the IANA time zones it knows.
 ## File manager
 
 The agent confines every path to the server's data directory, including through symbolic links, and new files belong to
-the server's user. Downloads are sent as attachments with a sandboxing CSP, so an uploaded HTML file can't run scripts
-in the panel. Secrets of the server stay on the node: files that only hold them can't be listed, read, written or moved,
-others show them as `<hidden>`, no file or folder with secrets can be moved where they would show, and archives leave
-them out. Only moving a server to another node copies them. Moving or deleting several files and folders at once
-checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the browser
-only up to 16 MB, so that a small archive can't exhaust the browser's memory.
+the server's user. No path leads into the temporary files and folders of the agent (`.noryx-*`), which aren't listed
+either, as they can hold secrets, e.g. a backup that is being restored or a file of a file set before it is hidden.
+Downloads are sent as attachments with a sandboxing CSP, so an uploaded HTML file can't run scripts in the panel.
+Secrets of the server stay on the node: files that only hold them can't be listed, read, written or moved, others show
+them as `<hidden>`, no file or folder with secrets can be moved or copied where they would show, and archives leave
+them out. Only moving a server to another node copies them. Copies never follow links, and one that a
+file set filled with secrets while it was copied is removed again. Moving, copying or deleting several files and folders
+at once checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the
+browser only up to 16 MB, so that a small archive can't exhaust the browser's memory. A search shows files as the
+editor does: without the files that only hold secrets and with secrets as `<hidden>`, also those a file set marks while
+it searches, and it doesn't follow links or read the temporary files of the agent, which can hold the secrets of a file
+being written.
+
+Archives that are extracted, uploaded as backups or imported as servers are untrusted, unlike the backups the agent made
+itself. The agent reads the list of such an archive before it writes anything and refuses it for links, hard links,
+devices and other special files, absolute paths, `..` and control characters in names, encrypted entries, a path twice
+or both as a file and a folder, more than 100,000 entries, more than 64 GB of files, and files that would be more than
+100 times the size of the archive (zip bombs; up to 64 MB are exempt). It reads at most 64 MB of the directory of a ZIP
+archive, which it keeps in memory, refuses one whose end announces more entries or a larger directory before it reads
+any, as Go's reader of ZIP archives reserves memory for them first, and decompresses a `.tar.gz` archive at most as far
+as these limits allow, twice: to check it, then to extract it, when each entry must match the list. The files must fit
+with 1 GB to spare. Every entry is written below its folder in the server's data (`os.Root`), as the server's user, and
+neither through a link nor in place of something that isn't a file, so a link of the server can't lead it elsewhere.
+Of the permissions in the archive, a file only keeps that its owner may run it, which the server's user could allow
+itself, and never special ones such as setuid. The file manager extracts nothing into a hidden path, the manifest of
+file sets, the temporary files of the agent or the files Noryx writes itself, such as `server.properties`, `ops.json`
+and `forwarding.secret`, and refuses the whole archive if it would.
+Extracting and copying need the permission to change files, searching the one to read them.
 
 ## Plugins and downloads
 
@@ -210,18 +254,35 @@ A datastore runs as the image's user without capabilities, with `no-new-privileg
 health check. The agent generates the superuser's password, which the image reads from a file that only it may read,
 never from the environment or labels, and which never leaves the node; MariaDB's root may only sign in on the container
 itself. Every database has its own user with rights on it alone, and on PostgreSQL nobody else may connect to it or to
-the superuser's database. Only the network's servers reach a datastore: on its node over an internal Docker network
+the superuser's database. Only the network's servers reach a datastore: on its node over an internal network
 without internet, which they share with each other as backends in a proxy's network already do; from other nodes only
 over the private network of the nodes, for the nodes of its servers, never at a public address. The agent checks every
 name against `^[a-z][a-z0-9_]{0,31}$`, refuses those of the engines themselves, and only takes passwords from `a-z2-7`,
 so no statement or configuration file needs escaping; statements go to the clients in the container on their standard
-input. Dumps are loaded as their database's own user, never as the superuser, with MariaDB's sandbox mode, so a dump
-can't gain more rights; as MariaDB has no way to sign in as a user without its password, the user gets a random one for
-the time of the load. The agent never stores the passwords of users: upgrades keep the hashes, which it checks before it
-uses them in a statement. Dumps are kept like backups and checked before a restore drops anything, so a damaged one
-changes nothing. Browsing reads as the superuser in a session that only reads and stops each statement after 10 seconds,
-with statements the agent builds itself from names that need no escaping: tables, schemas and columns whose names don't
-match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, MariaDB's client runs in its sandbox, and a page has at most 3 MiB. The log
+input. Dumps are loaded as their database's own user, never as the superuser, so a dump can't gain more rights; as
+MariaDB has no way to sign in as a user without its password, the user gets a random one for the time of the load. The
+clients' own commands are off while they load a dump, also one uploaded from elsewhere: MariaDB's client runs in binary
+mode, which only allows `DELIMITER`, `\C` and the sandbox, in its sandbox and without sending files for `LOAD DATA
+LOCAL`, and psql in its restricted mode with a random key, which refuses `\!`, `\connect`, `\copy`, `\i`, `\o` and all
+others. The `\restrict` and `\unrestrict` with which pg_dump wraps a dump are left out only at its start and end, as its
+author knows their key; any other one fails the load. So a dump can't run programs in the container, read its files,
+e.g. the superuser's password, or connect to another database or as another user. An uploaded dump is checked before it
+is kept: a single SQL file goes into a database the master knows, and a ZIP archive may only hold a `<database>.sql`
+with a valid name for each database besides folders and macOS's `__MACOSX`, up to 1000 entries, 50 databases and SQL
+files of 64 GB and 100 times its size together, all read to their ends to check their checksums; the agent keeps only
+these SQL files, and uploads have at most 16 GB and stop before they leave less than 1 GB free, also those whose size
+the master doesn't know in advance. The agent never stores the passwords of users: upgrades keep the hashes, which it
+checks before it uses them in a statement. Dumps are kept like backups and checked before a restore drops anything, so
+a damaged one changes nothing. Browsing never reads as the superuser, as reading runs what the database's user may have
+written, e.g. casts to text, functions and views: on PostgreSQL it reads as the database's own user, and on MariaDB,
+which signs in users only with their passwords, as a user that may only read the database, signs in only on the
+container with a random password and exists only while the agent reads. It reads in a session that only reads and stops
+each statement after 10 seconds, with statements the agent builds itself from names that need no escaping: tables,
+schemas and columns whose names don't match `^[A-Za-z0-9_$-]{1,64}$` aren't shown, the columns to sort and filter by
+must be the table's, the value of a filter, at most 1 KiB of UTF-8 without NUL, goes into the statement in hexadecimal,
+MariaDB's client runs in its sandbox, and a page has at most 3 MiB. To count the connections of a datastore, the agent
+runs a query of its own as the superuser, and the master records the usage only of the datastores it has on the node
+that reports it. The log
 of a datastore's container, which only those who may manage datastores see, shows the statements that the engines log,
 e.g. when one fails, so the agent hides every quoted value after `PASSWORD`, `PASSWORD(`, `IDENTIFIED BY` and `USING`,
 the hashes of passwords too, before it sends a line: also with escaped quotes, and to the end of the line where it can't
@@ -239,7 +300,9 @@ Copying never follows symbolic links, so a copy can't pull in files from outside
 Velocity proxy loses its forwarding secret, a copied BungeeCord proxy stops forwarding and a copied game server stops
 trusting the proxy, so a copy can't impersonate a server of a network. Copied proxies also lose Floodgate's key, with
 which Geyser vouches for Bedrock players, and copied game servers demand signed chat again. A copied Fabric or Quilt
-server keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab.
+server keeps FabricProxy-Lite, which turns players away until it is removed in the **Mods** tab. A copy of a game server
+of a network only joins the network, and gets its forwarding secret, if the user who copies it may also manage networks;
+it stays on the node of the original, so it is as exposed as the original is.
 
 ## Backups
 
@@ -260,6 +323,62 @@ a compromised node could have changed like the data of its servers. Marking a ba
 back up the server, and letting its job delete it again the one to delete backups. The master refuses restoring chosen
 paths, into another server or with a backup first on nodes whose agent would ignore that, e.g. restore all of a backup
 instead.
+
+An uploaded backup is untrusted. The agent receives it outside the server's data, keeps it only once it checked it like
+an archive of the file manager (see [File manager](#file-manager)), and marks it as untrusted in its details, which only
+the agent writes. Restoring an untrusted backup checks it again, with limits for backups (up to 1,000,000 entries and
+1 TB), and extracts it confined like an archive of the file manager, without the files that only hold secrets, the
+manifest of file sets and the files of the agent, whose versions on the server stay as they are, e.g. the pardons that
+wait for the end of temporary bans; it replaces every secret in the other files with the server's own, not only
+placeholders, and keeps the server's network settings like any restore. A backup from another node, moved
+with its server, copied there or a copy restored into a server, is untrusted too: the agent keeps it once it checked it
+like an uploaded one, with the limits for backups, and refuses it once it is larger than the master announced or less
+than 1 GB would stay free, also when the data of a moving server arrive. Listing, downloading and restoring an
+untrusted backup read the directory of its archive within the limits for backups too. The mark moves with the backup to
+another node, and copies for restoring into another server keep it; the master refuses both with agents that would
+drop it. Uploading needs the permissions to back up and to restore the server, and to change its files: an uploaded
+backup can bring any file, e.g. a plugin, which runs with the server and can read its secrets once it is restored, such
+as the forwarding secret of its network, like a plugin uploaded with the file manager.
+
+## Copies of backups
+
+Copies of backups leave the server's node, so the agent of the node makes them as downloads, with the secrets of the
+server hidden: files that only hold secrets, such as the console password, the forwarding secret of the network,
+Floodgate's key and the files with secrets of file sets, are left out, and secrets in other files, e.g. in
+`server.properties` or the forwarding settings, are `<hidden>`. Restoring a copy works like restoring a backup into
+another server: the agent puts the server's own secrets wherever the copy says `<hidden>`, and keeps the server's
+secrets, those of its network and its forwarding settings, see [Backups](#backups). The rest of the server's data is in
+the copies as in its backups: worlds, plugins with their data and configuration, which can hold passwords that weren't
+set through file sets.
+
+The master doesn't encrypt copies, so whoever runs an S3-compatible storage can read them. It asks the storage to
+encrypt them with its own keys (SSE-S3) unless that is turned off, which only protects them from those who get at its
+disks, not from the provider: choose a storage that you trust with the data of the servers. The master only connects to
+the configured endpoint, over HTTPS with a certificate the system trusts, follows no redirects, signs every request with
+AWS Signature Version 4 including the hash of its body, and accepts the endpoint, region, bucket and folder only in
+strict forms. The secret key of a storage is stored in the master's database like the forwarding secret, is part of
+`noryx-master backup`, and is never returned by the API or logged; endpoint, bucket and access key show to those who may
+see backup jobs. A compromised storage can only hand out archives of its own, which are restored like those of a
+compromised node.
+
+Another node keeps copies apart from the backups of its own servers, out of reach of containers and the file manager,
+and never restores them itself: the master relays them, as agents never connect to each other. Its administrator can
+read them there, like the backups of the servers on their own node. Agents mark every backup that came from elsewhere, a
+copy or one of another node, as untrusted, and restore it like an uploaded backup (see [Backups](#backups)): checked
+again with the limits for backups, extracted confined like an archive of the file manager, and with every secret
+replaced by the server's own; the master refuses to restore a copy with an agent that would trust it. So a compromised
+node or storage can change the data of the servers restored from its
+copies, like a node can change the backups of its own servers, but nothing beyond them. A copy belongs to its server on
+the node it was copied from, and follows the server when it moves: nodes tell the IDs of their servers themselves, so a
+compromised node that claims the ID of another node's server only gets copies of its own, and a job neither replaces
+nor deletes that server's copies for it.
+
+Copies take the backups of all servers away from their nodes, so adding, changing and deleting storages, and saving a
+job that copies, need the permissions to manage backup jobs and to see and download the backups of all servers; each run
+checks that the user who saved the job last still has them. Seeing and restoring the copies of a server needs the
+permission to see its backups, on the node it is on now; those of servers that are gone, whose scope is unknown, need it
+on all servers. Restoring needs the permission to restore backups of the server restored into, which must be of the
+same kind, and deleting a copy the permission to delete backups.
 
 ## Permissions
 
@@ -314,10 +433,35 @@ are cut to a maximum size. Besides its retention, the log is kept under a size l
 checks every minute, so that agents can only exceed it by what they add in a minute, a few MiB each. SQLite reuses the
 space of deleted entries, so the log takes at most about twice its limit on disk, however long the retention. So a
 compromised agent can't fill the database, also over weeks, or write entries about other nodes. Request fields that may hold
-secrets, such as the forwarding secret of a network, are never logged. Exports protect spreadsheets from formulas in
-entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the browser connects
-again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP address is that of the
-proxy, unless `--trusted-proxy` names it.
+secrets, such as the forwarding secret of a network or the URL of a webhook, are never logged. Exports protect
+spreadsheets from formulas in entries, and log files are only readable by their owner. A live stream ends every 5
+minutes and the browser connects again, which checks the session and the permissions again. Behind a reverse proxy, the
+logged IP address is that of the proxy, unless `--trusted-proxy` names it.
+
+## Notifications
+
+Managing notifications needs the permission to see the log for all servers besides its own, as rules send entries about
+every node and server, and their channels take them out of the master. The URLs of webhooks and the passwords of mail
+servers are stored in the master's database like the forwarding secret; the API never returns them, the log never names
+them, also not in errors, and an empty field keeps them, so that nobody who may manage notifications learns them. A mail
+channel keeps its password only while its server, port and user stay the same, so that it can't be sent to another
+server. Messages carry the texts of entries, never secrets, which aren't logged; entries can hold IP addresses and the
+names of players, which the panel says where channels are set up.
+
+Channels connect to public addresses only, so that the master can't be used to reach its own network: the address of
+every connection is checked right before it is made, after DNS answered, so that a name can't resolve to another address
+later. Refused are loopback, private (which include the private network of the nodes, as it must be one), link-local,
+shared (carrier-grade NAT), multicast, unspecified, reserved, documentation and benchmarking addresses, IPv6 unique
+local addresses, 6to4 and Teredo, and IPv4-mapped and NAT64 forms of refused IPv4 addresses. Webhooks need HTTPS with a
+certificate that the system trusts, redirects aren't followed and proxies of the environment aren't used, as they would
+connect elsewhere; mails go over TLS from the start or after STARTTLS, and the master refuses to sign in or send without
+it. Every request and mail has a timeout, and only the status of an answer is shown, not its body. Discord and Slack get
+the texts of entries, which agents and servers write, as text that can't mention anyone or be formatted: escaped for
+Discord, which also gets no mentions allowed, and as Slack's plain text with `&`, `<` and `>` escaped. The subjects of
+mails are a single line without control characters and encoded, so that an entry can't add headers. A compromised agent
+can only add warnings about its own node and servers, at the limited rate of the log, and each channel sends 5 messages
+at once, then one a minute at most, which counts what it leaves out. **Send test** works three times at once, then once
+every 20 seconds per channel.
 
 ## Usage
 
@@ -327,6 +471,27 @@ and checks at most 32 storage locations with valid names, so that an agent can't
 the thresholds of a server needs the permission to change its settings, of a node the permission to change the node,
 and warnings only show to those who may see the server or node.
 
+## Players
+
+The master notes where players played from the names of the players online that the agents measure: the name, the
+server, the day and the minutes, never IP addresses or anything else about them, kept as long as the log and deleted
+with their server or node. A compromised agent can make up players of its own game servers, but the master records only
+names of players (16 letters, digits and `_`, or Floodgate's dot before), at most 1000 of a server per measurement and
+10,000 players and servers of a node per day, so that it can't fill the database. Users only see where players played
+on the servers they may see.
+
+The faces of players send their names to Mojang, and those of Bedrock players to GeyserMC; the master asks for them,
+only over HTTPS and from fixed hosts, and fetches skins only from Minecraft's textures server by the ID of a texture,
+not by an address that a profile names. As names come from users and from agents, the master keeps up to 5000 faces,
+looks up at most 30 at once and then one every 2 seconds, and decodes only skins of up to 256 KiB that are images of 64
+by 64 or 64 by 32 pixels; it serves the face it drew itself as an image with a sandboxing CSP, so the browser never
+contacts them. Messages to players need the permission to send console commands on each server, like the network's
+message; their text becomes JSON with an encoder, never by hand, so it can't add components or commands. A temporary ban
+ends with a pardon that waits in `noryx-pending-players.json` in the server's data like the changes for stopped servers:
+a compromised server can change its own waiting pardons, which only affects itself, as it could pardon anyone anyway.
+The names of the players who joined come from the server's cache of players (`usercache.json`), which the server writes,
+so the agent reads at most 8 MiB and 10,000 entries of it, like the lists, and only names of players.
+
 ## Moving servers
 
 Agents never connect to each other: the master relays the server's archive and backups between them over its mutually
@@ -334,10 +499,18 @@ authenticated connections. The new node checks the settings like those of a new 
 to the server's data directory, without symbolic links. Moving needs the permissions to delete the server and read its
 files, and to create servers on the new node.
 
+A server created from an archive of a server from elsewhere gets the archive checked like one of the file manager,
+before anything of it is used: links, paths outside the data and too much data delete the new server again. It leaves
+out the files that only hold secrets, the manifest of file sets and the files of the agent, empties the secrets in the
+other files, and removes the forwarding settings, so that the server trusts no proxy and runs in online mode, until a
+network configures it. It needs the permission to create servers on the node, which is enough to bring any plugin with
+the archive: such a plugin runs with the server and can read the secrets it gets later, e.g. the forwarding secret of a
+network it joins, or a file set's.
+
 ## Console
 
 To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console password from the
-server's `server.properties` and connects to the server's console port inside Docker's network; the password never
+server's `server.properties` and connects to the server's console port inside the runtime's network; the password never
 leaves the node. A server that doesn't answer its console, e.g. a compromised one, holds up only its own commands: the
 agent applies the waiting changes of players to each server on its own, and gives each change 15 seconds before it waits
 for the next try.
@@ -354,19 +527,35 @@ interface on a host that didn't agree. Each node creates its WireGuard key itsel
 (`/var/lib/noryx-agent/overlay/private.key`, mode `0600`); only the public key reaches the master, over the node's
 mutually authenticated connection, and the master's backup holds public keys only. The agent checks what the master
 configures: the range must be a private IPv4 range (RFC 1918) that overlaps none of the node's addresses and routes,
-e.g. a provider's private network or a Docker network, and each peer gets exactly one address in it, so a master can't
-pull other traffic of the node into the tunnel. An nftables table of its own (`inet noryx`), which works next to
-Docker's iptables and nftables rules, drops packets for the node's address that don't arrive through the tunnel, new
-connections from the tunnel to the node itself, e.g. to SSH or the agent, and forwarded connections from the tunnel
-except those of a proxy's node to the ports of its servers. WireGuard accepts from a peer only its own address and
-doesn't answer unauthenticated packets. The agent binds each address it lets reach a port to the public key the peer at
-that address had then, which the master sends along, and drops the address once a peer has it with another key: a node
-that gets the address of a removed one, even while a member was offline and never saw the removal, reaches none of the
-ports published for the removed one. A compromised node reaches only the ports of its own servers on other nodes;
-removing it removes it everywhere. A rotated key is let in again as the master applies the node's networks again; a key
-that changes otherwise, e.g. as a node lost its data, needs its networks applied again in the panel. A compromised
-master could add a peer of its own, but it can already reconfigure every server. If the interface is missing, e.g.
-after a failed boot, the ports of these servers are reachable nowhere.
+e.g. a provider's private network or a network of Docker or Podman, and each peer gets exactly one address in it, so a
+master can't pull other traffic of the node into the tunnel. An nftables table of its own (`inet noryx`), which works
+next to the iptables and nftables rules of Docker and Podman, drops packets for the node's address that don't arrive
+through the tunnel, new connections from the tunnel to the node itself, e.g. to SSH or the agent, and forwarded
+connections from the tunnel except those of a proxy's node to the ports of its servers. WireGuard accepts from a peer
+only its own address and doesn't answer unauthenticated packets. The agent binds each address it lets reach a port to
+the public key the peer at that address had then, which the master sends along, and drops the address once a peer has it
+with another key: a node that gets the address of a removed one, even while a member was offline and never saw the
+removal, reaches none of the ports published for the removed one. A compromised node reaches only the ports of its own
+servers on other nodes; removing it removes it everywhere. A rotated key is let in again as the master applies the
+node's networks again; a key that changes otherwise, e.g. as a node lost its data, needs its networks applied again in
+the panel. A compromised master could add a peer of its own, but it can already reconfigure every server. If the
+interface is missing, e.g. after a failed boot, the ports of these servers are reachable nowhere.
+
+A test of the connections to a peer can't be turned into a scanner of other hosts. The agent connects only to the
+address that its own configuration gives the peer with the key the master names, which lies in the private range
+checked above, and only if WireGuard sends that address to that peer; the socket is bound to `noryx0`, so no connection
+leaves the node another way, e.g. into its local network, to the internet or to its own services. It connects only to
+the ports that the master's last configuration says the peer publishes for this node, which the master takes from that
+peer's own report, so a compromised node can only make others test its own address. A test connects to at most 32
+ports, each within 3 seconds, and the agent opens 64 test connections at once and then 4 a second; it sends nothing and
+closes each connection at once. What remains: a compromised master can claim any ports for a peer and so probe the TCP
+ports of the peers' addresses in the network at that rate, but each peer's firewall lets this node reach only the ports
+published for it, and such a master can already run code in the servers, which reach these addresses anyway. Only those
+who may manage the private network test, and only towards nodes they may see. The agent finds its firewall rules by the
+comments it writes with them, as the nftables package can't read rules with these conntrack matches; only root on the
+node could change rules and keep their comments. A node's page names published ports with only the servers, datastores
+and nodes that the user may see, and `overlay status` in the panel's terminal needs the permissions to see the node, all
+its servers and the datastores.
 
 ## Storage locations
 

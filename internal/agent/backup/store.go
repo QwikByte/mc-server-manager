@@ -23,8 +23,8 @@ import (
 )
 
 // A backup is kept as <backups of the location>/<owner>/<ID>.zip, with its details in
-// <ID>.json next to it. The owner is the ID of a server, or datastores/<ID> for the dumps of
-// a datastore.
+// <ID>.json next to it. The owner is the ID of a server, datastores/<ID> for the dumps of a
+// datastore, or copies/<ID> for the copies of backups of a server of another node.
 
 // idPattern matches backup IDs, which start with the time of creation; see noryxv1.NewBackupID.
 var idPattern = regexp.MustCompile(`^\d{8}-\d{6}-[a-z2-7]{6}$`)
@@ -39,7 +39,13 @@ type Details struct {
 	JobID   string   `json:"jobId,omitempty"`
 	// Kept backups are never deleted by their job.
 	Kept bool `json:"kept,omitempty"`
+	// Untrusted backups weren't made by this agent but came from elsewhere, e.g. from another
+	// node or a copy of a backup, so restoring them trusts nothing that their archive tells.
+	Untrusted bool `json:"untrusted,omitempty"`
 }
+
+// copies returns the owner of the copies of backups of a server of another node.
+func copies(serverID string) string { return filepath.Join("copies", serverID) }
 
 // Archive is a kept backup, a ZIP archive.
 type Archive struct {
@@ -57,7 +63,7 @@ func (b Archive) info() string { return filepath.Join(b.dir, b.ID+".json") }
 func (b Archive) Proto() *noryxv1.Backup {
 	return &noryxv1.Backup{
 		Id: b.ID, Label: b.Label, CreatedUnix: b.Created.Unix(), Size: b.Size, Location: b.Location, Paths: slashed(b.Paths), JobId: b.JobID,
-		Exclude: slashed(b.Exclude), Kept: b.Kept,
+		Exclude: slashed(b.Exclude), Kept: b.Kept, Untrusted: b.Untrusted,
 	}
 }
 
@@ -152,6 +158,12 @@ func (s Store) create(ctx context.Context, data *datadir.Dir, serverID, location
 // Add adds a backup of an owner to a location, whose archive write writes, if size bytes
 // fit. It only shows up once its archive is complete, and never replaces another one.
 func (s Store) Add(owner, location, id string, d Details, size int64, write func(io.Writer) error) (Archive, error) {
+	return s.AddFile(owner, location, id, d, size, func(f *os.File, _ *Details) error { return write(f) })
+}
+
+// AddFile is Add for an archive that write may read again once it wrote it, e.g. to check an
+// upload, and whose details it may complete.
+func (s Store) AddFile(owner, location, id string, d Details, size int64, write func(*os.File, *Details) error) (Archive, error) {
 	root, err := s.storage.BackupPath(location)
 	if err != nil {
 		return Archive{}, err
@@ -164,7 +176,7 @@ func (s Store) Add(owner, location, id string, d Details, size int64, write func
 		return b, fs.ErrExist
 	}
 	tmp := datadir.TempName(b.dir)
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a new file in the backups folder
+	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a new file in the backups folder
 	if err != nil {
 		return b, err
 	}
@@ -172,8 +184,11 @@ func (s Store) Add(owner, location, id string, d Details, size int64, write func
 	if err := storage.Fits(f, size); err != nil {
 		return b, errors.Join(err, f.Close())
 	}
+	if err := errors.Join(write(f, &b.Details), f.Close()); err != nil {
+		return b, err
+	}
 	info, err := json.Marshal(b.Details)
-	if err = errors.Join(err, write(f), f.Close()); err != nil {
+	if err != nil {
 		return b, err
 	}
 	if err := os.WriteFile(b.info(), info, 0o600); err != nil {
@@ -183,6 +198,27 @@ func (s Store) Add(owner, location, id string, d Details, size int64, write func
 		return b, errors.Join(err, os.Remove(b.info()))
 	}
 	return b, b.load()
+}
+
+// Temp creates a temporary file next to the backups of an owner in a location, if size bytes
+// fit, e.g. for an archive to check before it becomes a backup. The caller removes it.
+func (s Store) Temp(owner, location string, size int64) (*os.File, error) {
+	root, err := s.storage.BackupPath(location)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(root, owner)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(datadir.TempName(dir), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a new file in the backups folder
+	if err != nil {
+		return nil, err
+	}
+	if err := storage.Fits(f, size); err != nil {
+		return nil, errors.Join(err, f.Close(), os.Remove(f.Name()))
+	}
+	return f, nil
 }
 
 // Update stores the changed details of a backup.
@@ -229,38 +265,13 @@ func (s Store) Prune(owner, jobID string, r *noryxv1.BackupRetention) error {
 	return err
 }
 
-// retained tells which of backups, newest first, a retention keeps: the newest ones, and the
-// newest of each of the last days, weeks and months that have backups.
+// retained tells which of backups, newest first, a retention keeps, see BackupRetention.Keeps.
 func retained(backups []Archive, r *noryxv1.BackupRetention) []bool {
-	loc, err := time.LoadLocation(r.GetTimeZone())
-	if err != nil {
-		loc = time.UTC
+	created := make([]time.Time, len(backups))
+	for i, b := range backups {
+		created[i] = b.Created
 	}
-	keep := make([]bool, len(backups))
-	for i := range min(int(r.GetLast()), len(backups)) {
-		keep[i] = true
-	}
-	for _, rule := range []struct {
-		count  uint32
-		period func(time.Time) [3]int
-	}{
-		{r.GetDays(), func(t time.Time) [3]int { y, m, d := t.Date(); return [3]int{y, int(m), d} }},
-		{r.GetWeeks(), func(t time.Time) [3]int { y, w := t.ISOWeek(); return [3]int{y, w} }},
-		{r.GetMonths(), func(t time.Time) [3]int { y, m, _ := t.Date(); return [3]int{y, int(m)} }},
-	} {
-		seen := map[[3]int]bool{}
-		for i, b := range backups {
-			period := rule.period(b.Created.In(loc))
-			if seen[period] {
-				continue
-			}
-			if len(seen) == int(rule.count) {
-				break
-			}
-			seen[period], keep[i] = true, true
-		}
-	}
-	return keep
+	return r.Keeps(created)
 }
 
 // RemoveAll deletes all backups of an owner.

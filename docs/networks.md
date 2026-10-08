@@ -56,6 +56,16 @@ on other nodes at the host of their node's address and their port, so changing e
 does restoring a backup of one of its servers. Proxies created by earlier versions are created again once, to read
 console commands.
 
+## Copies of servers
+
+**Duplicate** on a game server of a network offers **Add the copy to the network**, e.g. for a second lobby or another
+minigame server. One operation copies the server on its node, adds the copy to the network right after the original,
+under the original's name in the network with the next free number (`lobby-2` for `lobby`, `lobby-3` for `lobby-2`), and
+applies the network. The copy takes the original's place: it follows it among the servers players join and fall back to,
+and those of its host names on Velocity, and gets its BungeeCord settings. It stays stopped until it is started. If the
+network can't be applied, e.g. as a node is offline, the copy stays in the network and the operation tells to apply it
+again. It needs the permission to manage networks besides those to copy the server.
+
 ## Changing the proxy
 
 A network can swap its proxy for a free Velocity or BungeeCord proxy on any node, and keeps its servers, join order,
@@ -91,7 +101,8 @@ decides, such as the servers, are locked. Saving reloads a running proxy.
 ## Actions
 
 **Servers** starts all servers of the network before the proxy, so that players find them, and stops the proxy first, so
-that all players leave at once. **Message** sends a chat message to all running game servers.
+that all players leave at once. **Message** shows a message to the players of all running game servers: in the chat
+(`say`), as a title with an optional subtitle, or above the hotbar, see [Players](players.md#actions).
 
 ## Restart server by server
 
@@ -117,6 +128,20 @@ panel installs the plugin from Modrinth and restarts the proxy to load it, which
 is edited in the panel (the plugin's `maintenance add` and `remove`), the texts in the plugin's `config.yml`, which the
 panel links to. The panel reads the state from the plugin's files, so it also shows maintenance turned on in the game.
 
+Maintenance can start now or in 5, 15 or 60 minutes, and last until it is ended or for 30 minutes up to a day; times go
+up to 28 days through the API. A single game server of the network can go into maintenance too: the proxy turns away
+players who want to join it, and sends those on it to the plugin's fallback server (`fallback` in its `config.yml`,
+`lobby` unless changed) or off the network. While the network is in maintenance, it can end in 5, 15 or 60 minutes
+instead of now. The panel uses the plugin's timers (`maintenance starttimer`, `endtimer`, `scheduletimer` and
+`aborttimer`, with the name of the server), which tell the players in the chat when maintenance starts or ends; a new
+timer replaces the one that runs. The plugin keeps timers to itself and forgets them when the proxy restarts, so the
+panel shows when maintenance ends only if the plugin keeps its end timer over restarts
+(`continue-endtimer-after-restart` in its `config.yml`), and otherwise shows the change once the timer ends. **Abort a
+timer** stops the one of the network or of a server. Planning the maintenance of a single server for later needs version
+5 of the plugin, as version 4 swaps its times; update it in the proxy's **Plugins** tab. A server named `global` can't
+go into maintenance alone, as version 5 reads that name as the whole network. Agents of older versions only turn the
+maintenance of the whole network on and off.
+
 ## Bedrock players
 
 The network's overview lets players of the Bedrock Edition join, on phones, consoles and Windows, at a UDP port of the
@@ -138,7 +163,7 @@ keeps their settings and Floodgate's key for later.
 
 ## Reaching the servers
 
-On its own node, the proxy reaches a server by container name over a Docker network that only the two of them share;
+On its own node, the proxy reaches a server by container name over a network that only the two of them share;
 such a server's port isn't published at all. A server on another node is reached over the private network of the nodes
 if both nodes are part of it (see [Private network](#private-network)). Otherwise it is reached at that node's host and
 the server's port, which must be open for the proxy's node. Docker's rules bypass firewalls such as ufw, so allow only
@@ -146,7 +171,11 @@ the proxy's node in Docker's `DOCKER-USER` chain on the server's node, e.g. for 
 203.0.113.10:
 `iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 25566 --ctdir ORIGINAL ! -s 203.0.113.10 -j DROP` (and save
 it, e.g. with `netfilter-persistent save`). The panel shows this command with each such server; with Docker's nftables
-firewall there is no `DOCKER-USER` chain, so use the private network instead.
+firewall there is no `DOCKER-USER` chain, so use the private network instead. Podman's rules bypass such firewalls too,
+and it has no such chain either; on its nodes, the panel shows a rule in an nftables table of its own instead, which
+comes before Podman's rules:
+`nft 'add table inet noryx-firewall; add chain inet noryx-firewall forward { type filter hook forward priority -10; }; add rule inet noryx-firewall forward meta l4proto tcp ct status dnat ct original proto-dst 25566 ip saddr != 203.0.113.10 drop'`
+(save it in `/etc/nftables.conf` to keep it after a reboot).
 
 ## Private network
 
@@ -169,7 +198,19 @@ had when the network was applied, so that a node that later gets the address of 
 a key therefore applies the networks with servers on the node and on other nodes again. Apply them again yourself if one
 of their nodes was offline meanwhile, or if a node's key changed otherwise, e.g. as it lost its data. The kernel keeps
 the interface `noryx0` while the agent restarts or updates, and `noryx-overlay.service` restores it at boot, before
-Docker starts the servers.
+Docker or Podman starts the servers.
+
+When a proxy doesn't reach a server on another node, the node pages tell why. Each one shows whether the node's firewall
+rules for the network (the nftables table `inet noryx`) are in place, missing or incomplete, e.g. after something
+flushed the rules: the master writes them again within 5 minutes, or `noryx-agent overlay up` right away. Its
+**Published ports** list each port the node publishes in the network with its server or datastore and the nodes that
+reach it; a node whose key changed since, marked _old key_, reaches the port once the network is applied again.
+**Test** next to a peer, for those who may manage the private network, connects from this node to every port that the
+peer publishes for it, and shows for each port whether a connection came about and how long that took, or why not: e.g.
+_connection refused_ if the server is stopped, or no answer within 3 seconds if a firewall drops the packets or the
+peer is unreachable. The node connects from itself, not from the proxy's container, sends nothing and closes each
+connection at once, so a server may log a connection that ended without data. `noryx-agent overlay status` shows the
+firewall and the published ports on the node, too.
 
 ## Legacy forwarding
 

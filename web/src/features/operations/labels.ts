@@ -41,6 +41,8 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Restore a backup of {{name}}", { name: subject })
     case "backup.restore-into":
       return t("Restore a backup into {{name}}", { name: subject })
+    case "backup.restore-copy":
+      return t("Restore a copy of a backup into {{name}}", { name: subject })
     case "network.create":
       return t("Create the network {{name}}", { name: subject })
     case "network.update":
@@ -65,6 +67,10 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn on maintenance of {{name}}", { name: subject })
     case "network.maintenance-off":
       return t("Turn off maintenance of {{name}}", { name: subject })
+    case "network.maintenance-timer":
+      return t("Plan maintenance of {{name}}", { name: subject })
+    case "network.maintenance-end":
+      return t("Plan the end of maintenance of {{name}}", { name: subject })
     case "overlay.leave":
       return t("Remove {{name}} from the private network", { name: subject })
     case "overlay.rotate":
@@ -91,6 +97,10 @@ export function titleOf(op: Operation, name?: string): string {
       return t("Turn off the whitelist of {{count}} servers", { count, defaultValue_one: "Turn off the whitelist of {{count}} server" })
     case "fileset.apply":
       return t("Apply the file set {{name}}", { name: subject })
+    case "files.extract":
+      return t("Extract {{name}}", { name: subject })
+    case "files.copy":
+      return t("Copy {{name}}", { name: subject })
     case "datastore.create":
       return t("Create the datastore {{name}}", { name: subject })
     case "datastore.update":
@@ -147,11 +157,14 @@ export function stepOf(op: Operation, step: string): string {
       return t("Save the worlds")
     case "copy":
     case "copying":
+      if (op.kind === "backup.restore-copy") return t("Fetch the copy")
       return op.kind === "backup.restore-into" ? t("Copy the backup") : t("Copy the data")
     case "archive":
       return op.kind.startsWith("backup.restore") ? t("Back up what is replaced") : t("Pack the backup")
     case "restore":
       return t("Unpack the backup")
+    case "extract":
+      return t("Extract the files")
     case "stop":
     case "stopping":
       return t("Stop the server")
@@ -180,6 +193,7 @@ export function stepOf(op: Operation, step: string): string {
     case "bedrock-remove":
       return t("Remove Geyser and Floodgate")
     case "maintenance":
+      if (op.kind === "network.maintenance-timer" || op.kind === "network.maintenance-end") return t("Start the timer of the Maintenance plugin")
       return op.kind === "network.maintenance-off" ? t("Turn maintenance off") : t("Turn maintenance on")
     case "overlay":
       return t("Leave the private network")

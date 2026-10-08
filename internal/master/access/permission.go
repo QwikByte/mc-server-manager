@@ -53,7 +53,8 @@ const (
 	PoliciesView     Permission = "policies.view"
 	PoliciesManage   Permission = "policies.manage"
 
-	LogsView Permission = "logs.view"
+	LogsView            Permission = "logs.view"
+	NotificationsManage Permission = "notifications.manage"
 
 	SettingsView Permission = "settings.view"
 	SettingsEdit Permission = "settings.edit"
@@ -105,7 +106,7 @@ var Catalog = []Area{
 	}},
 	{"Servers", []Info{
 		scoped(ServersView, "See servers", "Servers with their state, settings and plugins."),
-		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins, their tags the one to change server settings.", ServersView),
+		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins, their tags the one to change server settings. A server created from an archive brings its plugins, which run with the server and can read its secrets.", ServersView),
 		scoped(ServersStart, "Start servers", "", ServersView),
 		scoped(ServersStop, "Stop servers", "", ServersView),
 		scoped(ServersRestart, "Restart servers", "", ServersView),
@@ -121,7 +122,7 @@ var Catalog = []Area{
 	}},
 	{"Files and configuration", []Info{
 		scoped(FilesRead, "Browse and download files", "Secrets such as the RCON password stay hidden. Also needed to duplicate a server, as the copy contains its files.", ServersView),
-		scoped(FilesWrite, "Change files", "Upload, edit, move and delete files. Uploaded plugins run with the server and can read its secrets, such as the forwarding secret of its network.", FilesRead),
+		scoped(FilesWrite, "Change files", "Upload, edit, move and delete files. Uploaded plugins run with the server and can read its secrets, such as the forwarding secret of its network. Also needed to upload backups, which can bring any file.", FilesRead),
 		scoped(Properties, "Edit server.properties", "", ServersView),
 		scoped(Plugins, "Manage plugins and mods", "Install, update, upload and remove them. They run with the server and can read its secrets.", ServersView),
 	}},
@@ -143,12 +144,13 @@ var Catalog = []Area{
 	}},
 	{"Backup jobs and schedules", []Info{
 		global(BackupJobsView, "See backup jobs", ""),
-		global(BackupJobsManage, "Manage backup jobs", "Create, change, delete and run backup jobs for any server.", BackupJobsView),
+		global(BackupJobsManage, "Manage backup jobs", "Create, change, delete and run backup jobs for any server. Copying their backups away from the nodes, and managing the storage for the copies, also needs the permission to see and download backups on all servers.", BackupJobsView),
 		global(PoliciesView, "See schedules", ""),
 		global(PoliciesManage, "Manage schedules", "Create, change, delete and run schedules, which restart, stop and start any server or run console commands.", PoliciesView),
 	}},
 	{"Logs", []Info{
 		scoped(LogsView, "See logs", "Actions, warnings and errors of the master and the agents. Entries about users, groups, settings and the master itself need it for all servers."),
+		global(NotificationsManage, "Manage notifications", "Send entries of the log to Discord, Slack, webhooks and by mail, with rules that apply to all nodes and servers, so it also needs the permission to see logs for all servers. The addresses of webhooks and the passwords of mail servers can be set but never seen."),
 	}},
 	{"System", []Info{
 		global(SettingsView, "See the master's settings", "Its version, addresses and settings."),

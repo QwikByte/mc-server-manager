@@ -25,7 +25,7 @@ import { NodeActivity } from "@/features/logs/activity"
 import { OverlaySection } from "@/features/overlay/overlay-section"
 import { assignedMemoryMb, serversQuery } from "@/features/servers/api"
 import { ServerList } from "@/features/servers/server-list"
-import { usageQuery } from "@/features/usage/api"
+import { historyQuery, usageQuery } from "@/features/usage/api"
 import { formatCores } from "@/features/usage/format"
 import { UsageWarnings } from "@/features/usage/thresholds"
 import { UsageHistory } from "@/features/usage/usage-history"
@@ -34,6 +34,7 @@ import { memoryCapacityMb, memoryLimitMb, type Node, type NodeInfo, nodeQuery } 
 import { NewJoinTokenButton, NodeMenu } from "./node-actions"
 import { NodeSettingsDialog } from "./node-settings-dialog"
 import { NodeStatusBadge } from "./node-status"
+import { runtimeLabel } from "./runtime"
 import { StorageList } from "./storage-list"
 
 const route = getRouteApi("/_app/nodes/$nodeId")
@@ -87,7 +88,7 @@ export function NodePage() {
               />
               {can("nodes.view", node.id) && (
                 <UsageHistory
-                  nodeId={node.id}
+                  history={(range) => historyQuery(node.id, undefined, range)}
                   charts={[
                     {
                       title: t("CPU"),
@@ -156,7 +157,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   const details = [
     [t("Hostname"), info.hostname],
     [t("System"), info.os],
-    [t("Runtime"), info.runtime],
+    [t("Runtime"), runtimeLabel(info)],
     [t("Agent"), info.agentVersion],
   ].filter((detail): detail is [string, string] => !!detail[1])
   return (

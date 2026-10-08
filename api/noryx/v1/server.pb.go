@@ -2240,6 +2240,196 @@ func (x *ImportServerResponse) GetServer() *Server {
 	return nil
 }
 
+type CreateServerFromArchiveHeader struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The server to create, without properties: the archive brings its server.properties.
+	Server *CreateServerRequest `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	// Size of the archive if known, so that one that doesn't fit is refused before it is sent.
+	Size          int64 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateServerFromArchiveHeader) Reset() {
+	*x = CreateServerFromArchiveHeader{}
+	mi := &file_noryx_v1_server_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateServerFromArchiveHeader) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateServerFromArchiveHeader) ProtoMessage() {}
+
+func (x *CreateServerFromArchiveHeader) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_server_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateServerFromArchiveHeader.ProtoReflect.Descriptor instead.
+func (*CreateServerFromArchiveHeader) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_server_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *CreateServerFromArchiveHeader) GetServer() *CreateServerRequest {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
+func (x *CreateServerFromArchiveHeader) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+type CreateServerFromArchiveRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Content:
+	//
+	//	*CreateServerFromArchiveRequest_Header
+	//	*CreateServerFromArchiveRequest_Data
+	Content       isCreateServerFromArchiveRequest_Content `protobuf_oneof:"content"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateServerFromArchiveRequest) Reset() {
+	*x = CreateServerFromArchiveRequest{}
+	mi := &file_noryx_v1_server_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateServerFromArchiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateServerFromArchiveRequest) ProtoMessage() {}
+
+func (x *CreateServerFromArchiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_server_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateServerFromArchiveRequest.ProtoReflect.Descriptor instead.
+func (*CreateServerFromArchiveRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_server_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CreateServerFromArchiveRequest) GetContent() isCreateServerFromArchiveRequest_Content {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *CreateServerFromArchiveRequest) GetHeader() *CreateServerFromArchiveHeader {
+	if x != nil {
+		if x, ok := x.Content.(*CreateServerFromArchiveRequest_Header); ok {
+			return x.Header
+		}
+	}
+	return nil
+}
+
+func (x *CreateServerFromArchiveRequest) GetData() []byte {
+	if x != nil {
+		if x, ok := x.Content.(*CreateServerFromArchiveRequest_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isCreateServerFromArchiveRequest_Content interface {
+	isCreateServerFromArchiveRequest_Content()
+}
+
+type CreateServerFromArchiveRequest_Header struct {
+	Header *CreateServerFromArchiveHeader `protobuf:"bytes,1,opt,name=header,proto3,oneof"`
+}
+
+type CreateServerFromArchiveRequest_Data struct {
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
+}
+
+func (*CreateServerFromArchiveRequest_Header) isCreateServerFromArchiveRequest_Content() {}
+
+func (*CreateServerFromArchiveRequest_Data) isCreateServerFromArchiveRequest_Content() {}
+
+type CreateServerFromArchiveResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Server *Server                `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	// Files and folders of the archive that the server didn't get, e.g. those with secrets of
+	// the server it came from; up to 100.
+	LeftOut       []string `protobuf:"bytes,2,rep,name=left_out,json=leftOut,proto3" json:"left_out,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateServerFromArchiveResponse) Reset() {
+	*x = CreateServerFromArchiveResponse{}
+	mi := &file_noryx_v1_server_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateServerFromArchiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateServerFromArchiveResponse) ProtoMessage() {}
+
+func (x *CreateServerFromArchiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_server_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateServerFromArchiveResponse.ProtoReflect.Descriptor instead.
+func (*CreateServerFromArchiveResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_server_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CreateServerFromArchiveResponse) GetServer() *Server {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
+func (x *CreateServerFromArchiveResponse) GetLeftOut() []string {
+	if x != nil {
+		return x.LeftOut
+	}
+	return nil
+}
+
 var File_noryx_v1_server_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_server_proto_rawDesc = "" +
@@ -2399,7 +2589,17 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
 	"\acontent\"@\n" +
 	"\x14ImportServerResponse\x12(\n" +
-	"\x06server\x18\x01 \x01(\v2\x10.noryx.v1.ServerR\x06server*\xcf\x02\n" +
+	"\x06server\x18\x01 \x01(\v2\x10.noryx.v1.ServerR\x06server\"j\n" +
+	"\x1dCreateServerFromArchiveHeader\x125\n" +
+	"\x06server\x18\x01 \x01(\v2\x1d.noryx.v1.CreateServerRequestR\x06server\x12\x12\n" +
+	"\x04size\x18\x02 \x01(\x03R\x04size\"\x84\x01\n" +
+	"\x1eCreateServerFromArchiveRequest\x12A\n" +
+	"\x06header\x18\x01 \x01(\v2'.noryx.v1.CreateServerFromArchiveHeaderH\x00R\x06header\x12\x14\n" +
+	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
+	"\acontent\"f\n" +
+	"\x1fCreateServerFromArchiveResponse\x12(\n" +
+	"\x06server\x18\x01 \x01(\v2\x10.noryx.v1.ServerR\x06server\x12\x19\n" +
+	"\bleft_out\x18\x02 \x03(\tR\aleftOut*\xcf\x02\n" +
 	"\n" +
 	"ServerType\x12\x1b\n" +
 	"\x17SERVER_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -2432,7 +2632,7 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\x16FORWARDING_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fFORWARDING_NONE\x10\x01\x12\x15\n" +
 	"\x11FORWARDING_MODERN\x10\x02\x12\x15\n" +
-	"\x11FORWARDING_LEGACY\x10\x032\x96\b\n" +
+	"\x11FORWARDING_LEGACY\x10\x032\x88\t\n" +
 	"\rServerService\x12J\n" +
 	"\vListServers\x12\x1c.noryx.v1.ListServersRequest\x1a\x1d.noryx.v1.ListServersResponse\x12M\n" +
 	"\fCreateServer\x12\x1d.noryx.v1.CreateServerRequest\x1a\x1e.noryx.v1.CreateServerResponse\x12J\n" +
@@ -2448,7 +2648,8 @@ const file_noryx_v1_server_proto_rawDesc = "" +
 	"\vSendCommand\x12\x1c.noryx.v1.SendCommandRequest\x1a\x1d.noryx.v1.SendCommandResponse\x12Y\n" +
 	"\x10ConfigureNetwork\x12!.noryx.v1.ConfigureNetworkRequest\x1a\".noryx.v1.ConfigureNetworkResponse\x12V\n" +
 	"\x0fDuplicateServer\x12 .noryx.v1.DuplicateServerRequest\x1a!.noryx.v1.DuplicateServerResponse\x12O\n" +
-	"\fImportServer\x12\x1d.noryx.v1.ImportServerRequest\x1a\x1e.noryx.v1.ImportServerResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
+	"\fImportServer\x12\x1d.noryx.v1.ImportServerRequest\x1a\x1e.noryx.v1.ImportServerResponse(\x01\x12p\n" +
+	"\x17CreateServerFromArchive\x12(.noryx.v1.CreateServerFromArchiveRequest\x1a).noryx.v1.CreateServerFromArchiveResponse(\x01B0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_server_proto_rawDescOnce sync.Once
@@ -2463,42 +2664,45 @@ func file_noryx_v1_server_proto_rawDescGZIP() []byte {
 }
 
 var file_noryx_v1_server_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_noryx_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_noryx_v1_server_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_noryx_v1_server_proto_goTypes = []any{
-	(ServerType)(0),                  // 0: noryx.v1.ServerType
-	(RestartPolicy)(0),               // 1: noryx.v1.RestartPolicy
-	(ServerState)(0),                 // 2: noryx.v1.ServerState
-	(Forwarding)(0),                  // 3: noryx.v1.Forwarding
-	(*Server)(nil),                   // 4: noryx.v1.Server
-	(*ListServersRequest)(nil),       // 5: noryx.v1.ListServersRequest
-	(*ListServersResponse)(nil),      // 6: noryx.v1.ListServersResponse
-	(*CreateServerRequest)(nil),      // 7: noryx.v1.CreateServerRequest
-	(*CreateServerResponse)(nil),     // 8: noryx.v1.CreateServerResponse
-	(*StartServerRequest)(nil),       // 9: noryx.v1.StartServerRequest
-	(*StartServerResponse)(nil),      // 10: noryx.v1.StartServerResponse
-	(*StopServerRequest)(nil),        // 11: noryx.v1.StopServerRequest
-	(*StopServerResponse)(nil),       // 12: noryx.v1.StopServerResponse
-	(*RestartServerRequest)(nil),     // 13: noryx.v1.RestartServerRequest
-	(*RestartServerResponse)(nil),    // 14: noryx.v1.RestartServerResponse
-	(*UpdateServerRequest)(nil),      // 15: noryx.v1.UpdateServerRequest
-	(*UpdateServerResponse)(nil),     // 16: noryx.v1.UpdateServerResponse
-	(*UpdateImageRequest)(nil),       // 17: noryx.v1.UpdateImageRequest
-	(*UpdateImageResponse)(nil),      // 18: noryx.v1.UpdateImageResponse
-	(*DeleteServerRequest)(nil),      // 19: noryx.v1.DeleteServerRequest
-	(*DeleteServerResponse)(nil),     // 20: noryx.v1.DeleteServerResponse
-	(*StreamLogsRequest)(nil),        // 21: noryx.v1.StreamLogsRequest
-	(*StreamLogsResponse)(nil),       // 22: noryx.v1.StreamLogsResponse
-	(*SendCommandRequest)(nil),       // 23: noryx.v1.SendCommandRequest
-	(*SendCommandResponse)(nil),      // 24: noryx.v1.SendCommandResponse
-	(*ConfigureNetworkRequest)(nil),  // 25: noryx.v1.ConfigureNetworkRequest
-	(*NetworkBackend)(nil),           // 26: noryx.v1.NetworkBackend
-	(*ForcedHost)(nil),               // 27: noryx.v1.ForcedHost
-	(*ConfigureNetworkResponse)(nil), // 28: noryx.v1.ConfigureNetworkResponse
-	(*DuplicateServerRequest)(nil),   // 29: noryx.v1.DuplicateServerRequest
-	(*DuplicateServerResponse)(nil),  // 30: noryx.v1.DuplicateServerResponse
-	(*ImportServerRequest)(nil),      // 31: noryx.v1.ImportServerRequest
-	(*ImportServerResponse)(nil),     // 32: noryx.v1.ImportServerResponse
-	nil,                              // 33: noryx.v1.CreateServerRequest.PropertiesEntry
+	(ServerType)(0),                         // 0: noryx.v1.ServerType
+	(RestartPolicy)(0),                      // 1: noryx.v1.RestartPolicy
+	(ServerState)(0),                        // 2: noryx.v1.ServerState
+	(Forwarding)(0),                         // 3: noryx.v1.Forwarding
+	(*Server)(nil),                          // 4: noryx.v1.Server
+	(*ListServersRequest)(nil),              // 5: noryx.v1.ListServersRequest
+	(*ListServersResponse)(nil),             // 6: noryx.v1.ListServersResponse
+	(*CreateServerRequest)(nil),             // 7: noryx.v1.CreateServerRequest
+	(*CreateServerResponse)(nil),            // 8: noryx.v1.CreateServerResponse
+	(*StartServerRequest)(nil),              // 9: noryx.v1.StartServerRequest
+	(*StartServerResponse)(nil),             // 10: noryx.v1.StartServerResponse
+	(*StopServerRequest)(nil),               // 11: noryx.v1.StopServerRequest
+	(*StopServerResponse)(nil),              // 12: noryx.v1.StopServerResponse
+	(*RestartServerRequest)(nil),            // 13: noryx.v1.RestartServerRequest
+	(*RestartServerResponse)(nil),           // 14: noryx.v1.RestartServerResponse
+	(*UpdateServerRequest)(nil),             // 15: noryx.v1.UpdateServerRequest
+	(*UpdateServerResponse)(nil),            // 16: noryx.v1.UpdateServerResponse
+	(*UpdateImageRequest)(nil),              // 17: noryx.v1.UpdateImageRequest
+	(*UpdateImageResponse)(nil),             // 18: noryx.v1.UpdateImageResponse
+	(*DeleteServerRequest)(nil),             // 19: noryx.v1.DeleteServerRequest
+	(*DeleteServerResponse)(nil),            // 20: noryx.v1.DeleteServerResponse
+	(*StreamLogsRequest)(nil),               // 21: noryx.v1.StreamLogsRequest
+	(*StreamLogsResponse)(nil),              // 22: noryx.v1.StreamLogsResponse
+	(*SendCommandRequest)(nil),              // 23: noryx.v1.SendCommandRequest
+	(*SendCommandResponse)(nil),             // 24: noryx.v1.SendCommandResponse
+	(*ConfigureNetworkRequest)(nil),         // 25: noryx.v1.ConfigureNetworkRequest
+	(*NetworkBackend)(nil),                  // 26: noryx.v1.NetworkBackend
+	(*ForcedHost)(nil),                      // 27: noryx.v1.ForcedHost
+	(*ConfigureNetworkResponse)(nil),        // 28: noryx.v1.ConfigureNetworkResponse
+	(*DuplicateServerRequest)(nil),          // 29: noryx.v1.DuplicateServerRequest
+	(*DuplicateServerResponse)(nil),         // 30: noryx.v1.DuplicateServerResponse
+	(*ImportServerRequest)(nil),             // 31: noryx.v1.ImportServerRequest
+	(*ImportServerResponse)(nil),            // 32: noryx.v1.ImportServerResponse
+	(*CreateServerFromArchiveHeader)(nil),   // 33: noryx.v1.CreateServerFromArchiveHeader
+	(*CreateServerFromArchiveRequest)(nil),  // 34: noryx.v1.CreateServerFromArchiveRequest
+	(*CreateServerFromArchiveResponse)(nil), // 35: noryx.v1.CreateServerFromArchiveResponse
+	nil,                                     // 36: noryx.v1.CreateServerRequest.PropertiesEntry
 }
 var file_noryx_v1_server_proto_depIdxs = []int32{
 	0,  // 0: noryx.v1.Server.type:type_name -> noryx.v1.ServerType
@@ -2507,7 +2711,7 @@ var file_noryx_v1_server_proto_depIdxs = []int32{
 	4,  // 3: noryx.v1.ListServersResponse.servers:type_name -> noryx.v1.Server
 	0,  // 4: noryx.v1.CreateServerRequest.type:type_name -> noryx.v1.ServerType
 	1,  // 5: noryx.v1.CreateServerRequest.restart_policy:type_name -> noryx.v1.RestartPolicy
-	33, // 6: noryx.v1.CreateServerRequest.properties:type_name -> noryx.v1.CreateServerRequest.PropertiesEntry
+	36, // 6: noryx.v1.CreateServerRequest.properties:type_name -> noryx.v1.CreateServerRequest.PropertiesEntry
 	4,  // 7: noryx.v1.CreateServerResponse.server:type_name -> noryx.v1.Server
 	1,  // 8: noryx.v1.UpdateServerRequest.restart_policy:type_name -> noryx.v1.RestartPolicy
 	4,  // 9: noryx.v1.UpdateServerResponse.server:type_name -> noryx.v1.Server
@@ -2517,37 +2721,42 @@ var file_noryx_v1_server_proto_depIdxs = []int32{
 	4,  // 13: noryx.v1.DuplicateServerResponse.server:type_name -> noryx.v1.Server
 	4,  // 14: noryx.v1.ImportServerRequest.header:type_name -> noryx.v1.Server
 	4,  // 15: noryx.v1.ImportServerResponse.server:type_name -> noryx.v1.Server
-	5,  // 16: noryx.v1.ServerService.ListServers:input_type -> noryx.v1.ListServersRequest
-	7,  // 17: noryx.v1.ServerService.CreateServer:input_type -> noryx.v1.CreateServerRequest
-	9,  // 18: noryx.v1.ServerService.StartServer:input_type -> noryx.v1.StartServerRequest
-	11, // 19: noryx.v1.ServerService.StopServer:input_type -> noryx.v1.StopServerRequest
-	13, // 20: noryx.v1.ServerService.RestartServer:input_type -> noryx.v1.RestartServerRequest
-	19, // 21: noryx.v1.ServerService.DeleteServer:input_type -> noryx.v1.DeleteServerRequest
-	15, // 22: noryx.v1.ServerService.UpdateServer:input_type -> noryx.v1.UpdateServerRequest
-	17, // 23: noryx.v1.ServerService.UpdateImage:input_type -> noryx.v1.UpdateImageRequest
-	21, // 24: noryx.v1.ServerService.StreamLogs:input_type -> noryx.v1.StreamLogsRequest
-	23, // 25: noryx.v1.ServerService.SendCommand:input_type -> noryx.v1.SendCommandRequest
-	25, // 26: noryx.v1.ServerService.ConfigureNetwork:input_type -> noryx.v1.ConfigureNetworkRequest
-	29, // 27: noryx.v1.ServerService.DuplicateServer:input_type -> noryx.v1.DuplicateServerRequest
-	31, // 28: noryx.v1.ServerService.ImportServer:input_type -> noryx.v1.ImportServerRequest
-	6,  // 29: noryx.v1.ServerService.ListServers:output_type -> noryx.v1.ListServersResponse
-	8,  // 30: noryx.v1.ServerService.CreateServer:output_type -> noryx.v1.CreateServerResponse
-	10, // 31: noryx.v1.ServerService.StartServer:output_type -> noryx.v1.StartServerResponse
-	12, // 32: noryx.v1.ServerService.StopServer:output_type -> noryx.v1.StopServerResponse
-	14, // 33: noryx.v1.ServerService.RestartServer:output_type -> noryx.v1.RestartServerResponse
-	20, // 34: noryx.v1.ServerService.DeleteServer:output_type -> noryx.v1.DeleteServerResponse
-	16, // 35: noryx.v1.ServerService.UpdateServer:output_type -> noryx.v1.UpdateServerResponse
-	18, // 36: noryx.v1.ServerService.UpdateImage:output_type -> noryx.v1.UpdateImageResponse
-	22, // 37: noryx.v1.ServerService.StreamLogs:output_type -> noryx.v1.StreamLogsResponse
-	24, // 38: noryx.v1.ServerService.SendCommand:output_type -> noryx.v1.SendCommandResponse
-	28, // 39: noryx.v1.ServerService.ConfigureNetwork:output_type -> noryx.v1.ConfigureNetworkResponse
-	30, // 40: noryx.v1.ServerService.DuplicateServer:output_type -> noryx.v1.DuplicateServerResponse
-	32, // 41: noryx.v1.ServerService.ImportServer:output_type -> noryx.v1.ImportServerResponse
-	29, // [29:42] is the sub-list for method output_type
-	16, // [16:29] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	7,  // 16: noryx.v1.CreateServerFromArchiveHeader.server:type_name -> noryx.v1.CreateServerRequest
+	33, // 17: noryx.v1.CreateServerFromArchiveRequest.header:type_name -> noryx.v1.CreateServerFromArchiveHeader
+	4,  // 18: noryx.v1.CreateServerFromArchiveResponse.server:type_name -> noryx.v1.Server
+	5,  // 19: noryx.v1.ServerService.ListServers:input_type -> noryx.v1.ListServersRequest
+	7,  // 20: noryx.v1.ServerService.CreateServer:input_type -> noryx.v1.CreateServerRequest
+	9,  // 21: noryx.v1.ServerService.StartServer:input_type -> noryx.v1.StartServerRequest
+	11, // 22: noryx.v1.ServerService.StopServer:input_type -> noryx.v1.StopServerRequest
+	13, // 23: noryx.v1.ServerService.RestartServer:input_type -> noryx.v1.RestartServerRequest
+	19, // 24: noryx.v1.ServerService.DeleteServer:input_type -> noryx.v1.DeleteServerRequest
+	15, // 25: noryx.v1.ServerService.UpdateServer:input_type -> noryx.v1.UpdateServerRequest
+	17, // 26: noryx.v1.ServerService.UpdateImage:input_type -> noryx.v1.UpdateImageRequest
+	21, // 27: noryx.v1.ServerService.StreamLogs:input_type -> noryx.v1.StreamLogsRequest
+	23, // 28: noryx.v1.ServerService.SendCommand:input_type -> noryx.v1.SendCommandRequest
+	25, // 29: noryx.v1.ServerService.ConfigureNetwork:input_type -> noryx.v1.ConfigureNetworkRequest
+	29, // 30: noryx.v1.ServerService.DuplicateServer:input_type -> noryx.v1.DuplicateServerRequest
+	31, // 31: noryx.v1.ServerService.ImportServer:input_type -> noryx.v1.ImportServerRequest
+	34, // 32: noryx.v1.ServerService.CreateServerFromArchive:input_type -> noryx.v1.CreateServerFromArchiveRequest
+	6,  // 33: noryx.v1.ServerService.ListServers:output_type -> noryx.v1.ListServersResponse
+	8,  // 34: noryx.v1.ServerService.CreateServer:output_type -> noryx.v1.CreateServerResponse
+	10, // 35: noryx.v1.ServerService.StartServer:output_type -> noryx.v1.StartServerResponse
+	12, // 36: noryx.v1.ServerService.StopServer:output_type -> noryx.v1.StopServerResponse
+	14, // 37: noryx.v1.ServerService.RestartServer:output_type -> noryx.v1.RestartServerResponse
+	20, // 38: noryx.v1.ServerService.DeleteServer:output_type -> noryx.v1.DeleteServerResponse
+	16, // 39: noryx.v1.ServerService.UpdateServer:output_type -> noryx.v1.UpdateServerResponse
+	18, // 40: noryx.v1.ServerService.UpdateImage:output_type -> noryx.v1.UpdateImageResponse
+	22, // 41: noryx.v1.ServerService.StreamLogs:output_type -> noryx.v1.StreamLogsResponse
+	24, // 42: noryx.v1.ServerService.SendCommand:output_type -> noryx.v1.SendCommandResponse
+	28, // 43: noryx.v1.ServerService.ConfigureNetwork:output_type -> noryx.v1.ConfigureNetworkResponse
+	30, // 44: noryx.v1.ServerService.DuplicateServer:output_type -> noryx.v1.DuplicateServerResponse
+	32, // 45: noryx.v1.ServerService.ImportServer:output_type -> noryx.v1.ImportServerResponse
+	35, // 46: noryx.v1.ServerService.CreateServerFromArchive:output_type -> noryx.v1.CreateServerFromArchiveResponse
+	33, // [33:47] is the sub-list for method output_type
+	19, // [19:33] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_noryx_v1_server_proto_init() }
@@ -2563,13 +2772,17 @@ func file_noryx_v1_server_proto_init() {
 		(*ImportServerRequest_Header)(nil),
 		(*ImportServerRequest_Data)(nil),
 	}
+	file_noryx_v1_server_proto_msgTypes[30].OneofWrappers = []any{
+		(*CreateServerFromArchiveRequest_Header)(nil),
+		(*CreateServerFromArchiveRequest_Data)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_server_proto_rawDesc), len(file_noryx_v1_server_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   30,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

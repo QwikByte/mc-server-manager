@@ -62,6 +62,8 @@ import {
   useBackups,
 } from "./api"
 import { LocationField, SelectionField } from "./backup-fields"
+import { ServerCopies } from "./copies"
+import { UploadBackupDialog } from "./upload-backup-dialog"
 
 const route = getRouteApi("/_app/nodes/$nodeId/servers/$serverId/backups")
 
@@ -74,6 +76,8 @@ export function ServerBackupsPage() {
   const { data: jobList = [] } = useQuery({ ...jobs.coveringQuery(nodeId, serverId), enabled: can("backupjobs.view") })
   const { data: servers = [] } = useQuery(allServersQuery)
   const create = can("backups.create", nodeId, serverId)
+  // An uploaded backup is there to be restored, and can bring any file, like the file manager.
+  const upload = create && can("backups.restore", nodeId, serverId) && can("files.write", nodeId, serverId)
   const covering = jobList.filter((j) => j.enabled)
 
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />
@@ -88,61 +92,74 @@ export function ServerBackupsPage() {
   )
 
   return (
-    <Section
-      title={t("{{count}} backups", { count: backups.length, defaultValue_one: "{{count}} backup" })}
-      description={formatBytes(total)}
-      className="mt-0"
-      actions={create && <CreateBackupDialog nodeId={nodeId} server={server} />}
-    >
-      {can("backupjobs.view") && (
-        <Callout tone={covering.length > 0 ? "info" : "neutral"} icon={ClockIcon} className="mb-4">
-          {covering.length > 0 ? (
-            <Trans
-              i18nKey="Backed up by <jobs/>."
-              components={{
-                jobs: (
+    <>
+      <Section
+        title={t("{{count}} backups", { count: backups.length, defaultValue_one: "{{count}} backup" })}
+        description={formatBytes(total)}
+        className="mt-0"
+        actions={create && <BackupActions nodeId={nodeId} server={server} upload={upload} />}
+      >
+        {can("backupjobs.view") && (
+          <Callout tone={covering.length > 0 ? "info" : "neutral"} icon={ClockIcon} className="mb-4">
+            {covering.length > 0 ? (
+              <Trans
+                i18nKey="Backed up by <jobs/>."
+                components={{
+                  jobs: (
+                    <>
+                      {covering.map((j, i) => (
+                        <span key={j.id}>
+                          {i > 0 && ", "}
+                          <Link to="/backups/$jobId" params={{ jobId: j.id }} className="font-medium underline-offset-4 hover:underline">
+                            {j.name}
+                          </Link>{" "}
+                          ({describeSchedule(j.schedule)})
+                        </span>
+                      ))}
+                    </>
+                  ),
+                }}
+              />
+            ) : (
+              <>
+                {t("No backup job covers this server.")}
+                {can("backupjobs.manage") && (
                   <>
-                    {covering.map((j, i) => (
-                      <span key={j.id}>
-                        {i > 0 && ", "}
-                        <Link to="/backups/$jobId" params={{ jobId: j.id }} className="font-medium underline-offset-4 hover:underline">
-                          {j.name}
-                        </Link>{" "}
-                        ({describeSchedule(j.schedule)})
-                      </span>
-                    ))}
+                    {" "}
+                    <Trans
+                      i18nKey="<link>Create a job</link> to back it up on a schedule."
+                      components={{ link: <Link to="/backups/new" className="font-medium underline-offset-4 hover:underline" /> }}
+                    />
                   </>
-                ),
-              }}
-            />
-          ) : (
-            <>
-              {t("No backup job covers this server.")}
-              {can("backupjobs.manage") && (
-                <>
-                  {" "}
-                  <Trans
-                    i18nKey="<link>Create a job</link> to back it up on a schedule."
-                    components={{ link: <Link to="/backups/new" className="font-medium underline-offset-4 hover:underline" /> }}
-                  />
-                </>
-              )}
-            </>
-          )}
-        </Callout>
-      )}
-      {backups.length === 0 ? (
-        <EmptyState icon={ArchiveIcon} tone="info" title={t("No backups yet")}>
-          {create && <CreateBackupDialog nodeId={nodeId} server={server} />}
-        </EmptyState>
-      ) : (
-        <ul className="surface divide-y rounded-xl">
-          {backups.map((b) => (
-            <BackupRow key={b.id} nodeId={nodeId} server={server} backup={b} others={others} />
-          ))}
-        </ul>
-      )}
-    </Section>
+                )}
+              </>
+            )}
+          </Callout>
+        )}
+        {backups.length === 0 ? (
+          <EmptyState icon={ArchiveIcon} tone="info" title={t("No backups yet")}>
+            {create && <BackupActions nodeId={nodeId} server={server} upload={upload} />}
+          </EmptyState>
+        ) : (
+          <ul className="surface divide-y rounded-xl">
+            {backups.map((b) => (
+              <BackupRow key={b.id} nodeId={nodeId} server={server} backup={b} others={others} />
+            ))}
+          </ul>
+        )}
+      </Section>
+      <ServerCopies server={{ ...server, nodeId }} />
+    </>
+  )
+}
+
+/** Backs up the server now, and uploads a backup if allowed. */
+function BackupActions({ nodeId, server, upload }: { nodeId: string; server: Server; upload: boolean }) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {upload && <UploadBackupDialog nodeId={nodeId} server={server} />}
+      <CreateBackupDialog nodeId={nodeId} server={server} />
+    </div>
   )
 }
 
@@ -190,6 +207,11 @@ function BackupRow({ nodeId, server, backup, others }: { nodeId: string; server:
               <PushPinIcon className="size-3" />
               {t("Kept")}
             </Pill>
+          )}
+          {backup.untrusted && (
+            <span title={t("Not made on this node, e.g. uploaded. Restoring it checks its archive and keeps the server's secrets.")}>
+              <Pill tone="neutral">{t("From elsewhere")}</Pill>
+            </span>
           )}
         </p>
         <p className="truncate text-xs text-muted-foreground">

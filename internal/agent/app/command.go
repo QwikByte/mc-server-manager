@@ -21,6 +21,7 @@ type config struct {
 	dataDir    string
 	socketPath string
 	listenAddr string
+	runtime    runtimeFlags
 	log        logging.Options
 }
 
@@ -53,6 +54,7 @@ func Command() *cobra.Command {
 		RunE:  func(cmd *cobra.Command, _ []string) error { return serve(cmd.Context(), cfg) },
 	}
 	serve.Flags().StringVar(&cfg.listenAddr, "listen", ":7443", "listen address for connections from the master")
+	cfg.runtime.add(serve.Flags())
 	cfg.log.AddFlags(serve.Flags())
 
 	enrollCmd := &cobra.Command{
@@ -71,7 +73,7 @@ func Command() *cobra.Command {
 		},
 	}
 
-	root.AddCommand(serve, enrollCmd, storageCommand(&cfg))
+	root.AddCommand(serve, enrollCmd, storageCommand(&cfg), isolateCommand())
 	for _, c := range agentcli.Commands(cfg.local) {
 		if c.Name() == "overlay" {
 			c.AddCommand(overlayCommands(&cfg)...)

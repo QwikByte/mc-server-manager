@@ -1,4 +1,4 @@
-import { DownloadSimpleIcon, FolderOpenIcon, TrashIcon, XIcon } from "@phosphor-icons/react"
+import { CopyIcon, DownloadSimpleIcon, FolderOpenIcon, TrashIcon, XIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { useAccess } from "@/features/access/use-access"
 import { archiveUrl, join, type ServerFiles, useChangeEach } from "./api"
+import { CopyDialog } from "./copy-dialog"
 import { MoveDialog } from "./move-dialog"
 
 /** The first few of many names. */
@@ -16,7 +17,7 @@ function listNames(names: string[], max = 8) {
 
 /**
  * Acts on the chosen files and folders of a folder at once: downloads them as one ZIP archive,
- * moves or deletes them, each checked like a single one.
+ * moves, copies or deletes them, each checked like a single one.
  */
 export function SelectionBar({
   files,
@@ -34,7 +35,7 @@ export function SelectionBar({
 }) {
   const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const change = useChangeEach(files)
-  const [dialog, setDialog] = useState<"move" | "delete">()
+  const [dialog, setDialog] = useState<"move" | "copy" | "delete">()
 
   // Awaited rather than with callbacks of mutate, which end with the bar once its entries are gone.
   async function remove() {
@@ -66,6 +67,10 @@ export function SelectionBar({
             <FolderOpenIcon />
             {t("Move to…")}
           </Button>
+          <Button size="sm" variant="outline" disabled={change.isPending} onClick={() => setDialog("copy")}>
+            <CopyIcon />
+            {t("Copy to…")}
+          </Button>
           <Button size="sm" variant="outline" className="text-destructive" disabled={change.isPending} onClick={() => setDialog("delete")}>
             <TrashIcon />
             {change.isPending ? t("Deleting…") : t("Delete")}
@@ -73,6 +78,7 @@ export function SelectionBar({
         </>
       )}
       {dialog === "move" && <MoveDialog files={files} dir={dir} names={names} onClose={() => setDialog(undefined)} />}
+      {dialog === "copy" && <CopyDialog files={files} dir={dir} names={names} onClose={() => setDialog(undefined)} />}
       <ConfirmDialog
         open={dialog === "delete"}
         onOpenChange={(open) => !open && setDialog(undefined)}

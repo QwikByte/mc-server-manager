@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"slices"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -21,8 +22,10 @@ const (
 	bannedFile    = "banned-players.json"
 	whitelistFile = "whitelist.json"
 	opsFile       = "ops.json"
-	// pendingFile keeps the changes that wait for the server to run, in its data so that
-	// they move and are backed up with it.
+	// cacheFile is Minecraft's cache of the players who joined.
+	cacheFile = "usercache.json"
+	// pendingFile keeps the changes that wait for the server to run or for their time, in its
+	// data so that they move and are backed up with it.
 	pendingFile = "noryx-pending-players.json"
 
 	createdLayout = "2006-01-02 15:04:05 -0700" // of the times in the lists
@@ -63,12 +66,14 @@ func readList(dir *datadir.Dir, name string) ([]*noryxv1.ListedPlayer, error) {
 	return list, nil
 }
 
-// change is a change that waits, as the file keeps it.
+// change is a change that waits, as the file keeps it. Due is when it is due, e.g. the pardon
+// at the end of a temporary ban; 0 once the server runs.
 type change struct {
 	Action string `json:"action"`
 	Name   string `json:"name,omitempty"`
 	Reason string `json:"reason,omitempty"`
 	UUID   string `json:"uuid,omitempty"`
+	Due    int64  `json:"due,omitempty"`
 }
 
 // readPending returns the changes that wait for a server. Those that aren't valid, e.g.
@@ -80,7 +85,7 @@ func readPending(dir *datadir.Dir) ([]*noryxv1.PlayerChange, error) {
 	}
 	var pending []*noryxv1.PlayerChange
 	for _, c := range changes {
-		p := &noryxv1.PlayerChange{Action: noryxv1.ParsePlayerAction(c.Action), Name: c.Name, Reason: c.Reason, Uuid: c.UUID}
+		p := &noryxv1.PlayerChange{Action: noryxv1.ParsePlayerAction(c.Action), Name: c.Name, Reason: c.Reason, Uuid: c.UUID, DueUnix: c.Due}
 		if p.Problem() == "" && p.GetAction() != noryxv1.PlayerAction_PLAYER_ACTION_KICK {
 			pending = append(pending, p)
 		}
@@ -88,23 +93,61 @@ func readPending(dir *datadir.Dir) ([]*noryxv1.PlayerChange, error) {
 	return pending, nil
 }
 
-// addPending adds a change to those that wait for a server, unless it waits already.
-func addPending(dir *datadir.Dir, c *noryxv1.PlayerChange) error {
+// notePending notes a change in the changes that wait for a server, and returns them: the
+// change itself if it waits, unless it waits already, and for a ban or pardon, the pardon at
+// the end of a temporary ban instead of the one of an earlier ban.
+func notePending(dir *datadir.Dir, c *noryxv1.PlayerChange, waits bool) ([]*noryxv1.PlayerChange, error) {
 	pending, err := readPending(dir)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	a := c.GetAction()
+	noted := pending
+	if a == noryxv1.PlayerAction_PLAYER_ACTION_BAN || a == noryxv1.PlayerAction_PLAYER_ACTION_PARDON {
+		noted = slices.DeleteFunc(slices.Clone(pending), func(p *noryxv1.PlayerChange) bool {
+			return p.GetDueUnix() > 0 && strings.EqualFold(p.GetName(), c.GetName())
+		})
+	}
+	if waits && !slices.ContainsFunc(noted, func(p *noryxv1.PlayerChange) bool {
+		return p.GetDueUnix() == 0 && p.GetAction() == a && p.GetName() == c.GetName() && p.GetReason() == c.GetReason()
+	}) {
+		noted = append(noted, &noryxv1.PlayerChange{Action: a, Name: c.GetName(), Reason: c.GetReason(), Uuid: c.GetUuid()})
+	}
+	if c.GetEndsUnix() > 0 {
+		noted = append(noted, &noryxv1.PlayerChange{Action: noryxv1.PlayerAction_PLAYER_ACTION_PARDON, Name: c.GetName(), DueUnix: c.GetEndsUnix()})
+	}
 	switch {
-	case err != nil:
-		return status.Error(codes.Internal, err.Error())
-	case len(pending) >= maxPending:
-		return status.Error(codes.ResourceExhausted, "Too many changes wait for the server to start.")
-	case slices.ContainsFunc(pending, func(p *noryxv1.PlayerChange) bool {
-		return p.GetAction() == c.GetAction() && p.GetName() == c.GetName() && p.GetReason() == c.GetReason()
-	}):
-		return nil
+	case slices.Equal(noted, pending):
+		return pending, nil
+	case len(noted) > maxPending:
+		return nil, status.Error(codes.ResourceExhausted, "Too many changes wait for the server.")
 	}
-	if err := writePending(dir, append(pending, c)); err != nil {
-		return status.Error(codes.Internal, err.Error())
+	if err := writePending(dir, noted); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return nil
+	return noted, nil
+}
+
+// joined is a player in Minecraft's cache of the players who joined.
+type joined struct {
+	Name string `json:"name"`
+	UUID string `json:"uuid"`
+}
+
+// readJoined returns the players who joined a server, as its cache of players tells, with
+// valid names only.
+func readJoined(dir *datadir.Dir) ([]*noryxv1.ListedPlayer, error) {
+	var entries []joined
+	if err := readJSON(dir, cacheFile, &entries); err != nil {
+		return nil, err
+	}
+	var list []*noryxv1.ListedPlayer
+	for _, e := range entries {
+		if noryxv1.ValidPlayerName(e.Name) && len(list) < maxListed {
+			list = append(list, &noryxv1.ListedPlayer{Name: e.Name, Uuid: e.UUID})
+		}
+	}
+	return list, nil
 }
 
 // writePending replaces the changes that wait for a server; without any, the file goes.
@@ -117,7 +160,7 @@ func writePending(dir *datadir.Dir, pending []*noryxv1.PlayerChange) error {
 	}
 	changes := make([]change, len(pending))
 	for i, p := range pending {
-		changes[i] = change{p.GetAction().Slug(), p.GetName(), p.GetReason(), p.GetUuid()}
+		changes[i] = change{p.GetAction().Slug(), p.GetName(), p.GetReason(), p.GetUuid(), p.GetDueUnix()}
 	}
 	data, err := json.MarshalIndent(changes, "", "  ")
 	if err != nil {

@@ -12,6 +12,7 @@ import { useAccess } from "@/features/access/use-access"
 import { type Node, nodesQuery } from "@/features/nodes/api"
 import { NodeSettingsDialog } from "@/features/nodes/node-settings-dialog"
 import { NodeStatusBadge } from "@/features/nodes/node-status"
+import { runtimeLabel } from "@/features/nodes/runtime"
 import { type OutdatedAgent, updateQuery, waitsForUpdate } from "@/features/updates/api"
 import { UpdateAgentButton } from "@/features/updates/update-agent-button"
 import { formatDate, formatMegabytes } from "@/lib/format"
@@ -91,7 +92,7 @@ function AgentRow({ node, outdated, version }: { node: Node; outdated?: Outdated
                 {outdated.update.error ?? t("updating…")}
               </span>
             ) : (
-              <span className="block text-xs text-muted-foreground">{node.info.os || node.info.runtime}</span>
+              <span className="block text-xs text-muted-foreground">{node.info.os || runtimeLabel(node.info)}</span>
             )}
           </>
         ) : (

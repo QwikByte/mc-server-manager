@@ -59,17 +59,21 @@ internal/master/
   modrinth/            client for the Modrinth API and CDN
   hangar/              client for the Hangar API and CDN, with projects and versions shaped like Modrinth's
   geysermc/            client for GeyserMC's download server (Floodgate) and global API (IDs of Bedrock players)
+  s3/                  client for S3-compatible storage, signed with AWS Signature Version 4; s3test/ fakes a bucket
   modpack/             creates servers from Modrinth modpacks: checks a pack and writes its files into the server
   template/            templates for new servers
   fileset/             file sets: versions, targets, secrets, variables, the state of servers, previews and applying
   datastore/           datastores of networks: databases and their passwords, ports in the private network, the
                        addresses servers reach them at, dumps, upgrades, rotating passwords and browsing tables
   schedule/            tasks that run on servers or nodes at set times: storage, scheduler, REST API
-  backup/              backups of servers, and backup jobs as scheduled tasks
+  backup/              backups of servers, backup jobs as scheduled tasks, and the copies of their backups in
+                       S3-compatible storage or on other nodes, with the storages for them
   policy/              the panel's schedules (policies in the API): restarts with warnings, stops, starts, commands
   database/            SQLite and embedded migrations
   logs/                log in the database, logging of API requests, collecting the agents' logs, REST API, CLI
-  usage/               history of what nodes and servers use, from the agents' measurements, REST API
+  notify/              notifications of new log entries by rules to Discord, Slack, webhooks and mail, with a dialer
+                       that only reaches public addresses
+  usage/               history of what nodes, servers and datastores use, from the agents' measurements, REST API
   httpapi/             JSON helpers
 internal/agent/
   app/                 wiring, listeners, local CLI
@@ -79,6 +83,7 @@ internal/agent/
   storage/             storage locations allowed for server data
   overlay/             the node's part of the private network: WireGuard interface, keys, checks, nftables table
   datadir/             confined access to a server's data, owned by the server's user
+  archive/             extracts untrusted ZIP and .tar.gz archives: limits, links, protected paths
   secrets/             keeps the secrets in the data of servers from the panel: hidden files and <hidden> values
   rcon/                console connections to game servers (RCON), one per server
   network/             configuration of proxies and game servers for networks, the settings of proxies, Geyser's
@@ -88,7 +93,8 @@ internal/agent/
   fileset/             files of file sets on servers: secrets filled in, the manifest that hides them, their state
   properties/          reads and updates server.properties, keeping comments
   plugin/              plugin and mod files of servers
-  backup/              backups of servers: selection, archives, restoring, and the store that keeps dumps too
+  backup/              backups of servers: selection, archives, restoring, and the store that keeps dumps and
+                       copies of backups of other nodes too
   datastore/           datastores of networks: databases and users, dumps loaded as their users, tables shown read
                        only, the local CLI's part
   logs/                latest log entries in memory, log service, logging of every call

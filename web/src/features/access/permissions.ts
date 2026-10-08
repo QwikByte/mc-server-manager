@@ -37,6 +37,7 @@ const permissionIds = [
   "policies.view",
   "policies.manage",
   "logs.view",
+  "notifications.manage",
   "settings.view",
   "settings.edit",
   "terminal.use",

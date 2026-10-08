@@ -22,7 +22,7 @@ function useJoinToken(node: Node) {
           <DialogTitle>{t("Connect {{name}}", { name: node.name })}</DialogTitle>
           <DialogDescription>{t("Any earlier join token of this node no longer works.")}</DialogDescription>
         </DialogHeader>
-        {issue.data && <EnrollSteps token={issue.data} />}
+        {issue.data && <EnrollSteps token={issue.data} runtime={node.info?.runtimeName} />}
         <DialogFooter>
           <DialogClose asChild>
             <Button>{t("Done")}</Button>

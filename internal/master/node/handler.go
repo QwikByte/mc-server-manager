@@ -80,14 +80,18 @@ type view struct {
 	Warning string `json:"warning,omitempty"`
 }
 
+// info describes a node. Runtime is e.g. "docker 29.0.0", or "unavailable" while the agent
+// can't reach its runtime, whose version is empty then.
 type info struct {
-	AgentVersion string            `json:"agentVersion,omitempty"`
-	Hostname     string            `json:"hostname,omitempty"`
-	OS           string            `json:"os,omitempty"`
-	CPUCount     uint32            `json:"cpuCount"`
-	MemoryBytes  uint64            `json:"memoryBytes"`
-	Runtime      string            `json:"runtime,omitempty"`
-	Storage      []storageLocation `json:"storage"`
+	AgentVersion   string            `json:"agentVersion,omitempty"`
+	Hostname       string            `json:"hostname,omitempty"`
+	OS             string            `json:"os,omitempty"`
+	CPUCount       uint32            `json:"cpuCount"`
+	MemoryBytes    uint64            `json:"memoryBytes"`
+	Runtime        string            `json:"runtime,omitempty"`
+	RuntimeName    string            `json:"runtimeName"`
+	RuntimeVersion string            `json:"runtimeVersion,omitempty"`
+	Storage        []storageLocation `json:"storage"`
 }
 
 type storageLocation struct {
@@ -99,11 +103,11 @@ type storageLocation struct {
 
 // conceal leaves out what only users who may see the node get: where the master reaches
 // it, its system, agent and certificate, and where it keeps data. Using its servers doesn't
-// need them.
+// need them; the name of the runtime tells how to protect their ports.
 func (v *view) conceal() {
 	v.Address, v.CertificateExpiresAt = "", nil
 	if v.Info != nil {
-		v.Info.AgentVersion, v.Info.Hostname, v.Info.OS, v.Info.Runtime = "", "", "", ""
+		v.Info.AgentVersion, v.Info.Hostname, v.Info.OS, v.Info.Runtime, v.Info.RuntimeVersion = "", "", "", "", ""
 		for i := range v.Info.Storage {
 			v.Info.Storage[i].Path = ""
 		}
@@ -135,7 +139,8 @@ func (h *Handler) probe(ctx context.Context, n Node) view {
 		return v
 	}
 	v.Status = "online"
-	v.Info = &info{res.GetAgentVersion(), res.GetHostname(), res.GetOs(), res.GetCpuCount(), res.GetMemoryBytes(), res.GetRuntime(), []storageLocation{}}
+	name, version := res.RuntimeOf()
+	v.Info = &info{res.GetAgentVersion(), res.GetHostname(), res.GetOs(), res.GetCpuCount(), res.GetMemoryBytes(), res.GetRuntime(), name, version, []storageLocation{}}
 	for _, l := range res.GetStorage() {
 		v.Info.Storage = append(v.Info.Storage, storageLocation{l.GetName(), l.GetPath(), l.GetFreeBytes(), l.GetTotalBytes()})
 	}

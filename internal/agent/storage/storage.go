@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -89,6 +90,30 @@ func Fits(f *os.File, size int64) error {
 //nolint:gosec // block counts and sizes are never negative
 func free(st unix.Statfs_t) uint64 { return st.Bavail * uint64(st.Bsize) }
 
+// checkEvery is how many bytes a Guard writes between two checks of the free space.
+const checkEvery = 64 << 20
+
+// Guard returns a writer to w that stops writing before the free space of the file system of
+// the open file or folder f falls below MinFree, which it checks every 64 MiB, e.g. while an
+// upload of unknown size is written.
+func Guard(w io.Writer, f *os.File) io.Writer { return &guard{w: w, f: f} }
+
+type guard struct {
+	w         io.Writer
+	f         *os.File
+	unchecked int
+}
+
+func (g *guard) Write(p []byte) (int, error) {
+	if g.unchecked += len(p); g.unchecked >= checkEvery {
+		g.unchecked = 0
+		if err := Fits(g.f, int64(len(p))); err != nil {
+			return 0, err
+		}
+	}
+	return g.w.Write(p)
+}
+
 // Path returns the directory of a location; an empty name means the default location.
 func (l *Locations) Path(name string) (string, error) {
 	if name == "" || name == Default {
@@ -134,7 +159,7 @@ func (l *Locations) Add(name, path string) error {
 	if _, ok := paths[name]; ok {
 		return fmt.Errorf("location %q already exists", name)
 	}
-	// Only the Docker daemon needs access; containers see their own directory only.
+	// Only the runtime, which runs as root, needs access; containers see their own directory only.
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return err
 	}

@@ -45,6 +45,7 @@ const (
 	datastoreStop      = 120 // seconds; the postgres image warns that Docker's 10 are too few
 	datastorePids      = 512
 	datastoreReadyWait = 5 * time.Minute
+	sizeInterval       = time.Minute
 )
 
 // engine describes how an engine runs in its official image.
@@ -60,7 +61,7 @@ type engine struct {
 
 var engines = map[noryxv1.DatastoreEngine]engine{
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB: {
-		image: "mariadb", versions: []string{"11.8", "12.3"}, port: 3306,
+		image: "docker.io/library/mariadb", versions: []string{"11.8", "12.3"}, port: 3306,
 		data: func(string) string { return "/var/lib/mysql" },
 		// Root may only sign in on the container itself, and the system tables follow upgrades
 		// of the image.
@@ -68,7 +69,7 @@ var engines = map[noryxv1.DatastoreEngine]engine{
 		health: []string{"CMD", "healthcheck.sh", "--connect", "--innodb_initialized"},
 	},
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {
-		image: "postgres", versions: []string{"17", "18"}, port: 5432,
+		image: "docker.io/library/postgres", versions: []string{"17", "18"}, port: 5432,
 		// From 18 on, the image keeps the data of each major version in a folder of its own
 		// under /var/lib/postgresql, which is its volume.
 		data: func(version string) string {
@@ -77,8 +78,10 @@ var engines = map[noryxv1.DatastoreEngine]engine{
 			}
 			return "/var/lib/postgresql/data"
 		},
-		env:    []string{"POSTGRES_PASSWORD_FILE=" + superuserMount},
-		health: []string{"CMD", "pg_isready", "-U", "postgres"},
+		env: []string{"POSTGRES_PASSWORD_FILE=" + superuserMount},
+		// Over TCP: the server that initializes new data listens on the Unix socket only, and
+		// stops right after.
+		health: []string{"CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"},
 	},
 }
 
@@ -127,12 +130,29 @@ func (d *Docker) ListDatastores(ctx context.Context) ([]runtime.Datastore, error
 		}
 		ds := runtime.Datastore{DatastoreSpec: spec, State: datastoreState(c.State, c.Health)}
 		if dir, err := d.datastoreDir(spec); err == nil {
-			ds.Size = datadir.Size(os.DirFS(dir), dataFolder(spec.Version))
+			ds.Size = d.dataSize(filepath.Join(dir, dataFolder(spec.Version)))
 		}
 		list = append(list, ds)
 	}
 	slices.SortFunc(list, func(a, b runtime.Datastore) int { return strings.Compare(a.ID, b.ID) })
 	return list, nil
+}
+
+// sized is the size of a folder and when it was measured.
+type sized struct {
+	bytes int64
+	at    time.Time
+}
+
+// dataSize returns the size of a folder of data, measured at most every sizeInterval, as
+// measuring reads the details of all its files and the datastores are listed often.
+func (d *Docker) dataSize(folder string) int64 {
+	if s, ok := d.sizes.Load(folder); ok && time.Since(s.(sized).at) < sizeInterval {
+		return s.(sized).bytes
+	}
+	size := datadir.Size(os.DirFS(filepath.Dir(folder)), filepath.Base(folder))
+	d.sizes.Store(folder, sized{size, time.Now()})
+	return size
 }
 
 func datastoreSpecOf(labels map[string]string) (runtime.DatastoreSpec, bool) {
@@ -224,6 +244,7 @@ func (d *Docker) createDatastoreContainer(ctx context.Context, spec runtime.Data
 			return err
 		}
 	}
+	d.adapt(&opts)
 	_, err = d.cli.ContainerCreate(ctx, opts)
 	return err
 }
@@ -290,10 +311,14 @@ func datastoreOptions(spec runtime.DatastoreSpec, dir string) (client.ContainerC
 }
 
 func (d *Docker) StartDatastore(ctx context.Context, id string) error {
-	if _, _, err := d.inspectDatastore(ctx, id); err != nil {
+	c, _, err := d.inspectDatastore(ctx, id)
+	if err != nil {
 		return err
 	}
-	_, err := d.cli.ContainerStart(ctx, datastoreName(id), client.ContainerStartOptions{})
+	if err := d.checkNetworks(ctx, c); err != nil {
+		return err
+	}
+	_, err = d.cli.ContainerStart(ctx, datastoreName(id), client.ContainerStartOptions{})
 	return notFound(err)
 }
 
@@ -358,7 +383,7 @@ func (d *Docker) recreateDatastore(ctx context.Context, spec runtime.DatastoreSp
 			return
 		}
 		ctx := context.WithoutCancel(ctx)
-		_, removeErr := d.cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
+		removeErr := d.forceRemove(ctx, name)
 		if cerrdefs.IsNotFound(removeErr) {
 			removeErr = nil
 		}
@@ -396,7 +421,7 @@ func (d *Docker) RemoveDatastore(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := d.cli.ContainerRemove(ctx, datastoreName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
+	if err := d.forceRemove(ctx, datastoreName(id)); err != nil {
 		return notFound(err)
 	}
 	for _, name := range []string{datastoreName(id), portNetwork(id)} {

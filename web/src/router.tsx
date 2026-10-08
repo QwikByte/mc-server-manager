@@ -167,6 +167,12 @@ const playersRoute = createRoute({
   validateSearch: validatePlayerSearch,
   component: lazyRouteComponent(() => import("@/features/players/players-page"), "PlayersPage"),
 })
+const playerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/players/$name",
+  staticData: { title: msg("Players") },
+  component: lazyRouteComponent(() => import("@/features/players/player-page"), "PlayerPage"),
+})
 const serverRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/nodes/$nodeId/servers/$serverId",
@@ -268,15 +274,24 @@ const networkDatabasesRoute = createRoute({
   staticData: { title: msg("Databases") },
   component: lazyRouteComponent(() => import("@/features/datastores/databases-tab"), "DatabasesTab"),
 })
-// The table shown and the first of its rows are in the address.
+// The table shown, the first of its rows, how they are sorted and filtered are in the address.
+const text = (value: unknown) => (typeof value === "string" && value ? value : undefined)
 const networkDatabaseRoute = createRoute({
   getParentRoute: () => networkRoute,
   path: "databases/$datastoreId/$database",
   staticData: { title: msg("Databases") },
-  validateSearch: (search: Record<string, unknown>): { table?: string; schema?: string; offset?: number } => ({
-    table: typeof search.table === "string" && search.table ? search.table : undefined,
-    schema: typeof search.schema === "string" && search.schema ? search.schema : undefined,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { table?: string; schema?: string; offset?: number; sort?: string; desc?: boolean; filter?: string; value?: string; contains?: boolean } => ({
+    table: text(search.table),
+    schema: text(search.schema),
     offset: Number.isSafeInteger(search.offset) && Number(search.offset) > 0 ? Number(search.offset) : undefined,
+    sort: text(search.sort),
+    desc: search.desc === true || undefined,
+    filter: text(search.filter),
+    // A filter may look for an empty value, or one that reads as a number.
+    value: ["string", "number", "boolean"].includes(typeof search.value) ? String(search.value) : undefined,
+    contains: search.contains === true || undefined,
   }),
   component: lazyRouteComponent(() => import("@/features/datastores/table-browser"), "TableBrowser"),
 })
@@ -443,6 +458,12 @@ const groupRoute = createRoute({
   staticData: { title: msg("Groups") },
   component: lazyRouteComponent(() => import("@/features/access/group-page"), "GroupPage"),
 })
+const notificationsSettingsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "notifications",
+  staticData: { title: msg("Notifications") },
+  component: lazyRouteComponent(() => import("@/features/notify/notifications-page"), "NotificationsSettingsPage"),
+})
 const terminalRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "terminal",
@@ -478,6 +499,7 @@ export const router = createRouter({
       ]),
       networksRoute,
       playersRoute,
+      playerRoute,
       networkRoute.addChildren([networkOverviewRoute, networkProxyRoute, networkDatabasesRoute, networkDatabaseRoute]),
       libraryRoute.addChildren([templatesRoute, fileSetsRoute, pluginsRoute]),
       newTemplateRoute,
@@ -494,6 +516,7 @@ export const router = createRouter({
         generalSettingsRoute,
         agentsSettingsRoute,
         terminalRoute,
+        notificationsSettingsRoute,
         usersRoute,
         groupsRoute,
         newGroupRoute,

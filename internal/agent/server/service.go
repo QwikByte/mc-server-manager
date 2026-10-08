@@ -25,11 +25,13 @@ import (
 	"google.golang.org/grpc/status"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/archive"
 	"github.com/QwikByte/noryx/internal/agent/datadir"
 	"github.com/QwikByte/noryx/internal/agent/fileset"
 	mcnet "github.com/QwikByte/noryx/internal/agent/network"
 	"github.com/QwikByte/noryx/internal/agent/properties"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/agent/secrets"
 	"github.com/QwikByte/noryx/internal/agent/storage"
 	"github.com/QwikByte/noryx/internal/logging"
 )
@@ -59,9 +61,7 @@ var (
 	// Versions of mod loaders, e.g. 0.16.10 or 1.20.1-47.3.0, end up in a variable of the image.
 	loaderVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
 	secretPattern        = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
-	// Names of backends a proxy sends players to; "try" is the list of these names.
-	backendPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
-	hostPattern    = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
+	hostPattern          = regexp.MustCompile(`^[A-Za-z0-9.:-]{1,253}$`)
 	// Host names that players connect through, e.g. survival.example.com.
 	forcedHostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 	// JVM options end up in a shell variable that the image splits at spaces, so they
@@ -126,31 +126,9 @@ func (s *Service) ListServers(ctx context.Context, _ *noryxv1.ListServersRequest
 }
 
 func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerRequest) (*noryxv1.CreateServerResponse, error) {
-	_, knownType := noryxv1.ServerType_name[int32(req.GetType())]
-	spec := runtime.Spec{
-		ID:            runtime.NewID(),
-		Name:          req.GetName(),
-		Type:          req.GetType(),
-		Version:       cmp.Or(req.GetVersion(), "LATEST"),
-		MemoryMB:      req.GetMemoryMb(),
-		Port:          req.GetPort(),
-		Storage:       req.GetStorage(),
-		Java:          req.GetJava(),
-		RestartPolicy: req.GetRestartPolicy(),
-		AikarFlags:    req.GetAikarFlags(),
-		JVMOptions:    req.GetJvmOptions(),
-		CPUMillis:     req.GetCpuMillis(),
-		LoaderVersion: req.GetLoaderVersion(),
-		StopTimeout:   req.GetStopTimeoutSeconds(),
-		TimeZone:      req.GetTimeZone(),
-	}
-	switch {
-	case !req.GetAcceptEula() && !req.GetType().Proxy():
-		return nil, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a game server.")
-	case req.GetType() == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
-		return nil, status.Error(codes.InvalidArgument, "Choose a server type.")
-	case !knownType:
-		return nil, errUnknownType
+	spec, err := newServer(req)
+	if err != nil {
+		return nil, err
 	}
 	if msg := properties.Check(spec, req.GetProperties()); msg != "" {
 		return nil, status.Error(codes.InvalidArgument, msg)
@@ -171,6 +149,128 @@ func (s *Service) CreateServer(ctx context.Context, req *noryxv1.CreateServerReq
 		}
 	}
 	return &noryxv1.CreateServerResponse{Server: toProto(runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED})}, nil
+}
+
+// CreateServerFromArchive creates a server like CreateServer whose data is an archive from
+// elsewhere, which is untrusted: it is checked like an archive of the file manager, and the
+// server takes neither the files with secrets nor those of the agent from it, nor the secrets
+// and the forwarding settings in other files. Nothing of the server remains if that fails.
+func (s *Service) CreateServerFromArchive(stream noryxv1.ServerService_CreateServerFromArchiveServer) error {
+	ctx := stream.Context()
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	h := first.GetHeader()
+	if h == nil {
+		return status.Error(codes.InvalidArgument, "the first message must describe the server")
+	}
+	spec, err := newServer(h.GetServer())
+	switch {
+	case err != nil:
+		return err
+	case len(h.GetServer().GetProperties()) > 0:
+		return status.Error(codes.InvalidArgument, "A server from an archive takes the server.properties of the archive.")
+	}
+	release, err := s.check(ctx, spec)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := s.rt.Create(ctx, spec); err != nil {
+		return toStatus(err)
+	}
+	leftOut, err := s.adopt(ctx, spec, h.GetSize(), stream)
+	if err != nil {
+		if err := s.rt.Remove(context.WithoutCancel(ctx), spec.ID); err != nil {
+			slog.Error("Can't delete a server whose archive failed", logging.Servers, logging.KeyServer, spec.ID, "err", err)
+		}
+		return toStatus(err)
+	}
+	return stream.SendAndClose(&noryxv1.CreateServerFromArchiveResponse{
+		Server: toProto(runtime.Server{Spec: spec, State: noryxv1.ServerState_SERVER_STATE_STOPPED}), LeftOut: leftOut,
+	})
+}
+
+// adopt receives an archive from elsewhere into a temporary file of the data of a new server,
+// which has size bytes if known, extracts it as the server's data and returns what it left out.
+func (s *Service) adopt(ctx context.Context, spec runtime.Spec, size int64, stream noryxv1.ServerService_CreateServerFromArchiveServer) ([]string, error) {
+	dir, err := s.rt.Data(ctx, spec.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	top, err := dir.Open(".")
+	if err != nil {
+		return nil, err
+	}
+	defer top.Close()
+	if err := storage.Fits(top, size); err != nil {
+		return nil, err
+	}
+	tmp := datadir.TempName(".")
+	f, err := dir.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Remove(tmp) //nolint:errcheck // a leftover is removed with the server
+	defer f.Close()
+	n, err := archive.Receive(stream.Recv, storage.Guard(f, top))
+	if err != nil {
+		return nil, err
+	}
+	a, err := archive.Open(f, n, archive.Uploads)
+	if err != nil {
+		return nil, err
+	}
+	res, err := a.Extract(ctx, dir, ".", archive.Options{Protected: archive.Foreign(secrets.With(fileset.ManifestFile)), Skip: true})
+	if err != nil {
+		return nil, err
+	}
+	// The server compares its files with those of an empty server, which has no secrets and
+	// trusts no proxy.
+	empty := datadir.TempName(".")
+	if err := dir.Mkdir(empty, 0o700); err != nil {
+		return nil, err
+	}
+	defer dir.Remove(empty) //nolint:errcheck // a leftover is removed with the server
+	none, err := dir.Sub(empty)
+	if err != nil {
+		return nil, err
+	}
+	defer none.Close()
+	return res.LeftOut, errors.Join(secrets.Take(none, dir), mcnet.KeepForwarding(none, dir, spec.Type))
+}
+
+// newServer checks the request for a new server and returns the server's settings.
+func newServer(req *noryxv1.CreateServerRequest) (runtime.Spec, error) {
+	_, knownType := noryxv1.ServerType_name[int32(req.GetType())]
+	spec := runtime.Spec{
+		ID:            runtime.NewID(),
+		Name:          req.GetName(),
+		Type:          req.GetType(),
+		Version:       cmp.Or(req.GetVersion(), "LATEST"),
+		MemoryMB:      req.GetMemoryMb(),
+		Port:          req.GetPort(),
+		Storage:       req.GetStorage(),
+		Java:          req.GetJava(),
+		RestartPolicy: req.GetRestartPolicy(),
+		AikarFlags:    req.GetAikarFlags(),
+		JVMOptions:    req.GetJvmOptions(),
+		CPUMillis:     req.GetCpuMillis(),
+		LoaderVersion: req.GetLoaderVersion(),
+		StopTimeout:   req.GetStopTimeoutSeconds(),
+		TimeZone:      req.GetTimeZone(),
+	}
+	switch {
+	case !req.GetAcceptEula() && !req.GetType().Proxy():
+		return spec, status.Error(codes.InvalidArgument, "Accept the Minecraft EULA to create a game server.")
+	case req.GetType() == noryxv1.ServerType_SERVER_TYPE_UNSPECIFIED:
+		return spec, status.Error(codes.InvalidArgument, "Choose a server type.")
+	case !knownType:
+		return spec, errUnknownType
+	}
+	return spec, nil
 }
 
 func (s *Service) writeProperties(ctx context.Context, id string, changes map[string]string) error {
@@ -279,6 +379,11 @@ func (s *Service) extract(ctx context.Context, id string, stream noryxv1.ServerS
 		return err
 	}
 	defer dir.Close()
+	top, err := dir.Open(".")
+	if err != nil {
+		return err
+	}
+	defer top.Close()
 	tmp := datadir.TempName(".")
 	f, err := dir.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -286,7 +391,7 @@ func (s *Service) extract(ctx context.Context, id string, stream noryxv1.ServerS
 	}
 	defer dir.Remove(tmp) //nolint:errcheck // a leftover is removed with the server
 	defer f.Close()
-	var size int64
+	w, size := storage.Guard(f, top), int64(0) // the old node may send without end
 	for {
 		msg, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -295,7 +400,7 @@ func (s *Service) extract(ctx context.Context, id string, stream noryxv1.ServerS
 		if err != nil {
 			return err
 		}
-		n, err := f.Write(msg.GetData())
+		n, err := w.Write(msg.GetData())
 		if size += int64(n); err != nil {
 			return err
 		}
@@ -573,7 +678,7 @@ func networkOf(req *noryxv1.ConfigureNetworkRequest) (runtime.Network, string) {
 	for _, b := range req.GetBackends() {
 		backend := runtime.NetworkBackend{Name: b.GetName(), ServerID: b.GetServerId(), Address: b.GetAddress(), Restricted: b.GetRestricted(), Motd: b.GetMotd()}
 		switch {
-		case !backendPattern.MatchString(backend.Name) || backend.Name == "try" || names[backend.Name]:
+		case !noryxv1.ValidBackendName(backend.Name) || names[backend.Name]:
 			return network, fmt.Sprintf("invalid or duplicate backend name %q", backend.Name)
 		case backend.ServerID != "" && !runtime.ValidID(backend.ServerID):
 			return network, "invalid backend server ID"
@@ -738,6 +843,10 @@ func toStatus(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case status.Code(err) != codes.Unknown: // e.g. a refused archive
+		return err
+	case errors.As(err, new(storage.FullError)):
+		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, runtime.ErrNotFound):
 		return status.Error(codes.NotFound, "Server not found.")
 	case errors.Is(err, runtime.ErrNotRunning):

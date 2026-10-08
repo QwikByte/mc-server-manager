@@ -52,14 +52,31 @@ func TestTerminal(t *testing.T) {
 	a.runtime.down = true
 	a.runtime.mu.Unlock()
 	out, err := run(a.node.ID, "status")
-	if want := "can't reach Docker on this node, see: systemctl status docker"; err != want || !strings.Contains(out, "Runtime  unavailable") || strings.Contains(out, "System") {
+	if want := "can't reach Docker on this node, see: systemctl status docker"; err != want || !strings.Contains(out, "Runtime  Docker unavailable") || strings.Contains(out, "System") {
 		t.Errorf("status while Docker is down: output %q, error %q; want %q", out, err, want)
 	}
 	if _, err := run(a.node.ID, "server list"); err != "Docker isn't running on node-1, or its agent can't connect to it." {
 		t.Errorf("server list while Docker is down: error %q", err)
 	}
+	// Podman is named instead, with what to look at.
+	a.runtime.mu.Lock()
+	a.runtime.podman = true
+	a.runtime.mu.Unlock()
+	out, err = run(a.node.ID, "status")
+	if want := "can't reach Podman on this node, see: systemctl status podman.socket"; err != want || !strings.Contains(out, "Runtime  Podman unavailable") {
+		t.Errorf("status while Podman is down: output %q, error %q; want %q", out, err, want)
+	}
+	if _, err := run(a.node.ID, "server list"); err != "Podman isn't running on node-1, or its agent can't connect to it." {
+		t.Errorf("server list while Podman is down: error %q", err)
+	}
 	a.runtime.mu.Lock()
 	a.runtime.down = false
+	a.runtime.mu.Unlock()
+	if out, err := run(a.node.ID, "status"); err != "" || !strings.Contains(out, "Runtime  Podman fake") {
+		t.Errorf("status with Podman: output %q, error %q", out, err)
+	}
+	a.runtime.mu.Lock()
+	a.runtime.podman = false
 	a.runtime.mu.Unlock()
 
 	// The master's commands describe the master and its nodes.

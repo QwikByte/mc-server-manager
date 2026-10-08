@@ -91,3 +91,7 @@ export const playerActions: Record<PlayerAction, ActionInfo> = {
 /** The permissions an action needs on each server: making operators lets players run any command. */
 export const needs = (action: PlayerAction): Permission[] =>
   action === "op" || action === "deop" ? ["players.manage", "console.commands"] : ["players.manage"]
+
+/** The players of an action as its title names them: one by name, several by their number. */
+export const playersLabel = (names: string[]) =>
+  names.length === 1 ? names[0] : t("{{count}} players", { count: names.length, defaultValue_one: "{{count}} player" })

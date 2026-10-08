@@ -2,7 +2,7 @@ import { type QueryClient, queryOptions, useMutation, useMutationState, useQuery
 import type { ModpackChoice } from "@/features/modpacks/api"
 import { memoryLimitMb, type Node } from "@/features/nodes/api"
 import { type Operation, operate } from "@/features/operations/api"
-import { api } from "@/lib/api"
+import { api, send } from "@/lib/api"
 
 export type ServerState = "stopped" | "starting" | "running" | "crashing"
 
@@ -157,13 +157,43 @@ export function useCreateServer() {
   })
 }
 
+/** The settings of a server created from an archive, which brings its own server.properties. */
+export type ImportedSettings = Pick<NewServer, "name" | "type" | "version" | "memoryMb" | "port" | "acceptEula" | "storage" | "stopTimeout" | "timeZone">
+
+/**
+ * Creates a server whose data is a ZIP or .tar.gz archive of a server from elsewhere, with upload progress. leftOut
+ * are the files of the archive it didn't get, e.g. those with secrets of the server it came from.
+ */
+export function useImportServer() {
+  const queryClient = useQueryClient()
+  return async (
+    nodeId: string,
+    settings: ImportedSettings,
+    archive: File,
+    { onProgress, signal }: { onProgress: (fraction: number) => void; signal: AbortSignal },
+  ) => {
+    const form = new FormData()
+    form.append("server", JSON.stringify(settings))
+    form.append("archive", archive)
+    try {
+      return await send<Server & { leftOut: string[]; warning?: string }>("POST", `/nodes/${nodeId}/servers/import`, form, { onProgress, signal })
+    } finally {
+      void refreshServers(queryClient, nodeId)
+    }
+  }
+}
+
 /** Copies a server with all its data into a new server on the same node. */
 export function useDuplicateServer(nodeId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, name, port, onStart }: { id: string; name: string; port: number } & Followed) =>
-      operate<Server>(`/nodes/${nodeId}/servers/${id}/duplicate`, { body: { name, port } }, onStart),
-    onSettled: () => refreshServers(queryClient, nodeId),
+    /** With network, the copy of a game server of a network joins the network next to it. */
+    mutationFn: ({ id, onStart, ...body }: { id: string; name: string; port: number; network: boolean } & Followed) =>
+      operate<Server>(`/nodes/${nodeId}/servers/${id}/duplicate`, { body }, onStart),
+    onSettled: (_data, _error, { network }) => {
+      void refreshServers(queryClient, nodeId)
+      if (network) void queryClient.invalidateQueries({ queryKey: ["networks"] })
+    },
   })
 }
 

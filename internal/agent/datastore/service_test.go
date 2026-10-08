@@ -41,9 +41,15 @@ const password = "abcdefghijklmnopqrstuvwxyz234567"
 
 func newService(t *testing.T) (*Service, *fakeRuntime, *fakeOverlay, string) {
 	t.Helper()
+	return newServiceIn(t, t.TempDir())
+}
+
+// newServiceIn is newService with its default storage location in dir.
+func newServiceIn(t *testing.T, dir string) (*Service, *fakeRuntime, *fakeOverlay, string) {
+	t.Helper()
 	rt := &fakeRuntime{Datastores: &runtimetest.Datastores{}, servers: []runtime.Server{{Spec: runtime.Spec{ID: "server", Name: "lobby", Port: 25565}}}}
 	ov := &fakeOverlay{clients: map[string][]string{}}
-	s := NewService(rt, storage.New(t.TempDir()), ov)
+	s := NewService(rt, storage.New(dir), ov)
 	id := runtime.NewID()
 	_, err := s.CreateDatastore(t.Context(), &noryxv1.CreateDatastoreRequest{Id: id, Engine: noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB, Version: "11.8", MemoryMb: 512})
 	must(t, err)

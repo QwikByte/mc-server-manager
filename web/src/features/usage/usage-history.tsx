@@ -7,14 +7,14 @@ import { Segmented } from "@/components/segmented"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { historyQuery, type UsagePoint, type UsageRange, ranges } from "./api"
+import { type HistoryPoint, type HistoryQuery, type UsagePoint, type UsageRange, ranges } from "./api"
 import { type ChartSeries, TimeChart } from "./time-chart"
 import { locale } from "@/lib/i18n"
 
 /** A chart of the history: one measure, so one scale. */
-export interface ChartSpec {
+export interface ChartSpec<P extends HistoryPoint = UsagePoint> {
   title: string
-  series: ChartSeries[]
+  series: ChartSeries<P>[]
   format: (value: number) => string
   /** Top of the axis, e.g. a limit; 0 or missing rounds up the highest value. */
   max?: number
@@ -22,16 +22,25 @@ export interface ChartSpec {
 }
 
 /**
- * The history of a node, or of one of its servers, as charts or a table. The range applies
- * to all of them.
+ * The history of a node, of one of its servers or of a datastore, as charts or a table. The
+ * range applies to all of them.
  */
-export function UsageHistory({ nodeId, serverId, charts }: { nodeId: string; serverId?: string; charts: ChartSpec[] }) {
+export function UsageHistory<P extends HistoryPoint>({
+  history,
+  charts,
+  className,
+}: {
+  history: (range: UsageRange) => HistoryQuery<P>
+  charts: ChartSpec<P>[]
+  className?: string
+}) {
   const [range, setRange] = useState<UsageRange>("day")
   const [view, setView] = useState<"charts" | "table">("charts")
-  const { data, error, isPlaceholderData, dataUpdatedAt } = useQuery(historyQuery(nodeId, serverId, range))
+  const { data, error, isPlaceholderData, dataUpdatedAt } = useQuery(history(range))
 
   return (
     <Section
+      className={className}
       title={t("History")}
       actions={
         <div className="flex flex-wrap gap-2">
@@ -83,7 +92,7 @@ export function UsageHistory({ nodeId, serverId, charts }: { nodeId: string; ser
 }
 
 /** The values of the charts by step, newest first. */
-function UsageTable({ points, charts, range }: { points: UsagePoint[]; charts: ChartSpec[]; range: UsageRange }) {
+function UsageTable<P extends HistoryPoint>({ points, charts, range }: { points: P[]; charts: ChartSpec<P>[]; range: UsageRange }) {
   const columns = charts.flatMap((c) =>
     c.series.map((s) => ({
       label: c.series.length > 1 ? t("{{chart}} {{series}}", { chart: c.title, series: s.label.toLowerCase() }) : c.title,

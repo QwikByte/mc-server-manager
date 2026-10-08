@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useAccess } from "@/features/access/use-access"
+import type { Runtime } from "@/features/nodes/api"
 import type { NodeServer } from "@/features/servers/api"
 import { isFabric, isPaper } from "@/features/servers/server-types"
 import { type Forwarding, type Network, networksQuery, type ServerRef } from "./api"
@@ -55,10 +56,26 @@ export function backendName(serverName: string, taken: string[]) {
   return name
 }
 
-/** The command that lets only the proxy's node reach a server's port, for Docker's DOCKER-USER chain. */
-export function firewallCommand(port: number, proxyHost: string) {
-  const tables = proxyHost.includes(":") ? "ip6tables" : "iptables" // an IPv6 address needs the IPv6 tables
-  return `${tables} -I DOCKER-USER -p tcp -m conntrack --ctorigdstport ${port} --ctdir ORIGINAL ! -s ${proxyHost} -j DROP`
+/** The name of a copy of a server in its network: the original's without its number and the next free one, e.g. lobby-2. */
+export function copyName(original: string, taken: string[]) {
+  const base = original.replace(/-[0-9]+$/, "")
+  for (let i = 2; ; i++) {
+    const name = `${base.slice(0, 32 - `-${i}`.length)}-${i}`
+    if (!taken.includes(name)) return name
+  }
+}
+
+/**
+ * The command that lets only the proxy's node reach a server's port: for Docker's DOCKER-USER
+ * chain, or for Podman, which has none, in an nftables table that comes before its rules.
+ */
+export function firewallCommand(port: number, proxyHost: string, runtime: Runtime = "docker") {
+  const ipv6 = proxyHost.includes(":") // an IPv6 address needs the IPv6 tables
+  if (runtime === "podman") {
+    const rule = `meta l4proto tcp ct status dnat ct original proto-dst ${port} ${ipv6 ? "ip6" : "ip"} saddr != ${proxyHost} drop`
+    return `nft 'add table inet noryx-firewall; add chain inet noryx-firewall forward { type filter hook forward priority -10; }; add rule inet noryx-firewall forward ${rule}'`
+  }
+  return `${ipv6 ? "ip6tables" : "iptables"} -I DOCKER-USER -p tcp -m conntrack --ctorigdstport ${port} --ctdir ORIGINAL ! -s ${proxyHost} -j DROP`
 }
 
 /** The host of a node's address, e.g. 203.0.113.10 of 203.0.113.10:7443. */

@@ -52,13 +52,14 @@ func (d *Docker) addCrashes(ctx context.Context, containerID string, srv *runtim
 type watched struct {
 	inRow     map[string]int  // crashes in a row
 	unhealthy map[string]bool // whose health check failed last
+	lives     map[string]*life
 }
 
 // Watch logs crashes and stops servers that keep crashing, logs when the health check of a
 // server fails and passes again, and closes the connections to the consoles of servers that
 // stop, until ctx is done.
 func (d *Docker) Watch(ctx context.Context) {
-	w := watched{inRow: map[string]int{}, unhealthy: map[string]bool{}}
+	w := watched{inRow: map[string]int{}, unhealthy: map[string]bool{}, lives: map[string]*life{}}
 	for ctx.Err() == nil {
 		err := d.watch(ctx, w)
 		if ctx.Err() == nil {
@@ -66,23 +67,29 @@ func (d *Docker) Watch(ctx context.Context) {
 		}
 		select {
 		case <-ctx.Done():
-		case <-time.After(watchRetry): // e.g. while Docker restarts
+		case <-time.After(watchRetry): // e.g. while the runtime restarts
 		}
 	}
 }
 
 func (d *Docker) watch(ctx context.Context, w watched) error {
 	// health_status matches the events of all states of health.
-	filters := make(client.Filters).Add("type", string(events.ContainerEventType)).
-		Add("event", string(events.ActionDie), string(events.ActionHealthStatus)).Add("label", labelManaged)
+	actions := []string{string(events.ActionDie), string(events.ActionHealthStatus)}
+	if d.podman != nil {
+		actions = append(actions, string(events.ActionStart), string(events.ActionRestart))
+	}
+	filters := make(client.Filters).Add("type", string(events.ContainerEventType)).Add("event", actions...).Add("label", managed)
 	res := d.cli.Events(ctx, client.EventsListOptions{Filters: filters})
 	for {
 		select {
 		case msg := <-res.Messages:
-			if msg.Action == events.ActionDie {
+			switch {
+			case d.podman != nil:
+				d.podmanEvent(ctx, msg, w)
+			case msg.Action == events.ActionDie:
 				delete(w.unhealthy, msg.Actor.ID)
 				d.crashed(ctx, msg.Actor, w.inRow)
-			} else {
+			default:
 				health(msg, w.unhealthy)
 			}
 		case err := <-res.Err:
@@ -123,21 +130,28 @@ func (d *Docker) crashed(ctx context.Context, actor events.Actor, inRow map[stri
 		delete(inRow, actor.ID)
 		return
 	}
-	if !noteCrash(inRow, actor, spec.ID, res.Container.RestartCount) {
+	d.count(ctx, actor, spec.ID, res.Container.RestartCount, inRow)
+}
+
+// count logs and counts the crash of a server that its runtime starts again, and stops it
+// after maxCrashes in a row; see noteCrash.
+func (d *Docker) count(ctx context.Context, actor events.Actor, id string, restarts int, inRow map[string]int) {
+	if !noteCrash(inRow, actor, id, restarts) {
 		return
 	}
 	// A stop waits for the server's stop timeout, up to minutes, while the events of the other
 	// servers go on.
 	go func() {
-		if err := d.Stop(ctx, spec.ID); err != nil {
-			slog.Warn("Can't stop a crashing server", logging.Servers, logging.KeyServer, spec.ID, "err", err)
+		if err := d.Stop(ctx, id); err != nil {
+			slog.Warn("Can't stop a crashing server", logging.Servers, logging.KeyServer, id, "err", err)
 		}
 	}()
 }
 
-// noteCrash logs the crash of a server that Docker starts again, with how many crashes in a
-// row it was, and reports whether that makes maxCrashes, so that the server is to be stopped.
-// restarts is how often Docker restarted it since it was last started, e.g. by a user.
+// noteCrash logs the crash of a server that its runtime starts again, with how many crashes
+// in a row it was, and reports whether that makes maxCrashes, so that the server is to be
+// stopped. The attributes of actor are those of Docker's die event. restarts is how often the
+// runtime restarted it since it was last started, e.g. by a user.
 func noteCrash(inRow map[string]int, actor events.Actor, id string, restarts int) bool {
 	n := inRow[actor.ID] + 1
 	if ran, _ := strconv.Atoi(actor.Attributes["execDuration"]); time.Duration(ran)*time.Second >= stableAfter {

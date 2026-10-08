@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"net/http"
+	"slices"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -31,13 +32,63 @@ type Maintenance struct {
 	Installed bool `json:"installed"`
 	Enabled   bool `json:"enabled"`
 	// Players may join during maintenance.
-	Players      []MaintenancePlayer `json:"players"`
-	ProxyRunning bool                `json:"proxyRunning"`
+	Players []MaintenancePlayer `json:"players"`
+	// Servers are the game servers of the network in maintenance on their own, by name.
+	Servers []string `json:"servers"`
+	// EndsAt is when the maintenance of the whole network ends, if the plugin keeps its end
+	// timer over restarts. It keeps its other timers to itself.
+	EndsAt       *time.Time `json:"endsAt,omitempty"`
+	ProxyRunning bool       `json:"proxyRunning"`
+	// ServersAndTimers tells that the agent of the proxy's node changes the maintenance of
+	// single servers and starts timers.
+	ServersAndTimers bool `json:"serversAndTimers"`
 }
 
 type MaintenancePlayer struct {
 	Name string `json:"name"`
 	UUID string `json:"uuid"`
+}
+
+// MaintenanceChange turns maintenance on or off, for the whole network or one of its game
+// servers, now or after a delay. Maintenance that starts may end after a duration.
+type MaintenanceChange struct {
+	Enabled bool `json:"enabled"`
+	// Server is the name of a game server of the network; empty for the whole network.
+	Server string `json:"server"`
+	// Delay is the minutes until maintenance starts or ends; 0 for now.
+	Delay uint32 `json:"delay"`
+	// Duration is the minutes that maintenance lasts which starts; 0 until it is ended.
+	Duration uint32 `json:"duration"`
+}
+
+// requests returns the commands of the plugin for a change, which they check: maintenance
+// that starts now and ends later is turned on and gets a timer to end.
+func (c MaintenanceChange) requests() ([]*noryxv1.ChangeMaintenanceRequest, error) {
+	req := func(change noryxv1.MaintenanceChange, minutes, duration uint32) *noryxv1.ChangeMaintenanceRequest {
+		return &noryxv1.ChangeMaintenanceRequest{Change: change, Server: c.Server, Minutes: minutes, DurationMinutes: duration}
+	}
+	var reqs []*noryxv1.ChangeMaintenanceRequest
+	switch {
+	case !c.Enabled && c.Delay == 0:
+		reqs = append(reqs, req(noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_OFF, 0, c.Duration))
+	case !c.Enabled:
+		reqs = append(reqs, req(noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_END_TIMER, c.Delay, c.Duration))
+	case c.Delay > 0 && c.Duration > 0:
+		reqs = append(reqs, req(noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_SCHEDULE, c.Delay, c.Duration))
+	case c.Delay > 0:
+		reqs = append(reqs, req(noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_START_TIMER, c.Delay, 0))
+	default:
+		reqs = append(reqs, req(noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_ON, 0, 0))
+		if c.Duration > 0 {
+			reqs = append(reqs, req(noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_END_TIMER, c.Duration, 0))
+		}
+	}
+	for _, r := range reqs {
+		if problem := r.Problem(); problem != "" {
+			return nil, httpapi.Errorf(http.StatusBadRequest, "%s", problem)
+		}
+	}
+	return reqs, nil
 }
 
 // Maintenance tells whether a network is in maintenance.
@@ -51,20 +102,30 @@ func (s *Service) Maintenance(ctx context.Context, n Network) (Maintenance, erro
 		res, err = c.GetMaintenance(ctx, &noryxv1.GetMaintenanceRequest{ServerId: n.Proxy.ServerID})
 		return err
 	})
-	return maintenanceOf(res.GetMaintenance(), proxy.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING), err
+	return maintenanceOf(n, res.GetMaintenance(), proxy.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING), err
 }
 
-// SetMaintenance turns maintenance on or off. The first time, the plugin is installed on
-// the proxy, which restarts to load it.
-func (s *Service) SetMaintenance(ctx context.Context, n Network, on bool) (Maintenance, error) {
+// SetMaintenance changes the maintenance of a network or of one of its game servers. The
+// first time maintenance starts, the plugin is installed on the proxy, which restarts to
+// load it.
+func (s *Service) SetMaintenance(ctx context.Context, n Network, c MaintenanceChange) (Maintenance, error) {
 	ctx = context.WithoutCancel(ctx)
+	reqs, err := c.requests()
+	if err == nil {
+		err = n.checkServer(c.Server)
+	}
+	if err != nil {
+		return Maintenance{}, err
+	}
 	m, err := s.Maintenance(ctx, n)
 	switch {
 	case err != nil:
 		return m, err
 	case !m.ProxyRunning:
 		return m, httpapi.Errorf(http.StatusConflict, "Start the proxy of the network first.")
-	case !m.Installed && !on:
+	case (c.Server != "" || c.Delay > 0 || c.Duration > 0) && !m.ServersAndTimers:
+		return m, errOlderMaintenance
+	case !m.Installed && !c.Enabled:
 		return m, nil
 	case !m.Installed:
 		operation.Step(ctx, "plugin")
@@ -85,11 +146,38 @@ func (s *Service) SetMaintenance(ctx context.Context, n Network, on bool) (Maint
 		}
 	}
 	operation.Step(ctx, "maintenance")
-	change := noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_OFF
-	if on {
-		change = noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_ON
+	for _, req := range reqs {
+		if m, err = s.changeMaintenance(ctx, n, req); err != nil {
+			return m, err
+		}
 	}
-	return s.changeMaintenance(ctx, n, change, "")
+	return m, nil
+}
+
+// AbortMaintenanceTimer aborts the timer of the plugin for a network or one of its game
+// servers, if one runs.
+func (s *Service) AbortMaintenanceTimer(ctx context.Context, n Network, server string) (Maintenance, error) {
+	if err := n.checkServer(server); err != nil {
+		return Maintenance{}, err
+	}
+	m, err := s.Maintenance(ctx, n)
+	if err == nil && !m.ServersAndTimers {
+		err = errOlderMaintenance
+	}
+	if err != nil {
+		return m, err
+	}
+	return s.changeMaintenance(ctx, n, &noryxv1.ChangeMaintenanceRequest{Change: noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_ABORT_TIMER, Server: server})
+}
+
+var errOlderMaintenance = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the proxy's node for timers and the maintenance of single servers.")
+
+// checkServer fails unless name is empty, for the whole network, or names a game server of it.
+func (n *Network) checkServer(name string) error {
+	if name != "" && !slices.ContainsFunc(n.Backends, func(b Backend) bool { return b.Name == name }) {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose a server of the network.")
+	}
+	return nil
 }
 
 // ChangeMaintenancePlayer adds or removes a player who may join during maintenance.
@@ -98,19 +186,20 @@ func (s *Service) ChangeMaintenancePlayer(ctx context.Context, n Network, add bo
 	if add {
 		change = noryxv1.MaintenanceChange_MAINTENANCE_CHANGE_ADD
 	}
-	return s.changeMaintenance(ctx, n, change, player)
+	return s.changeMaintenance(ctx, n, &noryxv1.ChangeMaintenanceRequest{Change: change, Player: player})
 }
 
-func (s *Service) changeMaintenance(ctx context.Context, n Network, change noryxv1.MaintenanceChange, player string) (Maintenance, error) {
-	if player != "" && !noryxv1.ValidPlayerName(player) {
-		return Maintenance{}, httpapi.Errorf(http.StatusBadRequest, "Enter the name of a player: up to 16 letters, digits and underscores.")
+func (s *Service) changeMaintenance(ctx context.Context, n Network, req *noryxv1.ChangeMaintenanceRequest) (Maintenance, error) {
+	if problem := req.Problem(); problem != "" {
+		return Maintenance{}, httpapi.Errorf(http.StatusBadRequest, "%s", problem)
 	}
+	req.ServerId = n.Proxy.ServerID
 	var res *noryxv1.ChangeMaintenanceResponse
 	err := s.proxy(ctx, n, func(ctx context.Context, c noryxv1.ProxyServiceClient) (err error) {
-		res, err = c.ChangeMaintenance(ctx, &noryxv1.ChangeMaintenanceRequest{ServerId: n.Proxy.ServerID, Change: change, Player: player})
+		res, err = c.ChangeMaintenance(ctx, req)
 		return err
 	})
-	return maintenanceOf(res.GetMaintenance(), true), err
+	return maintenanceOf(n, res.GetMaintenance(), true), err
 }
 
 // proxy calls the ProxyService of the agent of a network's proxy, with time for the plugin to
@@ -128,10 +217,24 @@ func (s *Service) proxy(ctx context.Context, n Network, call func(ctx context.Co
 	return err
 }
 
-func maintenanceOf(m *noryxv1.Maintenance, proxyRunning bool) Maintenance {
-	out := Maintenance{Installed: m.GetInstalled(), Enabled: m.GetEnabled(), Players: []MaintenancePlayer{}, ProxyRunning: proxyRunning}
+// maintenanceOf returns the maintenance the agent read, with the servers in maintenance that
+// are game servers of the network.
+func maintenanceOf(n Network, m *noryxv1.Maintenance, proxyRunning bool) Maintenance {
+	out := Maintenance{
+		Installed: m.GetInstalled(), Enabled: m.GetEnabled(), Players: []MaintenancePlayer{}, Servers: []string{},
+		ProxyRunning: proxyRunning, ServersAndTimers: m.GetServersAndTimers(),
+	}
 	for _, p := range m.GetPlayers() {
 		out.Players = append(out.Players, MaintenancePlayer{p.GetName(), p.GetUuid()})
+	}
+	for _, b := range n.Backends {
+		if slices.Contains(m.GetServers(), b.Name) {
+			out.Servers = append(out.Servers, b.Name)
+		}
+	}
+	if m.GetEndsAt() > 0 {
+		end := time.Unix(m.GetEndsAt(), 0)
+		out.EndsAt = &end
 	}
 	return out
 }

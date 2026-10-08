@@ -71,8 +71,13 @@ type GetInfoResponse struct {
 	Storage []*StorageLocation `protobuf:"bytes,7,rep,name=storage,proto3" json:"storage,omitempty"`
 	// When the certificate the agent presents to the master expires.
 	CertificateNotAfterUnix int64 `protobuf:"varint,8,opt,name=certificate_not_after_unix,json=certificateNotAfterUnix,proto3" json:"certificate_not_after_unix,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// The container runtime the agent is set to use, "docker" or "podman", also while it
+	// can't reach it, and its version, e.g. "29.0.0", empty then. Older agents leave both
+	// empty, as they only run Docker; runtime tells its version.
+	RuntimeName    string `protobuf:"bytes,9,opt,name=runtime_name,json=runtimeName,proto3" json:"runtime_name,omitempty"`
+	RuntimeVersion string `protobuf:"bytes,10,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetInfoResponse) Reset() {
@@ -159,6 +164,20 @@ func (x *GetInfoResponse) GetCertificateNotAfterUnix() int64 {
 		return x.CertificateNotAfterUnix
 	}
 	return 0
+}
+
+func (x *GetInfoResponse) GetRuntimeName() string {
+	if x != nil {
+		return x.RuntimeName
+	}
+	return ""
+}
+
+func (x *GetInfoResponse) GetRuntimeVersion() string {
+	if x != nil {
+		return x.RuntimeVersion
+	}
+	return ""
 }
 
 // StorageLocation is a directory the node's administrator allowed for server data.
@@ -476,7 +495,7 @@ var File_noryx_v1_node_proto protoreflect.FileDescriptor
 const file_noryx_v1_node_proto_rawDesc = "" +
 	"\n" +
 	"\x13noryx/v1/node.proto\x12\bnoryx.v1\"\x10\n" +
-	"\x0eGetInfoRequest\"\xae\x02\n" +
+	"\x0eGetInfoRequest\"\xfa\x02\n" +
 	"\x0fGetInfoResponse\x12#\n" +
 	"\ragent_version\x18\x01 \x01(\tR\fagentVersion\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x12\x0e\n" +
@@ -485,7 +504,10 @@ const file_noryx_v1_node_proto_rawDesc = "" +
 	"\fmemory_bytes\x18\x05 \x01(\x04R\vmemoryBytes\x12\x18\n" +
 	"\aruntime\x18\x06 \x01(\tR\aruntime\x123\n" +
 	"\astorage\x18\a \x03(\v2\x19.noryx.v1.StorageLocationR\astorage\x12;\n" +
-	"\x1acertificate_not_after_unix\x18\b \x01(\x03R\x17certificateNotAfterUnix\"y\n" +
+	"\x1acertificate_not_after_unix\x18\b \x01(\x03R\x17certificateNotAfterUnix\x12!\n" +
+	"\fruntime_name\x18\t \x01(\tR\vruntimeName\x12'\n" +
+	"\x0fruntime_version\x18\n" +
+	" \x01(\tR\x0eruntimeVersion\"y\n" +
 	"\x0fStorageLocation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1d\n" +

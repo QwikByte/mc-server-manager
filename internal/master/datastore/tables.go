@@ -58,15 +58,22 @@ func (s *Service) Tables(ctx context.Context, id, name string) ([]Table, error) 
 	return tables, browsing(err)
 }
 
-// Browse returns a page of the rows of a table, which the agent only reads.
-func (s *Service) Browse(ctx context.Context, id, name, schema, table string, offset uint64) (Page, error) {
-	ds, _, err := s.database(ctx, id, name)
+// Browse returns a page of the rows of a table that req chooses, which the agent only reads.
+func (s *Service) Browse(ctx context.Context, id string, req *noryxv1.BrowseTableRequest) (Page, error) {
+	ds, _, err := s.database(ctx, id, req.GetDatabase())
 	if err != nil {
 		return Page{}, err
 	}
+	if f := req.GetFilter(); f != nil && f.Problem() != "" {
+		return Page{}, httpapi.Errorf(http.StatusBadRequest, "%s", f.Problem())
+	}
+	req.Id, req.Limit = id, pageRows
 	page := Page{Columns: []Column{}, Rows: [][]Value{}}
 	err = s.call(ctx, ds.NodeID, func(ctx context.Context, c noryxv1.DatastoreServiceClient) error {
-		res, err := c.BrowseTable(ctx, &noryxv1.BrowseTableRequest{Id: id, Database: name, Schema: schema, Table: table, Offset: offset, Limit: pageRows})
+		res, err := c.BrowseTable(ctx, req)
+		if err == nil && (req.GetSort() != "" || req.GetFilter() != nil) && !res.GetSortedAndFiltered() {
+			return status.Error(codes.Unimplemented, "the agent can't sort and filter")
+		}
 		for _, col := range res.GetColumns() {
 			page.Columns = append(page.Columns, Column{col.GetName(), col.GetType(), col.GetPrimaryKey()})
 		}
@@ -80,6 +87,9 @@ func (s *Service) Browse(ctx context.Context, id, name, schema, table string, of
 		page.More = res.GetMore()
 		return err
 	})
+	if status.Code(err) == codes.Unimplemented && (req.GetSort() != "" || req.GetFilter() != nil) {
+		return Page{}, httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the datastore's node to sort and filter tables.")
+	}
 	return page, browsing(err)
 }
 

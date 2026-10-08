@@ -15,6 +15,17 @@ are archived, so players stay connected.
 
 - **By hand.** The **Backups** tab of a server backs it up now, e.g. before an update, and lists, downloads, restores
   and deletes its backups and changes their labels.
+- **Uploaded.** **Upload** on the **Backups** tab adds a ZIP archive as a backup of the server, e.g. one downloaded
+  before, also after the server was deleted, or files of a server from elsewhere; it can then be restored like any
+  other. It streams through the master like an upload of the file manager, up to 16 GB, as long as 1 GB stays free. The
+  agent checks it like an archive of the file manager before it keeps it, and refuses archives with links, paths
+  outside the server's folder, `./` or backslashes in paths, more than 100,000 entries or too much data. Uploaded
+  backups are marked **From elsewhere**, and restoring one treats it as untrusted: it replaces the files and folders at
+  the top of the archive, checks the archive again, leaves out the files that only hold secrets and those of the agent,
+  such as the manifest of file sets, and replaces every secret in the other files with the server's own, besides
+  keeping how the server takes part in its network as any restore does. Uploading needs the permissions to back up and
+  to restore the server's backups, and to change its files, as a backup can bring any file, e.g. a plugin, like the
+  file manager.
 - **Jobs.** The **Backups** tab of the **Automation** schedules backup jobs for nodes, servers, tags and networks at
   set times, see [Targets and times](#targets-and-times). A job keeps its newest backups per server, and the newest of
   each of the last days, weeks and months that have backups, in its time zone, e.g. 7 daily and 4 weekly ones; once it
@@ -47,18 +58,69 @@ are archived, so players stay connected.
 - Restoring chosen files, into another server or with a backup first needs an up-to-date agent on the node, as does
   moving backups that leave something out or are kept; the panel says so otherwise. Until a node's agent is updated,
   jobs that keep backups of days, weeks or months keep all of them there, and backups there leave nothing out.
-- Deleting a server deletes its backups too. Locally, `noryx-agent backup list|create|restore` works without the master,
-  e.g. to restore a server while the master is unreachable.
+- Deleting a server deletes its backups too, but not their [copies](#copies-of-backups). Locally,
+  `noryx-agent backup list|create|restore` works without the master, e.g. to restore a server while the master is
+  unreachable.
 - **Databases** are backed up as SQL dumps instead, see [Databases](databases.md#backups).
+
+## Copies of backups
+
+A node that loses its disk loses the backups on it too. So a backup job can copy each backup of a server that it makes
+away from the server's node, as chosen in **Copy to**:
+
+- **S3-compatible storage**, such as AWS S3, Backblaze B2, Cloudflare R2, Wasabi or MinIO. **Storage for copies** on
+  the **Backups** tab of the **Automation** adds one: its endpoint (the host, with a port unless it is 443, e.g.
+  `s3.eu-central-1.amazonaws.com`), region, bucket, an optional folder in it and an access key with its secret key,
+  which needs to put, get and delete objects there. The master only connects over HTTPS, and saves a storage only once
+  it could write and delete a small object (`.noryx-check`) there. Copies are kept as
+  `<folder>/<server ID>/<backup ID>.zip`. **Path style** addresses the bucket in the path, for MinIO and other storage
+  without a host name per bucket. **Encrypt** asks the storage to encrypt the copies with its own keys
+  (`x-amz-server-side-encryption: AES256`); turn it off for storage that refuses this. The master doesn't encrypt the
+  copies itself, so the storage's provider can read them, see [Security](security.md#copies-of-backups).
+- **Another node**, which keeps the copies in a storage location, apart from the backups of its own servers
+  (`<backups of the location>/copies/<server ID>`). The master relays them, as agents never connect to each other.
+
+After it backed up a server, the job copies those of its backups of the server that have no copy there yet, also those
+that a run before couldn't copy. Then it deletes the copies it no longer keeps: those whose backup is no longer on the
+node and that its [retention](#backups) doesn't keep among the copies; copies of kept backups stay. So the job keeps as
+many copies as backups, and a node that lost its backups takes none of their copies with it. The page of the job lists
+the copies each run made and deleted, and a run whose copies failed fails. The master streams the copies, so it needs
+no space for them. Dumps of datastores aren't copied.
+
+A copy is a download of the backup: the files that only hold secrets of the server, such as its console password, the
+forwarding secret of its network, Floodgate's key and the files with secrets of [file sets](library.md#file-sets), are
+left out, and other files show `<hidden>` in place of secrets. Everything else is in it: worlds, plugins with their data
+and configuration, which can hold passwords that weren't set through file sets.
+
+- **Restoring.** The **Backups** tab of a server lists its copies after its backups, also those made while it was on
+  another node. **Restore** relays a copy into the server, on its current node, and restores all of it like a backup
+  of another server: the server keeps its own secrets and those of its network, and its forwarding settings. What the
+  restore replaces is backed up first unless that is turned off. A copy can also be restored into another server of
+  the same kind. **Copies of servers that are gone**, deleted or on a node that is offline or removed, are listed on
+  the **Backups** tab of the **Automation**, from where they can be restored into another server, e.g. a new one on
+  another node.
+- **Deleting.** Deleting a server or a job keeps its copies, so that a lost server can still be restored; the lists of
+  copies delete them. Copies to a place that the job no longer copies to stay too. Removing a node forgets the copies
+  it keeps. A storage can only be deleted once no job copies to it; the master forgets its copies then, which stay in
+  the bucket.
+- **Permissions.** Adding, changing and deleting storages, and saving a job that copies, need the permissions to manage
+  backup jobs and to see and download the backups of all servers, as copies take the backups away from their nodes. Each
+  run checks that the user who saved the job last still has them, like [schedules](#schedules) that back up first.
+  Seeing and restoring the copies of a server needs the permission to see its backups, those of servers that are gone
+  the permission on all servers; restoring needs the permission to restore backups of the server restored into, and
+  deleting a copy the one to delete backups.
+- Copying to a node needs an up-to-date agent there, and restoring a copy one on the node of the server restored into.
 
 ## Backing up the master
 
-The master keeps users, nodes, networks, templates, file sets with their secrets, backup jobs, schedules, settings and
-the log in its database, and the certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling
-every node again. `sudo -u noryx noryx-master backup <file>` saves both in a `.tar.gz` archive, also while the master
-runs; with `-` instead of a file, it writes the archive to stdout, e.g. for
+The master keeps users, nodes, networks, templates, file sets with their secrets, backup jobs, the storages for
+[copies of backups](#copies-of-backups) with their secret keys, schedules, settings and the log in its database, and the
+certificate authority (CA) that its agents trust in `pki`. Losing them means enrolling every node again, and losing
+track of the copies of backups. `sudo -u noryx noryx-master backup <file>` saves both in a `.tar.gz` archive, also while
+the master runs; with `-` instead of a file, it writes the archive to stdout, e.g. for
 `ssh master 'sudo -u noryx noryx-master backup -' > master.tar.gz` on another machine. The CA's private key lets anyone
-control the agents, so keep the archive as safe as the master. To restore it, e.g. on a new machine after
+control the agents, and the secret keys of storages let anyone read the copies there, so keep the archive as safe as the
+master. To restore it, e.g. on a new machine after
 `install.sh master`:
 
 ```sh

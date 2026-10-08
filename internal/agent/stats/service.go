@@ -42,9 +42,10 @@ type Service struct {
 	noryxv1.UnimplementedStatsServiceServer
 	rt runtime.Runtime
 
-	measuring sync.Mutex // one measurement at a time; guards host and servers
-	host      cpuTimes   // of the measurement before
-	servers   map[string]*serverState
+	measuring  sync.Mutex // one measurement at a time; guards host, servers and datastores
+	host       cpuTimes   // of the measurement before
+	servers    map[string]*serverState
+	datastores map[string]*counters
 
 	mu     sync.Mutex
 	latest *noryxv1.GetStatsResponse
@@ -53,14 +54,32 @@ type Service struct {
 
 // serverState is what the service keeps about a server between measurements.
 type serverState struct {
-	usage        runtime.Usage
-	at           time.Time
+	counters
 	consoleRetry time.Time
 	offline      *bool // whether it runs in offline mode, read once per run
 }
 
+// counters are the counters of a container's measurement before, which rates need.
+type counters struct {
+	usage runtime.Usage
+	at    time.Time
+}
+
+// rates returns the CPU time used and the bytes received and sent per second since the
+// measurement before, if any, and keeps u for the next one. Counters start again when the
+// container restarts.
+func (c *counters) rates(u runtime.Usage, now time.Time) (cpuMillis uint32, received, sent uint64) {
+	prev, elapsed := c.usage, now.Sub(c.at)
+	if !c.at.IsZero() && elapsed > 0 && u.CPUTime >= prev.CPUTime && u.NetRxBytes >= prev.NetRxBytes && u.NetTxBytes >= prev.NetTxBytes {
+		cpuMillis = uint32((u.CPUTime - prev.CPUTime) * 1000 / elapsed) //nolint:gosec // at most the cores
+		received, sent = perSecond(u.NetRxBytes-prev.NetRxBytes, elapsed), perSecond(u.NetTxBytes-prev.NetTxBytes, elapsed)
+	}
+	c.usage, c.at = u, now
+	return cpuMillis, received, sent
+}
+
 func NewService(rt runtime.Runtime) *Service {
-	return &Service{rt: rt, servers: map[string]*serverState{}, disks: map[string]uint64{}}
+	return &Service{rt: rt, servers: map[string]*serverState{}, datastores: map[string]*counters{}, disks: map[string]uint64{}}
 }
 
 // GetStats returns the latest measurement, or measures now if there is none of the last
@@ -136,11 +155,29 @@ func (s *Service) measureLocked(ctx context.Context) {
 		}
 		wg.Go(func() { res.Servers[i] = state.measure(ctx, s.rt, srv, now) })
 	}
+	datastores, dsErr := s.rt.ListDatastores(ctx)
+	if dsErr != nil {
+		slog.Debug("Can't list the datastores to measure them", "err", dsErr)
+	}
+	res.Datastores = make([]*noryxv1.DatastoreStats, len(datastores))
+	for i, ds := range datastores {
+		c := s.datastores[ds.ID]
+		if c == nil {
+			c = &counters{}
+			s.datastores[ds.ID] = c
+		}
+		wg.Go(func() { res.Datastores[i] = c.measureDatastore(ctx, s.rt, ds, now) })
+	}
 	wg.Wait()
 	for id, state := range s.servers {
 		if err == nil && !slices.ContainsFunc(list, func(srv runtime.Server) bool { return srv.ID == id }) {
 			state.reset()
 			delete(s.servers, id)
+		}
+	}
+	for id := range s.datastores {
+		if dsErr == nil && !slices.ContainsFunc(datastores, func(ds runtime.Datastore) bool { return ds.ID == id }) {
+			delete(s.datastores, id)
 		}
 	}
 	s.mu.Lock()
@@ -164,7 +201,7 @@ func (s *Service) measureHost() *noryxv1.NodeStats {
 }
 
 func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runtime.Server, now time.Time) *noryxv1.ServerStats {
-	stats := &noryxv1.ServerStats{Id: srv.ID}
+	stats := &noryxv1.ServerStats{Id: srv.ID, Proxy: srv.Type.Proxy()}
 	if srv.State == noryxv1.ServerState_SERVER_STATE_STOPPED {
 		st.reset()
 		return stats
@@ -174,14 +211,7 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 		st.reset()
 		return stats
 	}
-	// Counters start again when the server restarts.
-	prev, elapsed := st.usage, now.Sub(st.at)
-	if !st.at.IsZero() && elapsed > 0 && u.CPUTime >= prev.CPUTime && u.NetRxBytes >= prev.NetRxBytes && u.NetTxBytes >= prev.NetTxBytes {
-		stats.CpuMillis = uint32((u.CPUTime - prev.CPUTime) * 1000 / elapsed) //nolint:gosec // at most the cores
-		stats.NetworkReceivedBytesPerSecond = perSecond(u.NetRxBytes-prev.NetRxBytes, elapsed)
-		stats.NetworkSentBytesPerSecond = perSecond(u.NetTxBytes-prev.NetTxBytes, elapsed)
-	}
-	st.usage, st.at = u, now
+	stats.CpuMillis, stats.NetworkReceivedBytesPerSecond, stats.NetworkSentBytesPerSecond = st.rates(u, now)
 	stats.Running, stats.MemoryBytes, stats.MemoryLimitBytes, stats.CpuLimitMillis = true, u.MemoryBytes, u.MemoryLimit, srv.CPUMillis
 	if srv.State != noryxv1.ServerState_SERVER_STATE_RUNNING {
 		return stats // starting servers don't answer yet
@@ -214,6 +244,22 @@ func (st *serverState) measure(ctx context.Context, rt runtime.Runtime, srv runt
 				stats.Tps = min(tps, 20)
 			}
 		}
+	}
+	return stats
+}
+
+// measureDatastore measures what a datastore uses; the size of its data is the runtime's.
+func (c *counters) measureDatastore(ctx context.Context, rt runtime.Runtime, ds runtime.Datastore, now time.Time) *noryxv1.DatastoreStats {
+	stats := &noryxv1.DatastoreStats{Id: ds.ID, DiskBytes: uint64(max(ds.Size, 0))}
+	u, err := rt.DatastoreUsage(ctx, ds.ID)
+	if err != nil {
+		c.at = time.Time{}
+		return stats
+	}
+	stats.CpuMillis, _, _ = c.rates(u.Usage, now)
+	stats.Running, stats.MemoryBytes, stats.MemoryLimitBytes, stats.CpuLimitMillis = true, u.MemoryBytes, u.MemoryLimit, ds.CPUMillis
+	if u.Connections >= 0 {
+		stats.Connections = new(uint32(u.Connections)) //nolint:gosec // far fewer
 	}
 	return stats
 }

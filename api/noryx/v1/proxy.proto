@@ -17,7 +17,8 @@ service ProxyService {
   // maintenance is on, and which players may join meanwhile.
   rpc GetMaintenance(GetMaintenanceRequest) returns (GetMaintenanceResponse);
   // ChangeMaintenance runs a command of the Maintenance plugin on the console of a running
-  // proxy, and returns once the plugin saved the change.
+  // proxy, and returns once the plugin saved the change. Timers only live in the plugin, so
+  // the call returns once it sent their commands.
   rpc ChangeMaintenance(ChangeMaintenanceRequest) returns (ChangeMaintenanceResponse);
 }
 
@@ -61,6 +62,14 @@ message ChangeMaintenanceRequest {
   MaintenanceChange change = 2;
   // The player to add or remove.
   string player = 3;
+  // The game server of the network that maintenance is turned on or off for, or that a
+  // timer is about, by its name in the configuration of the proxy; empty for the whole
+  // network. Agents that don't tell servers_and_timers in Maintenance ignore it.
+  string server = 4;
+  // Minutes until a timer starts or ends maintenance, from 1 to MaxMaintenanceMinutes.
+  uint32 minutes = 5;
+  // Minutes that the maintenance a schedule starts lasts, from 1 to MaxMaintenanceMinutes.
+  uint32 duration_minutes = 6;
 }
 
 message ChangeMaintenanceResponse {
@@ -74,6 +83,13 @@ enum MaintenanceChange {
   // Adds or removes a player who may join during maintenance.
   MAINTENANCE_CHANGE_ADD = 3;
   MAINTENANCE_CHANGE_REMOVE = 4;
+  // Starts or ends maintenance after minutes; a new timer replaces the one that runs.
+  MAINTENANCE_CHANGE_START_TIMER = 5;
+  MAINTENANCE_CHANGE_END_TIMER = 6;
+  // Starts maintenance after minutes, and ends it duration_minutes later.
+  MAINTENANCE_CHANGE_SCHEDULE = 7;
+  // Aborts the timer that runs, if any.
+  MAINTENANCE_CHANGE_ABORT_TIMER = 8;
 }
 
 message Maintenance {
@@ -82,6 +98,15 @@ message Maintenance {
   bool enabled = 2;
   // Who may join during maintenance.
   repeated MaintenancePlayer players = 3;
+  // The servers in maintenance on their own, by their name in the configuration of the proxy.
+  repeated string servers = 4;
+  // When the plugin ends the maintenance of the whole network, in Unix seconds, if it keeps
+  // its end timer over restarts (continue-endtimer-after-restart); 0 otherwise. The plugin
+  // keeps its other timers to itself.
+  int64 ends_at = 5;
+  // The agent changes the maintenance of single servers and starts timers. Older agents
+  // ignore the fields of ChangeMaintenanceRequest for them.
+  bool servers_and_timers = 6;
 }
 
 message MaintenancePlayer {

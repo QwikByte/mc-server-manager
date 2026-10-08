@@ -51,13 +51,17 @@ import (
 	"github.com/QwikByte/noryx/internal/master/logs"
 	"github.com/QwikByte/noryx/internal/master/modpack"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/mojang"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/notify"
 	"github.com/QwikByte/noryx/internal/master/operation"
 	"github.com/QwikByte/noryx/internal/master/overlay"
+	"github.com/QwikByte/noryx/internal/master/player"
 	"github.com/QwikByte/noryx/internal/master/plugin"
 	"github.com/QwikByte/noryx/internal/master/policy"
 	"github.com/QwikByte/noryx/internal/master/preference"
+	"github.com/QwikByte/noryx/internal/master/s3/s3test"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 	"github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/settings"
@@ -81,8 +85,9 @@ func TestEnrollAndControlNode(t *testing.T) {
 	check(t, err)
 	info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
 	check(t, err)
-	if info.GetRuntime() != "fake" {
-		t.Fatalf("runtime = %q, want fake", info.GetRuntime())
+	// Older masters read the runtime and its version from one field.
+	if name, version := info.RuntimeOf(); info.GetRuntime() != "docker fake" || name != noryxv1.RuntimeDocker || version != "fake" {
+		t.Fatalf("runtime = %q, %q %q", info.GetRuntime(), name, version)
 	}
 
 	servers := noryxv1.NewServerServiceClient(conn)
@@ -222,6 +227,8 @@ type master struct {
 	modrinth   *fakeModrinth
 	hangar     *fakeHangar
 	geysermc   *fakeGeyserMC
+	s3         *s3test.Server // S3-compatible storage for copies of backups
+	mojang     *fakeMojang
 	update     update.Options
 	// quick is how long requests wait for their operations; tests get the result right away.
 	quick time.Duration
@@ -251,7 +258,7 @@ func startMaster(t *testing.T) *master {
 	serve(t, enrollServer, ln)
 	return &master{
 		db: db, ca: ca, cert: masterCert, settings: conf, nodes: nodes, logs: logStore,
-		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), update: update.Options{DataDir: dir}, quick: time.Minute,
+		enrollAddr: ln.Addr().String(), modrinth: startModrinth(t), hangar: startHangar(t), geysermc: startGeyserMC(t), s3: s3test.New(t), mojang: startMojang(t), update: update.Options{DataDir: dir}, quick: time.Minute,
 	}
 }
 
@@ -267,8 +274,10 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	networks := network.NewService(m.db, nodes, plugins, overlays, datastores)
 	tags := tag.NewStore(m.db)
 	accessService := access.NewService(m.db)
-	usageStore := usage.NewStore(m.db, nodes, m.settings)
-	jobs := backup.NewJobs(nodes, datastores)
+	sightings := player.NewSightings(m.db, m.settings)
+	usageStore := usage.NewStore(m.db, nodes, m.settings, sightings)
+	copies := backup.NewCopies(m.db, nodes, m.s3.Client().Transport)
+	jobs := backup.NewJobs(nodes, datastores, copies)
 	tasks := schedule.NewService(m.db, nodes, tags, networks, accessService, map[string]schedule.Kind{
 		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins),
 	}, moves.Busy)
@@ -276,9 +285,10 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	fileSets := fileset.NewService(m.db, nodes, networks, tags, datastores, moves)
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: accessService, Settings: m.settings, Nodes: nodes, Overlay: overlays,
-		Networks: networks, Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks,
+		Networks: networks, Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(m.mojang.URL, m.mojang.URL, m.mojang.URL+"/texture/"), Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks, Copies: copies,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
-		Usage: usageStore, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
+		Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
+		Notify: notify.New(m.db, m.logs, notify.Options{}),
 	}
 }
 
@@ -303,8 +313,9 @@ type agent struct {
 	log      *agentlogs.Buffer
 }
 
-// startAgent registers a node and enrolls its agent with a join token.
-func (m *master) startAgent(t *testing.T, name string) agent {
+// startAgent registers a node and enrolls its agent with a join token. Options of its gRPC
+// server can change its answers, e.g. to those of an older agent.
+func (m *master) startAgent(t *testing.T, name string, opts ...grpc.ServerOption) agent {
 	ln := listen(t)
 	n, token, err := m.nodes.Create(t.Context(), name, ln.Addr().String())
 	check(t, err)
@@ -313,7 +324,8 @@ func (m *master) startAgent(t *testing.T, name string) agent {
 	a.identity, err = agentnode.LoadIdentity(a.dir)
 	check(t, err)
 	creds := credentials.NewTLS(pki.AgentServerTLS(a.identity.Holder, a.identity.CA))
-	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), agentoverlay.NewService(a.dir, a.kernel), a.log, grpc.Creds(creds)), ln)
+	opts = append(opts, grpc.Creds(creds))
+	serve(t, app.NewGRPCServer(a.runtime, a.identity, storage.New(a.dir), agentoverlay.NewService(a.dir, a.kernel), a.log, opts...), ln)
 	return a
 }
 
@@ -416,9 +428,20 @@ type fakeRuntime struct {
 	hold chan struct{}
 	// down makes the runtime unreachable, like Docker while it isn't running.
 	down bool
+	// podman makes it tell that it is Podman.
+	podman bool
 }
 
 var errDown = errors.New("failed to connect to the docker API")
+
+func (f *fakeRuntime) Name() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.podman {
+		return noryxv1.RuntimePodman
+	}
+	return noryxv1.RuntimeDocker
+}
 
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
 	f.mu.Lock()
@@ -426,7 +449,7 @@ func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
 	if f.down {
 		return runtime.Info{}, errDown
 	}
-	return runtime.Info{Name: "fake", CPUs: 4, MemoryBytes: 16 << 30}, nil
+	return runtime.Info{Version: "fake", CPUs: 4, MemoryBytes: 16 << 30}, nil
 }
 
 func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) {

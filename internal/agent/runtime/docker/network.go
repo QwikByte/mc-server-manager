@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -210,13 +211,23 @@ func (d *Docker) release(ctx context.Context, proxyID string, backends []runtime
 	return nil
 }
 
-// prepare readies a server that is about to start. A proxy gets its data handed to the
-// user it runs as, and listens on the port its container publishes, as the default
-// configuration of the Velocity image listens on another one. A stopped proxy of an older
-// agent, which ran it as root, is created again to run as that user.
+// prepare readies a server that is about to start. On Podman, the servers are kept apart
+// again, in case the tables of the agent were removed, and its networks must have the bridges
+// that the tables match. A proxy gets its data handed to the user it runs as, and listens on
+// the port its container publishes, as the default configuration of the Velocity image listens
+// on another one. A stopped proxy of an older agent, which ran it as root, is created again to
+// run as that user.
 func (d *Docker) prepare(ctx context.Context, id string) error {
+	if d.podman != nil {
+		if err := Isolate(); err != nil {
+			return fmt.Errorf("keep the servers apart: %w", err)
+		}
+	}
 	c, spec, err := d.inspect(ctx, id)
-	if err != nil || !spec.Type.Proxy() {
+	if err != nil {
+		return err
+	}
+	if err := d.checkNetworks(ctx, c); err != nil || !spec.Type.Proxy() {
 		return err
 	}
 	path, err := d.dataPath(spec)
@@ -244,19 +255,78 @@ func (d *Docker) prepare(ctx context.Context, id string) error {
 // shared network can't reach each other, and those in the internal network of a datastore
 // not the internet.
 func (d *Docker) ensureNetwork(ctx context.Context, name string) error {
-	_, err := d.cli.NetworkInspect(ctx, name, client.NetworkInspectOptions{})
-	if !cerrdefs.IsNotFound(err) {
+	if exists, err := d.networkExists(ctx, name); exists || err != nil {
 		return err
 	}
 	opts := client.NetworkCreateOptions{Driver: "bridge", Internal: internalNetwork(name), Labels: map[string]string{labelManaged: "true"}}
-	if name == sharedNetwork {
+	switch {
+	case d.podman != nil: // see Isolate
+		opts.Options = map[string]string{"com.docker.network.bridge.name": bridge(name)}
+	case name == sharedNetwork:
 		opts.Options = map[string]string{"com.docker.network.bridge.enable_icc": "false"}
 	}
-	_, err = d.cli.NetworkCreate(ctx, name, opts)
+	_, err := d.cli.NetworkCreate(ctx, name, opts)
 	if cerrdefs.IsConflict(err) {
 		return nil // created concurrently
 	}
 	return err
+}
+
+// networkExists reports whether a network of the agent exists. On Podman, it must have the
+// bridge that the agent keeps apart (see Isolate), which only Podman's own API tells: one with
+// another, e.g. of an older agent, is removed once no container uses it, to be created again,
+// and refused until then.
+func (d *Docker) networkExists(ctx context.Context, name string) (bool, error) {
+	var err error
+	if d.podman == nil {
+		_, err = d.cli.NetworkInspect(ctx, name, client.NetworkInspectOptions{})
+	} else {
+		var n struct {
+			Bridge string `json:"network_interface"`
+		}
+		if err = d.libpod(ctx, "/networks/"+url.PathEscape(name)+"/json", &n); err == nil && n.Bridge != bridge(name) {
+			return false, d.removeUnused(ctx, name)
+		}
+	}
+	if cerrdefs.IsNotFound(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// removeUnused removes a network of the agent on Podman that lacks its bridge, unless a
+// container uses it.
+func (d *Docker) removeUnused(ctx context.Context, name string) error {
+	res, err := d.cli.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("network", name)})
+	if err != nil {
+		return err
+	}
+	if len(res.Items) > 0 {
+		return fmt.Errorf("the network %s of Podman lacks the bridge by which the agent keeps it apart from its other networks, "+
+			"e.g. as an older agent created it, so nothing starts in it; the agent creates it again once no container uses it, "+
+			"e.g. once its servers moved to another node", name)
+	}
+	_, err = d.cli.NetworkRemove(ctx, name, client.NetworkRemoveOptions{})
+	if cerrdefs.IsNotFound(err) {
+		return nil // removed concurrently
+	}
+	return err
+}
+
+// checkNetworks checks the networks of the agent that the container c is in before it starts:
+// on Podman, they must have the bridges that the tables of the agent match.
+func (d *Docker) checkNetworks(ctx context.Context, c container.InspectResponse) error {
+	if d.podman == nil || c.NetworkSettings == nil {
+		return nil
+	}
+	for name := range c.NetworkSettings.Networks {
+		if name == sharedNetwork || strings.HasPrefix(name, proxyNetworkPrefix) || strings.HasPrefix(name, datastorePrefix) {
+			if err := d.ensureNetwork(ctx, name); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // recreate replaces the container c of a server to change its settings; the data on the host

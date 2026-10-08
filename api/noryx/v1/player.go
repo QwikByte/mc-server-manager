@@ -7,8 +7,12 @@ import (
 	"unicode/utf8"
 )
 
-// MaxReason is the longest reason for a kick or ban, in characters.
-const MaxReason = 256
+const (
+	// MaxReason is the longest reason for a kick or ban, in characters.
+	MaxReason = 256
+	// MaxPlayerChanges is the most changes of one call of ChangePlayers.
+	MaxPlayerChanges = 100
+)
 
 // playerName matches the names of Java players, and those of Bedrock players, which
 // Floodgate starts with a dot.
@@ -43,7 +47,8 @@ func (a PlayerAction) Global() bool {
 }
 
 // Problem returns a message for the operator if a change is invalid. Only kicks and bans
-// take a reason, and turning the whitelist on or off no player.
+// take a reason, only bans an end, only pardons a time they wait for, and turning the
+// whitelist on or off no player.
 func (c *PlayerChange) Problem() string {
 	a := c.GetAction()
 	switch {
@@ -55,6 +60,10 @@ func (c *PlayerChange) Problem() string {
 		return "Only kicks and bans take a reason, of up to 256 characters on one line."
 	case c.GetUuid() != "" && (a != PlayerAction_PLAYER_ACTION_WHITELIST_ADD || !BedrockPlayer(c.GetName()) || !floodgateID.MatchString(c.GetUuid())):
 		return "Only Bedrock players are whitelisted by their ID from Floodgate."
+	case c.GetEndsUnix() < 0, c.GetEndsUnix() > 0 && a != PlayerAction_PLAYER_ACTION_BAN:
+		return "Only bans end at a time."
+	case c.GetDueUnix() < 0, c.GetDueUnix() > 0 && a != PlayerAction_PLAYER_ACTION_PARDON:
+		return "Only pardons wait for a time."
 	}
 	return ""
 }

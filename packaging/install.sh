@@ -4,6 +4,7 @@
 #   install.sh master [--public-host <host>] [--panel-addr <ip:port>] [--admin <name>]
 #                                                                the panel and control plane
 #   install.sh agent [--join <token>] [--install-docker]         a node that runs Minecraft servers
+#                    [--runtime docker|podman]                    in Docker (default) or Podman as root
 #   install.sh all [...]                                         both on this machine, connected to each other
 #   install.sh update [--only master|agent]                      updates what is installed
 #
@@ -13,7 +14,8 @@
 # Packages: .deb (apt), .rpm (dnf, yum, zypper) and Arch Linux (pacman), for x86_64 and arm64.
 # Releases are verified with OpenSSL 3, so only current Linux systems are supported.
 # Questions: run as "sudo bash install.sh ..." to answer them. Piped to bash, it asks nothing,
-# generates the administrator's password and installs Docker only with --install-docker.
+# generates the administrator's password and installs Docker only with --install-docker. With
+# --runtime podman, it installs Podman from the system's packages, which needs Podman 4.9 or newer.
 set -Eeuo pipefail
 
 # The release workflow replaces "latest" with the version of the release.
@@ -26,7 +28,7 @@ readonly ENROLL_PORT=9443 AGENT_PORT=7443 PANEL_ADDR=127.0.0.1:8080
 # A generated password goes here rather than into logs of provisioning tools, for root only.
 readonly PASSWORD_FILE=/etc/noryx/admin-password
 
-public_host="" panel_addr="" admin=admin join="" install_docker=no only="" local_agent=no fresh_master=no password=""
+public_host="" panel_addr="" admin=admin join="" install_docker=no runtime="" only="" local_agent=no fresh_master=no password=""
 
 log() { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2; }
@@ -39,7 +41,7 @@ interactive() { [ -t 0 ]; }
 installed() { command -v "$1" >/dev/null; }
 
 usage() {
-  die "Usage: install.sh master|agent|all|update [--version <vX.Y.Z>] [--public-host <host>] [--panel-addr <ip:port>] [--admin <name>] [--join <token>] [--install-docker] [--only master|agent]"
+  die "Usage: install.sh master|agent|all|update [--version <vX.Y.Z>] [--public-host <host>] [--panel-addr <ip:port>] [--admin <name>] [--join <token>] [--install-docker] [--runtime docker|podman] [--only master|agent]"
 }
 
 # ask asks on the terminal and prints the answer, or the default for an empty one. Without a
@@ -60,6 +62,7 @@ parse_args() {
       --admin) admin=${2:?--admin needs a value}; shift ;;
       --join) join=${2:?--join needs a value}; shift ;;
       --install-docker) install_docker=yes ;;
+      --runtime) runtime=${2:?--runtime needs a value}; shift ;;
       --only) only=${2:?--only needs a value}; shift ;;
       *) usage ;;
     esac
@@ -218,13 +221,57 @@ setup_docker() {
   systemctl enable --now --quiet docker || warn "Docker could not be started, see: journalctl -u docker"
 }
 
+# setup_podman installs Podman from the system's packages if it's missing, and starts its socket
+# for the agent. At boot, podman-restart starts the servers once noryx-isolate keeps them apart.
+setup_podman() {
+  local version
+  if ! installed podman; then
+    log "Installing Podman"
+    wait_for_packages
+    if installed apt-get; then
+      DEBIAN_FRONTEND=noninteractive apt-get update -qq -o DPkg::Lock::Timeout=300 >/dev/null
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -o DPkg::Lock::Timeout=300 podman >/dev/null
+    elif installed dnf; then dnf install -y -q podman >/dev/null
+    elif installed yum; then yum install -y -q podman >/dev/null
+    elif installed zypper; then ZYPP_LOCK_TIMEOUT=300 zypper --non-interactive -q install podman >/dev/null
+    else pacman -S --noconfirm --needed podman >/dev/null
+    fi
+  fi
+  version=$(podman version --format '{{.Client.Version}}' 2>/dev/null) || version=""
+  if ! [[ "$version" =~ ^([0-9]+)\.([0-9]+) ]] || ((BASH_REMATCH[1] < 4 || (BASH_REMATCH[1] == 4 && BASH_REMATCH[2] < 9))); then
+    die "Noryx needs Podman 4.9 or newer, which this system doesn't offer (${version:-none}). Use Docker, or a newer system, e.g. Debian 13, Ubuntu 24.04 or RHEL 9."
+  fi
+  systemctl enable --now --quiet podman.socket || warn "Podman's socket could not be started, see: journalctl -u podman.socket"
+  systemctl enable --quiet podman-restart.service
+}
+
+# set_runtime sets the runtime in the agent's options, without one for Docker, and restarts a
+# running agent whose runtime changed.
+set_runtime() {
+  local before
+  before=$(grep '^NORYX_AGENT_OPTS=' /etc/noryx/agent.env) || before=""
+  sed -i -E '/^NORYX_AGENT_OPTS=/s/ ?--runtime [a-z]+//' /etc/noryx/agent.env
+  if [ "$runtime" = podman ]; then
+    sed -i '/^NORYX_AGENT_OPTS=/s/"$/ --runtime podman"/' /etc/noryx/agent.env
+    systemctl enable --now --quiet noryx-isolate.service ||
+      die "The servers of Podman can't be kept apart, as the kernel lacks the bridge support or the lookups of routes of nftables (nft_meta_bridge, nft_fib_inet). Use Docker on this node."
+  else
+    systemctl disable --quiet noryx-isolate.service 2>/dev/null || true
+  fi
+  [ "$(grep '^NORYX_AGENT_OPTS=' /etc/noryx/agent.env)" = "$before" ] || systemctl try-restart noryx-agent.service
+}
+
 setup_agent() {
-  setup_docker
+  # Without --runtime, an agent keeps the runtime it has.
+  [ -n "$runtime" ] || runtime=$(sed -n 's/^NORYX_AGENT_OPTS=.*--runtime \([a-z]*\).*/\1/p' /etc/noryx/agent.env 2>/dev/null) || runtime=""
+  runtime=${runtime:-docker}
+  if [ "$runtime" = podman ]; then setup_podman; else setup_docker; fi
   install_package noryx-agent
   if [ "$local_agent" = yes ]; then
     sed -i "s|^NORYX_AGENT_OPTS=.*|NORYX_AGENT_OPTS=\"--listen 127.0.0.1:$AGENT_PORT\"|" /etc/noryx/agent.env
     wait_for_port "$ENROLL_PORT" || die "The master did not start, see: journalctl -u noryx-master"
   fi
+  set_runtime
   if [ -n "$join" ]; then
     log "Connecting the agent to the master"
     noryx-agent enroll "$join"
@@ -299,6 +346,10 @@ main() {
   parse_args "$@"
   case $mode:$only in
     master: | agent: | all: | update: | update:master | update:agent) ;;
+    *) usage ;;
+  esac
+  case $runtime in
+    "" | docker | podman) ;;
     *) usage ;;
   esac
   check_system

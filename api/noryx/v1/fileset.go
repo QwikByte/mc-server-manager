@@ -54,20 +54,27 @@ var fileSetRefused = []string{
 	"plugins/Geyser-BungeeCord/config.yml", "plugins/Geyser-BungeeCord/saved-auth-chains.json", "plugins/Geyser-BungeeCord/saved-refresh-tokens.json",
 }
 
+// NoryxFile reports whether clean, the clean path of a file in the data of a server with
+// forward slashes, is one that Noryx writes itself or that holds secrets of the server, or a
+// temporary file of the agent, which neither file sets nor archives may write.
+func NoryxFile(clean string) bool {
+	segments := strings.Split(clean, "/")
+	return slices.Contains(fileSetRefused, clean) || len(segments) == 1 && (strings.HasPrefix(clean, "noryx-") || strings.HasPrefix(clean, "banned-")) ||
+		slices.ContainsFunc(segments, func(s string) bool { return strings.HasPrefix(s, ".noryx-") })
+}
+
 // CleanFileSetPath returns the clean form of the path of a file of a set, relative to the
 // data of a server with forward slashes, e.g. plugins/LuckPerms/config.yml, and why a set
 // can't have a file there, or "".
 func CleanFileSetPath(p string) (string, string) {
 	clean := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(p)), "/")
-	segments := strings.Split(clean, "/")
 	switch {
 	case clean == "" || strings.HasSuffix(p, "/"):
 		return clean, "Enter the path of a file, e.g. plugins/LuckPerms/config.yml."
 	case len(p) > maxFileSetPath || strings.ContainsFunc(p, func(r rune) bool { return r == '\\' || unicode.IsControl(r) }) ||
 		slices.Contains(strings.Split(p, "/"), "..") || !utf8.ValidString(p):
 		return clean, fmt.Sprintf("%q is no valid path.", p)
-	case slices.Contains(fileSetRefused, clean) || len(segments) == 1 && (strings.HasPrefix(clean, "noryx-") || strings.HasPrefix(clean, "banned-")) ||
-		slices.ContainsFunc(segments, func(s string) bool { return strings.HasPrefix(s, ".noryx-") }):
+	case NoryxFile(clean):
 		return clean, fmt.Sprintf("Noryx manages %s itself, or it holds secrets of the server.", clean)
 	case slices.Contains([]string{".jar", ".zip", ".class"}, strings.ToLower(path.Ext(clean))):
 		return clean, fmt.Sprintf("%s holds code, which a set can't add. Install plugins on the Plugins page.", clean)

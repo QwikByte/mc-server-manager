@@ -4,12 +4,14 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/QwikByte/noryx/internal/agent/runtime"
+	"github.com/QwikByte/noryx/internal/logging"
 )
 
 func (d *Docker) Usage(ctx context.Context, id string) (runtime.Usage, error) {
@@ -20,8 +22,35 @@ func (d *Docker) Usage(ctx context.Context, id string) (runtime.Usage, error) {
 	if !c.State.Running {
 		return runtime.Usage{}, runtime.ErrNotRunning
 	}
+	return d.usage(ctx, containerName(id))
+}
+
+func (d *Docker) DatastoreUsage(ctx context.Context, id string) (runtime.DatastoreUsage, error) {
+	c, _, err := d.inspectDatastore(ctx, id)
+	if err != nil {
+		return runtime.DatastoreUsage{}, err
+	}
+	if !c.State.Running {
+		return runtime.DatastoreUsage{}, runtime.ErrDatastoreNotRunning
+	}
+	u, err := d.usage(ctx, datastoreName(id))
+	if err != nil {
+		return runtime.DatastoreUsage{}, err
+	}
+	res := runtime.DatastoreUsage{Usage: u, Connections: -1}
+	if c.State.Health != nil && c.State.Health.Status == container.Healthy {
+		if res.Connections, err = d.connections(ctx, id); err != nil {
+			slog.DebugContext(ctx, "Can't count the connections of a datastore", logging.Databases, "datastore", id, "err", err)
+			res.Connections = -1
+		}
+	}
+	return res, nil
+}
+
+// usage measures what a running container uses.
+func (d *Docker) usage(ctx context.Context, name string) (runtime.Usage, error) {
 	// A single sample returns right away; the caller computes rates from consecutive ones.
-	res, err := d.cli.ContainerStats(ctx, containerName(id), client.ContainerStatsOptions{})
+	res, err := d.cli.ContainerStats(ctx, name, client.ContainerStatsOptions{})
 	if err != nil {
 		return runtime.Usage{}, notFound(err)
 	}

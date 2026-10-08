@@ -204,6 +204,9 @@ func velocitySent(player, server string) func(line string) (bool, error) {
 // commands from there. If answer is set, it reads the console's output until answer accepts
 // a line, and returns the error answer returns for it.
 func (d *Docker) console(ctx context.Context, id, command string, answer func(line string) (bool, error)) error {
+	if d.podman != nil {
+		return d.podmanConsole(ctx, id, command, answer)
+	}
 	res, err := d.cli.ContainerAttach(ctx, containerName(id), client.ContainerAttachOptions{
 		Stream: true, Stdin: true, Stdout: answer != nil, Stderr: answer != nil,
 	})

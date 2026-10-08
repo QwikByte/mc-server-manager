@@ -38,6 +38,14 @@ service ServerService {
   // node, e.g. one that moves here. The header describes it, the data that follows is its
   // data directory as a ZIP archive, like ArchiveDirectory sends it.
   rpc ImportServer(stream ImportServerRequest) returns (ImportServerResponse);
+  // CreateServerFromArchive creates a stopped server like CreateServer, whose data is a ZIP or
+  // .tar.gz archive from elsewhere, e.g. of a server at a host. The header describes the
+  // server, the data that follows is the archive. Unlike ImportServer, the archive is
+  // untrusted: the agent checks it like an archive of the file manager, leaves out the files
+  // with secrets and those it writes itself, and replaces the secrets and the forwarding
+  // settings in the others. Nothing of the server remains if that fails. Agents of older
+  // versions answer UNIMPLEMENTED.
+  rpc CreateServerFromArchive(stream CreateServerFromArchiveRequest) returns (CreateServerFromArchiveResponse);
 }
 
 enum ServerType {
@@ -353,4 +361,25 @@ message ImportServerRequest {
 
 message ImportServerResponse {
   Server server = 1;
+}
+
+message CreateServerFromArchiveHeader {
+  // The server to create, without properties: the archive brings its server.properties.
+  CreateServerRequest server = 1;
+  // Size of the archive if known, so that one that doesn't fit is refused before it is sent.
+  int64 size = 2;
+}
+
+message CreateServerFromArchiveRequest {
+  oneof content {
+    CreateServerFromArchiveHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message CreateServerFromArchiveResponse {
+  Server server = 1;
+  // Files and folders of the archive that the server didn't get, e.g. those with secrets of
+  // the server it came from; up to 100.
+  repeated string left_out = 2;
 }

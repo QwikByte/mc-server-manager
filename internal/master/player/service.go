@@ -21,7 +21,11 @@ import (
 	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
-const queryTimeout = 10 * time.Second
+const (
+	queryTimeout = 10 * time.Second
+	// batchTimeout bounds the changes of many players on a server, and messages to them.
+	batchTimeout = time.Minute
+)
 
 // Nodes gives access to the agents of the nodes.
 type Nodes interface {
@@ -49,30 +53,67 @@ func NewService(nodes Nodes, networks Networks, bedrock BedrockPlayers) *Service
 // Result tells how a change ended on a server.
 type Result struct {
 	network.Ref
+	// Name is the player, unless the change was of the whole server.
+	Name string `json:"name,omitempty"`
 	// Pending tells that the server doesn't run and changes the player once it does.
 	Pending bool   `json:"pending,omitempty"`
 	Output  string `json:"output,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
 
-// Change changes a player on servers: at once on those that run, and on the others once
-// they do.
-func (s *Service) Change(ctx context.Context, c *noryxv1.PlayerChange, servers []network.Ref) []Result {
-	results := make([]Result, len(servers))
-	failed := func(i int, err error) { results[i] = Result{Ref: servers[i], Error: httpapi.Message(err)} }
+// Change makes changes of players on servers: at once on those that run, and on the others
+// once they do. It tells how each change ended on each server.
+func (s *Service) Change(ctx context.Context, changes []*noryxv1.PlayerChange, servers []network.Ref) []Result {
+	results := make([][]Result, len(servers))
+	failed := func(i int, err error) {
+		results[i] = make([]Result, len(changes))
+		for j, c := range changes {
+			results[i][j] = Result{Ref: servers[i], Name: c.GetName(), Error: httpapi.Message(err)}
+		}
+	}
 	operation.Each(ctx, nodesOf(servers), func(ctx context.Context, i int) {
-		var res *noryxv1.ChangePlayerResponse
-		err := s.call(ctx, servers[i].NodeID, func(ctx context.Context, conn grpc.ClientConnInterface) (err error) {
-			res, err = noryxv1.NewPlayerServiceClient(conn).ChangePlayer(ctx, &noryxv1.ChangePlayerRequest{ServerId: servers[i].ServerID, Change: c})
+		var got []*noryxv1.PlayerChangeResult
+		err := s.callFor(ctx, servers[i].NodeID, batchTimeout, func(ctx context.Context, conn grpc.ClientConnInterface) (err error) {
+			got, err = changeOn(ctx, noryxv1.NewPlayerServiceClient(conn), servers[i].ServerID, changes)
 			return err
 		})
 		if err != nil {
 			failed(i, err)
 			return
 		}
-		results[i] = Result{Ref: servers[i], Pending: res.GetPending(), Output: res.GetOutput()}
+		results[i] = make([]Result, len(changes))
+		for j, c := range changes {
+			results[i][j] = Result{Ref: servers[i], Name: c.GetName(), Error: "The agent didn't answer this change."}
+			if j < len(got) {
+				results[i][j].Pending, results[i][j].Output, results[i][j].Error = got[j].GetPending(), got[j].GetOutput(), got[j].GetError()
+			}
+		}
 	}, failed)
-	return results
+	return slices.Concat(results...)
+}
+
+// changeOn makes changes on a server in one call. Older agents change one player per call
+// and know no temporary bans.
+func changeOn(ctx context.Context, c noryxv1.PlayerServiceClient, serverID string, changes []*noryxv1.PlayerChange) ([]*noryxv1.PlayerChangeResult, error) {
+	res, err := c.ChangePlayers(ctx, &noryxv1.ChangePlayersRequest{ServerId: serverID, Changes: changes})
+	if status.Code(err) != codes.Unimplemented {
+		return res.GetResults(), err
+	}
+	if slices.ContainsFunc(changes, func(c *noryxv1.PlayerChange) bool { return c.GetEndsUnix() > 0 }) {
+		return nil, httpapi.Errorf(http.StatusNotImplemented, "Update the agent of this node to ban players for a time.")
+	}
+	results := make([]*noryxv1.PlayerChangeResult, len(changes))
+	for i, change := range changes {
+		res, err := c.ChangePlayer(ctx, &noryxv1.ChangePlayerRequest{ServerId: serverID, Change: change})
+		if status.Code(err) == codes.Unimplemented {
+			return nil, err
+		}
+		results[i] = &noryxv1.PlayerChangeResult{Pending: res.GetPending(), Output: res.GetOutput()}
+		if err != nil {
+			results[i].Error = httpapi.Message(err)
+		}
+	}
+	return results, nil
 }
 
 // Listed is a player in the lists of servers.
@@ -90,7 +131,7 @@ type Listed struct {
 }
 
 // ServerState is what the lists of a server don't tell: whether its whitelist is on, and
-// the changes that wait for it to run.
+// the changes that wait for it to run or for their time.
 type ServerState struct {
 	network.Ref
 	WhitelistEnabled bool      `json:"whitelistEnabled"`
@@ -99,19 +140,22 @@ type ServerState struct {
 	Error string `json:"error,omitempty"`
 }
 
-// Pending is a change that waits for a server to run.
+// Pending is a change that waits for a server to run, or until Due, e.g. the pardon at the
+// end of a temporary ban.
 type Pending struct {
-	Action string `json:"action"`
-	Name   string `json:"name,omitempty"`
-	Reason string `json:"reason,omitempty"`
+	Action string     `json:"action"`
+	Name   string     `json:"name,omitempty"`
+	Reason string     `json:"reason,omitempty"`
+	Due    *time.Time `json:"due,omitempty"`
 }
 
-// Lists are the lists of servers, joined by player.
+// Lists are the lists of servers, joined by player, and the players who joined them.
 type Lists struct {
 	Servers     []ServerState `json:"servers"`
 	Banned      []Listed      `json:"banned"`
 	Whitelisted []Listed      `json:"whitelisted"`
 	Operators   []Listed      `json:"operators"`
+	Joined      []Listed      `json:"joined,omitempty"`
 }
 
 // Lists returns who is banned, whitelisted and operator on the given servers.
@@ -128,18 +172,24 @@ func (s *Service) Lists(ctx context.Context, servers []network.Ref) Lists {
 			out.Servers[i].Error = httpapi.Message(err)
 		}
 	}, nil)
-	var banned, whitelisted, operators joined
+	var banned, whitelisted, operators, players joined
 	for i, res := range got {
 		ref := servers[i]
 		banned.add(ref, res.GetBanned())
 		whitelisted.add(ref, res.GetWhitelisted())
 		operators.add(ref, res.GetOperators())
+		players.add(ref, res.GetJoined())
 		out.Servers[i].WhitelistEnabled = res.GetWhitelistEnabled()
 		for _, p := range res.GetPending() {
-			out.Servers[i].Pending = append(out.Servers[i].Pending, Pending{p.GetAction().Slug(), p.GetName(), p.GetReason()})
+			pending := Pending{Action: p.GetAction().Slug(), Name: p.GetName(), Reason: p.GetReason()}
+			if p.GetDueUnix() > 0 {
+				due := time.Unix(p.GetDueUnix(), 0)
+				pending.Due = &due
+			}
+			out.Servers[i].Pending = append(out.Servers[i].Pending, pending)
 		}
 	}
-	out.Banned, out.Whitelisted, out.Operators = banned.sorted(), whitelisted.sorted(), operators.sorted()
+	out.Banned, out.Whitelisted, out.Operators, out.Joined = banned.sorted(), whitelisted.sorted(), operators.sorted(), players.sorted()
 	return out
 }
 
@@ -230,9 +280,43 @@ func (s *Service) Send(ctx context.Context, n network.Network, player, server st
 	})
 }
 
+// Message shows a message to players on servers, with the console commands of Minecraft, and
+// tells on which servers it failed.
+func (s *Service) Message(ctx context.Context, m network.Message, names []string, servers []network.Ref) ([]Result, error) {
+	var commands []string
+	for _, name := range names {
+		c, err := m.Commands(name)
+		if err != nil {
+			return nil, err
+		}
+		commands = append(commands, c...)
+	}
+	results := make([]Result, len(servers))
+	operation.Each(ctx, nodesOf(servers), func(ctx context.Context, i int) {
+		results[i].Ref = servers[i]
+		err := s.callFor(ctx, servers[i].NodeID, batchTimeout, func(ctx context.Context, conn grpc.ClientConnInterface) error {
+			for _, command := range commands {
+				if _, err := noryxv1.NewServerServiceClient(conn).SendCommand(ctx, &noryxv1.SendCommandRequest{Id: servers[i].ServerID, Command: command}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			results[i].Error = httpapi.Message(err)
+		}
+	}, nil)
+	return results, nil
+}
+
 // call calls the agent of a node.
 func (s *Service) call(ctx context.Context, nodeID string, fn func(ctx context.Context, conn grpc.ClientConnInterface) error) error {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	return s.callFor(ctx, nodeID, queryTimeout, fn)
+}
+
+// callFor calls the agent of a node, for at most the given time.
+func (s *Service) callFor(ctx context.Context, nodeID string, timeout time.Duration, fn func(ctx context.Context, conn grpc.ClientConnInterface) error) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	conn, err := s.nodes.Conn(ctx, nodeID)
 	if err == nil {

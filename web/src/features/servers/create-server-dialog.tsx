@@ -4,7 +4,10 @@ import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type FormEvent, type ReactElement, useCallback, useState } from "react"
 import { Trans } from "react-i18next"
+import { toast } from "sonner"
 import { Fold } from "@/components/fold"
+import { Segmented } from "@/components/segmented"
+import { UploadProgress } from "@/components/upload-progress"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -17,7 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAccess } from "@/features/access/use-access"
 import type { ModpackChoice } from "@/features/modpacks/api"
@@ -37,7 +40,8 @@ import { OperationStatus } from "@/features/operations/operation-status"
 import { guard, useOperation } from "@/features/operations/use-operation"
 import { keptVersions, type Template, templatesQuery } from "@/features/templates/api"
 import { formatBytes, formatSeconds, formatTimeZone } from "@/lib/format"
-import { freeMemoryMb, type NewServer, serversQuery, useCreateServer } from "./api"
+import { useUpload } from "@/lib/use-upload"
+import { freeMemoryMb, type ImportedSettings, type NewServer, serversQuery, useCreateServer, useImportServer } from "./api"
 import { defaults, modpack, serverType, suggestPort, usedPorts } from "./server-types"
 import { MemoryField, StopTimeoutField, TimeZoneField, VersionField } from "./settings-fields"
 import { EndOfLifeNotice, SoftwareOptions } from "./software"
@@ -55,6 +59,9 @@ type Form = Omit<NewServer, "port" | "storage"> & {
   world: World
   stopTimeout: number
   timeZone: string
+  /** A new server starts empty, or with the data of an archive of a server from elsewhere. */
+  source: "empty" | "archive"
+  archive?: File
 }
 
 const none = "none"
@@ -64,7 +71,16 @@ function blank(template?: Template): Form {
     ? { type: template.type, version: template.version === "LATEST" ? "" : template.version, memoryMb: template.memoryMb }
     : { type: "paper", version: "", memoryMb: defaults("paper").memoryMb }
   const { stopTimeout = 60, timeZone = "" } = template ?? {}
-  return { name: "", acceptEula: false, templateId: template?.id, world: worldOf(template?.properties), stopTimeout, timeZone, ...basics }
+  return {
+    name: "",
+    acceptEula: false,
+    templateId: template?.id,
+    world: worldOf(template?.properties),
+    stopTimeout,
+    timeZone,
+    source: "empty",
+    ...basics,
+  }
 }
 
 /** What a template adds to a new server, e.g. "Java 21 · 3 properties · LuckPerms". */
@@ -102,6 +118,9 @@ export function CreateServerDialog({
   const open = shown ?? ownOpen
   const [form, setForm] = useState(() => blank(fixedTemplate))
   const create = useCreateServer()
+  const importServer = useImportServer()
+  const upload = useUpload()
+  const [importError, setImportError] = useState<string>()
   const operation = useOperation()
   const navigate = useNavigate()
   const { data: templates = [] } = useQuery({ ...templatesQuery, enabled: open && !fixedTemplate })
@@ -115,6 +134,7 @@ export function CreateServerDialog({
   const locations = node?.info?.storage ?? []
   const proxy = serverType(form.type).proxy
   const fromModpack = form.type === modpack
+  const fromArchive = form.source === "archive"
   const chooseModpack = useCallback((choice?: ModpackChoice) => setForm((f) => ({ ...f, modpack: choice })), [])
   const port =
     form.port ??
@@ -127,6 +147,8 @@ export function CreateServerDialog({
   const title = t("Create {{name}}", { name: form.name })
 
   function onOpenChange(next: boolean) {
+    if (upload.uploading) return
+    setImportError(undefined)
     setOpen(next)
     onShownChange?.(next)
     if (!next) {
@@ -142,6 +164,11 @@ export function CreateServerDialog({
     setForm({ ...form, type, memoryMb: form.memoryMb === before ? defaults(type).memoryMb : form.memoryMb })
   }
 
+  // An archive brings its own data, so neither a template nor a modpack applies.
+  function chooseSource(source: Form["source"]) {
+    setForm({ ...form, source, archive: undefined, templateId: undefined, modpack: undefined, type: form.type === modpack ? "paper" : form.type })
+  }
+
   function chooseTemplate(id: string) {
     const chosen = templates.find((candidate) => candidate.id === id)
     setForm({ ...blank(chosen), name: form.name, acceptEula: form.acceptEula, nodeId: form.nodeId, port: form.port, storage: form.storage })
@@ -153,6 +180,10 @@ export function CreateServerDialog({
     const { name, type, memoryMb, acceptEula, stopTimeout, timeZone } = form
     const version = proxy ? "" : form.version.trim()
     const server: NewServer = { name, type, memoryMb, acceptEula, port, storage, version, stopTimeout, timeZone }
+    if (fromArchive) {
+      if (form.archive) void createFromArchive(nodeId, server, form.archive)
+      return
+    }
     if (fromModpack) Object.assign(server, { type: "", version: "", modpack: form.modpack })
     if (template) {
       const { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties } = template
@@ -178,6 +209,24 @@ export function CreateServerDialog({
     })
   }
 
+  async function createFromArchive(nodeId: string, server: ImportedSettings, archive: File) {
+    setImportError(undefined)
+    try {
+      const created = await upload.run((onProgress, signal) => importServer(nodeId, server, archive, { onProgress, signal }))
+      if (!created) return
+      const leftOut = created.leftOut.length > 0 && t("It didn't take {{files}} from the archive.", { files: created.leftOut.join(", ") })
+      ;(created.warning ? toast.warning : toast.success)(t("Created {{name}} from {{archive}}", { name: created.name, archive: archive.name }), {
+        description: [leftOut, created.warning].filter(Boolean).join(" ") || undefined,
+      })
+      setOpen(false)
+      onShownChange?.(false)
+      setForm(blank(fixedTemplate))
+      void navigate({ to: "/nodes/$nodeId/servers/$serverId", params: { nodeId, serverId: created.id } })
+    } catch (e) {
+      setImportError((e as Error).message)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {shown === undefined && (
@@ -190,7 +239,7 @@ export function CreateServerDialog({
           )}
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-lg" {...guard(create.isPending)}>
+      <DialogContent className="sm:max-w-lg" {...guard(create.isPending || upload.uploading)}>
         {operation.live ? (
           <OperationStatus
             op={operation.live}
@@ -215,7 +264,22 @@ export function CreateServerDialog({
               </DialogDescription>
             </DialogHeader>
             <FieldGroup>
-              {!fixedTemplate && templates.length > 0 && (
+              {!fixedTemplate && (
+                <FieldSet>
+                  <FieldLegend variant="label">{t("Start with")}</FieldLegend>
+                  <Segmented
+                    label={t("Start with")}
+                    className="w-fit"
+                    value={form.source}
+                    onChange={chooseSource}
+                    options={[
+                      { value: "empty", label: t("A new server") },
+                      { value: "archive", label: t("An archive of a server") },
+                    ]}
+                  />
+                </FieldSet>
+              )}
+              {!fixedTemplate && !fromArchive && templates.length > 0 && (
                 <Field>
                   <FieldLabel htmlFor="server-template">{t("Template")}</FieldLabel>
                   <Select value={form.templateId ?? none} onValueChange={(id) => id && chooseTemplate(id)}>
@@ -296,7 +360,7 @@ export function CreateServerDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SoftwareOptions chosen={form.type} />
-                      {nodeId && can("plugins.manage", nodeId) && (
+                      {nodeId && can("plugins.manage", nodeId) && !fromArchive && (
                         <SelectGroup>
                           <SelectSeparator />
                           <SelectLabel>{t("Modpacks")}</SelectLabel>
@@ -311,6 +375,24 @@ export function CreateServerDialog({
                 )}
               </div>
               <EndOfLifeNotice type={form.type} />
+              {fromArchive && (
+                <Field>
+                  <FieldLabel htmlFor="server-archive">{t("Archive")}</FieldLabel>
+                  <Input
+                    id="server-archive"
+                    type="file"
+                    accept=".zip,.tar.gz,.tgz,application/zip,application/gzip"
+                    required
+                    disabled={upload.uploading}
+                    onChange={(e) => setForm({ ...form, archive: e.target.files?.[0] })}
+                  />
+                  <FieldDescription>
+                    {t(
+                      "A ZIP or .tar.gz archive of the contents of a server's folder, e.g. from a host, with server.properties at its top; up to 16 GB. The server gets its worlds, plugins and settings, but not its secrets, such as the console password, nor its trust in a proxy.",
+                    )}
+                  </FieldDescription>
+                </Field>
+              )}
               {fromModpack && <ModpackPicker onChange={chooseModpack} />}
               <div className="grid gap-4 sm:grid-cols-2">
                 <MemoryField
@@ -351,7 +433,7 @@ export function CreateServerDialog({
                   </Select>
                 </Field>
               )}
-              {!proxy && <WorldFields value={form.world} onChange={(world) => setForm({ ...form, world })} />}
+              {!proxy && !fromArchive && <WorldFields value={form.world} onChange={(world) => setForm({ ...form, world })} />}
               <Fold
                 title={t("Stop timeout and time zone")}
                 summary={`${formatSeconds(form.stopTimeout)} · ${formatTimeZone(form.timeZone)}`}
@@ -391,15 +473,32 @@ export function CreateServerDialog({
               )}
               {proxy && <FieldDescription>{t("Proxies always run the latest release of their software.")}</FieldDescription>}
               {create.error && <FieldError>{create.error.message}</FieldError>}
+              {upload.progress !== undefined && <UploadProgress progress={upload.progress} done={t("Creating the server and unpacking the archive…")} />}
+              {importError && <FieldError>{importError}</FieldError>}
             </FieldGroup>
             <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline" disabled={create.isPending}>
-                  {t("Cancel")}
+              {upload.uploading ? (
+                <Button type="button" variant="outline" onClick={upload.cancel}>
+                  {t("Cancel upload")}
                 </Button>
-              </DialogClose>
-              <Button type="submit" disabled={create.isPending || !nodeId || (fromModpack && !form.modpack)}>
-                {create.isPending ? (template?.plugins.length ? t("Creating and installing…") : t("Creating…")) : t("Create server")}
+              ) : (
+                <DialogClose asChild>
+                  <Button variant="outline" disabled={create.isPending}>
+                    {t("Cancel")}
+                  </Button>
+                </DialogClose>
+              )}
+              <Button
+                type="submit"
+                disabled={create.isPending || upload.uploading || !nodeId || (fromModpack && !form.modpack) || (fromArchive && !form.archive)}
+              >
+                {upload.uploading
+                  ? t("Uploading…")
+                  : create.isPending
+                    ? template?.plugins.length
+                      ? t("Creating and installing…")
+                      : t("Creating…")
+                    : t("Create server")}
               </Button>
             </DialogFooter>
           </form>

@@ -13,6 +13,9 @@ service PlayerService {
   // ChangePlayer runs the command of a change on a running game server. A server that
   // doesn't run runs it once it does; only a kick fails then.
   rpc ChangePlayer(ChangePlayerRequest) returns (ChangePlayerResponse);
+  // ChangePlayers makes changes one after the other, e.g. bans several players, each like
+  // ChangePlayer, and tells how each ended. Agents without it know no temporary bans.
+  rpc ChangePlayers(ChangePlayersRequest) returns (ChangePlayersResponse);
 }
 
 enum PlayerAction {
@@ -38,8 +41,11 @@ message GetPlayerListsResponse {
   repeated ListedPlayer whitelisted = 2;
   repeated ListedPlayer operators = 3;
   bool whitelist_enabled = 4;
-  // Changes that wait for the server to run, in their order.
+  // Changes that wait for the server to run or for their time, in their order.
   repeated PlayerChange pending = 5;
+  // Players who joined the server, as its cache of players (usercache.json) tells, e.g. to
+  // whitelist or ban them while they're offline. Only their names and IDs are set.
+  repeated ListedPlayer joined = 6;
 }
 
 message ListedPlayer {
@@ -61,6 +67,32 @@ message PlayerChange {
   // The ID Floodgate gives a Bedrock player, whom the servers behind its proxy can't look
   // up: whitelisting them writes it into the whitelist.
   string uuid = 4;
+  // When a ban ends: the agent pardons the player then, or once the server runs again if it
+  // doesn't run at that time. Only bans take it; a later ban or pardon replaces it.
+  int64 ends_unix = 5;
+  // When a waiting change is due, e.g. the pardon at the end of a ban; 0 for changes that
+  // only wait for the server to run. Only the agent sets it, in the changes that wait.
+  int64 due_unix = 6;
+}
+
+message ChangePlayersRequest {
+  string server_id = 1;
+  // Up to 100 changes.
+  repeated PlayerChange changes = 2;
+}
+
+message ChangePlayersResponse {
+  // How each change ended, in their order.
+  repeated PlayerChangeResult results = 1;
+}
+
+message PlayerChangeResult {
+  // The server doesn't run and runs the command once it does.
+  bool pending = 1;
+  // What the server answered, without formatting.
+  string output = 2;
+  // Why the change failed; the others were made nonetheless.
+  string error = 3;
 }
 
 message ChangePlayerRequest {

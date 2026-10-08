@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,21 +37,33 @@ type column struct {
 	Key  string `json:"key"`  // PRI for one of the primary key
 }
 
-// browser is how the agent reads the tables of an engine's databases: as the superuser in a
-// session that only reads, with statements it builds itself from names that need no escaping,
-// as noryxv1.DatabaseName and noryxv1.TableName match them. Each statement prints a JSON value
-// per line.
+// browser is how the agent reads the tables of an engine's databases: never as the superuser,
+// as reading runs what the database's user may have written, e.g. casts, functions and views,
+// in a session that only reads, with statements it builds itself from names that need no
+// escaping, as noryxv1.DatabaseName and noryxv1.TableName match them, and values in
+// hexadecimal. Each statement prints a JSON value per line.
 type browser struct {
-	// client reads SQL from its standard input on a database, with the superuser's environment.
-	client  func(database string) []string
+	// client reads SQL from its standard input on a database as user, who signs in with
+	// password if it needs one.
+	client func(user, database, password string) (cmd, env []string)
+	// reader, if set, creates a user who may only read a database and signs in with password
+	// on the container, and forget drops it; otherwise the database's own user reads it.
+	reader  func(user, database, password string) string
+	forget  func(user string) string
 	session string
+	quote   func(name string) string
 	// tables prints a noryxv1.Table per line, columns a column.
 	tables  func(database string) string
 	columns func(database, schema, table string) string
-	// cell is a column's value as text of at most maxValue+1 characters.
-	cell func(c column) string
-	// rows prints an array of the cells of each row.
-	rows func(schema, table string, cells, order []string, offset uint64, limit uint32) string
+	// text is a column's value as text, as a page shows it; cell cuts it to at most
+	// maxValue+1 characters.
+	text, cell func(c column) string
+	// equals and contains match text with a value in hexadecimal: contains ignores case.
+	equals, contains func(text, value string) string
+	// from names a table.
+	from func(schema, table string) string
+	// row prints an array of cells.
+	row func(cells []string) string
 }
 
 // mariadbBinary are the data types of MariaDB without a character set, which a page shows as
@@ -60,10 +74,16 @@ var mariadbBinary = []string{"binary", "varbinary", "tinyblob", "blob", "mediumb
 var browsers = map[noryxv1.DatastoreEngine]browser{
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB: {
 		// The sandbox refuses the commands of the client itself, and raw output keeps JSON as it is.
-		client: func(db string) []string {
-			return []string{"mariadb", "-uroot", "-N", "-B", "-r", "--sandbox", "--default-character-set=utf8mb4", db}
+		client: func(user, db, password string) ([]string, []string) {
+			return []string{"mariadb", "-u" + user, "-N", "-B", "-r", "--sandbox", "--default-character-set=utf8mb4", db}, []string{"MYSQL_PWD=" + password}
 		},
+		// MariaDB signs in its users only with their passwords, which only the master knows.
+		reader: func(user, db, password string) string {
+			return fmt.Sprintf("CREATE USER '%[1]s'@'localhost' IDENTIFIED BY '%[3]s'; GRANT SELECT ON `%[2]s`.* TO '%[1]s'@'localhost';", user, grantable(db), password)
+		},
+		forget:  func(user string) string { return fmt.Sprintf("DROP USER IF EXISTS '%s'@'localhost';", user) },
 		session: fmt.Sprintf("SET SESSION TRANSACTION READ ONLY; SET SESSION max_statement_time = %d;\n", browseTimeout),
+		quote:   func(name string) string { return "`" + name + "`" },
 		tables: func(db string) string {
 			return fmt.Sprintf("SELECT JSON_OBJECT('name', TABLE_NAME, 'rows', IFNULL(TABLE_ROWS, -1), 'size', IFNULL(DATA_LENGTH + INDEX_LENGTH, 0))"+
 				" FROM information_schema.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME;", db)
@@ -72,19 +92,35 @@ var browsers = map[noryxv1.DatastoreEngine]browser{
 			return fmt.Sprintf("SELECT JSON_OBJECT('name', COLUMN_NAME, 'type', COLUMN_TYPE, 'data', DATA_TYPE, 'key', COLUMN_KEY)"+
 				" FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s' ORDER BY ORDINAL_POSITION;", db, table)
 		},
+		text: func(c column) string {
+			if slices.Contains(mariadbBinary, c.Data) {
+				return fmt.Sprintf("CONCAT('0x', HEX(`%s`))", c.Name)
+			}
+			return fmt.Sprintf("`%s`", c.Name)
+		},
 		cell: func(c column) string {
 			if slices.Contains(mariadbBinary, c.Data) {
 				return fmt.Sprintf("CONCAT('0x', HEX(LEFT(`%s`, %d)))", c.Name, (maxValue-2)/2+1)
 			}
 			return fmt.Sprintf("LEFT(`%s`, %d)", c.Name, maxValue+1)
 		},
-		rows: func(_, table string, cells, order []string, offset uint64, limit uint32) string {
-			return fmt.Sprintf("SELECT JSON_ARRAY(%s) FROM `%s`%s LIMIT %d OFFSET %d;", strings.Join(cells, ", "), table, orderBy(order, "`"), limit, offset)
+		// Compared as the bytes of UTF-8, whatever the collation of the column.
+		equals: func(text, value string) string {
+			return fmt.Sprintf("CAST(CONVERT(%s USING utf8mb4) AS BINARY) = x'%s'", text, value)
 		},
+		contains: func(text, value string) string {
+			return fmt.Sprintf("LOCATE(CAST(LOWER(_utf8mb4 x'%s') AS BINARY), CAST(LOWER(CONVERT(%s USING utf8mb4)) AS BINARY)) > 0", value, text)
+		},
+		from: func(_, table string) string { return "`" + table + "`" },
+		row:  func(cells []string) string { return "JSON_ARRAY(" + strings.Join(cells, ", ") + ")" },
 	},
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {
-		client:  func(db string) []string { return slices.Concat(psql, []string{"-A", "-t", "-U", "postgres", "-d", db}) },
+		// The database's user signs in without a password on the container, as Load does.
+		client: func(user, db, _ string) ([]string, []string) {
+			return slices.Concat(psql, []string{"-A", "-t", "-U", user, "-d", db}), nil
+		},
 		session: fmt.Sprintf("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY; SET statement_timeout = '%ds';\n", browseTimeout),
+		quote:   func(name string) string { return `"` + name + `"` },
 		tables: func(string) string {
 			return "SELECT json_build_object('schema', n.nspname, 'name', c.relname, 'rows', c.reltuples::bigint, 'size', pg_total_relation_size(c.oid))" +
 				" FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace" +
@@ -95,31 +131,75 @@ var browsers = map[noryxv1.DatastoreEngine]browser{
 				" FROM pg_attribute a LEFT JOIN pg_index i ON i.indrelid = a.attrelid AND i.indisprimary"+
 				" WHERE a.attrelid = to_regclass('\"%s\".\"%s\"') AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum;", schema, table)
 		},
+		text: func(c column) string { return fmt.Sprintf(`%q::text`, c.Name) },
 		cell: func(c column) string { return fmt.Sprintf(`left(%q::text, %d)`, c.Name, maxValue+1) },
-		rows: func(schema, table string, cells, order []string, offset uint64, limit uint32) string {
-			return fmt.Sprintf(`SELECT to_json(ARRAY[%s]::text[]) FROM %q.%q%s LIMIT %d OFFSET %d;`, strings.Join(cells, ", "), schema, table, orderBy(order, `"`), limit, offset)
+		equals: func(text, value string) string {
+			return fmt.Sprintf("%s = convert_from(decode('%s', 'hex'), 'UTF8')", text, value)
 		},
+		contains: func(text, value string) string {
+			return fmt.Sprintf("strpos(lower(%s), lower(convert_from(decode('%s', 'hex'), 'UTF8'))) > 0", text, value)
+		},
+		from: func(schema, table string) string { return fmt.Sprintf("%q.%q", schema, table) },
+		row:  func(cells []string) string { return "to_json(ARRAY[" + strings.Join(cells, ", ") + "]::text[])" },
 	},
 }
 
-func orderBy(columns []string, quote string) string {
-	if len(columns) == 0 {
-		return ""
+// rows returns the statement that prints the cells of each row that a request chooses, and
+// one more, of the columns of its table, which have those it sorts and filters by.
+func (b browser) rows(req *noryxv1.BrowseTableRequest, schema string, columns []column) string {
+	cells := make([]string, len(columns))
+	for i, c := range columns {
+		cells[i] = b.cell(c)
 	}
-	return " ORDER BY " + quote + strings.Join(columns, quote+", "+quote) + quote
+	sql := "SELECT " + b.row(cells) + " FROM " + b.from(schema, req.GetTable())
+	if f := req.GetFilter(); f != nil {
+		match := b.equals
+		if f.GetContains() {
+			match = b.contains
+		}
+		c := columns[slices.IndexFunc(columns, func(c column) bool { return c.Name == f.GetColumn() })]
+		sql += " WHERE " + match(b.text(c), hex.EncodeToString([]byte(f.GetValue())))
+	}
+	var order []string
+	if req.GetSort() != "" {
+		order = append(order, b.quote(req.GetSort()))
+		if req.GetDescending() {
+			order[0] += " DESC"
+		}
+	}
+	for _, c := range columns {
+		if c.Key == "PRI" && c.Name != req.GetSort() {
+			order = append(order, b.quote(c.Name))
+		}
+	}
+	if len(order) > 0 {
+		sql += " ORDER BY " + strings.Join(order, ", ")
+	}
+	return sql + fmt.Sprintf(" LIMIT %d OFFSET %d;", req.GetLimit()+1, req.GetOffset())
 }
 
 // browse runs a statement that sql builds on a database of a ready datastore, in a session
 // that only reads, and decodes each line it prints with decode.
-func (d *Docker) browse(ctx context.Context, id, name string, sql func(b browser) string, decode func(line []byte) error) error {
+func (d *Docker) browse(ctx context.Context, id, name string, sql func(b browser) string, decode func(line []byte) error) (err error) {
 	s, err := d.session(ctx, id, name)
 	if err != nil {
 		return err
 	}
 	b := browsers[s.engine]
-	_, env := s.dialect.superuser(s.password)
+	user, password := name, ""
+	if b.reader != nil {
+		user, password = "noryx-reader-"+strings.ToLower(rand.Text()[:12]), strings.ToLower(rand.Text())
+		defer func() {
+			_, forgetErr := s.query(context.WithoutCancel(ctx), b.forget(user))
+			err = errors.Join(err, forgetErr)
+		}()
+		if _, err := s.query(ctx, b.reader(user, name, password), password); err != nil {
+			return err
+		}
+	}
+	cmd, env := b.client(user, name, password)
 	out := &capped{max: maxPage}
-	if err := d.exec(ctx, id, b.client(name), env, strings.NewReader(b.session+sql(b)), out, s.password); err != nil {
+	if err := d.exec(ctx, id, cmd, env, strings.NewReader(b.session+sql(b)), out, password); err != nil {
 		return err
 	}
 	lines := bufio.NewScanner(&out.Buffer)
@@ -157,10 +237,13 @@ func (d *Docker) Tables(ctx context.Context, id, name string) ([]*noryxv1.Table,
 	return tables, err
 }
 
-func (d *Docker) Browse(ctx context.Context, id, name, schema, table string, offset uint64, limit uint32) (*noryxv1.BrowseTableResponse, error) {
-	schema = cmp.Or(schema, "public") // MariaDB has none
+func (d *Docker) Browse(ctx context.Context, id string, req *noryxv1.BrowseTableRequest) (*noryxv1.BrowseTableResponse, error) {
+	name, table, schema := req.GetDatabase(), req.GetTable(), cmp.Or(req.GetSchema(), "public") // MariaDB has none
 	if !noryxv1.TableName.MatchString(table) || !noryxv1.TableName.MatchString(schema) {
 		return nil, runtime.ErrNoTable
+	}
+	if f := req.GetFilter(); f != nil && f.Problem() != "" {
+		return nil, errors.New(f.Problem())
 	}
 	var columns []column
 	err := d.browse(ctx, id, name, func(b browser) string { return b.columns(name, schema, table) }, func(line []byte) error {
@@ -180,21 +263,16 @@ func (d *Docker) Browse(ctx context.Context, id, name, schema, table string, off
 	case len(columns) == 0:
 		return nil, runtime.ErrNoTable
 	}
-	res := &noryxv1.BrowseTableResponse{}
-	var order []string
+	for _, name := range []string{req.GetSort(), req.GetFilter().GetColumn()} {
+		if name != "" && !slices.ContainsFunc(columns, func(c column) bool { return c.Name == name }) {
+			return nil, fmt.Errorf("%w: %q", runtime.ErrNoColumn, name)
+		}
+	}
+	res := &noryxv1.BrowseTableResponse{SortedAndFiltered: true}
 	for _, c := range columns {
 		res.Columns = append(res.Columns, &noryxv1.TableColumn{Name: c.Name, Type: c.Type, PrimaryKey: c.Key == "PRI"})
-		if c.Key == "PRI" {
-			order = append(order, c.Name)
-		}
 	}
-	rows := func(b browser) string {
-		cells := make([]string, len(columns))
-		for i, c := range columns {
-			cells[i] = b.cell(c)
-		}
-		return b.rows(schema, table, cells, order, offset, limit+1)
-	}
+	rows := func(b browser) string { return b.rows(req, schema, columns) }
 	err = d.browse(ctx, id, name, rows, func(line []byte) error {
 		var values []*string
 		if err := json.Unmarshal(line, &values); err != nil {
@@ -210,8 +288,8 @@ func (d *Docker) Browse(ctx context.Context, id, name, schema, table string, off
 		res.Rows = append(res.Rows, row)
 		return nil
 	})
-	if len(res.Rows) > int(limit) {
-		res.Rows, res.More = res.Rows[:limit], true
+	if len(res.Rows) > int(req.GetLimit()) {
+		res.Rows, res.More = res.Rows[:req.GetLimit()], true
 	}
 	return res, err
 }

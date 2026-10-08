@@ -15,12 +15,13 @@ type Handler struct{ store *Store }
 func NewHandler(store *Store) *Handler { return &Handler{store: store} }
 
 // Register adds the routes. The latest measurement and the warnings only contain what the user
-// may see. Changing the thresholds of a node needs the permission to change the node, and of a
-// server the permission to change its settings.
+// may see, datastores for those who may see datastores. Changing the thresholds of a node needs
+// the permission to change the node, and of a server the permission to change its settings.
 func (h *Handler) Register(m access.Mux) {
 	m.Handle("GET /api/nodes/{node}/usage", access.SignedIn, h.latest)
 	m.Handle("GET /api/nodes/{node}/usage/history", access.OnNode(access.NodesView, "node"), h.history)
 	m.Handle("GET /api/nodes/{node}/servers/{id}/usage/history", access.OnServer(access.ServersView), h.history)
+	m.Handle("GET /api/datastores/{id}/usage/history", access.Everywhere(access.DatastoresView), h.datastoreHistory)
 	m.Handle("GET /api/usage/warnings", access.SignedIn, h.warnings)
 	m.Handle("GET /api/nodes/{node}/usage/thresholds", access.OnNode(access.NodesView, "node"), h.thresholds)
 	m.Handle("PUT /api/nodes/{node}/usage/thresholds", access.OnNode(access.NodesEdit, "node"), h.setThresholds)
@@ -29,9 +30,21 @@ func (h *Handler) Register(m access.Mux) {
 }
 
 type latestView struct {
-	Time    time.Time    `json:"time"`
-	Node    *nodeView    `json:"node,omitempty"`
-	Servers []serverView `json:"servers"`
+	Time       time.Time       `json:"time"`
+	Node       *nodeView       `json:"node,omitempty"`
+	Servers    []serverView    `json:"servers"`
+	Datastores []datastoreView `json:"datastores,omitempty"`
+}
+
+type datastoreView struct {
+	ID               string  `json:"id"`
+	Running          bool    `json:"running"`
+	CPUMillis        uint32  `json:"cpuMillis"`
+	CPULimitMillis   uint32  `json:"cpuLimitMillis"`
+	MemoryBytes      uint64  `json:"memoryBytes"`
+	MemoryLimitBytes uint64  `json:"memoryLimitBytes"`
+	Connections      *uint32 `json:"connections,omitempty"`
+	DiskBytes        uint64  `json:"diskBytes"`
 }
 
 type nodeView struct {
@@ -88,18 +101,39 @@ func (h *Handler) latest(w http.ResponseWriter, r *http.Request) {
 		}
 		view.Servers = append(view.Servers, v)
 	}
+	if grants.Has(access.DatastoresView) {
+		for _, ds := range stats.GetDatastores() {
+			view.Datastores = append(view.Datastores, datastoreView{
+				ID: ds.GetId(), Running: ds.GetRunning(), CPUMillis: ds.GetCpuMillis(), CPULimitMillis: ds.GetCpuLimitMillis(),
+				MemoryBytes: ds.GetMemoryBytes(), MemoryLimitBytes: ds.GetMemoryLimitBytes(), Connections: ds.Connections, DiskBytes: ds.GetDiskBytes(),
+			})
+		}
+	}
 	httpapi.WriteJSON(w, http.StatusOK, view)
 }
 
-// history returns the usage of a node, or of a server if the path names one, over the
-// range "day" (the default) or "week".
+// history returns the usage of a node, or of a server if the path names one.
 func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
+	writeHistory(w, r, func(span, step time.Duration) ([]Point, error) {
+		return h.store.History(r.Context(), r.PathValue("node"), r.PathValue("id"), span, step)
+	})
+}
+
+// datastoreHistory returns the usage of a datastore.
+func (h *Handler) datastoreHistory(w http.ResponseWriter, r *http.Request) {
+	writeHistory(w, r, func(span, step time.Duration) ([]DatastorePoint, error) {
+		return h.store.DatastoreHistory(r.Context(), r.PathValue("id"), span, step)
+	})
+}
+
+// writeHistory answers with the history over the range "day" (the default) or "week".
+func writeHistory[P any](w http.ResponseWriter, r *http.Request, history func(span, step time.Duration) ([]P, error)) {
 	rng, ok := Ranges[cmp.Or(r.URL.Query().Get("range"), "day")]
 	if !ok {
 		httpapi.WriteError(w, r, httpapi.Errorf(http.StatusBadRequest, "Choose the range day or week."))
 		return
 	}
-	points, err := h.store.History(r.Context(), r.PathValue("node"), r.PathValue("id"), rng.Span, rng.Step)
+	points, err := history(rng.Span, rng.Step)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return

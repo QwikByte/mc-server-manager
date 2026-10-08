@@ -39,6 +39,7 @@ import { jobs } from "@/features/backups/api"
 import { fileSetsQuery } from "@/features/filesets/api"
 import { networksQuery } from "@/features/networks/api"
 import { nodesQuery } from "@/features/nodes/api"
+import { seenPlayersQuery } from "@/features/players/api"
 import { useOnlinePlayers } from "@/features/players/online"
 import { actions as policyActions, policies } from "@/features/policies/api"
 import { describeSchedule } from "@/features/schedules/describe"
@@ -46,6 +47,8 @@ import { allServersQuery, type NodeServer, serverKey, useBulkAction } from "@/fe
 import { serverLook, serverType, statusOf } from "@/features/servers/server-types"
 import { settings } from "@/features/settings/tabs"
 import { templatesQuery } from "@/features/templates/api"
+import { formatAgo } from "@/lib/format"
+import { useDebounced } from "@/lib/use-debounced"
 import { cn } from "@/lib/utils"
 import { openedPath, readRecent } from "./recent"
 import { account, type Creation, creations, pageKeys } from "./shortcuts"
@@ -77,8 +80,6 @@ interface Entry {
   status?: Status
   detail?: string
   labelClass?: string
-  /** Opens it if its address alone doesn't, e.g. a player on the players page. */
-  open?: () => Promise<void>
 }
 
 /** An address of the panel from its parts, e.g. of a template from its ID. */
@@ -111,7 +112,16 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
   const { data: users = [] } = useQuery({ ...usersQuery, enabled: access.can("users.view") })
   const { players } = useOnlinePlayers(access.canSomewhere("servers.view"))
   const needle = query.trim().toLowerCase()
-  const found = needle.length >= 2 ? players.filter((p) => p.name.toLowerCase().includes(needle)).slice(0, 8) : []
+  const searched = useDebounced(needle, 200)
+  const { data: seen } = useQuery({
+    ...seenPlayersQuery({ q: searched, limit: 8 }),
+    enabled: searched.length >= 2 && access.canSomewhere("servers.view"),
+  })
+  // The players online, then those seen before, each once.
+  const online = needle.length >= 2 ? players.filter((p) => p.name.toLowerCase().includes(needle)).slice(0, 8) : []
+  const offline = (needle.length >= 2 && searched === needle ? (seen?.players ?? []) : []).filter(
+    (s) => !online.some((p) => p.name.toLowerCase() === s.name.toLowerCase()),
+  )
   // Notes match as written, as fuzzy matching would find nearly every search in a longer text.
   const inNotes = (s: NodeServer) => (needle.length >= 2 && s.notes?.toLowerCase().includes(needle) ? [needle] : [])
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
@@ -138,15 +148,24 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
     },
     {
       heading: t("Players"),
-      entries: found.map((p) => ({
-        value: `player/${p.name}@${serverKey(p.server)}`,
-        path: "/players",
-        label: p.name,
-        labelClass: "font-mono",
-        icon: <UserIcon weight="duotone" className="text-info" />,
-        detail: p.server.name,
-        open: () => navigate({ to: "/players", search: { q: p.name } }),
-      })),
+      entries: [
+        ...online.map((p) => ({
+          value: `player/${p.name}@${serverKey(p.server)}`,
+          path: at("players", p.name),
+          label: p.name,
+          labelClass: "font-mono",
+          icon: <UserIcon weight="duotone" className="text-success" />,
+          detail: p.server.name,
+        })),
+        ...offline.map((p) => ({
+          value: `player/${p.name}`,
+          path: at("players", p.name),
+          label: p.name,
+          labelClass: "font-mono",
+          icon: <UserIcon weight="duotone" className="text-info" />,
+          detail: t("Seen {{ago}}", { ago: formatAgo(p.lastSeen) }),
+        })),
+      ],
     },
     {
       heading: t("Networks"),
@@ -248,7 +267,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
       key={value}
       value={value}
       keywords={[entry.label, ...(entry.keywords ?? [])]}
-      onSelect={() => go(entry.open ?? (() => navigate({ href: entry.path })))}
+      onSelect={() => go(() => navigate({ href: entry.path }))}
     >
       {entry.icon}
       <span className={cn("truncate font-medium", entry.labelClass)}>{entry.label}</span>

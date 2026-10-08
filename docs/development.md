@@ -5,7 +5,7 @@ agents and people alike.
 
 ## Running locally
 
-Requirements: Go 1.27, Node.js 22. Nodes need Docker.
+Requirements: Go 1.27, Node.js 22. Nodes need Docker, or Podman 4.9 or newer as root (`serve --runtime podman`).
 
 `scripts/ubuntu-test.sh` sets up a complete test environment on Ubuntu (desktop, server or WSL): it installs Go, Node.js
 and Docker when missing, builds everything, starts master and agent and can create a Paper test server.
@@ -35,6 +35,10 @@ go run ./cmd/noryx-agent --data-dir .data/agent serve --listen 127.0.0.1:7443
 | `make lint`     | golangci-lint, oxlint, the translation checks and the TypeScript type check    |
 | `make generate` | Regenerates the gRPC code after changing `api/**/*.proto`                      |
 | `make packages` | Builds the packages and archives of a release into `dist/`, without publishing |
+
+Tests that run containers need root and only run with `NORYX_DOCKER_TEST` set: with
+`NORYX_DOCKER_TEST=1 go test ./internal/agent/runtime/docker`, datastores run in Docker, and with
+`NORYX_DOCKER_TEST=podman` in Podman, along with `TestPodmanLive`, which checks what Podman does differently.
 
 ## Windows
 

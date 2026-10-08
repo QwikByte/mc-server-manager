@@ -18,6 +18,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 )
@@ -46,6 +47,9 @@ type JobSettings struct {
 	KeepDays   uint32 `json:"keepDays"`
 	KeepWeeks  uint32 `json:"keepWeeks"`
 	KeepMonths uint32 `json:"keepMonths"`
+	// Copy is where the job copies its backups of servers to, keeping as many copies as
+	// backups; nil for nowhere.
+	Copy *CopyTo `json:"copy,omitempty"`
 }
 
 // retention returns which backups the job keeps, with days beginning in a time zone.
@@ -75,13 +79,16 @@ type Datastores interface {
 type Jobs struct {
 	nodes      Nodes
 	datastores Datastores
+	// copies copies the backups of jobs away from their nodes; nil for backups that aren't
+	// those of jobs, e.g. of schedules that back up first.
+	copies *Copies
 }
 
-func NewJobs(nodes Nodes, datastores Datastores) Jobs {
-	return Jobs{nodes: nodes, datastores: datastores}
+func NewJobs(nodes Nodes, datastores Datastores, copies *Copies) Jobs {
+	return Jobs{nodes: nodes, datastores: datastores, copies: copies}
 }
 
-func (Jobs) Check(raw json.RawMessage) (json.RawMessage, error) {
+func (j Jobs) Check(raw json.RawMessage) (json.RawMessage, error) {
 	var s JobSettings
 	msg := "Choose what to back up."
 	if err := json.Unmarshal(raw, &s); err == nil {
@@ -100,10 +107,28 @@ func (Jobs) Check(raw json.RawMessage) (json.RawMessage, error) {
 		msg = "Choose a storage location of the nodes."
 	case s.retention("").Problem() != "":
 		msg = s.retention("").Problem()
+	case s.Copy != nil && j.copies == nil:
+		msg = "Only backup jobs copy backups."
+	case s.Copy != nil:
+		ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+		defer cancel()
+		if msg = s.Copy.check(ctx, j.copies); msg == "" {
+			return json.Marshal(s)
+		}
 	default:
 		return json.Marshal(s)
 	}
 	return nil, httpapi.Errorf(http.StatusBadRequest, "%s", msg)
+}
+
+// Needs tells that a job that copies its backups needs the permission to see and download
+// the backups of all servers, as the copies take them away from their nodes.
+func (Jobs) Needs(raw json.RawMessage) []access.Permission {
+	var s JobSettings
+	if json.Unmarshal(raw, &s) == nil && s.Copy != nil {
+		return []access.Permission{access.BackupsView}
+	}
+	return nil
 }
 
 func (Jobs) Lead(json.RawMessage) time.Duration { return 0 }
@@ -136,7 +161,15 @@ func (j Jobs) Run(ctx context.Context, t schedule.Task, servers schedule.Servers
 			if err == nil && b == nil {
 				err = schedule.Skipped("It has none of the selected data yet, e.g. as it never started.")
 			}
-			return srv.Report(t, logging.Backups, "Back up server", err)
+			if err = srv.Report(t, logging.Backups, "Back up server", err); err != nil || s.Copy == nil || j.copies == nil {
+				return err
+			}
+			// Also backups that couldn't be copied before.
+			change, err := j.copies.Sync(ctx, t, s, srv)
+			if change == "" && err == nil {
+				return nil
+			}
+			return srv.ReportChange(t, logging.Backups, "Copy backups", change, err)
 		})
 	}
 	for _, ds := range datastores {

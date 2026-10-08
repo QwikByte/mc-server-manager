@@ -361,7 +361,7 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, re
 	for _, b := range list.GetBackups() {
 		imported := &noryxv1.Backup{
 			Id: b.GetId(), Label: b.GetLabel(), CreatedUnix: b.GetCreatedUnix(), Location: req.Storage, Paths: b.GetPaths(), JobId: b.GetJobId(),
-			Exclude: b.GetExclude(), Kept: b.GetKept(),
+			Exclude: b.GetExclude(), Kept: b.GetKept(), Untrusted: b.GetUntrusted(),
 			Size: b.GetSize(), // refused upfront if it doesn't fit
 		}
 		copied, err := node.Relay(ctx,
@@ -374,10 +374,10 @@ func (h *Handler) transfer(ctx context.Context, mv Move, src *noryxv1.Server, re
 				return &noryxv1.ImportBackupRequest{Content: &noryxv1.ImportBackupRequest_Data{Data: data}}
 			},
 			progress)
-		// Agents of older versions would restore what the backup left out as missing, and
-		// let its job delete it.
-		if got := copied.GetBackup(); err == nil && (len(got.GetExclude()) != len(b.GetExclude()) || got.GetKept() != b.GetKept()) {
-			err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of %s to move backups that leave out files or are kept.", mv.ToName)
+		// Agents of older versions would restore what the backup left out as missing, let its
+		// job delete it, and trust one from elsewhere.
+		if got := copied.GetBackup(); err == nil && (len(got.GetExclude()) != len(b.GetExclude()) || got.GetKept() != b.GetKept() || b.GetUntrusted() && !got.GetUntrusted()) {
+			err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of %s to move backups that leave out files, are kept or came from elsewhere.", mv.ToName)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("backup %q: %w", cmp.Or(b.GetLabel(), b.GetId()), err)

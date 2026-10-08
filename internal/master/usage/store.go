@@ -1,12 +1,13 @@
-// Package usage keeps a history of what nodes and their servers use, from the
+// Package usage keeps a history of what nodes, their servers and datastores use, from the
 // measurements of the agents, and serves it to the panel along with the latest one. It warns
-// when they use too much for a while, as thresholds of the settings, or of a node or server
-// itself, tell.
+// when nodes and servers use too much for a while, as thresholds of the settings, or of a node
+// or server itself, tell.
 package usage
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -54,19 +55,26 @@ type Config interface {
 	Thresholds() Defaults
 }
 
+// Observer learns of the running servers of every measurement that the store records, e.g. to
+// note which players were online. Their IDs are valid, each once, and at most maxServers.
+type Observer interface {
+	Record(ctx context.Context, nodeID string, at time.Time, servers []*noryxv1.ServerStats) error
+}
+
 // Store keeps what nodes and servers used during the last week, and the measures that are
 // beyond their thresholds.
 type Store struct {
-	db    *sql.DB
-	nodes Nodes
-	conf  Config
+	db        *sql.DB
+	nodes     Nodes
+	conf      Config
+	observers []Observer
 
 	mu        sync.Mutex
 	crossings map[key]*crossing
 }
 
-func NewStore(db *sql.DB, nodes Nodes, conf Config) *Store {
-	return &Store{db: db, nodes: nodes, conf: conf, crossings: map[key]*crossing{}}
+func NewStore(db *sql.DB, nodes Nodes, conf Config, observers ...Observer) *Store {
+	return &Store{db: db, nodes: nodes, conf: conf, observers: observers, crossings: map[key]*crossing{}}
 }
 
 // Run records the latest measurement of every agent each minute until ctx ends.
@@ -109,15 +117,24 @@ func (s *Store) sample(ctx context.Context, now time.Time) {
 			}
 			if err != nil { // offline nodes are left out
 				slog.Debug("Can't record the usage of a node", logging.Nodes, logging.KeyNode, n.ID, "err", err)
-			} else if thErr == nil {
+				return
+			}
+			if thErr == nil {
 				s.checkNode(ctx, n.ID, now, stats, th)
+			}
+			for _, o := range s.observers {
+				if err := o.Record(ctx, n.ID, now, recorded(stats)); err != nil {
+					slog.Warn("Can't record a measurement of a node", logging.Nodes, logging.KeyNode, n.ID, "err", err)
+				}
 			}
 		})
 	}
 	wg.Wait()
 	s.forget(func(k key) bool { return !enrolled[k.node] })
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM usage_samples WHERE time < ?`, now.Add(-retention).Unix()); err != nil {
-		slog.Warn("Can't delete old usage", logging.Nodes, "err", err)
+	for _, sql := range []string{`DELETE FROM usage_samples WHERE time < ?`, `DELETE FROM datastore_usage WHERE time < ?`} {
+		if _, err := s.db.ExecContext(ctx, sql, now.Add(-retention).Unix()); err != nil {
+			slog.Warn("Can't delete old usage", logging.Nodes, "err", err)
+		}
 	}
 }
 
@@ -164,6 +181,28 @@ func (s *Store) add(ctx context.Context, nodeID string, at time.Time, stats *nor
 		}
 		if _, err := insert.ExecContext(ctx, at.Unix(), nodeID, srv.GetId(), srv.GetCpuMillis(), srv.GetMemoryBytes(),
 			srv.GetNetworkReceivedBytesPerSecond(), srv.GetNetworkSentBytesPerSecond(), srv.GetDiskBytes(), players, tps); err != nil {
+			return err
+		}
+	}
+	// Only the running datastores that the master has on the node, each once.
+	insertDatastore, err := tx.PrepareContext(ctx, `
+		INSERT INTO datastore_usage (time, datastore_id, cpu_millis, memory_bytes, connections, disk_bytes)
+		SELECT ?, id, ?, ?, ?, ? FROM datastores WHERE id = ? AND node_id = ?`)
+	if err != nil {
+		return err
+	}
+	defer insertDatastore.Close()
+	seen := map[string]bool{}
+	for _, ds := range stats.GetDatastores() {
+		if !ds.GetRunning() || seen[ds.GetId()] || len(seen) == maxServers {
+			continue
+		}
+		seen[ds.GetId()] = true
+		var connections any
+		if ds.Connections != nil {
+			connections = ds.GetConnections()
+		}
+		if _, err := insertDatastore.ExecContext(ctx, at.Unix(), ds.GetCpuMillis(), ds.GetMemoryBytes(), connections, ds.GetDiskBytes(), ds.GetId(), nodeID); err != nil {
 			return err
 		}
 	}
@@ -225,6 +264,52 @@ func (s *Store) History(ctx context.Context, nodeID, serverID string, span, step
 		}
 		if tps.Valid {
 			p.TPS = &tps.Float64
+		}
+		points = append(points, p)
+	}
+	return points, rows.Err()
+}
+
+// DatastorePoint is what a datastore used on average during a step of its history.
+type DatastorePoint struct {
+	Time        time.Time `json:"time"`
+	CPUMillis   float64   `json:"cpuMillis"`
+	MemoryBytes float64   `json:"memoryBytes"`
+	// Connections is the most connections during the step.
+	Connections *int64 `json:"connections"`
+	DiskBytes   int64  `json:"diskBytes"`
+}
+
+var errNoDatastore = httpapi.Errorf(http.StatusNotFound, "Datastore not found.")
+
+// DatastoreHistory returns the usage of a datastore since span ago, with the averages of each
+// step. Steps in which it didn't run are missing.
+func (s *Store) DatastoreHistory(ctx context.Context, id string, span, step time.Duration) ([]DatastorePoint, error) {
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM datastores WHERE id = ?`, id).Scan(&id); errors.Is(err, sql.ErrNoRows) {
+		return nil, errNoDatastore
+	} else if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT time / ?1 * ?1 AS start, AVG(cpu_millis), AVG(memory_bytes), MAX(connections), MAX(disk_bytes)
+		FROM datastore_usage WHERE datastore_id = ?2 AND time >= ?3
+		GROUP BY start ORDER BY start`,
+		int64(step.Seconds()), id, time.Now().Add(-span).Unix())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	points := []DatastorePoint{}
+	for rows.Next() {
+		var p DatastorePoint
+		var start int64
+		var connections sql.NullInt64
+		if err := rows.Scan(&start, &p.CPUMillis, &p.MemoryBytes, &connections, &p.DiskBytes); err != nil {
+			return nil, err
+		}
+		p.Time = time.Unix(start, 0)
+		if connections.Valid {
+			p.Connections = &connections.Int64
 		}
 		points = append(points, p)
 	}

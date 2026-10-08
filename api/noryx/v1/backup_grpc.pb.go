@@ -27,6 +27,10 @@ const (
 	BackupService_ListBackupFiles_FullMethodName = "/noryx.v1.BackupService/ListBackupFiles"
 	BackupService_DownloadBackup_FullMethodName  = "/noryx.v1.BackupService/DownloadBackup"
 	BackupService_ImportBackup_FullMethodName    = "/noryx.v1.BackupService/ImportBackup"
+	BackupService_ImportCopy_FullMethodName      = "/noryx.v1.BackupService/ImportCopy"
+	BackupService_DownloadCopy_FullMethodName    = "/noryx.v1.BackupService/DownloadCopy"
+	BackupService_DeleteCopy_FullMethodName      = "/noryx.v1.BackupService/DeleteCopy"
+	BackupService_UploadBackup_FullMethodName    = "/noryx.v1.BackupService/UploadBackup"
 )
 
 // BackupServiceClient is the client API for BackupService service.
@@ -55,6 +59,20 @@ type BackupServiceClient interface {
 	// ImportBackup adds a backup of a server that came from another node. The header
 	// describes it, the data that follows is its archive.
 	ImportBackup(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportBackupRequest, ImportBackupResponse], error)
+	// ImportCopy keeps a copy of a backup of a server of another node, apart from the backups
+	// of the servers of this node, so that the server can be restored if its node is lost. The
+	// header names the server, which needn't exist here, and describes the backup. Copies are
+	// never restored where they are kept: the master relays them into a server.
+	ImportCopy(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportCopyRequest, ImportCopyResponse], error)
+	// DownloadCopy sends the archive of a copy in chunks; the first message carries its size.
+	DownloadCopy(ctx context.Context, in *DownloadCopyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadCopyResponse], error)
+	DeleteCopy(ctx context.Context, in *DeleteCopyRequest, opts ...grpc.CallOption) (*DeleteCopyResponse, error)
+	// UploadBackup adds a ZIP archive from elsewhere as a backup of a server, e.g. one that was
+	// downloaded before. The header describes it, the data that follows is the archive. The
+	// agent checks it like an archive of the file manager and keeps it as untrusted, so that
+	// restoring it checks it again and trusts nothing it tells. Its paths are the files and
+	// folders at the top of the archive. Agents of older versions answer UNIMPLEMENTED.
+	UploadBackup(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadBackupRequest, UploadBackupResponse], error)
 }
 
 type backupServiceClient struct {
@@ -157,6 +175,61 @@ func (c *backupServiceClient) ImportBackup(ctx context.Context, opts ...grpc.Cal
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BackupService_ImportBackupClient = grpc.ClientStreamingClient[ImportBackupRequest, ImportBackupResponse]
 
+func (c *backupServiceClient) ImportCopy(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportCopyRequest, ImportCopyResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &BackupService_ServiceDesc.Streams[2], BackupService_ImportCopy_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ImportCopyRequest, ImportCopyResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_ImportCopyClient = grpc.ClientStreamingClient[ImportCopyRequest, ImportCopyResponse]
+
+func (c *backupServiceClient) DownloadCopy(ctx context.Context, in *DownloadCopyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadCopyResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &BackupService_ServiceDesc.Streams[3], BackupService_DownloadCopy_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DownloadCopyRequest, DownloadCopyResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_DownloadCopyClient = grpc.ServerStreamingClient[DownloadCopyResponse]
+
+func (c *backupServiceClient) DeleteCopy(ctx context.Context, in *DeleteCopyRequest, opts ...grpc.CallOption) (*DeleteCopyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteCopyResponse)
+	err := c.cc.Invoke(ctx, BackupService_DeleteCopy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *backupServiceClient) UploadBackup(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadBackupRequest, UploadBackupResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &BackupService_ServiceDesc.Streams[4], BackupService_UploadBackup_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[UploadBackupRequest, UploadBackupResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_UploadBackupClient = grpc.ClientStreamingClient[UploadBackupRequest, UploadBackupResponse]
+
 // BackupServiceServer is the server API for BackupService service.
 // All implementations must embed UnimplementedBackupServiceServer
 // for forward compatibility.
@@ -183,6 +256,20 @@ type BackupServiceServer interface {
 	// ImportBackup adds a backup of a server that came from another node. The header
 	// describes it, the data that follows is its archive.
 	ImportBackup(grpc.ClientStreamingServer[ImportBackupRequest, ImportBackupResponse]) error
+	// ImportCopy keeps a copy of a backup of a server of another node, apart from the backups
+	// of the servers of this node, so that the server can be restored if its node is lost. The
+	// header names the server, which needn't exist here, and describes the backup. Copies are
+	// never restored where they are kept: the master relays them into a server.
+	ImportCopy(grpc.ClientStreamingServer[ImportCopyRequest, ImportCopyResponse]) error
+	// DownloadCopy sends the archive of a copy in chunks; the first message carries its size.
+	DownloadCopy(*DownloadCopyRequest, grpc.ServerStreamingServer[DownloadCopyResponse]) error
+	DeleteCopy(context.Context, *DeleteCopyRequest) (*DeleteCopyResponse, error)
+	// UploadBackup adds a ZIP archive from elsewhere as a backup of a server, e.g. one that was
+	// downloaded before. The header describes it, the data that follows is the archive. The
+	// agent checks it like an archive of the file manager and keeps it as untrusted, so that
+	// restoring it checks it again and trusts nothing it tells. Its paths are the files and
+	// folders at the top of the archive. Agents of older versions answer UNIMPLEMENTED.
+	UploadBackup(grpc.ClientStreamingServer[UploadBackupRequest, UploadBackupResponse]) error
 	mustEmbedUnimplementedBackupServiceServer()
 }
 
@@ -216,6 +303,18 @@ func (UnimplementedBackupServiceServer) DownloadBackup(*DownloadBackupRequest, g
 }
 func (UnimplementedBackupServiceServer) ImportBackup(grpc.ClientStreamingServer[ImportBackupRequest, ImportBackupResponse]) error {
 	return status.Error(codes.Unimplemented, "method ImportBackup not implemented")
+}
+func (UnimplementedBackupServiceServer) ImportCopy(grpc.ClientStreamingServer[ImportCopyRequest, ImportCopyResponse]) error {
+	return status.Error(codes.Unimplemented, "method ImportCopy not implemented")
+}
+func (UnimplementedBackupServiceServer) DownloadCopy(*DownloadCopyRequest, grpc.ServerStreamingServer[DownloadCopyResponse]) error {
+	return status.Error(codes.Unimplemented, "method DownloadCopy not implemented")
+}
+func (UnimplementedBackupServiceServer) DeleteCopy(context.Context, *DeleteCopyRequest) (*DeleteCopyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteCopy not implemented")
+}
+func (UnimplementedBackupServiceServer) UploadBackup(grpc.ClientStreamingServer[UploadBackupRequest, UploadBackupResponse]) error {
+	return status.Error(codes.Unimplemented, "method UploadBackup not implemented")
 }
 func (UnimplementedBackupServiceServer) mustEmbedUnimplementedBackupServiceServer() {}
 func (UnimplementedBackupServiceServer) testEmbeddedByValue()                       {}
@@ -364,6 +463,49 @@ func _BackupService_ImportBackup_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BackupService_ImportBackupServer = grpc.ClientStreamingServer[ImportBackupRequest, ImportBackupResponse]
 
+func _BackupService_ImportCopy_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(BackupServiceServer).ImportCopy(&grpc.GenericServerStream[ImportCopyRequest, ImportCopyResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_ImportCopyServer = grpc.ClientStreamingServer[ImportCopyRequest, ImportCopyResponse]
+
+func _BackupService_DownloadCopy_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DownloadCopyRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(BackupServiceServer).DownloadCopy(m, &grpc.GenericServerStream[DownloadCopyRequest, DownloadCopyResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_DownloadCopyServer = grpc.ServerStreamingServer[DownloadCopyResponse]
+
+func _BackupService_DeleteCopy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteCopyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackupServiceServer).DeleteCopy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BackupService_DeleteCopy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackupServiceServer).DeleteCopy(ctx, req.(*DeleteCopyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BackupService_UploadBackup_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(BackupServiceServer).UploadBackup(&grpc.GenericServerStream[UploadBackupRequest, UploadBackupResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type BackupService_UploadBackupServer = grpc.ClientStreamingServer[UploadBackupRequest, UploadBackupResponse]
+
 // BackupService_ServiceDesc is the grpc.ServiceDesc for BackupService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -395,6 +537,10 @@ var BackupService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ListBackupFiles",
 			Handler:    _BackupService_ListBackupFiles_Handler,
 		},
+		{
+			MethodName: "DeleteCopy",
+			Handler:    _BackupService_DeleteCopy_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -405,6 +551,21 @@ var BackupService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ImportBackup",
 			Handler:       _BackupService_ImportBackup_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ImportCopy",
+			Handler:       _BackupService_ImportCopy_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "DownloadCopy",
+			Handler:       _BackupService_DownloadCopy_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "UploadBackup",
+			Handler:       _BackupService_UploadBackup_Handler,
 			ClientStreams: true,
 		},
 	},

@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"strings"
@@ -76,6 +77,15 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 	node := func(p access.Permission) check {
 		return grantsOnly(p, func(g access.Grants) bool { return g.On(p, nodeID, "") })
 	}
+	// both needs the permissions of two checks.
+	both := func(a, b check) check {
+		return check{
+			run: func(ctx context.Context, g access.Grants, args []string) error {
+				return cmp.Or(a.run(ctx, g, args), b.run(ctx, g, args))
+			},
+			offer: func(g access.Grants) bool { return a.offer(g) && b.offer(g) },
+		}
+	}
 	server := func(p access.Permission) check {
 		return check{
 			run: func(_ context.Context, g access.Grants, args []string) error {
@@ -117,7 +127,8 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 		"backup create":     change(access.BackupsCreate),
 		"backup restore":    change(access.BackupsRestore),
 		"logs":              node(access.LogsView),
-		"overlay status":    node(access.NodesView),
+		// It names the servers and datastores whose ports the node publishes in the private network.
+		"overlay status": both(node(access.NodesView), both(node(access.ServersView), global(access.DatastoresView))),
 	}
 }
 

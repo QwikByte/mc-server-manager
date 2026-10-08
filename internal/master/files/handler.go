@@ -23,6 +23,7 @@ import (
 	"github.com/QwikByte/noryx/internal/logging"
 	"github.com/QwikByte/noryx/internal/master/access"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
+	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
 const (
@@ -30,6 +31,8 @@ const (
 	maxUploadBytes = 16 << 30 // the agent enforces the same limit
 	maxArchived    = 1000     // files and folders chosen for an archive, which the log names
 	opTimeout      = 30 * time.Second
+	// longTimeout covers extracting and copying large worlds.
+	longTimeout = 2 * time.Hour
 )
 
 // Nodes provides connections to node agents.
@@ -37,9 +40,14 @@ type Nodes interface {
 	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
 }
 
-type Handler struct{ nodes Nodes }
+type Handler struct {
+	nodes Nodes
+	ops   *operation.Operations
+}
 
-func NewHandler(nodes Nodes) *Handler { return &Handler{nodes: nodes} }
+func NewHandler(nodes Nodes, ops *operation.Operations) *Handler {
+	return &Handler{nodes: nodes, ops: ops}
+}
 
 func (h *Handler) Register(mux access.Mux) {
 	const base = "/api/nodes/{node}/servers/{id}/files"
@@ -51,6 +59,9 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET "+base+"/archive", read, h.archive)
 	mux.Handle("POST "+base+"/directories", write, h.createDirectory)
 	mux.Handle("POST "+base+"/move", write, h.move)
+	mux.Handle("POST "+base+"/extract", write, h.extract)
+	mux.Handle("POST "+base+"/copy", write, h.copy)
+	mux.Handle("GET "+base+"/search", read, h.search)
 }
 
 type fileView struct {
@@ -318,6 +329,115 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		_, err := c.DeleteFile(ctx, &noryxv1.DeleteFileRequest{ServerId: id, Path: r.URL.Query().Get("path")})
 		return err
 	})
+}
+
+// extract extracts an archive of the server into a folder as an operation, as worlds take a
+// while. The agent checks the archive, which is untrusted, before it writes anything.
+func (h *Handler) extract(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path        string `json:"path"`
+		Destination string `json:"destination"`
+		Overwrite   bool   `json:"overwrite"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	logging.Note(r.Context(), slog.String("path", req.Path), slog.String("destination", req.Destination), slog.Bool("overwrite", req.Overwrite))
+	spec := h.spec(r, "files.extract", req.Path, "extract")
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		var res *noryxv1.ExtractArchiveResponse
+		err := h.agent(ctx, spec.NodeID, func(ctx context.Context, c noryxv1.FileServiceClient) (err error) {
+			res, err = c.ExtractArchive(ctx, &noryxv1.ExtractArchiveRequest{
+				ServerId: spec.ServerID, Path: req.Path, Destination: req.Destination, Overwrite: req.Overwrite,
+			})
+			return err
+		}, "Update the agent of the node to extract archives.")
+		if err != nil {
+			return nil, err
+		}
+		return map[string]int64{"files": res.GetFiles(), "size": res.GetSize()}, nil
+	})
+}
+
+// copy copies a file or folder within the server's data as an operation, as worlds take a while.
+func (h *Handler) copy(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	logging.Note(r.Context(), slog.String("from", req.From), slog.String("to", req.To))
+	spec := h.spec(r, "files.copy", req.From, "copy")
+	spec.Status = http.StatusNoContent
+	h.ops.Run(w, r, spec, func(ctx context.Context) (any, error) {
+		return nil, h.agent(ctx, spec.NodeID, func(ctx context.Context, c noryxv1.FileServiceClient) error {
+			_, err := c.CopyFile(ctx, &noryxv1.CopyFileRequest{ServerId: spec.ServerID, From: req.From, To: req.To})
+			return err
+		}, "Update the agent of the node to copy files.")
+	})
+}
+
+type match struct {
+	Path string `json:"path"`
+	Line int64  `json:"line"`
+	Text string `json:"text"`
+}
+
+// search searches the text files of a folder for the text of the parameter query, as the file
+// manager shows them.
+func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), opTimeout)
+	defer cancel()
+	c, err := h.client(ctx, r)
+	var res *noryxv1.SearchFilesResponse
+	if err == nil {
+		res, err = c.SearchFiles(ctx, &noryxv1.SearchFilesRequest{ServerId: r.PathValue("id"), Path: r.URL.Query().Get("path"), Query: r.URL.Query().Get("query")})
+	}
+	if status.Code(err) == codes.Unimplemented {
+		err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the node to search files.")
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	matches := make([]match, 0, len(res.GetMatches()))
+	for _, m := range res.GetMatches() {
+		matches = append(matches, match{m.GetPath(), m.GetLine(), m.GetText()})
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{
+		"matches": matches, "truncated": res.GetTruncated(), "files": res.GetFiles(), "tooLarge": res.GetTooLarge(),
+	})
+}
+
+// spec describes an operation on the file subject of the server of a request, which those see
+// who may read its files.
+func (h *Handler) spec(r *http.Request, kind, subject, step string) operation.Spec {
+	nodeID, serverID := r.PathValue("node"), r.PathValue("id")
+	return operation.Spec{
+		Kind: kind, Subject: path.Base("/" + subject), NodeID: nodeID, ServerID: serverID, Steps: []string{step}, Status: http.StatusOK,
+		Timeout: longTimeout, Category: logging.Files, Visible: func(g access.Grants) bool { return g.On(access.FilesRead, nodeID, serverID) },
+	}
+}
+
+// agent calls the agent of a node within an operation, which follows the call's progress.
+// Agents that don't know the call fail with older.
+func (h *Handler) agent(ctx context.Context, nodeID string, call func(context.Context, noryxv1.FileServiceClient) error, older string) error {
+	conn, err := h.nodes.Conn(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	ctx, stop := operation.Agent(ctx, conn)
+	defer stop()
+	if err := call(ctx, noryxv1.NewFileServiceClient(conn)); status.Code(err) == codes.Unimplemented {
+		return httpapi.Errorf(http.StatusNotImplemented, "%s", older)
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 // unary reads an optional JSON body into req and runs an operation without result.

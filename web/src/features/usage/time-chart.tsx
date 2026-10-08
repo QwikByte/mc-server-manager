@@ -2,7 +2,7 @@ import i18next from "i18next"
 import { type KeyboardEvent, type PointerEvent, useState } from "react"
 import { niceMax } from "@/lib/chart"
 import { cn } from "@/lib/utils"
-import type { UsagePoint } from "./api"
+import type { HistoryPoint, UsagePoint } from "./api"
 import { locale } from "@/lib/i18n"
 
 /** The colour classes of the series, checked for colour vision deficiencies in both themes. */
@@ -11,11 +11,11 @@ const tones = {
   "series-2": { line: "stroke-series-2", area: "fill-series-2/10", key: "bg-series-2" },
 }
 
-export interface ChartSeries {
+export interface ChartSeries<P extends HistoryPoint = UsagePoint> {
   label: string
   tone: keyof typeof tones
   /** The value of a step; null where it is unknown. */
-  value: (p: UsagePoint) => number | null
+  value: (p: P) => number | null
 }
 
 // The plot is drawn in these units and stretched to its box; lines keep their width.
@@ -27,7 +27,7 @@ const H = 100
  * apart or have no value leave a gap, e.g. while a server was stopped. A crosshair shows
  * the values of a step, also with the arrow keys.
  */
-export function TimeChart({
+export function TimeChart<P extends HistoryPoint>({
   title,
   points,
   step,
@@ -40,12 +40,12 @@ export function TimeChart({
   className,
 }: {
   title: string
-  points: UsagePoint[]
+  points: P[]
   /** Length of a step in seconds. */
   step: number
   span: number
   end: number
-  series: ChartSeries[]
+  series: ChartSeries<P>[]
   format: (value: number) => string
   /** Top of the axis, e.g. a limit; by default the highest value rounded up with nice. */
   max?: number
@@ -56,7 +56,7 @@ export function TimeChart({
   const from = end - span
   const stepMs = step * 1000
   const max = fixedMax || nice(Math.max(0, ...points.flatMap((p) => series.map((s) => s.value(p) ?? 0))) || 1)
-  const center = (p: UsagePoint) => Date.parse(p.time) + stepMs / 2
+  const center = (p: P) => Date.parse(p.time) + stepMs / 2
   const x = (t: number) => ((t - from) / span) * W
   const y = (v: number) => H - (Math.min(v, max) / max) * H
   const shown = active === undefined ? undefined : points[active]
@@ -213,9 +213,9 @@ export function TimeChart({
 }
 
 /** Splits the points into runs of consecutive steps with a value. */
-function runs(points: UsagePoint[], s: ChartSeries, stepMs: number) {
-  const out: UsagePoint[][] = []
-  let prev: UsagePoint | undefined
+function runs<P extends HistoryPoint>(points: P[], s: ChartSeries<P>, stepMs: number) {
+  const out: P[][] = []
+  let prev: P | undefined
   for (const p of points) {
     if (s.value(p) === null) {
       prev = undefined

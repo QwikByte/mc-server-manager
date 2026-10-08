@@ -1,6 +1,9 @@
 package overlay
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
 	"maps"
 	"net/netip"
 	"slices"
@@ -8,6 +11,7 @@ import (
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
 	"github.com/google/nftables/expr"
+	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
 
@@ -15,35 +19,187 @@ import (
 // Docker writes them with iptables or nftables, as its chains only drop.
 var table = &nftables.Table{Family: nftables.TableFamilyINet, Name: "noryx"}
 
-// writeFirewall replaces the table of the network in one transaction:
+// baseChain is a chain of the table that accepts what its rules don't drop.
+type baseChain struct {
+	name     string
+	hook     *nftables.ChainHook
+	priority nftables.ChainPriority
+	rules    []rule
+}
+
+// rule is a rule of the table with its comment, which nft list shows and by which
+// checkFirewall recognizes it.
+type rule struct {
+	comment string
+	exprs   []expr.Any
+}
+
+// chains returns the chains of the table for st:
 //   - Packets for the node's address in the network only come in through the interface, not
 //     from neighbours on other interfaces, which Docker would forward to published ports.
 //   - Nothing in the network reaches the services of the node itself, such as SSH or the agent.
 //   - From the network, a published port is only reached by its client, and nothing else is
 //     forwarded, e.g. directly to a container.
 //   - TCP connections through the interface fit its MTU.
+func chains(st State) []baseChain {
+	addr := st.Address.Addr()
+	forward := []rule{
+		{"TCP from " + Interface + " fits its MTU", clampMSS(expr.MetaKeyIIFNAME)},
+		{"TCP to " + Interface + " fits its MTU", clampMSS(expr.MetaKeyOIFNAME)},
+	}
+	for _, id := range slices.Sorted(maps.Keys(st.Clients)) {
+		c := st.Clients[id]
+		for _, client := range c.addresses() {
+			forward = append(forward, rule{
+				fmt.Sprintf("%s reaches %s", client, netip.AddrPortFrom(addr, c.Port)),
+				join(iifname(expr.CmpOpEq, Interface), ipv4, tcp, ctOriginal(expr.CtKeyDST, addr.AsSlice()),
+					ctOriginal(expr.CtKeyPROTODST, binaryutil.BigEndian.PutUint16(c.Port)), saddr(client), accept),
+			})
+		}
+	}
+	forward = append(forward, rule{"nothing else from " + Interface, join(iifname(expr.CmpOpEq, Interface), ctNew, drop)})
+	return []baseChain{
+		{"prerouting", nftables.ChainHookPrerouting, -150, []rule{{
+			fmt.Sprintf("%s only through %s", addr, Interface),
+			join(ipv4, daddr(addr), iifname(expr.CmpOpNeq, Interface), iifname(expr.CmpOpNeq, "lo"), drop),
+		}}},
+		{"input", nftables.ChainHookInput, -1, []rule{{"nothing from " + Interface, join(iifname(expr.CmpOpEq, Interface), ctNew, drop)}}},
+		{"forward", nftables.ChainHookForward, -1, forward},
+	}
+}
+
+// writeFirewall replaces the table of the network in one transaction.
 func writeFirewall(st State) error {
 	conn, err := nftables.New()
 	if err != nil {
 		return err
 	}
-	addr := st.Address.Addr()
 	conn.AddTable(table) // so that deleting it never fails
 	conn.DelTable(table)
 	conn.AddTable(table)
-	chain(conn, "prerouting", nftables.ChainHookPrerouting, -150, join(ipv4, daddr(addr), iifname(expr.CmpOpNeq, Interface), iifname(expr.CmpOpNeq, "lo"), drop))
-	chain(conn, "input", nftables.ChainHookInput, -1, join(iifname(expr.CmpOpEq, Interface), ctNew, drop))
-	forward := [][]expr.Any{clampMSS(expr.MetaKeyIIFNAME), clampMSS(expr.MetaKeyOIFNAME)}
-	for _, id := range slices.Sorted(maps.Keys(st.Clients)) {
-		c := st.Clients[id]
-		for _, client := range c.addresses() {
-			forward = append(forward, join(iifname(expr.CmpOpEq, Interface), ipv4, tcp, ctOriginal(expr.CtKeyDST, addr.AsSlice()),
-				ctOriginal(expr.CtKeyPROTODST, binaryutil.BigEndian.PutUint16(c.Port)), saddr(client), accept))
+	for _, c := range chains(st) {
+		added := conn.AddChain(&nftables.Chain{
+			Name: c.name, Table: table, Type: nftables.ChainTypeFilter, Hooknum: c.hook,
+			Priority: nftables.ChainPriorityRef(c.priority), Policy: new(nftables.ChainPolicyAccept),
+		})
+		for _, r := range c.rules {
+			// User data of the type 0 (NFTNL_UDATA_RULE_COMMENT) is the comment that nft shows.
+			comment := append([]byte{0, byte(len(r.comment) + 1)}, r.comment+"\x00"...) //nolint:gosec // far shorter than 255 bytes
+			conn.AddRule(&nftables.Rule{Table: table, Chain: added, Exprs: r.exprs, UserData: comment})
 		}
 	}
-	forward = append(forward, join(iifname(expr.CmpOpEq, Interface), ctNew, drop))
-	chain(conn, "forward", nftables.ChainHookForward, -1, forward...)
 	return conn.Flush()
+}
+
+// ErrNoTable tells that the table of the network is missing, e.g. as something flushed the
+// node's rules.
+var ErrNoTable = errors.New("the nftables table inet noryx is missing")
+
+// checkFirewall returns nil if the table of the network has the chains and rules that
+// writeFirewall writes for st, ErrNoTable if there is none, or else what differs. It knows
+// the rules by their comments, which only someone on the node could change; chains that
+// someone adds to the table there can only drop more.
+func checkFirewall(st State) error {
+	conn, err := nftables.New()
+	if err != nil {
+		return err
+	}
+	tables, err := conn.ListTablesOfFamily(table.Family)
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(tables, func(t *nftables.Table) bool { return t.Name == table.Name }) {
+		return ErrNoTable
+	}
+	present, err := conn.ListChainsOfTableFamily(table.Family)
+	if err != nil {
+		return err
+	}
+	for _, want := range chains(st) {
+		i := slices.IndexFunc(present, func(c *nftables.Chain) bool {
+			return c.Table != nil && c.Table.Name == table.Name && c.Name == want.name
+		})
+		if i < 0 {
+			return fmt.Errorf("the chain %s is missing", want.name)
+		}
+		c := present[i]
+		if c.Type != nftables.ChainTypeFilter || c.Hooknum == nil || *c.Hooknum != *want.hook || c.Priority == nil ||
+			*c.Priority != want.priority || c.Policy == nil || *c.Policy != nftables.ChainPolicyAccept {
+			return fmt.Errorf("the chain %s has another type, hook, priority or policy", want.name)
+		}
+		comments, err := ruleComments(want.name)
+		if err != nil {
+			return err
+		}
+		if len(comments) != len(want.rules) {
+			return fmt.Errorf("the chain %s has %d rules instead of %d", want.name, len(comments), len(want.rules))
+		}
+		// Older agents wrote no comments; they rewrite the table when the master configures them.
+		older := !slices.ContainsFunc(comments, func(c string) bool { return c != "" })
+		for j, r := range want.rules {
+			if comments[j] != r.comment && !older {
+				return fmt.Errorf("the chain %s lacks the rule %q", want.name, r.comment)
+			}
+		}
+	}
+	return nil
+}
+
+// ruleComments returns the comments of the rules of a chain of the table, in their order. It
+// reads them itself, as the nftables package fails to read the direction of ct expressions,
+// which the kernel sends 8 bits wide.
+func ruleComments(chain string) ([]string, error) {
+	conn, err := netlink.Dial(unix.NETLINK_NETFILTER, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	attrs, err := netlink.MarshalAttributes([]netlink.Attribute{
+		{Type: unix.NFTA_RULE_TABLE, Data: []byte(table.Name + "\x00")},
+		{Type: unix.NFTA_RULE_CHAIN, Data: []byte(chain + "\x00")},
+	})
+	if err != nil {
+		return nil, err
+	}
+	msgs, err := conn.Execute(netlink.Message{
+		Header: netlink.Header{Type: netlink.HeaderType(unix.NFNL_SUBSYS_NFTABLES<<8 | unix.NFT_MSG_GETRULE), Flags: netlink.Request | netlink.Dump},
+		Data:   append([]byte{byte(table.Family), unix.NFNETLINK_V0, 0, 0}, attrs...), // struct nfgenmsg
+	})
+	if err != nil {
+		return nil, err
+	}
+	comments := make([]string, len(msgs))
+	for i, m := range msgs {
+		if len(m.Data) < 4 {
+			return nil, errors.New("a rule without a header")
+		}
+		ad, err := netlink.NewAttributeDecoder(m.Data[4:])
+		if err != nil {
+			return nil, err
+		}
+		for ad.Next() {
+			if ad.Type() == unix.NFTA_RULE_USERDATA {
+				comments[i] = comment(ad.Bytes())
+			}
+		}
+		if err := ad.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return comments, nil
+}
+
+// comment returns the comment in the user data of a rule: type, length and value, such as
+// "text\x00", of each entry.
+func comment(data []byte) string {
+	for len(data) >= 2 && int(data[1]) <= len(data)-2 {
+		value := data[2 : 2+int(data[1])]
+		if data[0] == 0 {
+			return string(bytes.TrimRight(value, "\x00"))
+		}
+		data = data[2+len(value):]
+	}
+	return ""
 }
 
 // removeFirewall removes the table of the network, if there is one.
@@ -55,17 +211,6 @@ func removeFirewall() error {
 	conn.AddTable(table)
 	conn.DelTable(table)
 	return conn.Flush()
-}
-
-// chain adds a base chain that accepts what its rules don't drop.
-func chain(conn *nftables.Conn, name string, hook *nftables.ChainHook, priority nftables.ChainPriority, rules ...[]expr.Any) {
-	c := conn.AddChain(&nftables.Chain{
-		Name: name, Table: table, Type: nftables.ChainTypeFilter, Hooknum: hook,
-		Priority: nftables.ChainPriorityRef(priority), Policy: new(nftables.ChainPolicyAccept),
-	})
-	for _, r := range rules {
-		conn.AddRule(&nftables.Rule{Table: table, Chain: c, Exprs: r})
-	}
 }
 
 func join(parts ...[]expr.Any) []expr.Any { return slices.Concat(parts...) }

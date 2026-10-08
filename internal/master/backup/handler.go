@@ -5,6 +5,7 @@ package backup
 import (
 	"cmp"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -28,6 +29,8 @@ const (
 	queryTimeout = 30 * time.Second
 	// backupTimeout covers backing up and restoring servers with large worlds.
 	backupTimeout = 2 * time.Hour
+	// maxUpload limits uploaded backups like the files of the file manager; the agent too.
+	maxUpload = 16 << 30
 )
 
 // Nodes provides connections to node agents.
@@ -100,12 +103,15 @@ type view struct {
 	JobID     string    `json:"jobId,omitempty"`
 	// Kept backups are never deleted by their job.
 	Kept bool `json:"kept"`
+	// Untrusted backups came from elsewhere, e.g. an upload; restoring them trusts nothing that
+	// their archive tells.
+	Untrusted bool `json:"untrusted"`
 }
 
 func toView(b *noryxv1.Backup) view {
 	return view{
 		b.GetId(), b.GetLabel(), time.Unix(b.GetCreatedUnix(), 0), b.GetSize(), b.GetLocation(), append([]string{}, b.GetPaths()...),
-		append([]string{}, b.GetExclude()...), b.GetJobId(), b.GetKept(),
+		append([]string{}, b.GetExclude()...), b.GetJobId(), b.GetKept(), b.GetUntrusted(),
 	}
 }
 
@@ -120,10 +126,11 @@ type Handler struct {
 	ops      *operation.Operations
 	// moving refuses changes to a server while it moves to another node.
 	moving func(serverID string) error
+	copies *Copies
 }
 
-func NewHandler(nodes Nodes, networks Networks, ops *operation.Operations, moving func(serverID string) error) *Handler {
-	return &Handler{nodes: nodes, networks: networks, ops: ops, moving: moving}
+func NewHandler(nodes Nodes, networks Networks, ops *operation.Operations, moving func(serverID string) error, copies *Copies) *Handler {
+	return &Handler{nodes: nodes, networks: networks, ops: ops, moving: moving, copies: copies}
 }
 
 func (h *Handler) Register(mux access.Mux) {
@@ -138,6 +145,11 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST "+base+"/{backup}/restore-into", access.OnServer(access.BackupsView), h.restoreInto)
 	mux.Handle("DELETE "+base+"/{backup}", access.OnServer(access.BackupsDelete), h.delete)
 	mux.Handle("GET "+base+"/{backup}/download", access.OnServer(access.BackupsView), h.download)
+	h.registerCopies(mux)
+	// An uploaded backup is there to be restored, and can bring any file, e.g. a plugin that
+	// reads the secrets of the server, like the file manager.
+	mux.Handle("POST "+base+"/upload", access.All(access.OnServer(access.BackupsCreate), access.OnServer(access.BackupsRestore),
+		access.OnServer(access.FilesWrite)), h.upload)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -360,6 +372,9 @@ func (h *Handler) restoreInto(w http.ResponseWriter, r *http.Request) {
 				slog.Warn("Can't delete the copy of a backup", logging.Backups, logging.KeyNode, req.Node, logging.KeyServer, req.Server, "backup", copied.GetId(), "err", err)
 			}
 		}()
+		if b.GetUntrusted() && !copied.GetUntrusted() { // an older agent would trust it
+			return nil, httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the node to restore backups from elsewhere into its servers.")
+		}
 		return h.restoreOn(ctx, req.Node, req.Server, copied.GetId(), req.restoreRequest)
 	})
 }
@@ -432,7 +447,7 @@ func (h *Handler) copy(ctx context.Context, nodeID string, source *noryxv1.Serve
 	}
 	header := &noryxv1.ImportBackupHeader{ServerId: toServer, Backup: &noryxv1.Backup{
 		Id: noryxv1.NewBackupID(time.Unix(b.GetCreatedUnix(), 0)), Label: cmp.Or(b.GetLabel(), source.GetName()), CreatedUnix: b.GetCreatedUnix(),
-		Size: b.GetSize(), Paths: b.GetPaths(), Exclude: b.GetExclude(),
+		Size: hidden(b.GetSize()), Paths: b.GetPaths(), Exclude: b.GetExclude(), Untrusted: b.GetUntrusted(),
 	}}
 	var copied int64
 	res, err := node.Relay(ctx,
@@ -452,6 +467,11 @@ func (h *Handler) copy(ctx context.Context, nodeID string, source *noryxv1.Serve
 		})
 	return res.GetBackup(), err
 }
+
+// hidden is the size that the download of a backup of size bytes with the secrets hidden has at
+// most, which the agent that takes it holds it to: a placeholder can be longer than a secret,
+// and the files with secrets are compressed again.
+func hidden(size int64) int64 { return size + size/10 + 1<<20 }
 
 // restoreOn restores a backup of a server within an operation, and configures the server's
 // network again, as the backup may have the proxy's servers or Geyser's port of another
@@ -533,6 +553,38 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	}
 	httpapi.Relay(w, first, stream)
+}
+
+// upload adds a ZIP archive, the body of the request, as a backup of the server with the label
+// and in the storage location of the query. It streams through the master like an upload of
+// the file manager; the agent checks the archive and keeps it apart from its own backups.
+func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithCancel(r.Context()) // cancelling discards the partial archive
+	defer cancel()
+	q := r.URL.Query()
+	logging.Note(ctx, slog.String("label", q.Get("label")), slog.String("location", q.Get("location")))
+	c, err := h.client(ctx, r.PathValue("node"))
+	var res *noryxv1.UploadBackupResponse
+	if err == nil {
+		header := &noryxv1.UploadBackupHeader{ServerId: r.PathValue("id"), Label: q.Get("label"), Location: q.Get("location"), Size: max(r.ContentLength, 0)}
+		res, err = node.Upload(ctx, c.UploadBackup, &noryxv1.UploadBackupRequest{Content: &noryxv1.UploadBackupRequest_Header{Header: header}},
+			func(data []byte) *noryxv1.UploadBackupRequest {
+				return &noryxv1.UploadBackupRequest{Content: &noryxv1.UploadBackupRequest_Data{Data: data}}
+			}, http.MaxBytesReader(w, r.Body, maxUpload))
+	}
+	var tooLarge *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooLarge):
+		err = httpapi.Errorf(http.StatusRequestEntityTooLarge, "Backups can have up to %d GB.", maxUpload>>30)
+	case status.Code(err) == codes.Unimplemented:
+		err = httpapi.Errorf(http.StatusNotImplemented, "Update the agent of the node to upload backups.")
+	}
+	if err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	logging.Note(ctx, slog.String("backup", res.GetBackup().GetId()))
+	httpapi.WriteJSON(w, http.StatusCreated, toView(res.GetBackup()))
 }
 
 func (h *Handler) client(ctx context.Context, nodeID string) (noryxv1.BackupServiceClient, error) {

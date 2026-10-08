@@ -73,7 +73,7 @@ func restore(t *testing.T, dir *datadir.Dir, typ noryxv1.ServerType, b Archive, 
 	staged, err := stage(t.Context(), dir, &zr.Reader, paths)
 	defer dir.RemoveAll(staged) //nolint:errcheck // a temporary folder
 	check(t, err)
-	check(t, keep(dir, typ, staged))
+	check(t, keep(dir, typ, staged, false))
 	check(t, swap(dir, staged, paths, kept(dir, b)))
 }
 

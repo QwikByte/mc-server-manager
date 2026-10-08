@@ -2,7 +2,8 @@
 // agent of a node runs, with databases for the plugins of the network's servers. The master
 // keeps the password of each database's user, which only those who manage datastores see, to
 // enter it into the configuration of the plugins; the superuser's password never leaves the
-// node. They can also look into the tables of a database, which the agent only reads.
+// node. They can also look into the tables of a database, which the agent only reads, and upload
+// dumps made elsewhere, which the agent checks and loads like its own.
 package datastore
 
 import (
