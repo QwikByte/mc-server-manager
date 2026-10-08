@@ -344,7 +344,10 @@ read them there, like the backups of the servers on their own node. Agents mark 
 copy or one of another node, as untrusted, and restore it like an uploaded backup (see [Backups](#backups)): checked
 again with the limits for backups, extracted confined like an archive of the file manager, and with every secret
 replaced by the server's own. So a compromised node or storage can change the data of the servers restored from its
-copies, like a node can change the backups of its own servers, but nothing beyond them.
+copies, like a node can change the backups of its own servers, but nothing beyond them. A copy belongs to its server on
+the node it was copied from, and follows the server when it moves: nodes tell the IDs of their servers themselves, so a
+compromised node that claims the ID of another node's server only gets copies of its own, and a job neither replaces
+nor deletes that server's copies for it.
 
 Copies take the backups of all servers away from their nodes, so adding, changing and deleting storages, and saving a
 job that copies, need the permissions to manage backup jobs and to see and download the backups of all servers; each run

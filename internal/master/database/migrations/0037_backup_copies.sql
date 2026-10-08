@@ -17,8 +17,9 @@ CREATE TABLE backup_storages (
 -- Copies of backups that jobs made away from the servers' nodes: in a storage or on another
 -- node (copy_node, in a storage location of it). They describe the backup and the server it
 -- is of as they were when it was copied, so that the server can be restored once it or its
--- node is gone; deleting the job or the server keeps them. Copies of a deleted storage or on
--- a removed node go with it.
+-- node is gone; deleting the job or the server keeps them. They belong to the server on its
+-- node (node_id), which they follow when it moves. Copies of a deleted storage or on a removed
+-- node go with it.
 CREATE TABLE backup_copies (
     id          INTEGER PRIMARY KEY,
     task_id     TEXT    REFERENCES tasks (id) ON DELETE SET NULL,

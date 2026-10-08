@@ -15,6 +15,7 @@ import (
 	"time"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
+	"github.com/QwikByte/noryx/internal/agent/runtime"
 	masterapp "github.com/QwikByte/noryx/internal/master/app"
 	"github.com/QwikByte/noryx/internal/master/backup"
 	"github.com/QwikByte/noryx/internal/master/network"
@@ -217,4 +218,54 @@ func TestBackupCopies(t *testing.T) {
 	if len(copies) != 0 {
 		t.Fatalf("copies of a deleted storage = %+v", copies)
 	}
+}
+
+// A node tells the IDs of its servers itself. A compromised node that claims the ID of a server
+// of another node gets copies of its own, which neither replace nor delete those of the server,
+// even with backups from the future.
+func TestCopiesOfClaimedServers(t *testing.T) {
+	m := startMaster(t)
+	a1, a2, a3 := m.startAgent(t, "node-1"), m.startAgent(t, "node-2"), m.startAgent(t, "node-3")
+	lobby := m.createServer(t, a1, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	serverData{t, filepath.Join(a1.runtime.dir, lobby.ServerID)}.write("world/level.dat", "level")
+	svc := m.services(t)
+	srv := httptest.NewTLSServer(masterapp.Handler(svc))
+	t.Cleanup(srv.Close)
+	admin, err := svc.Users.CreateUser(t.Context(), "admin", "the-admins-password")
+	check(t, err)
+	check(t, svc.Access.MakeAdmin(t.Context(), admin.ID))
+	api := browser(t, srv)
+	api.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "the-admins-password"}, http.StatusOK, nil)
+	var job schedule.Task
+	api.do("POST", "/api/backup-jobs", map[string]any{
+		"name": "Offsite", "enabled": true, "schedule": map[string]any{"times": []string{"03:00"}, "timeZone": "UTC"},
+		"targets":  []map[string]string{{"nodeId": a1.node.ID}, {"nodeId": a3.node.ID}},
+		"settings": map[string]any{"selection": map[string]any{"everything": true}, "keep": 2, "copy": map[string]string{"node": a2.node.ID}},
+	}, http.StatusCreated, &job)
+	runSteps(t, api, "/api/backup-jobs/"+job.ID)
+
+	a3.runtime.mu.Lock()
+	a3.runtime.servers = append(a3.runtime.servers, runtime.Server{Spec: runtime.Spec{ID: lobby.ServerID, Name: "Lobby", Type: noryxv1.ServerType_SERVER_TYPE_PAPER}})
+	a3.runtime.mu.Unlock()
+	serverData{t, filepath.Join(a3.runtime.dir, lobby.ServerID)}.write("world/level.dat", "planted")
+	future := time.Now().Add(48 * time.Hour)
+	id, planted := noryxv1.NewBackupID(future), serverData{t, filepath.Join(a3.dir, "backups", lobby.ServerID)}
+	planted.write(id+".zip", string(zipOf(t, map[string]string{"world/level.dat": "planted"})))
+	planted.write(id+".json", `{"created":"`+future.Format(time.RFC3339)+`","paths":["."],"jobId":"`+job.ID+`"}`)
+	nextSecond()
+	runSteps(t, api, "/api/backup-jobs/"+job.ID)
+
+	copiesOf := func(ref network.Ref) []backup.Copy {
+		var copies []backup.Copy
+		api.do("GET", "/api/nodes/"+ref.NodeID+"/servers/"+ref.ServerID+"/copies", nil, http.StatusOK, &copies)
+		return copies
+	}
+	ours, theirs := copiesOf(lobby), copiesOf(network.Ref{NodeID: a3.node.ID, ServerID: lobby.ServerID})
+	if len(ours) != 2 || len(theirs) != 2 || ours[0].NodeID != a1.node.ID || theirs[0].NodeID != a3.node.ID || theirs[0].BackupID != id {
+		t.Fatalf("copies of the lobby = %+v, of node-3 = %+v", ours, theirs)
+	}
+	// The copies of the server of another node aren't the lobby's.
+	path := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID + "/copies/" + strconv.FormatInt(theirs[0].ID, 10)
+	api.do("POST", path+"/restore", nil, http.StatusNotFound, nil)
+	api.do("DELETE", path, nil, http.StatusNotFound, nil)
 }
