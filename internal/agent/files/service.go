@@ -421,6 +421,14 @@ func (s *Service) CopyFile(ctx context.Context, req *noryxv1.CopyFileRequest) (*
 	if exists(to) {
 		return nil, toStatus(fs.ErrExist)
 	}
+	top, err := dir.Open(".")
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	defer top.Close()
+	if err := storage.Fits(top, datadir.Size(dir.FS(), filepath.ToSlash(from))); err != nil {
+		return nil, toStatus(err)
+	}
 	if err := dir.CopyTree(ctx, from, to); err != nil {
 		return nil, toStatus(err)
 	}

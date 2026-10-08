@@ -125,6 +125,16 @@ func TestCopyFile(t *testing.T) {
 	if err := copyFile("world/level.dat", "level.dat"); err != nil {
 		t.Fatal(err)
 	}
+	// A copy must leave 1 GB free, also of a file with holes, which takes no space yet.
+	if err := os.Truncate(filepath.Join(data, "world/level.dat"), 8<<40); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile("world", "world_large"); status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("copying more than fits: %v", err)
+	}
+	if err := os.Truncate(filepath.Join(data, "world/level.dat"), 5); err != nil {
+		t.Fatal(err)
+	}
 	for c, code := range map[[2]string]codes.Code{
 		{"world", "world_copy"}:                             codes.AlreadyExists,
 		{"world", "world/inside"}:                           codes.InvalidArgument,

@@ -60,8 +60,9 @@ to 16 GB each and 10,000 files at once, streamed through the master, as long as 
 backups), creates files and folders, edits configuration files in the browser and downloads files or whole folders as
 ZIP archives. A folder can be filtered by name and sorted by name, the largest or the newest first; the browser keeps
 the order for every folder. **Move to…** in the menu of a file or folder moves it into another folder, and **Copy to…**
-copies it there, or into the same folder under a new name, e.g. `world copy`. Selected files and folders are downloaded
-as one ZIP archive, moved, copied or deleted together; agents of older versions can't download several of them at once.
+copies it there, or into the same folder under a new name, e.g. `world copy`, as long as 1 GB stays free on the node.
+Selected files and folders are downloaded as one ZIP archive, moved, copied or deleted together; agents of older
+versions can't download several of them at once.
 
 **Extract…** in the menu of a ZIP or `.tar.gz` archive extracts it into its folder or into a new folder in it, e.g. a
 world, a modpack's overrides or the configuration of plugins that were uploaded as one archive. Existing files are only
