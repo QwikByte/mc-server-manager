@@ -238,8 +238,9 @@ setup_podman() {
     fi
   fi
   version=$(podman version --format '{{.Client.Version}}' 2>/dev/null) || version=""
-  [[ "$version" =~ ^([0-9]+)\.([0-9]+) ]] && ((BASH_REMATCH[1] > 4 || (BASH_REMATCH[1] == 4 && BASH_REMATCH[2] >= 9))) ||
+  if ! [[ "$version" =~ ^([0-9]+)\.([0-9]+) ]] || ((BASH_REMATCH[1] < 4 || (BASH_REMATCH[1] == 4 && BASH_REMATCH[2] < 9))); then
     die "Noryx needs Podman 4.9 or newer, which this system doesn't offer (${version:-none}). Use Docker, or a newer system, e.g. Debian 13, Ubuntu 24.04 or RHEL 9."
+  fi
   systemctl enable --now --quiet podman.socket || warn "Podman's socket could not be started, see: journalctl -u podman.socket"
   systemctl enable --quiet podman-restart.service
 }
