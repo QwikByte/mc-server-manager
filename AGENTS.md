@@ -83,6 +83,7 @@ internal/agent/
   storage/             storage locations allowed for server data
   overlay/             the node's part of the private network: WireGuard interface, keys, checks, nftables table
   datadir/             confined access to a server's data, owned by the server's user
+  archive/             extracts untrusted ZIP and .tar.gz archives: limits, links, protected paths
   secrets/             keeps the secrets in the data of servers from the panel: hidden files and <hidden> values
   rcon/                console connections to game servers (RCON), one per server
   network/             configuration of proxies and game servers for networks, the settings of proxies, Geyser's

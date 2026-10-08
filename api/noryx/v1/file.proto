@@ -27,6 +27,21 @@ service FileService {
   // HashFiles tells the SHA-512 hashes of files, e.g. so that the master learns which files
   // of a modpack changed since it wrote them. Agents of older versions answer UNIMPLEMENTED.
   rpc HashFiles(HashFilesRequest) returns (HashFilesResponse);
+  // ExtractArchive extracts a ZIP or .tar.gz archive of the server into a folder, as the
+  // server's user. The archive is untrusted: links, special files and paths that leave the
+  // folder, the files that hold secrets of the server or that Noryx writes itself, too many
+  // entries, too much data and a too high compression ratio refuse it before anything is
+  // written. Agents of older versions answer UNIMPLEMENTED.
+  rpc ExtractArchive(ExtractArchiveRequest) returns (ExtractArchiveResponse);
+  // CopyFile copies a file or folder within the server's data, like MoveFile moves it: files
+  // with secrets of the server can't be copied, and the copy never replaces anything. Agents
+  // of older versions answer UNIMPLEMENTED.
+  rpc CopyFile(CopyFileRequest) returns (CopyFileResponse);
+  // SearchFiles searches the text files of a folder and the folders in it for a text, as the
+  // panel shows them: files that only hold secrets are left out, and others show them as
+  // "<hidden>". It stops after a while, at large files and after many matches. Agents of
+  // older versions answer UNIMPLEMENTED.
+  rpc SearchFiles(SearchFilesRequest) returns (SearchFilesResponse);
 }
 
 message FileInfo {
@@ -155,4 +170,57 @@ message HashFilesResponse {
   // something else, a file with secrets or one larger than MaxHashedSize maps to "".
   // Missing files are left out.
   map<string, string> sha512 = 1;
+}
+
+message ExtractArchiveRequest {
+  string server_id = 1;
+  // The archive, a file of the server.
+  string path = 2;
+  // The folder to extract into, which is created if it is missing; empty for the server's
+  // folder.
+  string destination = 3;
+  // Replace existing files; otherwise an archive with a file that exists already is refused.
+  bool overwrite = 4;
+}
+
+message ExtractArchiveResponse {
+  // The files extracted, and their size.
+  int64 files = 1;
+  int64 size = 2;
+}
+
+message CopyFileRequest {
+  string server_id = 1;
+  string from = 2;
+  // Where the copy goes, which must not exist.
+  string to = 3;
+}
+
+message CopyFileResponse {}
+
+message SearchFilesRequest {
+  string server_id = 1;
+  // The folder to search, with the folders in it; empty for the server's folder.
+  string path = 2;
+  // The text to find, regardless of case.
+  string query = 3;
+}
+
+// SearchMatch is a line of a file that holds the text searched for.
+message SearchMatch {
+  // Relative to the server's folder.
+  string path = 1;
+  // The number of the line, from 1.
+  int64 line = 2;
+  // The line, shortened if it is long.
+  string text = 3;
+}
+
+message SearchFilesResponse {
+  repeated SearchMatch matches = 1;
+  // Set if the search stopped before it searched all files: after many matches or a while.
+  bool truncated = 2;
+  // The files searched, and those left out as they are too large.
+  int64 files = 3;
+  int64 too_large = 4;
 }

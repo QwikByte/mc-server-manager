@@ -1,8 +1,11 @@
 package secrets
 
 import (
+	"errors"
 	"slices"
 	"testing"
+
+	"github.com/QwikByte/noryx/internal/agent/datadir"
 )
 
 func TestRedactAndRestore(t *testing.T) {
@@ -66,4 +69,41 @@ func TestFiles(t *testing.T) {
 	if omit, edit := marked.Censor(".")("server.properties"); omit || edit == nil {
 		t.Error("an archive doesn't redact server.properties")
 	}
+}
+
+// Fill only fills in placeholders, Take replaces all secrets of an archive from elsewhere.
+func TestFillAndTake(t *testing.T) {
+	for _, tc := range []struct {
+		take             bool
+		restored, filled string
+	}{
+		{false, "motd=a\nrcon.password=<hidden>\n", "motd=a\nrcon.password=ours\n"},
+		{false, "motd=a\nrcon.password=theirs\n", "motd=a\nrcon.password=theirs\n"},
+		{true, "motd=a\nrcon.password=theirs\nmanagement-server-secret=x\n", "motd=a\nrcon.password=ours\nmanagement-server-secret=\n"},
+	} {
+		current, restored := dir(t), dir(t)
+		err := errors.Join(current.WriteFile("server.properties", []byte("rcon.password=ours\n")), restored.WriteFile("server.properties", []byte(tc.restored)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		fill := Fill
+		if tc.take {
+			fill = Take
+		}
+		if err := fill(current, restored); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := restored.ReadFile("server.properties"); string(got) != tc.filled {
+			t.Errorf("take %v: %q, want %q", tc.take, got, tc.filled)
+		}
+	}
+}
+
+func dir(t *testing.T) *datadir.Dir {
+	d, err := datadir.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	return d
 }

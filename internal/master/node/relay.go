@@ -49,3 +49,37 @@ func Relay[D any, PD interface {
 	}
 	return nil, err
 }
+
+// chunkSize is the size of the chunks Upload sends.
+const chunkSize = 256 << 10
+
+// Upload sends content to an agent in chunks, after a header, and returns the agent's answer,
+// e.g. an archive that a browser uploads. If reading content fails, the caller cancels ctx,
+// so that the agent discards what it received.
+func Upload[Req, Res any](
+	ctx context.Context,
+	upload func(context.Context, ...grpc.CallOption) (grpc.ClientStreamingClient[Req, Res], error),
+	header *Req,
+	data func([]byte) *Req,
+	content io.Reader,
+) (*Res, error) {
+	up, err := upload(ctx)
+	if err == nil {
+		err = up.Send(header)
+	}
+	buf := make([]byte, chunkSize)
+	for err == nil {
+		var n int
+		n, err = io.ReadFull(content, buf)
+		if n > 0 {
+			if sendErr := up.Send(data(buf[:n])); sendErr != nil {
+				err = sendErr
+			}
+		}
+	}
+	// The content ended, or the agent ended the upload (io.EOF), whose answer tells why.
+	if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, err
+	}
+	return up.CloseAndRecv()
+}

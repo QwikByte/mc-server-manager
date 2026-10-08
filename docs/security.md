@@ -145,10 +145,26 @@ zone as `TZ`, once the agent found it among the IANA time zones it knows.
 The agent confines every path to the server's data directory, including through symbolic links, and new files belong to
 the server's user. Downloads are sent as attachments with a sandboxing CSP, so an uploaded HTML file can't run scripts
 in the panel. Secrets of the server stay on the node: files that only hold them can't be listed, read, written or moved,
-others show them as `<hidden>`, no file or folder with secrets can be moved where they would show, and archives leave
-them out. Only moving a server to another node copies them. Moving or deleting several files and folders at once
-checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the browser
-only up to 16 MB, so that a small archive can't exhaust the browser's memory.
+others show them as `<hidden>`, no file or folder with secrets can be moved or copied where they would show, and
+archives leave them out. Only moving a server to another node copies them. Copies never follow links, and one that a
+file set filled with secrets while it was copied is removed again. Moving, copying or deleting several files and folders
+at once checks each of them like a single one. The viewer of logs shows them as text and unpacks archived logs in the
+browser only up to 16 MB, so that a small archive can't exhaust the browser's memory. A search shows files as the
+editor does: without the files that only hold secrets and with secrets as `<hidden>`, also those a file set marks while
+it searches, and it doesn't follow links.
+
+Archives that are extracted, uploaded as backups or imported as servers are untrusted, unlike the backups the agent made
+itself. The agent reads the list of such an archive before it writes anything and refuses it for links, hard links,
+devices and other special files, absolute paths, `..` and control characters in names, encrypted entries, a path twice
+or both as a file and a folder, more than 100,000 entries, more than 64 GB of files, and files that would be more than
+100 times the size of the archive (zip bombs; up to 64 MB are exempt). It reads at most 64 MB of the directory of a ZIP
+archive, which it keeps in memory, and decompresses a `.tar.gz` archive at most as far as these limits allow, twice: to
+check it, then to extract it, when each entry must match the list. The files must fit with 1 GB to spare. Every entry
+is written below its folder in the server's data (`os.Root`), as the server's user, and neither through a link nor in
+place of something that isn't a file, so a link of the server can't lead it elsewhere. The file manager extracts
+nothing into a hidden path, the manifest of file sets, the temporary files of the agent or the files Noryx writes
+itself, such as `server.properties`, `ops.json` and `forwarding.secret`, and refuses the whole archive if it would.
+Extracting and copying need the permission to change files, searching the one to read them.
 
 ## Plugins and downloads
 
@@ -292,6 +308,15 @@ back up the server, and letting its job delete it again the one to delete backup
 paths, into another server or with a backup first on nodes whose agent would ignore that, e.g. restore all of a backup
 instead.
 
+An uploaded backup is untrusted. The agent receives it outside the server's data, keeps it only once it checked it like
+an archive of the file manager (see [File manager](#file-manager)), and marks it as untrusted in its details, which only
+the agent writes. Restoring an untrusted backup checks it again, with limits for backups (up to 1,000,000 entries and
+1 TB), and extracts it confined like an archive of the file manager, without the files that only hold secrets, the
+manifest of file sets and the files of the agent; it replaces every secret in the other files with the server's own,
+not only placeholders, and keeps the server's network settings like any restore. The mark moves with the backup to
+another node, and copies for restoring into another server keep it; the master refuses both with agents that would
+drop it. Uploading needs the permissions to back up and to restore the server.
+
 ## Copies of backups
 
 Copies of backups leave the server's node, so the agent of the node makes them as downloads, with the secrets of the
@@ -316,11 +341,10 @@ compromised node.
 Another node keeps copies apart from the backups of its own servers, out of reach of containers and the file manager,
 and never restores them itself: the master relays them, as agents never connect to each other. Its administrator can
 read them there, like the backups of the servers on their own node. Agents mark every backup that came from elsewhere, a
-copy or one of another node, as untrusted. Before an agent restores one, it checks that what the archive says it unpacks
-to fits on the disk with the space kept free for the servers, as unpacking stops at the size each file claims, and it
-extracts the archive confined to the server's folder and without links, like every backup. So a compromised node or
-storage can change the data of the servers restored from its copies, like a node can change the backups of its own
-servers, but nothing beyond them.
+copy or one of another node, as untrusted, and restore it like an uploaded backup (see [Backups](#backups)): checked
+again with the limits for backups, extracted confined like an archive of the file manager, and with every secret
+replaced by the server's own. So a compromised node or storage can change the data of the servers restored from its
+copies, like a node can change the backups of its own servers, but nothing beyond them.
 
 Copies take the backups of all servers away from their nodes, so adding, changing and deleting storages, and saving a
 job that copies, need the permissions to manage backup jobs and to see and download the backups of all servers; each run
@@ -447,6 +471,12 @@ Agents never connect to each other: the master relays the server's archive and b
 authenticated connections. The new node checks the settings like those of a new server and extracts the archive confined
 to the server's data directory, without symbolic links. Moving needs the permissions to delete the server and read its
 files, and to create servers on the new node.
+
+A server created from an archive of a server from elsewhere gets the archive checked like one of the file manager,
+before anything of it is used: links, paths outside the data and too much data delete the new server again. It leaves
+out the files that only hold secrets, the manifest of file sets and the files of the agent, empties the secrets in the
+other files, and removes the forwarding settings, so that the server trusts no proxy and runs in online mode, until a
+network configures it. It needs the permission to create servers on the node.
 
 ## Console
 

@@ -7,6 +7,8 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/QwikByte/noryx/internal/agent/progress"
@@ -51,6 +53,49 @@ func Copy(ctx context.Context, src, dst string) error {
 			return err
 		}
 		return keepMode(to, name, info)
+	})
+}
+
+// CopyTree copies the file or folder from to to, which must not exist, within the directory,
+// e.g. for the file manager. The copies are new files of the directory's owner. Symbolic
+// links, other special files and temporary files of the agent are left out. If copying
+// fails, the copy goes away.
+func (d *Dir) CopyTree(ctx context.Context, from, to string) (err error) {
+	if progress.Active(ctx) {
+		progress.Step(ctx, "copy", Size(d.FS(), filepath.ToSlash(from)))
+	}
+	created := false // a folder at to, which goes away if copying fails
+	defer func() {
+		if err != nil && created {
+			err = errors.Join(err, d.RemoveAll(to))
+		}
+	}()
+	return fs.WalkDir(d.FS(), filepath.ToSlash(from), func(name string, e fs.DirEntry, err error) error {
+		if err != nil || ctx.Err() != nil {
+			return cmp.Or(err, ctx.Err())
+		}
+		target := filepath.Join(to, strings.TrimPrefix(filepath.FromSlash(name), from))
+		switch {
+		case IsTemp(e.Name()) && e.IsDir():
+			return fs.SkipDir
+		case e.IsDir(): // the first is to, which mustn't exist
+			if err := d.Mkdir(target, dirPerm); err != nil {
+				return err
+			}
+			created = true
+			return d.own(target)
+		case IsTemp(e.Name()) || !e.Type().IsRegular():
+			return nil
+		}
+		return d.Replace(target, false, func(w io.Writer) error {
+			in, err := d.Open(filepath.FromSlash(name)) // the server may have put a named pipe there meanwhile
+			if err != nil {
+				return err
+			}
+			defer in.Close()
+			_, err = io.Copy(w, progress.Reader(ctx, in))
+			return err
+		})
 	})
 }
 

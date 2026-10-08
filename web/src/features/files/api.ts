@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
-import { ApiError, api, responseError } from "@/lib/api"
+import { type Operation, operate } from "@/features/operations/api"
+import { ApiError, api, responseError, send } from "@/lib/api"
 
 export interface FileEntry {
   name: string
@@ -131,29 +132,53 @@ export async function saveText(s: ServerFiles, path: string, text: string, versi
   return res.headers.get("ETag") ?? undefined
 }
 
-/**
- * Uploads a file with progress reports; fetch can't report upload progress. Without
- * overwrite, the master answers 409 if the file exists.
- */
+/** Uploads a file with progress reports. Without overwrite, the master answers 409 if the file exists. */
 export function upload(
   s: ServerFiles,
   path: string,
   body: Blob | string,
   { overwrite = false, onProgress, signal }: { overwrite?: boolean; onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
 ): Promise<FileEntry> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open("PUT", `${contentUrl(s, path)}${overwrite ? "&overwrite=true" : ""}`)
-    xhr.setRequestHeader("Content-Type", "application/octet-stream")
-    xhr.responseType = "json"
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
-    xhr.onload = () =>
-      xhr.status === 201
-        ? resolve(xhr.response as FileEntry)
-        : reject(new ApiError(xhr.status, xhr.response?.error ?? t("The upload failed with status {{status}}.", { status: xhr.status })))
-    xhr.onerror = () => reject(new Error(t("The connection to the panel was lost.")))
-    xhr.onabort = () => reject(new DOMException(t("The upload was cancelled."), "AbortError"))
-    signal?.addEventListener("abort", () => xhr.abort())
-    xhr.send(body)
-  })
+  return send<FileEntry>("PUT", `${base(s)}/content${query(path)}${overwrite ? "&overwrite=true" : ""}`, body, { onProgress, signal })
 }
+
+/** Whether a file is an archive that the agent can extract. */
+export const isArchive = (name: string) => /\.(zip|tar\.gz|tgz)$/i.test(name)
+
+/** What extracting an archive extracted. */
+export interface Extracted {
+  files: number
+  size: number
+}
+
+/** Extracts an archive of the server into a folder, which is created if it is missing. */
+export const extractArchive = (s: ServerFiles, path: string, destination: string, overwrite: boolean, onStart?: (op: Operation) => void) =>
+  operate<Extracted>(`${base(s)}/extract`, { body: { path, destination, overwrite } }, onStart)
+
+/** Copies a file or folder within the server's data; the copy must not exist. */
+export const copyFile = (s: ServerFiles, from: string, to: string) => operate<void>(`${base(s)}/copy`, { body: { from, to } })
+
+/** A line of a file that holds the text searched for. */
+export interface Match {
+  path: string
+  line: number
+  text: string
+}
+
+export interface SearchResult {
+  matches: Match[]
+  /** The search stopped early, after many matches or a while. */
+  truncated: boolean
+  /** The files searched, and those left out as they are too large. */
+  files: number
+  tooLarge: number
+}
+
+/** Searches the text files of a folder and the folders in it, as the file manager shows them. */
+export const searchQuery = (s: ServerFiles, path: string, text: string) =>
+  queryOptions({
+    queryKey: ["file-search", s.nodeId, s.serverId, path, text],
+    queryFn: () => api<SearchResult>(`${base(s)}/search${query(path)}&query=${encodeURIComponent(text)}`),
+    enabled: text.trim() !== "",
+    staleTime: 0,
+  })

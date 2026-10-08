@@ -115,7 +115,13 @@ func Restore(name string, data, current []byte) []byte {
 
 // Fill puts the secrets of current into the files of restored, e.g. a backup of another
 // server whose secrets were hidden, wherever they say Placeholder.
-func Fill(current, restored *datadir.Dir) error {
+func Fill(current, restored *datadir.Dir) error { return fill(current, restored, false) }
+
+// Take puts the secrets of current into the files of restored in place of all secrets these
+// have, e.g. of an archive from elsewhere, or leaves them empty where current has none.
+func Take(current, restored *datadir.Dir) error { return fill(current, restored, true) }
+
+func fill(current, restored *datadir.Dir, all bool) error {
 	for name := range redacted {
 		data, err := restored.ReadFile(name)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -128,7 +134,11 @@ func Fill(current, restored *datadir.Dir) error {
 		if err != nil {
 			return err
 		}
-		if filled := Restore(name, data, now); !bytes.Equal(filled, data) {
+		filled := data
+		if all {
+			filled = Redact(name, data)
+		}
+		if filled = Restore(name, filled, now); !bytes.Equal(filled, data) {
 			if err := restored.WriteFile(name, filled); err != nil {
 				return err
 			}

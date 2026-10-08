@@ -19,19 +19,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ServerService_ListServers_FullMethodName      = "/noryx.v1.ServerService/ListServers"
-	ServerService_CreateServer_FullMethodName     = "/noryx.v1.ServerService/CreateServer"
-	ServerService_StartServer_FullMethodName      = "/noryx.v1.ServerService/StartServer"
-	ServerService_StopServer_FullMethodName       = "/noryx.v1.ServerService/StopServer"
-	ServerService_RestartServer_FullMethodName    = "/noryx.v1.ServerService/RestartServer"
-	ServerService_DeleteServer_FullMethodName     = "/noryx.v1.ServerService/DeleteServer"
-	ServerService_UpdateServer_FullMethodName     = "/noryx.v1.ServerService/UpdateServer"
-	ServerService_UpdateImage_FullMethodName      = "/noryx.v1.ServerService/UpdateImage"
-	ServerService_StreamLogs_FullMethodName       = "/noryx.v1.ServerService/StreamLogs"
-	ServerService_SendCommand_FullMethodName      = "/noryx.v1.ServerService/SendCommand"
-	ServerService_ConfigureNetwork_FullMethodName = "/noryx.v1.ServerService/ConfigureNetwork"
-	ServerService_DuplicateServer_FullMethodName  = "/noryx.v1.ServerService/DuplicateServer"
-	ServerService_ImportServer_FullMethodName     = "/noryx.v1.ServerService/ImportServer"
+	ServerService_ListServers_FullMethodName             = "/noryx.v1.ServerService/ListServers"
+	ServerService_CreateServer_FullMethodName            = "/noryx.v1.ServerService/CreateServer"
+	ServerService_StartServer_FullMethodName             = "/noryx.v1.ServerService/StartServer"
+	ServerService_StopServer_FullMethodName              = "/noryx.v1.ServerService/StopServer"
+	ServerService_RestartServer_FullMethodName           = "/noryx.v1.ServerService/RestartServer"
+	ServerService_DeleteServer_FullMethodName            = "/noryx.v1.ServerService/DeleteServer"
+	ServerService_UpdateServer_FullMethodName            = "/noryx.v1.ServerService/UpdateServer"
+	ServerService_UpdateImage_FullMethodName             = "/noryx.v1.ServerService/UpdateImage"
+	ServerService_StreamLogs_FullMethodName              = "/noryx.v1.ServerService/StreamLogs"
+	ServerService_SendCommand_FullMethodName             = "/noryx.v1.ServerService/SendCommand"
+	ServerService_ConfigureNetwork_FullMethodName        = "/noryx.v1.ServerService/ConfigureNetwork"
+	ServerService_DuplicateServer_FullMethodName         = "/noryx.v1.ServerService/DuplicateServer"
+	ServerService_ImportServer_FullMethodName            = "/noryx.v1.ServerService/ImportServer"
+	ServerService_CreateServerFromArchive_FullMethodName = "/noryx.v1.ServerService/CreateServerFromArchive"
 )
 
 // ServerServiceClient is the client API for ServerService service.
@@ -72,6 +73,14 @@ type ServerServiceClient interface {
 	// node, e.g. one that moves here. The header describes it, the data that follows is its
 	// data directory as a ZIP archive, like ArchiveDirectory sends it.
 	ImportServer(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportServerRequest, ImportServerResponse], error)
+	// CreateServerFromArchive creates a stopped server like CreateServer, whose data is a ZIP or
+	// .tar.gz archive from elsewhere, e.g. of a server at a host. The header describes the
+	// server, the data that follows is the archive. Unlike ImportServer, the archive is
+	// untrusted: the agent checks it like an archive of the file manager, leaves out the files
+	// with secrets and those it writes itself, and replaces the secrets and the forwarding
+	// settings in the others. Nothing of the server remains if that fails. Agents of older
+	// versions answer UNIMPLEMENTED.
+	CreateServerFromArchive(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse], error)
 }
 
 type serverServiceClient struct {
@@ -224,6 +233,19 @@ func (c *serverServiceClient) ImportServer(ctx context.Context, opts ...grpc.Cal
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ServerService_ImportServerClient = grpc.ClientStreamingClient[ImportServerRequest, ImportServerResponse]
 
+func (c *serverServiceClient) CreateServerFromArchive(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ServerService_ServiceDesc.Streams[2], ServerService_CreateServerFromArchive_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ServerService_CreateServerFromArchiveClient = grpc.ClientStreamingClient[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse]
+
 // ServerServiceServer is the server API for ServerService service.
 // All implementations must embed UnimplementedServerServiceServer
 // for forward compatibility.
@@ -262,6 +284,14 @@ type ServerServiceServer interface {
 	// node, e.g. one that moves here. The header describes it, the data that follows is its
 	// data directory as a ZIP archive, like ArchiveDirectory sends it.
 	ImportServer(grpc.ClientStreamingServer[ImportServerRequest, ImportServerResponse]) error
+	// CreateServerFromArchive creates a stopped server like CreateServer, whose data is a ZIP or
+	// .tar.gz archive from elsewhere, e.g. of a server at a host. The header describes the
+	// server, the data that follows is the archive. Unlike ImportServer, the archive is
+	// untrusted: the agent checks it like an archive of the file manager, leaves out the files
+	// with secrets and those it writes itself, and replaces the secrets and the forwarding
+	// settings in the others. Nothing of the server remains if that fails. Agents of older
+	// versions answer UNIMPLEMENTED.
+	CreateServerFromArchive(grpc.ClientStreamingServer[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse]) error
 	mustEmbedUnimplementedServerServiceServer()
 }
 
@@ -310,6 +340,9 @@ func (UnimplementedServerServiceServer) DuplicateServer(context.Context, *Duplic
 }
 func (UnimplementedServerServiceServer) ImportServer(grpc.ClientStreamingServer[ImportServerRequest, ImportServerResponse]) error {
 	return status.Error(codes.Unimplemented, "method ImportServer not implemented")
+}
+func (UnimplementedServerServiceServer) CreateServerFromArchive(grpc.ClientStreamingServer[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse]) error {
+	return status.Error(codes.Unimplemented, "method CreateServerFromArchive not implemented")
 }
 func (UnimplementedServerServiceServer) mustEmbedUnimplementedServerServiceServer() {}
 func (UnimplementedServerServiceServer) testEmbeddedByValue()                       {}
@@ -548,6 +581,13 @@ func _ServerService_ImportServer_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ServerService_ImportServerServer = grpc.ClientStreamingServer[ImportServerRequest, ImportServerResponse]
 
+func _ServerService_CreateServerFromArchive_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ServerServiceServer).CreateServerFromArchive(&grpc.GenericServerStream[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ServerService_CreateServerFromArchiveServer = grpc.ClientStreamingServer[CreateServerFromArchiveRequest, CreateServerFromArchiveResponse]
+
 // ServerService_ServiceDesc is the grpc.ServiceDesc for ServerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -609,6 +649,11 @@ var ServerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ImportServer",
 			Handler:       _ServerService_ImportServer_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "CreateServerFromArchive",
+			Handler:       _ServerService_CreateServerFromArchive_Handler,
 			ClientStreams: true,
 		},
 	},

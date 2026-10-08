@@ -1,10 +1,12 @@
-import { DotsThreeIcon, DownloadSimpleIcon, FolderOpenIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react"
+import { CopyIcon, DotsThreeIcon, DownloadSimpleIcon, FileArchiveIcon, FolderOpenIcon, PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react"
+import { useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { useAccess } from "@/features/access/use-access"
+import { useOperation } from "@/features/operations/use-operation"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,17 +14,38 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { archiveUrl, contentUrl, type FileEntry, join, type ServerFiles, useChangeFiles } from "./api"
+import { formatBytes } from "@/lib/format"
+import { archiveUrl, contentUrl, extractArchive, type FileEntry, isArchive, join, type ServerFiles, useChangeFiles } from "./api"
+import { CopyDialog } from "./copy-dialog"
+import { ExtractDialog } from "./extract-dialog"
 import { MoveDialog } from "./move-dialog"
 import { NameDialog } from "./name-dialog"
 
-/** Menu of a file or folder: download, rename, move and delete. */
+/** Menu of a file or folder: download, extract an archive, rename, move, copy and delete. */
 export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: string; entry: FileEntry }) {
   const writable = useAccess().can("files.write", files.nodeId, files.serverId)
   const change = useChangeFiles(files)
-  const [dialog, setDialog] = useState<"rename" | "move" | "delete">()
+  const operation = useOperation()
+  const queryClient = useQueryClient()
+  const [dialog, setDialog] = useState<"rename" | "move" | "copy" | "extract" | "delete">()
   const path = join(dir, entry.name)
   const close = (open: boolean) => !open && setDialog(undefined)
+
+  const extract = (destination: string, overwrite: boolean) =>
+    operation.run(
+      (onStart) =>
+        extractArchive(files, path, destination, overwrite, onStart).finally(
+          () => void queryClient.invalidateQueries({ queryKey: ["files", files.nodeId, files.serverId] }),
+        ),
+      {
+        title: t("Extracting {{name}}…", { name: entry.name }),
+        notify: true,
+        done: ({ files: count, size }) => ({
+          message: t("Extracted {{count}} files from {{name}}", { count, name: entry.name, defaultValue_one: "Extracted {{count}} file from {{name}}" }),
+          description: formatBytes(size),
+        }),
+      },
+    )
 
   return (
     <>
@@ -42,6 +65,12 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
           </DropdownMenuItem>
           {writable && (
             <>
+              {!entry.directory && isArchive(entry.name) && (
+                <DropdownMenuItem onSelect={() => setDialog("extract")}>
+                  <FileArchiveIcon />
+                  {t("Extract…")}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => setDialog("rename")}>
                 <PencilSimpleIcon />
                 {t("Rename")}
@@ -49,6 +78,10 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
               <DropdownMenuItem onSelect={() => setDialog("move")}>
                 <FolderOpenIcon />
                 {t("Move to…")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setDialog("copy")}>
+                <CopyIcon />
+                {t("Copy to…")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setDialog("delete")}>
@@ -69,6 +102,8 @@ export function FileActions({ files, dir, entry }: { files: ServerFiles; dir: st
         onSubmit={(name) => change.mutateAsync({ action: "move", from: path, to: join(dir, name) })}
       />
       {dialog === "move" && <MoveDialog files={files} dir={dir} names={[entry.name]} onClose={() => setDialog(undefined)} />}
+      {dialog === "copy" && <CopyDialog files={files} dir={dir} names={[entry.name]} onClose={() => setDialog(undefined)} />}
+      {dialog === "extract" && <ExtractDialog dir={dir} name={entry.name} onClose={() => setDialog(undefined)} onExtract={extract} />}
       <ConfirmDialog
         open={dialog === "delete"}
         onOpenChange={close}

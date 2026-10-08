@@ -27,6 +27,9 @@ const (
 	FileService_MoveFile_FullMethodName         = "/noryx.v1.FileService/MoveFile"
 	FileService_DeleteFile_FullMethodName       = "/noryx.v1.FileService/DeleteFile"
 	FileService_HashFiles_FullMethodName        = "/noryx.v1.FileService/HashFiles"
+	FileService_ExtractArchive_FullMethodName   = "/noryx.v1.FileService/ExtractArchive"
+	FileService_CopyFile_FullMethodName         = "/noryx.v1.FileService/CopyFile"
+	FileService_SearchFiles_FullMethodName      = "/noryx.v1.FileService/SearchFiles"
 )
 
 // FileServiceClient is the client API for FileService service.
@@ -56,6 +59,21 @@ type FileServiceClient interface {
 	// HashFiles tells the SHA-512 hashes of files, e.g. so that the master learns which files
 	// of a modpack changed since it wrote them. Agents of older versions answer UNIMPLEMENTED.
 	HashFiles(ctx context.Context, in *HashFilesRequest, opts ...grpc.CallOption) (*HashFilesResponse, error)
+	// ExtractArchive extracts a ZIP or .tar.gz archive of the server into a folder, as the
+	// server's user. The archive is untrusted: links, special files and paths that leave the
+	// folder, the files that hold secrets of the server or that Noryx writes itself, too many
+	// entries, too much data and a too high compression ratio refuse it before anything is
+	// written. Agents of older versions answer UNIMPLEMENTED.
+	ExtractArchive(ctx context.Context, in *ExtractArchiveRequest, opts ...grpc.CallOption) (*ExtractArchiveResponse, error)
+	// CopyFile copies a file or folder within the server's data, like MoveFile moves it: files
+	// with secrets of the server can't be copied, and the copy never replaces anything. Agents
+	// of older versions answer UNIMPLEMENTED.
+	CopyFile(ctx context.Context, in *CopyFileRequest, opts ...grpc.CallOption) (*CopyFileResponse, error)
+	// SearchFiles searches the text files of a folder and the folders in it for a text, as the
+	// panel shows them: files that only hold secrets are left out, and others show them as
+	// "<hidden>". It stops after a while, at large files and after many matches. Agents of
+	// older versions answer UNIMPLEMENTED.
+	SearchFiles(ctx context.Context, in *SearchFilesRequest, opts ...grpc.CallOption) (*SearchFilesResponse, error)
 }
 
 type fileServiceClient struct {
@@ -167,6 +185,36 @@ func (c *fileServiceClient) HashFiles(ctx context.Context, in *HashFilesRequest,
 	return out, nil
 }
 
+func (c *fileServiceClient) ExtractArchive(ctx context.Context, in *ExtractArchiveRequest, opts ...grpc.CallOption) (*ExtractArchiveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExtractArchiveResponse)
+	err := c.cc.Invoke(ctx, FileService_ExtractArchive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) CopyFile(ctx context.Context, in *CopyFileRequest, opts ...grpc.CallOption) (*CopyFileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CopyFileResponse)
+	err := c.cc.Invoke(ctx, FileService_CopyFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) SearchFiles(ctx context.Context, in *SearchFilesRequest, opts ...grpc.CallOption) (*SearchFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchFilesResponse)
+	err := c.cc.Invoke(ctx, FileService_SearchFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FileServiceServer is the server API for FileService service.
 // All implementations must embed UnimplementedFileServiceServer
 // for forward compatibility.
@@ -194,6 +242,21 @@ type FileServiceServer interface {
 	// HashFiles tells the SHA-512 hashes of files, e.g. so that the master learns which files
 	// of a modpack changed since it wrote them. Agents of older versions answer UNIMPLEMENTED.
 	HashFiles(context.Context, *HashFilesRequest) (*HashFilesResponse, error)
+	// ExtractArchive extracts a ZIP or .tar.gz archive of the server into a folder, as the
+	// server's user. The archive is untrusted: links, special files and paths that leave the
+	// folder, the files that hold secrets of the server or that Noryx writes itself, too many
+	// entries, too much data and a too high compression ratio refuse it before anything is
+	// written. Agents of older versions answer UNIMPLEMENTED.
+	ExtractArchive(context.Context, *ExtractArchiveRequest) (*ExtractArchiveResponse, error)
+	// CopyFile copies a file or folder within the server's data, like MoveFile moves it: files
+	// with secrets of the server can't be copied, and the copy never replaces anything. Agents
+	// of older versions answer UNIMPLEMENTED.
+	CopyFile(context.Context, *CopyFileRequest) (*CopyFileResponse, error)
+	// SearchFiles searches the text files of a folder and the folders in it for a text, as the
+	// panel shows them: files that only hold secrets are left out, and others show them as
+	// "<hidden>". It stops after a while, at large files and after many matches. Agents of
+	// older versions answer UNIMPLEMENTED.
+	SearchFiles(context.Context, *SearchFilesRequest) (*SearchFilesResponse, error)
 	mustEmbedUnimplementedFileServiceServer()
 }
 
@@ -227,6 +290,15 @@ func (UnimplementedFileServiceServer) DeleteFile(context.Context, *DeleteFileReq
 }
 func (UnimplementedFileServiceServer) HashFiles(context.Context, *HashFilesRequest) (*HashFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HashFiles not implemented")
+}
+func (UnimplementedFileServiceServer) ExtractArchive(context.Context, *ExtractArchiveRequest) (*ExtractArchiveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExtractArchive not implemented")
+}
+func (UnimplementedFileServiceServer) CopyFile(context.Context, *CopyFileRequest) (*CopyFileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CopyFile not implemented")
+}
+func (UnimplementedFileServiceServer) SearchFiles(context.Context, *SearchFilesRequest) (*SearchFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SearchFiles not implemented")
 }
 func (UnimplementedFileServiceServer) mustEmbedUnimplementedFileServiceServer() {}
 func (UnimplementedFileServiceServer) testEmbeddedByValue()                     {}
@@ -368,6 +440,60 @@ func _FileService_HashFiles_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FileService_ExtractArchive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExtractArchiveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).ExtractArchive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_ExtractArchive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).ExtractArchive(ctx, req.(*ExtractArchiveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_CopyFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CopyFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).CopyFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_CopyFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).CopyFile(ctx, req.(*CopyFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_SearchFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).SearchFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_SearchFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).SearchFiles(ctx, req.(*SearchFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FileService_ServiceDesc is the grpc.ServiceDesc for FileService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -394,6 +520,18 @@ var FileService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HashFiles",
 			Handler:    _FileService_HashFiles_Handler,
+		},
+		{
+			MethodName: "ExtractArchive",
+			Handler:    _FileService_ExtractArchive_Handler,
+		},
+		{
+			MethodName: "CopyFile",
+			Handler:    _FileService_CopyFile_Handler,
+		},
+		{
+			MethodName: "SearchFiles",
+			Handler:    _FileService_SearchFiles_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

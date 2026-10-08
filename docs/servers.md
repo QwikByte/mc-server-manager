@@ -20,6 +20,18 @@ template has them, or as Minecraft's defaults. They are written to `server.prope
 agent checks them like other properties. The [stop timeout and the time zone](#settings-and-images) fold away the same
 way, as the template has them, or 1 minute and UTC. Deleting a server with all its worlds asks for its name first.
 
+A server that ran elsewhere, e.g. at a host or on another panel, can start from **An archive of a server**: a ZIP or
+`.tar.gz` archive of the contents of its folder, with `server.properties` at its top. Software, version, memory and port
+are chosen as usual, and the archive becomes its data, streamed through the master like an upload of the file manager
+(up to 16 GB, while 1 GB stays free on the node, which also needs room for the archive until it is unpacked). The agent
+checks the archive like one of the file manager; one with links, paths outside the folder or too much data creates no
+server. The server doesn't take what holds secrets of the server it came from or what Noryx writes again: the files of
+the console password (`.rcon-cli.env`, `.rcon-cli.yaml`), a proxy's `forwarding.secret`, Floodgate's key and Geyser's
+sign-ins, the manifest of file sets and other files of the agent are left out, which the panel names, and the console
+password and other secrets in `server.properties` and the configuration of plugins are emptied. It trusts no proxy: its
+forwarding settings are removed and it runs in online mode until it joins a [network](networks.md). Creating a server
+from an archive needs the permission to create servers on the node and an up-to-date agent.
+
 The page of a server shows the address players join at, with a button to copy it: the host of its node's address with
 the server's port, or its proxy's for a server of a network. Without the permissions to see that node and the networks,
 it shows only the port.
@@ -47,9 +59,22 @@ The file manager of a server browses its data, uploads files and whole folders b
 to 16 GB each and 10,000 files at once, streamed through the master, as long as 1 GB stays free on the node, like for
 backups), creates files and folders, edits configuration files in the browser and downloads files or whole folders as
 ZIP archives. A folder can be filtered by name and sorted by name, the largest or the newest first; the browser keeps
-the order for every folder. **Move to…** in the menu of a file or folder moves it into another folder. Selected files
-and folders are downloaded as one ZIP archive, moved or deleted together; agents of older versions can't download
-several of them at once.
+the order for every folder. **Move to…** in the menu of a file or folder moves it into another folder, and **Copy to…**
+copies it there, or into the same folder under a new name, e.g. `world copy`. Selected files and folders are downloaded
+as one ZIP archive, moved, copied or deleted together; agents of older versions can't download several of them at once.
+
+**Extract…** in the menu of a ZIP or `.tar.gz` archive extracts it into its folder or into a new folder in it, e.g. a
+world, a modpack's overrides or the configuration of plugins that were uploaded as one archive. Existing files are only
+replaced if that is chosen. The agent reads the list of the archive first and refuses it before it writes anything if
+it holds links or other special files, paths outside the folder, more than 100,000 entries, more than 64 GB of files or
+far more than the archive's size (zip bombs), a file that exists already, or a file that holds secrets of the server or
+that Noryx writes itself, such as `server.properties`, `ops.json` or `whitelist.json` in the server's folder: such files
+can be extracted into another folder, or uploaded and edited on their own.
+
+**Search** finds text in the text files of the shown folder and the folders in it, regardless of case, and opens a file
+of a match in the editor. Files that only hold secrets are left out and others show them as `<hidden>`, so a search
+never finds a secret. Files larger than 4 MB and binary files are left out, and a search stops after 500 matches or 10
+seconds. Extracting, copying and searching need an up-to-date agent on the node.
 
 If something changed or deleted a file while it was open in the editor, e.g. a plugin, a file set or another user,
 saving shows the difference to the file on the server and offers to load that version or to overwrite it. Agents tell

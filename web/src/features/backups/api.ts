@@ -3,7 +3,7 @@ import { t } from "i18next"
 import type { Listing, ServerFiles } from "@/features/files/api"
 import { type Operation, operate } from "@/features/operations/api"
 import { defaultSchedule, type TaskInput, taskApi } from "@/features/schedules/api"
-import { api } from "@/lib/api"
+import { api, send } from "@/lib/api"
 import { locale } from "@/lib/i18n"
 
 /** What of a server is backed up; the agent finds the matching files when it backs up. */
@@ -37,6 +37,8 @@ export interface Backup {
   jobId?: string
   /** Kept backups are never deleted by their job. */
   kept: boolean
+  /** The backup came from elsewhere, e.g. an upload, so restoring it trusts nothing in its archive. Older masters don't tell. */
+  untrusted?: boolean
 }
 
 export interface JobSettings {
@@ -135,6 +137,17 @@ export const backupFilesQuery = (s: ServerFiles, id: string, path: string) =>
   })
 
 export const downloadUrl = (nodeId: string, serverId: string, id: string) => `/api${base(nodeId, serverId)}/${id}/download`
+
+/** Uploads a ZIP archive as a backup of a server, with progress reports. */
+export function uploadBackup(
+  nodeId: string,
+  serverId: string,
+  archive: File,
+  { label, location, onProgress, signal }: { label: string; location: string; onProgress: (fraction: number) => void; signal: AbortSignal },
+) {
+  const query = new URLSearchParams({ label, location })
+  return send<Backup>("POST", `${base(nodeId, serverId)}/upload?${query}`, archive, { onProgress, signal })
+}
 
 /** What a restore restores, and where. */
 export interface Restore {
