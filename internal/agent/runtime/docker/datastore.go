@@ -61,7 +61,7 @@ type engine struct {
 
 var engines = map[noryxv1.DatastoreEngine]engine{
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB: {
-		image: "mariadb", versions: []string{"11.8", "12.3"}, port: 3306,
+		image: "docker.io/library/mariadb", versions: []string{"11.8", "12.3"}, port: 3306,
 		data: func(string) string { return "/var/lib/mysql" },
 		// Root may only sign in on the container itself, and the system tables follow upgrades
 		// of the image.
@@ -69,7 +69,7 @@ var engines = map[noryxv1.DatastoreEngine]engine{
 		health: []string{"CMD", "healthcheck.sh", "--connect", "--innodb_initialized"},
 	},
 	noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {
-		image: "postgres", versions: []string{"17", "18"}, port: 5432,
+		image: "docker.io/library/postgres", versions: []string{"17", "18"}, port: 5432,
 		// From 18 on, the image keeps the data of each major version in a folder of its own
 		// under /var/lib/postgresql, which is its volume.
 		data: func(version string) string {
@@ -78,8 +78,10 @@ var engines = map[noryxv1.DatastoreEngine]engine{
 			}
 			return "/var/lib/postgresql/data"
 		},
-		env:    []string{"POSTGRES_PASSWORD_FILE=" + superuserMount},
-		health: []string{"CMD", "pg_isready", "-U", "postgres"},
+		env: []string{"POSTGRES_PASSWORD_FILE=" + superuserMount},
+		// Over TCP: the server that initializes new data listens on the Unix socket only, and
+		// stops right after.
+		health: []string{"CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres"},
 	},
 }
 
@@ -242,6 +244,7 @@ func (d *Docker) createDatastoreContainer(ctx context.Context, spec runtime.Data
 			return err
 		}
 	}
+	d.adapt(&opts)
 	_, err = d.cli.ContainerCreate(ctx, opts)
 	return err
 }
@@ -376,7 +379,7 @@ func (d *Docker) recreateDatastore(ctx context.Context, spec runtime.DatastoreSp
 			return
 		}
 		ctx := context.WithoutCancel(ctx)
-		_, removeErr := d.cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{Force: true})
+		removeErr := d.forceRemove(ctx, name)
 		if cerrdefs.IsNotFound(removeErr) {
 			removeErr = nil
 		}
@@ -414,7 +417,7 @@ func (d *Docker) RemoveDatastore(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := d.cli.ContainerRemove(ctx, datastoreName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
+	if err := d.forceRemove(ctx, datastoreName(id)); err != nil {
 		return notFound(err)
 	}
 	for _, name := range []string{datastoreName(id), portNetwork(id)} {

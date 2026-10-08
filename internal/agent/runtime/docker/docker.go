@@ -1,9 +1,11 @@
-// Package docker runs Minecraft servers as Docker containers based on the
-// itzg/minecraft-server and itzg/mc-proxy images, which cover all common server types.
+// Package docker runs Minecraft servers as containers of Docker, or of Podman through its
+// Docker-compatible API, based on the itzg/minecraft-server and itzg/mc-proxy images, which
+// cover all common server types. Where Podman differs, podman.go makes up for it.
 package docker
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -37,9 +40,13 @@ import (
 const (
 	labelManaged = "io.noryx.managed"
 	labelSpec    = "io.noryx.spec"
+	// managed matches the containers of servers in filters, with the value, without which
+	// Podman's filter of events matches nothing.
+	managed = labelManaged + "=true"
 
-	serverImage = "itzg/minecraft-server"
-	proxyImage  = "itzg/mc-proxy"
+	// Images are named with their registry, as Podman doesn't assume Docker Hub.
+	serverImage = "docker.io/itzg/minecraft-server"
+	proxyImage  = "docker.io/itzg/mc-proxy"
 
 	pidsLimit    = 1024
 	maxLineBytes = 1 << 20
@@ -88,39 +95,69 @@ var images = map[noryxv1.ServerType]image{
 	noryxv1.ServerType_SERVER_TYPE_WATERFALL:  {proxyImage, "WATERFALL", 25577, "/server"},
 }
 
-// Docker implements runtime.Runtime. Container labels are the only state:
-// the agent itself stores nothing besides the server data directories.
+// Docker implements runtime.Runtime with Docker or Podman. Container labels are the only
+// state: the agent itself stores nothing besides the server data directories.
 type Docker struct {
 	cli      *client.Client
 	storage  *storage.Locations
 	consoles *rcon.Consoles
 	sizes    sync.Map // of the data of datastores by folder, as dataSize measured them
+	podman   *podman  // nil for Docker
+	// refused tells why the agent refuses the runtime that answered last; see check.
+	refused atomic.Pointer[error]
 }
 
-// New connects to the Docker daemon configured by the standard DOCKER_* variables.
-func New(locations *storage.Locations) (*Docker, error) {
-	cli, err := client.New(client.FromEnv)
-	if err != nil {
-		return nil, err
+// Options choose the runtime.
+type Options struct {
+	// Podman makes the agent run servers with Podman instead of Docker.
+	Podman bool
+	// Socket is the path of the runtime's Unix socket. Empty means Docker's of the DOCKER_HOST
+	// variable or /var/run/docker.sock, or Podman's PodmanSocket.
+	Socket string
+}
+
+// New returns the runtime; it connects with the first call, so it starts while the runtime
+// doesn't run yet.
+func New(locations *storage.Locations, opts Options) (*Docker, error) {
+	d := &Docker{storage: locations, consoles: rcon.NewConsoles()}
+	clientOpts := []client.Opt{client.FromEnv, client.WithResponseHook(d.check)}
+	if opts.Podman {
+		d.podman = &podman{}
+		opts.Socket = cmp.Or(opts.Socket, PodmanSocket)
 	}
-	return &Docker{cli: cli, storage: locations, consoles: rcon.NewConsoles()}, nil
+	if opts.Socket != "" {
+		clientOpts = append(clientOpts, client.WithHost("unix://"+opts.Socket))
+	}
+	var err error
+	d.cli, err = client.New(clientOpts...)
+	return d, err
 }
 
 func (d *Docker) Close() error { return d.cli.Close() }
 
+func (d *Docker) Name() string {
+	if d.podman != nil {
+		return noryxv1.RuntimePodman
+	}
+	return noryxv1.RuntimeDocker
+}
+
 func (d *Docker) Info(ctx context.Context) (runtime.Info, error) {
 	res, err := d.cli.Info(ctx, client.InfoOptions{})
 	if err != nil {
-		return runtime.Info{}, err
+		return runtime.Info{}, cmp.Or(d.refusal(), err)
 	}
 	i := res.Info
 	//nolint:gosec // CPU count and memory size are never negative and fit easily
-	return runtime.Info{Name: "docker " + i.ServerVersion, OS: i.OperatingSystem, CPUs: uint32(i.NCPU), MemoryBytes: uint64(i.MemTotal)}, nil
+	return runtime.Info{Version: i.ServerVersion, OS: i.OperatingSystem, CPUs: uint32(i.NCPU), MemoryBytes: uint64(i.MemTotal)}, nil
 }
 
 func (d *Docker) List(ctx context.Context) ([]runtime.Server, error) {
-	res, err := d.cli.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("label", labelManaged)})
+	res, err := d.cli.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: make(client.Filters).Add("label", managed)})
 	if err != nil {
+		return nil, err
+	}
+	if err := d.withHealth(ctx, res.Items); err != nil {
 		return nil, err
 	}
 	servers := make([]runtime.Server, 0, len(res.Items))
@@ -250,6 +287,7 @@ func (d *Docker) createContainer(ctx context.Context, spec runtime.Spec, netName
 	for _, name := range also {
 		opts.NetworkingConfig.EndpointsConfig[name] = &network.EndpointSettings{}
 	}
+	d.adapt(&opts)
 	_, err = d.cli.ContainerCreate(ctx, opts)
 	return err
 }
@@ -410,7 +448,7 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 	if _, err := d.dataPath(spec); err != nil { // e.g. a removed storage location; nothing is deleted yet
 		return err
 	}
-	if _, err := d.cli.ContainerRemove(ctx, containerName(id), client.ContainerRemoveOptions{Force: true}); err != nil {
+	if err := d.forceRemove(ctx, containerName(id)); err != nil {
 		if cerrdefs.IsConflict(err) {
 			return runtime.ErrNotFound // another request is removing it, which removes its data too
 		}
@@ -465,13 +503,23 @@ func (d *Docker) logs(ctx context.Context, name string, tail int, after time.Tim
 		stopped := false
 		err = eachLine(r, func(text string) bool {
 			line := logLine(text)
-			stopped = (after.IsZero() || line.Time.After(after)) && !yield(line, nil)
+			stopped = (after.IsZero() || newer(line.Time, after)) && !yield(line, nil)
 			return !stopped
 		})
 		if err != nil && !stopped && ctx.Err() == nil {
 			yield(runtime.LogLine{}, err)
 		}
 	}
+}
+
+// newer reports whether a line written at t comes after the time after. Podman before 5.8
+// tells the time of lines in whole seconds, so lines of the same second count as later: a
+// console that resumes may show a line again, rather than miss one.
+func newer(t, after time.Time) bool {
+	if t.Nanosecond() == 0 {
+		return !t.Before(after.Truncate(time.Second))
+	}
+	return t.After(after)
 }
 
 // eachLine calls fn with each line of r until it returns false, with lines cut after

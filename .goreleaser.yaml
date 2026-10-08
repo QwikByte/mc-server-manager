@@ -51,6 +51,8 @@ archives:
         strip_parent: true
       - src: packaging/agent/noryx-overlay.service
         strip_parent: true
+      - src: packaging/agent/noryx-isolate.service
+        strip_parent: true
       - src: packaging/agent/agent.env
         strip_parent: true
 
@@ -96,13 +98,15 @@ nfpms:
     id: noryx-agent
     ids: [noryx-agent]
     package_name: noryx-agent
-    description: Node agent of Noryx, which runs the Minecraft servers of a machine in Docker.
+    description: Node agent of Noryx, which runs the Minecraft servers of a machine in Docker or Podman.
     dependencies: []
     contents:
       - src: packaging/agent/noryx-agent.service
         dst: /usr/lib/systemd/system/noryx-agent.service
       - src: packaging/agent/noryx-overlay.service
         dst: /usr/lib/systemd/system/noryx-overlay.service
+      - src: packaging/agent/noryx-isolate.service
+        dst: /usr/lib/systemd/system/noryx-isolate.service
       - src: bin/install.sh
         dst: /usr/lib/noryx-agent/install.sh
         file_info:

@@ -5,9 +5,10 @@ Everything a single server offers in the panel. New servers can also start from 
 
 ## Software
 
-Servers run as containers based on [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server) (Vanilla,
-Paper, Purpur, Folia, Leaf, Fabric, Quilt, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy)
-(Velocity, BungeeCord; Waterfall only for existing proxies, see [Networks](networks.md#proxies-and-forwarding)).
+Servers run as containers of Docker or [Podman](installation.md#docker-or-podman) based on
+[itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server) (Vanilla, Paper, Purpur, Folia, Leaf, Fabric,
+Quilt, Forge, NeoForge) and [itzg/mc-proxy](https://github.com/itzg/docker-mc-proxy) (Velocity, BungeeCord; Waterfall
+only for existing proxies, see [Networks](networks.md#proxies-and-forwarding)).
 Container labels are the agent's only state, so servers keep running while an agent restarts.
 
 ## Creating and deleting
@@ -115,11 +116,15 @@ printf '[Service]\nTimeoutStopSec=11min\n' | sudo tee /etc/systemd/system/docker
 sudo systemctl daemon-reload
 ```
 
+On a node that runs [Podman](installation.md#docker-or-podman), `podman-restart.service` stops the servers, so raise
+its `TimeoutStopSec` the same way, in `/etc/systemd/system/podman-restart.service.d`.
+
 ## Crashes and health
 
 A server that crashed and starts again shows as **crashing**, with how often it crashed and its exit code. After 5
-crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker would start it again forever. Each
-crash is a warning in the log, which the bell counts, and the notice on the server's page links to its crash reports.
+crashes in a row, each within 10 minutes of its start, the agent stops it, as Docker or Podman would start it again
+forever. Each crash is a warning in the log, which the bell counts, and the notice on the server's page links to its
+crash reports.
 
 The images check the health of their server. A server that runs but fails its health check, e.g. as it hangs, shows as
 **unhealthy** on its card and page and under what needs attention on the overview; the log tells when it becomes

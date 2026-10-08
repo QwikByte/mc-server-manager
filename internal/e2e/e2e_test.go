@@ -85,8 +85,9 @@ func TestEnrollAndControlNode(t *testing.T) {
 	check(t, err)
 	info, err := noryxv1.NewNodeServiceClient(conn).GetInfo(ctx, &noryxv1.GetInfoRequest{})
 	check(t, err)
-	if info.GetRuntime() != "fake" {
-		t.Fatalf("runtime = %q, want fake", info.GetRuntime())
+	// Older masters read the runtime and its version from one field.
+	if name, version := info.RuntimeOf(); info.GetRuntime() != "docker fake" || name != noryxv1.RuntimeDocker || version != "fake" {
+		t.Fatalf("runtime = %q, %q %q", info.GetRuntime(), name, version)
 	}
 
 	servers := noryxv1.NewServerServiceClient(conn)
@@ -425,9 +426,20 @@ type fakeRuntime struct {
 	hold chan struct{}
 	// down makes the runtime unreachable, like Docker while it isn't running.
 	down bool
+	// podman makes it tell that it is Podman.
+	podman bool
 }
 
 var errDown = errors.New("failed to connect to the docker API")
+
+func (f *fakeRuntime) Name() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.podman {
+		return noryxv1.RuntimePodman
+	}
+	return noryxv1.RuntimeDocker
+}
 
 func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
 	f.mu.Lock()
@@ -435,7 +447,7 @@ func (f *fakeRuntime) Info(context.Context) (runtime.Info, error) {
 	if f.down {
 		return runtime.Info{}, errDown
 	}
-	return runtime.Info{Name: "fake", CPUs: 4, MemoryBytes: 16 << 30}, nil
+	return runtime.Info{Version: "fake", CPUs: 4, MemoryBytes: 16 << 30}, nil
 }
 
 func (f *fakeRuntime) List(context.Context) ([]runtime.Server, error) {

@@ -1,9 +1,9 @@
 [Unit]
 Description=Noryx private network of the nodes
 Documentation=https://github.com/QwikByte/noryx
-# Docker starts the backends whose ports are published at the node's address in the network,
-# which only works once the interface has it.
-Before=docker.service noryx-agent.service
+# Docker or Podman starts the backends whose ports are published at the node's address in the
+# network, which only works once the interface has it.
+Before=docker.service podman-restart.service noryx-agent.service
 ConditionPathExists=/var/lib/noryx-agent/overlay/state.json
 
 [Service]

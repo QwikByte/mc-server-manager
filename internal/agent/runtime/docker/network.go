@@ -210,11 +210,17 @@ func (d *Docker) release(ctx context.Context, proxyID string, backends []runtime
 	return nil
 }
 
-// prepare readies a server that is about to start. A proxy gets its data handed to the
+// prepare readies a server that is about to start. On Podman, the servers are kept apart
+// again, in case the table of the agent was removed. A proxy gets its data handed to the
 // user it runs as, and listens on the port its container publishes, as the default
 // configuration of the Velocity image listens on another one. A stopped proxy of an older
 // agent, which ran it as root, is created again to run as that user.
 func (d *Docker) prepare(ctx context.Context, id string) error {
+	if d.podman != nil {
+		if err := Isolate(); err != nil {
+			return fmt.Errorf("keep the servers apart: %w", err)
+		}
+	}
 	c, spec, err := d.inspect(ctx, id)
 	if err != nil || !spec.Type.Proxy() {
 		return err
@@ -249,7 +255,10 @@ func (d *Docker) ensureNetwork(ctx context.Context, name string) error {
 		return err
 	}
 	opts := client.NetworkCreateOptions{Driver: "bridge", Internal: internalNetwork(name), Labels: map[string]string{labelManaged: "true"}}
-	if name == sharedNetwork {
+	switch {
+	case name == sharedNetwork && d.podman != nil: // see Isolate
+		opts.Options = map[string]string{"com.docker.network.bridge.name": sharedBridge}
+	case name == sharedNetwork:
 		opts.Options = map[string]string{"com.docker.network.bridge.enable_icc": "false"}
 	}
 	_, err = d.cli.NetworkCreate(ctx, name, opts)

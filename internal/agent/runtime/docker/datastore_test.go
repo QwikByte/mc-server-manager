@@ -14,7 +14,6 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
-	"github.com/QwikByte/noryx/internal/agent/storage"
 )
 
 func TestDatastoreOptions(t *testing.T) {
@@ -65,14 +64,7 @@ func TestEveryDatastoreEngineHasADialect(t *testing.T) {
 // that joins the internal network of a datastore reaches it by name. It needs Docker, root
 // and the images, so it only runs with NORYX_DOCKER_TEST set.
 func TestDatastoresLive(t *testing.T) {
-	if os.Getenv("NORYX_DOCKER_TEST") == "" {
-		t.Skip("set NORYX_DOCKER_TEST to run datastores in Docker")
-	}
-	d, err := New(storage.New(t.TempDir()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
+	d := live(t)
 	for _, engine := range []noryxv1.DatastoreEngine{noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB, noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES} {
 		t.Run(engine.Slug(), func(t *testing.T) { liveDatastore(t, d, engine) })
 	}
@@ -225,20 +217,8 @@ func joinedContainer(t *testing.T, d *Docker, id string) container.InspectRespon
 
 // reaches checks that a container resolves the name of a datastore's container.
 func reaches(t *testing.T, d *Docker, c container.InspectResponse, id string) {
-	ctx := t.Context()
-	res, err := d.cli.ExecCreate(ctx, c.ID, client.ExecCreateOptions{Cmd: []string{"getent", "hosts", datastoreName(id)}})
-	must(t, err)
-	_, err = d.cli.ExecStart(ctx, res.ID, client.ExecStartOptions{})
-	must(t, err)
-	for {
-		inspect, err := d.cli.ExecInspect(ctx, res.ID, client.ExecInspectOptions{})
-		must(t, err)
-		if !inspect.Running {
-			if inspect.ExitCode != 0 {
-				t.Errorf("%s doesn't resolve", datastoreName(id))
-			}
-			return
-		}
+	if err := d.run(t.Context(), c.ID, "", []string{"getent", "hosts", datastoreName(id)}, nil, nil, nil); err != nil {
+		t.Errorf("%s doesn't resolve: %v", datastoreName(id), err)
 	}
 }
 
@@ -252,11 +232,7 @@ func must(t *testing.T, err error) {
 // TestUpgradeRollsBackLive upgrades a datastore whose dump its user may not load, a view of
 // the superuser, after which it runs the old version on the old data again.
 func TestUpgradeRollsBackLive(t *testing.T) {
-	if os.Getenv("NORYX_DOCKER_TEST") == "" {
-		t.Skip("set NORYX_DOCKER_TEST to run datastores in Docker")
-	}
-	d, err := New(storage.New(t.TempDir()))
-	must(t, err)
+	d := live(t)
 	ctx := t.Context()
 	spec := runtime.DatastoreSpec{ID: runtime.NewID(), Engine: noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB, Version: "11.8", MemoryMB: 512}
 	must(t, d.CreateDatastore(ctx, spec))

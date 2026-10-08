@@ -134,7 +134,7 @@ func (l *Locations) Add(name, path string) error {
 	if _, ok := paths[name]; ok {
 		return fmt.Errorf("location %q already exists", name)
 	}
-	// Only the Docker daemon needs access; containers see their own directory only.
+	// Only the runtime, which runs as root, needs access; containers see their own directory only.
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		return err
 	}

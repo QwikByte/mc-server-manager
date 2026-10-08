@@ -33,6 +33,11 @@ message GetInfoResponse {
   repeated StorageLocation storage = 7;
   // When the certificate the agent presents to the master expires.
   int64 certificate_not_after_unix = 8;
+  // The container runtime the agent is set to use, "docker" or "podman", also while it
+  // can't reach it, and its version, e.g. "29.0.0", empty then. Older agents leave both
+  // empty, as they only run Docker; runtime tells its version.
+  string runtime_name = 9;
+  string runtime_version = 10;
 }
 
 // StorageLocation is a directory the node's administrator allowed for server data.

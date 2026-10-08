@@ -12,8 +12,8 @@ import (
 )
 
 // explained makes calls to the agent of a node fail with messages that name the node if it
-// can't be used: its agent can't be reached, or Docker isn't running on it. The panel shows them
-// where the node may not be obvious, e.g. on a network.
+// can't be used: its agent can't be reached, or its runtime, Docker or Podman, isn't running on
+// it. The panel shows them where the node may not be obvious, e.g. on a network.
 func (s *Service) explained(id string) []grpc.DialOption {
 	return []grpc.DialOption{
 		grpc.WithChainUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoke grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -50,7 +50,8 @@ func (s *Service) explain(id string, err error) error {
 	}
 	for _, d := range st.Details() {
 		if info, ok := d.(*errdetails.ErrorInfo); ok && info.GetReason() == noryxv1.ReasonRuntimeUnavailable {
-			return status.Errorf(codes.Unavailable, "Docker isn't running on %s, or its agent can't connect to it.", name)
+			runtime := noryxv1.RuntimeTitle(info.GetMetadata()[noryxv1.MetadataRuntime])
+			return status.Errorf(codes.Unavailable, "%s isn't running on %s, or its agent can't connect to it.", runtime, name)
 		}
 	}
 	return status.Errorf(codes.Unavailable, "%s can't be reached. Check that its agent is running and that the master can connect to it.", name)

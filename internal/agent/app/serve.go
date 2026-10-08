@@ -38,6 +38,10 @@ import (
 )
 
 func serve(ctx context.Context, cfg config) error {
+	runtimeOpts, err := cfg.runtime.options()
+	if err != nil {
+		return err
+	}
 	buf := agentlogs.NewBuffer()
 	logFile, err := logging.Setup(cfg.log, buf.Handler(cfg.log.Level))
 	if err != nil {
@@ -55,7 +59,12 @@ func serve(ctx context.Context, cfg config) error {
 		return err
 	}
 	locations := storage.New(cfg.dataDir)
-	rt, err := docker.New(locations)
+	if runtimeOpts.Podman {
+		if err := isolate(); err != nil {
+			return err
+		}
+	}
+	rt, err := docker.New(locations, runtimeOpts)
 	if err != nil {
 		return err
 	}
@@ -88,7 +97,7 @@ func serve(ctx context.Context, cfg config) error {
 	errc := make(chan error, 2)
 	go func() { errc <- remote.Serve(tcpListener) }()
 	go func() { errc <- localSrv.Serve(unixListener) }()
-	slog.Info("Agent started", "version", buildinfo.Version, "listen", cfg.listenAddr, "socket", cfg.socket(),
+	slog.Info("Agent started", "version", buildinfo.Version, "listen", cfg.listenAddr, "socket", cfg.socket(), "runtime", rt.Name(),
 		"identity", identity.Get().Leaf.Subject.CommonName, "certificate_not_after", identity.Get().Leaf.NotAfter,
 		"ca_fingerprint", pki.Fingerprint(identity.CA))
 

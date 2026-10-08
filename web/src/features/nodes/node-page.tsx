@@ -34,6 +34,7 @@ import { memoryCapacityMb, memoryLimitMb, type Node, type NodeInfo, nodeQuery } 
 import { NewJoinTokenButton, NodeMenu } from "./node-actions"
 import { NodeSettingsDialog } from "./node-settings-dialog"
 import { NodeStatusBadge } from "./node-status"
+import { runtimeLabel } from "./runtime"
 import { StorageList } from "./storage-list"
 
 const route = getRouteApi("/_app/nodes/$nodeId")
@@ -156,7 +157,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   const details = [
     [t("Hostname"), info.hostname],
     [t("System"), info.os],
-    [t("Runtime"), info.runtime],
+    [t("Runtime"), runtimeLabel(info)],
     [t("Agent"), info.agentVersion],
   ].filter((detail): detail is [string, string] => !!detail[1])
   return (

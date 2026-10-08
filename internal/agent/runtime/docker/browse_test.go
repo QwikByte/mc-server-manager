@@ -4,14 +4,12 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"os"
 	"slices"
 	"strings"
 	"testing"
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/agent/runtime"
-	"github.com/QwikByte/noryx/internal/agent/storage"
 )
 
 func TestEveryDatastoreEngineHasABrowser(t *testing.T) {
@@ -27,12 +25,7 @@ func TestEveryDatastoreEngineHasABrowser(t *testing.T) {
 // hexadecimal, and a session that only reads; and it counts the connections. It only runs
 // with NORYX_DOCKER_TEST set, like TestDatastoresLive.
 func TestBrowseLive(t *testing.T) {
-	if os.Getenv("NORYX_DOCKER_TEST") == "" {
-		t.Skip("set NORYX_DOCKER_TEST to run datastores in Docker")
-	}
-	d, err := New(storage.New(t.TempDir()))
-	must(t, err)
-	t.Cleanup(func() { _ = d.Close() })
+	d := live(t)
 	tests := map[noryxv1.DatastoreEngine]struct{ blob, bytes, hex string }{
 		noryxv1.DatastoreEngine_DATASTORE_ENGINE_MARIADB:  {"BLOB", "X'00FF'", "0x00FF"},
 		noryxv1.DatastoreEngine_DATASTORE_ENGINE_POSTGRES: {"bytea", `'\x00ff'`, `\x00ff`},

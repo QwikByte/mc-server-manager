@@ -101,17 +101,31 @@ longer send players to its servers. The node itself isn't contacted, and if a se
 configured, the node stays. Only deleting a network whose proxy's node doesn't answer skips the proxy and the servers
 on that node, which then only trust each other, and says so. The forwarding mods come from Modrinth like other mods,
 checked against their SHA-512 hashes. Proxies read console commands from their standard input, which only the agent
-writes to through Docker; no RCON plugin is added. The commands of the Maintenance plugin only take what the agent
-checked itself: names of players, the name of a server that its configuration of the proxy has, and timers as whole
-minutes up to 28 days, so nothing else becomes part of a command.
+writes to through the runtime; no RCON plugin is added. Podman closes that input once anyone attached to it leaves, so
+there a shell of the proxy's user in its container writes the command to the input of the proxy's process, taking it on
+its own input rather than as an argument. The commands of the Maintenance plugin only take what the agent checked
+itself: names of players, the name of a server that its configuration of the proxy has, and timers as whole minutes up
+to 28 days, so nothing else becomes part of a command.
 
 ## Containers
 
 Containers run with `no-new-privileges`, memory and PID limits, and only the capabilities the images need to hand the
 data to the server's user: `CHOWN`, `SETUID` and `SETGID`. Proxies run as the user of their image (uid 1000) from the
-start, which owns their data, without any capabilities. Servers of a node can't reach each other: they share a Docker
-network without communication between containers (`noryx-servers`), and a Velocity proxy shares another one only with
-its backends on the node.
+start, which owns their data, without any capabilities. Servers of a node can't reach each other: they share a network
+without communication between containers (`noryx-servers`), and a Velocity proxy shares another one only with its
+backends on the node.
+
+A node runs its containers with Docker or with Podman as root, and the same holds for both. The agent sets every option
+of a container itself, so that Podman gets the same users, capabilities, limits, health checks and published addresses
+as Docker, and as root it keeps the users of the containers, which own the data on the node, as Docker does. Podman
+ignores the option of a network that keeps its containers apart, so on its nodes the agent names the bridge of
+`noryx-servers` after it and drops whatever the bridge would forward from one container to another, in an nftables table
+of its own (`bridge noryx`): when it starts, before each start of a server, and at boot with `noryx-isolate.service`,
+without which Podman doesn't start the servers. An agent that can't set up the table, e.g. as the kernel lacks
+`nft_meta_bridge`, doesn't run. The agent checks every answer of the runtime's socket and refuses one at which the other
+runtime answers, e.g. Podman behind Docker's socket, or a Podman older than 4.9, as it relies on how each one keeps
+servers apart. With SELinux, e.g. on RHEL, Podman also confines each container to the files labelled for it, and the
+agent has it label the mounts of each container for that container alone (`Z`). Rootless Podman isn't supported.
 
 ## Agent input
 
@@ -212,7 +226,7 @@ A datastore runs as the image's user without capabilities, with `no-new-privileg
 health check. The agent generates the superuser's password, which the image reads from a file that only it may read,
 never from the environment or labels, and which never leaves the node; MariaDB's root may only sign in on the container
 itself. Every database has its own user with rights on it alone, and on PostgreSQL nobody else may connect to it or to
-the superuser's database. Only the network's servers reach a datastore: on its node over an internal Docker network
+the superuser's database. Only the network's servers reach a datastore: on its node over an internal network
 without internet, which they share with each other as backends in a proxy's network already do; from other nodes only
 over the private network of the nodes, for the nodes of its servers, never at a public address. The agent checks every
 name against `^[a-z][a-z0-9_]{0,31}$`, refuses those of the engines themselves, and only takes passwords from `a-z2-7`,
@@ -437,7 +451,7 @@ files, and to create servers on the new node.
 ## Console
 
 To run commands on a game server, e.g. to ask it for its ticks per second, the agent reads the console password from the
-server's `server.properties` and connects to the server's console port inside Docker's network; the password never
+server's `server.properties` and connects to the server's console port inside the runtime's network; the password never
 leaves the node. A server that doesn't answer its console, e.g. a compromised one, holds up only its own commands: the
 agent applies the waiting changes of players to each server on its own, and gives each change 15 seconds before it waits
 for the next try.
@@ -454,19 +468,19 @@ interface on a host that didn't agree. Each node creates its WireGuard key itsel
 (`/var/lib/noryx-agent/overlay/private.key`, mode `0600`); only the public key reaches the master, over the node's
 mutually authenticated connection, and the master's backup holds public keys only. The agent checks what the master
 configures: the range must be a private IPv4 range (RFC 1918) that overlaps none of the node's addresses and routes,
-e.g. a provider's private network or a Docker network, and each peer gets exactly one address in it, so a master can't
-pull other traffic of the node into the tunnel. An nftables table of its own (`inet noryx`), which works next to
-Docker's iptables and nftables rules, drops packets for the node's address that don't arrive through the tunnel, new
-connections from the tunnel to the node itself, e.g. to SSH or the agent, and forwarded connections from the tunnel
-except those of a proxy's node to the ports of its servers. WireGuard accepts from a peer only its own address and
-doesn't answer unauthenticated packets. The agent binds each address it lets reach a port to the public key the peer at
-that address had then, which the master sends along, and drops the address once a peer has it with another key: a node
-that gets the address of a removed one, even while a member was offline and never saw the removal, reaches none of the
-ports published for the removed one. A compromised node reaches only the ports of its own servers on other nodes;
-removing it removes it everywhere. A rotated key is let in again as the master applies the node's networks again; a key
-that changes otherwise, e.g. as a node lost its data, needs its networks applied again in the panel. A compromised
-master could add a peer of its own, but it can already reconfigure every server. If the interface is missing, e.g.
-after a failed boot, the ports of these servers are reachable nowhere.
+e.g. a provider's private network or a network of Docker or Podman, and each peer gets exactly one address in it, so a
+master can't pull other traffic of the node into the tunnel. An nftables table of its own (`inet noryx`), which works
+next to the iptables and nftables rules of Docker and Podman, drops packets for the node's address that don't arrive
+through the tunnel, new connections from the tunnel to the node itself, e.g. to SSH or the agent, and forwarded
+connections from the tunnel except those of a proxy's node to the ports of its servers. WireGuard accepts from a peer
+only its own address and doesn't answer unauthenticated packets. The agent binds each address it lets reach a port to
+the public key the peer at that address had then, which the master sends along, and drops the address once a peer has it
+with another key: a node that gets the address of a removed one, even while a member was offline and never saw the
+removal, reaches none of the ports published for the removed one. A compromised node reaches only the ports of its own
+servers on other nodes; removing it removes it everywhere. A rotated key is let in again as the master applies the
+node's networks again; a key that changes otherwise, e.g. as a node lost its data, needs its networks applied again in
+the panel. A compromised master could add a peer of its own, but it can already reconfigure every server. If the
+interface is missing, e.g. after a failed boot, the ports of these servers are reachable nowhere.
 
 A test of the connections to a peer can't be turned into a scanner of other hosts. The agent connects only to the
 address that its own configuration gives the peer with the key the master names, which lies in the private range

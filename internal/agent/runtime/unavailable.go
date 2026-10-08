@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -13,6 +14,10 @@ import (
 )
 
 const probeTimeout = 3 * time.Second
+
+// ErrWrongRuntime is returned while the socket of the runtime answers as another runtime than
+// the agent is set to use, e.g. Podman behind Docker's socket, or as a version too old.
+var ErrWrongRuntime = errors.New("the agent can't use this runtime")
 
 // Interceptors tell callers when a call failed because the runtime is down, instead of passing
 // on the error of its client, e.g. "failed to connect to the docker API at unix://…".
@@ -28,17 +33,23 @@ func Interceptors(rt Runtime) []grpc.ServerOption {
 	}
 }
 
-// explain replaces an unexpected error if the runtime can't be reached.
+// explain replaces an unexpected error if the runtime can't be reached, or is another one.
 func explain(ctx context.Context, rt Runtime, err error) error {
 	if code := status.Code(err); code != codes.Internal && code != codes.Unknown {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), probeTimeout)
 	defer cancel()
-	if _, down := rt.Info(ctx); down == nil {
+	_, down := rt.Info(ctx)
+	switch {
+	case down == nil:
 		return err
+	case errors.Is(down, ErrWrongRuntime):
+		return status.Error(codes.FailedPrecondition, down.Error())
 	}
-	st, _ := status.New(codes.Unavailable, "Docker isn't running on the node, or the agent can't connect to it.").
-		WithDetails(&errdetails.ErrorInfo{Reason: noryxv1.ReasonRuntimeUnavailable, Domain: "noryx.v1"})
+	st, _ := status.New(codes.Unavailable, noryxv1.RuntimeTitle(rt.Name())+" isn't running on the node, or the agent can't connect to it.").
+		WithDetails(&errdetails.ErrorInfo{
+			Reason: noryxv1.ReasonRuntimeUnavailable, Domain: "noryx.v1", Metadata: map[string]string{noryxv1.MetadataRuntime: rt.Name()},
+		})
 	return st.Err()
 }

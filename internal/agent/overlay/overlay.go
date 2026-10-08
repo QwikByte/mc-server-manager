@@ -4,7 +4,7 @@
 // whose administrator allowed it with the local CLI, and the checks of the agent keep the
 // master from pulling other traffic of the node into the tunnel or opening the node's own
 // services to it. The interface outlives the agent, and noryx-agent overlay up restores it
-// at boot, before Docker starts the backends.
+// at boot, before Docker or Podman starts the backends.
 package overlay
 
 import (
@@ -367,7 +367,7 @@ func Deny(dataDir string) error {
 	return nil
 }
 
-// Up restores the interface and firewall rules of a member, e.g. at boot before Docker
+// Up restores the interface and firewall rules of a member, e.g. at boot before the runtime
 // starts the containers whose ports are published in the network.
 func Up(dataDir string, kernel Kernel) error {
 	s := NewService(dataDir, kernel)

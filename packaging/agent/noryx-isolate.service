@@ -1,0 +1,15 @@
+[Unit]
+Description=Noryx: keep the servers of Podman from reaching each other
+Documentation=https://github.com/QwikByte/noryx
+# Podman starts the servers at boot itself, which must not reach each other from the start.
+# Enabled on nodes that run Podman; if it fails, Podman doesn't start them.
+Before=podman-restart.service noryx-agent.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/noryx-agent isolate
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=podman-restart.service
