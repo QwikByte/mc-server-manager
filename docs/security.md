@@ -158,7 +158,8 @@ itself. The agent reads the list of such an archive before it writes anything an
 devices and other special files, absolute paths, `..` and control characters in names, encrypted entries, a path twice
 or both as a file and a folder, more than 100,000 entries, more than 64 GB of files, and files that would be more than
 100 times the size of the archive (zip bombs; up to 64 MB are exempt). It reads at most 64 MB of the directory of a ZIP
-archive, which it keeps in memory, and decompresses a `.tar.gz` archive at most as far as these limits allow, twice: to
+archive, which it keeps in memory, refuses one whose end announces more entries or a larger directory before it reads
+any, as Go's reader of ZIP archives reserves memory for them first, and decompresses a `.tar.gz` archive at most as far as these limits allow, twice: to
 check it, then to extract it, when each entry must match the list. The files must fit with 1 GB to spare. Every entry
 is written below its folder in the server's data (`os.Root`), as the server's user, and neither through a link nor in
 place of something that isn't a file, so a link of the server can't lead it elsewhere. The file manager extracts
@@ -313,7 +314,8 @@ an archive of the file manager (see [File manager](#file-manager)), and marks it
 the agent writes. Restoring an untrusted backup checks it again, with limits for backups (up to 1,000,000 entries and
 1 TB), and extracts it confined like an archive of the file manager, without the files that only hold secrets, the
 manifest of file sets and the files of the agent; it replaces every secret in the other files with the server's own,
-not only placeholders, and keeps the server's network settings like any restore. The mark moves with the backup to
+not only placeholders, and keeps the server's network settings like any restore. Listing, downloading and restoring an
+untrusted backup read the directory of its archive within the limits for backups too. The mark moves with the backup to
 another node, and copies for restoring into another server keep it; the master refuses both with agents that would
 drop it. Uploading needs the permissions to back up and to restore the server.
 

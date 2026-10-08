@@ -142,12 +142,16 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	zr, err := zip.OpenReader(b.Path())
+	f, err := os.Open(b.Path())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	defer zr.Close()
-	paths, err := chosen(&zr.Reader, b, req.GetPaths())
+	defer f.Close()
+	zr, err := zipOf(f, b)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	paths, err := chosen(zr, b, req.GetPaths())
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +164,7 @@ func (s *Service) RestoreBackup(ctx context.Context, req *noryxv1.RestoreBackupR
 	if b.Untrusted {
 		staged, err = stageUntrusted(ctx, data, b, paths)
 	} else {
-		staged, err = stage(ctx, data, &zr.Reader, paths)
+		staged, err = stage(ctx, data, zr, paths)
 	}
 	if staged != "" {
 		defer data.RemoveAll(staged) //nolint:errcheck // best effort; the result of restoring matters
@@ -268,12 +272,16 @@ func (s *Service) ListBackupFiles(ctx context.Context, req *noryxv1.ListBackupFi
 	}
 	hidden := fileset.Read(data).Secrets()
 	data.Close()
-	zr, err := zip.OpenReader(b.Path())
+	f, err := os.Open(b.Path())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	defer zr.Close()
-	files, ok := list(&zr.Reader, folder, hidden)
+	defer f.Close()
+	zr, err := zipOf(f, b)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	files, ok := list(zr, folder, hidden)
 	if !ok {
 		return nil, status.Error(codes.NotFound, "The backup has no such folder.")
 	}
@@ -303,7 +311,7 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 		}
 		hidden := fileset.Read(data).Secrets()
 		data.Close()
-		zr, err := zip.NewReader(f, b.Size)
+		zr, err := zipOf(f, b)
 		if err != nil {
 			return toStatus(err)
 		}
@@ -315,6 +323,15 @@ func (s *Service) DownloadBackup(req *noryxv1.DownloadBackupRequest, stream nory
 	return Send(r, size, func(size int64, data []byte) error {
 		return stream.Send(&noryxv1.DownloadBackupResponse{Size: size, Data: data})
 	})
+}
+
+// zipOf reads the directory of the archive of a backup in f. That of an untrusted one, from
+// elsewhere, is read within the limits of backups, which it passed when it was added.
+func zipOf(f *os.File, b Archive) (*zip.Reader, error) {
+	if b.Untrusted {
+		return archive.OpenZip(f, b.Size, archive.Backups)
+	}
+	return zip.NewReader(f, b.Size)
 }
 
 // Send sends what r reads in chunks, the first with size, until its end.

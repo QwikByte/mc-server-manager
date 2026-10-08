@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"io"
 	"io/fs"
 	"slices"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -70,6 +72,43 @@ func zipped(t *testing.T, entries ...zipEntry) []byte {
 	}
 	check(t, zw.Close())
 	return buf.Bytes()
+}
+
+// endOnly is an archive of nothing but the end of a ZIP64 archive that announces entries.
+func endOnly(entries uint64) []byte {
+	le := binary.LittleEndian
+	end := le.AppendUint32(nil, 0x06064b50)
+	end = le.AppendUint64(end, 44)
+	end = append(end, make([]byte, 12)...)
+	end = le.AppendUint64(end, entries) // on this disk
+	end = le.AppendUint64(end, entries) // in all
+	end = append(end, make([]byte, 16)...)
+	end = le.AppendUint32(end, 0x07064b50) // the locator of the ZIP64 end at 0
+	end = append(end, make([]byte, 12)...)
+	end = le.AppendUint32(end, 1)
+	end = le.AppendUint32(end, 0x06054b50)
+	return append(end, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0)
+}
+
+// An untrusted backup is read within the limits of backups, so that an archive from elsewhere
+// can't exhaust the agent's memory.
+func TestUntrustedLimits(t *testing.T) {
+	path, _ := paperData(t)
+	s := NewService(&fakeRuntime{dir: path}, storage.New(t.TempDir()))
+	d := Details{Created: time.Now(), Paths: []string{"."}, Untrusted: true}
+	b, err := s.store.Add(serverID, storage.Default, noryxv1.NewBackupID(d.Created), d, 0, func(w io.Writer) error {
+		_, err := w.Write(endOnly(1 << 40))
+		return err
+	})
+	check(t, err)
+	_, err = s.ListBackupFiles(t.Context(), &noryxv1.ListBackupFilesRequest{ServerId: serverID, BackupId: b.ID})
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("listing: %v", err)
+	}
+	_, err = s.RestoreBackup(t.Context(), &noryxv1.RestoreBackupRequest{ServerId: serverID, BackupId: b.ID})
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("restoring: %v", err)
+	}
 }
 
 // An uploaded backup is checked before it is kept, and restoring it brings its files but none

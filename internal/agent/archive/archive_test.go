@@ -5,12 +5,15 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -358,5 +361,57 @@ func TestTooManyEntries(t *testing.T) {
 	a, err := Open(bytes.NewReader(buf.Bytes()), int64(buf.Len()), Backups)
 	if err != nil || len(a.Entries) != Uploads.Entries+1 {
 		t.Fatalf("backup: %v", err)
+	}
+}
+
+// sparse reads as size bytes of zeros that end with tail, like a sparse file.
+type sparse struct {
+	size int64
+	tail []byte
+}
+
+func (s sparse) ReadAt(p []byte, off int64) (int, error) {
+	if off < 0 {
+		return 0, errors.New("negative offset")
+	}
+	n := int(max(min(int64(len(p)), s.size-off), 0))
+	clear(p[:n])
+	start := s.size - int64(len(s.tail))
+	for i := max(off, start); i < off+int64(n); i++ {
+		p[i-off] = s.tail[i-start]
+	}
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+// A ZIP64 archive whose end announces more entries than the limits allow is refused before
+// archive/zip reserves memory for them: for one per 30 bytes, 270 MiB for 1 GiB of zeros.
+func TestHugeDirectoryEnd(t *testing.T) {
+	const size = 1 << 30
+	le := binary.LittleEndian
+	end := le.AppendUint32(nil, 0x06064b50)
+	end = le.AppendUint64(end, 44)
+	end = append(end, 45, 0, 45, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+	end = le.AppendUint64(end, size/31) // entries on this disk
+	end = le.AppendUint64(end, size/31) // and in all
+	end = le.AppendUint64(end, 46)      // the size of the directory
+	end = le.AppendUint64(end, size-56-20-22-46)
+	end = le.AppendUint32(end, 0x07064b50) // the locator of the ZIP64 end
+	end = le.AppendUint32(end, 0)
+	end = le.AppendUint64(end, size-56-20-22)
+	end = le.AppendUint32(end, 1)
+	end = le.AppendUint32(end, 0x06054b50) // the end, which leaves the numbers to the ZIP64 end
+	end = append(end, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0)
+	archive := sparse{size, end}
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := OpenZip(archive, size, Backups)
+	runtime.ReadMemStats(&after)
+	wantCode(t, err, codes.ResourceExhausted, "1000000 files and folders")
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 1<<20 {
+		t.Fatalf("allocated %d bytes", allocated)
 	}
 }
