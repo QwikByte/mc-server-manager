@@ -151,7 +151,7 @@ function PortOwner({ nodeId, port, className }: { nodeId: string; port: Publishe
   if (datastore) {
     return (
       <Link to="/networks/$networkId/databases" params={{ networkId: datastore.networkId }} className={cn(link, "inline-flex items-center gap-1.5")}>
-        <DatabaseIcon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+        <DatabaseIcon className="size-4 shrink-0 text-muted-foreground" />
         <span className="truncate">{datastore.name}</span>
       </Link>
     )

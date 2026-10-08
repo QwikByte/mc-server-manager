@@ -16,10 +16,10 @@ const Lazy = lazy(() => load().then((Palette) => ({ default: Palette })))
 const CreateDialog = lazy(() => import("./create-dialog").then((m) => ({ default: m.CreateDialog })))
 
 /**
- * Opens the palette with Ctrl+K or ⌘K anywhere in the panel, or with its button; a folded one only shows its icon.
- * It also follows the other keyboard shortcuts and shows the dialogs they and the palette open.
+ * Opens the palette with Ctrl+K or ⌘K anywhere in the panel, or with its button, which shows only its icon on
+ * small screens. It also follows the other keyboard shortcuts and shows the dialogs they and the palette open.
  */
-export function PaletteButton({ className, onOpen, folded }: { className?: string; onOpen?: () => void; folded?: boolean }) {
+export function PaletteButton({ className, onOpen }: { className?: string; onOpen?: () => void }) {
   const [open, setOpen] = useState(false)
   const [dialog, setDialog] = useState<Exclude<Opens, "search">>()
   useRememberOpened()
@@ -43,7 +43,10 @@ export function PaletteButton({ className, onOpen, folded }: { className?: strin
     <>
       <Button
         variant="outline"
-        className={cn("justify-start text-muted-foreground", className)}
+        className={cn(
+          "h-8 justify-start bg-muted/50 font-normal text-muted-foreground shadow-none max-sm:w-8 max-sm:justify-center max-sm:px-0 sm:w-56 lg:w-72 dark:bg-muted/50",
+          className,
+        )}
         aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}
         onClick={() => {
           onOpen?.()
@@ -51,8 +54,8 @@ export function PaletteButton({ className, onOpen, folded }: { className?: strin
         }}
       >
         <MagnifyingGlassIcon />
-        <span className={cn("flex-1 text-left max-md:sr-only", folded && "md:sr-only")}>{t("Search…")}</span>
-        <kbd className={cn("rounded border bg-muted px-1.5 font-mono text-[0.6875rem] max-md:hidden", folded && "md:hidden")}>{searchChord}</kbd>
+        <span className="flex-1 text-left max-sm:sr-only">{t("Search…")}</span>
+        <kbd className="rounded-sm border bg-card px-1.5 font-mono text-[0.6875rem] max-sm:hidden">{searchChord}</kbd>
       </Button>
       {open &&
         (Loaded ? (

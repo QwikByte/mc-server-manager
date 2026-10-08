@@ -45,7 +45,7 @@ export function ThemeChoices({ onChoose = setTheme }: { onChoose?: (theme: Theme
     <DropdownMenuRadioGroup value={theme} onValueChange={(value) => onChoose(value as Theme)}>
       {options.map(({ value, label, icon: Icon }) => (
         <DropdownMenuRadioItem key={value} value={value}>
-          <Icon weight="duotone" />
+          <Icon />
           {t(label)}
         </DropdownMenuRadioItem>
       ))}

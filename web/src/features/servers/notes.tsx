@@ -18,7 +18,7 @@ export function ServerNotes({ nodeId, server, canEdit }: { nodeId: string; serve
   if (!server.notes) return null
   return (
     <section aria-label={t("Notes")} className="mb-6 flex items-start gap-3 rounded-xl bg-muted/50 p-4 text-sm">
-      <NoteIcon className="mt-px size-5 shrink-0 text-muted-foreground" weight="duotone" />
+      <NoteIcon className="mt-px size-5 shrink-0 text-muted-foreground" />
       <p className="min-w-0 flex-1 break-words whitespace-pre-wrap">{server.notes}</p>
       {canEdit && (
         <Button

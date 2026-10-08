@@ -150,7 +150,7 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
                   <p className="text-sm text-muted-foreground">{t("Unchanged: {{names}}", { names: unchanged.map(nameOf).join(", ") })}</p>
                 )}
                 {restarting.length > 0 && (
-                  <div className="grid gap-3 rounded-xl p-4 ring-1 ring-foreground/8">
+                  <div className="grid gap-3 rounded-xl p-4 ring-1 ring-border">
                     <label className="flex items-start gap-3 text-sm">
                       <Switch className="mt-0.5" checked={restart && mayRestart} disabled={!mayRestart} onCheckedChange={setRestart} />
                       <span className="space-y-0.5">
@@ -192,7 +192,7 @@ export function ApplyDialog({ set, onClose }: { set: FileSet; onClose: () => voi
 /** The changes of servers whose files change alike. */
 function GroupChanges({ group, contents }: { group: Group; contents: Record<string, string> }) {
   return (
-    <section className="grid gap-3 rounded-xl p-4 ring-1 ring-foreground/8">
+    <section className="grid gap-3 rounded-xl p-4 ring-1 ring-border">
       <div className="flex flex-wrap items-center gap-1.5">
         {group.servers.map((s) => (
           <Pill key={`${s.nodeId}/${s.serverId}`} tone={s.state === "left" ? "neutral" : "info"}>
@@ -268,7 +268,7 @@ function Results({ title, results, onRetry }: { title: string; results: Result[]
         {results.map((r) => {
           const changed = r.changes.filter((c) => c.action !== "unchanged").length
           return (
-            <li key={`${r.nodeId}/${r.serverId}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-sm ring-1 ring-foreground/8">
+            <li key={`${r.nodeId}/${r.serverId}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-sm ring-1 ring-border">
               <span className="font-medium">{nameOf(r)}</span>
               <span className="text-muted-foreground">{r.nodeName}</span>
               {r.error ? (

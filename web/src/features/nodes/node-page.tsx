@@ -17,7 +17,7 @@ import { Meter } from "@/components/meter"
 import { BackLink } from "@/components/back-link"
 import { PageHeader } from "@/components/page-header"
 import { usePageName } from "@/components/page-title"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
@@ -162,7 +162,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
   ].filter((detail): detail is [string, string] => !!detail[1])
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <StatStrip className="grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={CpuIcon}
           tone="warning"
@@ -197,7 +197,7 @@ function NodeFacts({ node, info }: { node: Node; info: NodeInfo }) {
         >
           {t("Renewed automatically")}
         </StatCard>
-      </div>
+      </StatStrip>
       {details.length > 0 && (
         <dl className="mt-4 surface grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl px-5 py-4 md:grid-cols-4">
           {details.map(([term, value]) => (

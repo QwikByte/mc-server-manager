@@ -226,17 +226,17 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
       data-code
       aria-labelledby="console-heading"
       className={cn(
-        "overflow-hidden rounded-2xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10",
+        "overflow-hidden rounded-xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10",
         maximized && maximizedClass,
       )}
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-console-overlay/10 py-2 pr-2 pl-4">
         <h2 id="console-heading" className="flex items-center gap-2 text-sm font-semibold">
-          <TerminalIcon className="size-4 text-console-command" weight="duotone" />
+          <TerminalIcon className="size-4 text-console-command" />
           {t("Console")}
         </h2>
         <p role="status" className="mr-auto flex items-center gap-2 text-xs text-console-muted">
-          <span aria-hidden className={cn("size-2 rounded-full", connections[connection].dot)} />
+          <span aria-hidden className={cn("size-2 rounded-[2px]", connections[connection].dot)} />
           {t(connections[connection].text)}
         </p>
         <div className="flex w-full items-center gap-1 sm:w-auto">
@@ -251,7 +251,11 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("Search output")}
               aria-label={t("Search the output")}
-              className="h-8 w-full rounded-lg bg-console-overlay/[0.06] pr-16 pl-8 text-xs outline-none placeholder:text-console-muted focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden"
+              className={cn(
+                "h-8 w-full rounded-lg bg-console-overlay/[0.06] pr-2 pl-8 text-xs outline-none placeholder:text-console-muted focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden",
+                // Room for how many lines match.
+                filtered && "pr-16",
+              )}
             />
             {filtered && (
               <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[11px] text-console-muted tabular-nums">

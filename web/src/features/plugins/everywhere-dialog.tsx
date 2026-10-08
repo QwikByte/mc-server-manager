@@ -88,7 +88,7 @@ export function EverywhereDialog({
             </DialogHeader>
             <ul className="grid max-h-[50vh] gap-2 overflow-y-auto">
               {results.map((r) => (
-                <li key={key(r)} className="flex items-start gap-3 rounded-lg px-3 py-2 text-sm ring-1 ring-foreground/8">
+                <li key={key(r)} className="flex items-start gap-3 rounded-lg px-3 py-2 text-sm ring-1 ring-border">
                   {r.error ? (
                     <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" weight="fill" />
                   ) : (

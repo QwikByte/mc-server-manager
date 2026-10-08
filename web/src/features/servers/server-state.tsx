@@ -29,7 +29,7 @@ export function StateBar({ servers, className }: { servers: { state: ServerState
   const summary = counts.map(({ state, count }) => `${count} ${t(serverStates[state].label)}`).join(", ")
   return (
     <div className={cn("space-y-2", className)}>
-      <div role="img" aria-label={summary} className="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-muted">
+      <div role="img" aria-label={summary} className="flex h-1.5 gap-0.5 overflow-hidden rounded-[2px] bg-muted">
         {counts.map(({ state, count }) => (
           <span key={state} className={cn("h-full", toneDots[serverStates[state].tone])} style={{ flexGrow: count }} />
         ))}

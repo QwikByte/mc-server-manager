@@ -10,7 +10,7 @@ export function RestartOption({ restart }: { restart: ReturnType<typeof useResta
   const { running, on, setOn, batch, setBatch, may } = restart
   if (running.length === 0) return null
   return (
-    <div className="grid gap-3 rounded-xl p-4 ring-1 ring-foreground/8">
+    <div className="grid gap-3 rounded-xl p-4 ring-1 ring-border">
       <label className="flex items-start gap-3 text-sm">
         <Switch className="mt-0.5" checked={on && may} disabled={!may} onCheckedChange={setOn} />
         <span className="space-y-0.5">

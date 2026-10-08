@@ -79,7 +79,7 @@ function NetworkCard({ network, servers, usage }: { network: Network; servers?: 
     <Link
       to="/networks/$networkId"
       params={{ networkId: network.id }}
-      className="group surface flex h-full flex-col gap-5 rounded-xl p-5 transition-all outline-none hover:-translate-y-0.5 hover:shadow-lg hover:ring-violet/40 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0"
+      className="group surface flex h-full flex-col gap-5 rounded-xl p-5 lift outline-none hover:ring-violet/40 focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex items-start gap-3">
         <IconTile icon={GraphIcon} tone="violet" />

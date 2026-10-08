@@ -8,6 +8,7 @@ import {
   LightningIcon,
   PushPinIcon,
   ScrollIcon,
+  SquaresFourIcon,
   UsersThreeIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react"
@@ -21,6 +22,7 @@ import { Attention, Networks, Nodes, Pinned, TopServers } from "./lists"
 import { QuickActions } from "./quick-actions"
 import { Resources } from "./resources"
 import { Schedules } from "./schedules"
+import { ServerMap } from "./server-map"
 
 export interface WidgetDef {
   id: string
@@ -38,6 +40,14 @@ const seesServers = (a: Access) => a.canSomewhere("servers.view")
 /** The widgets of the overview, in their default order. */
 export const widgets: WidgetDef[] = [
   { id: "figures", title: msg("Key figures"), icon: ChartBarIcon, columns: 3, visible: () => true, Component: Figures },
+  {
+    id: "server-map",
+    title: msg("Server map"),
+    icon: SquaresFourIcon,
+    columns: 3,
+    visible: (a) => a.canSomewhere("nodes.view") || seesServers(a),
+    Component: ServerMap,
+  },
   { id: "attention", title: msg("Needs attention"), icon: WarningCircleIcon, columns: 2, visible: () => true, Component: Attention },
   {
     id: "nodes",

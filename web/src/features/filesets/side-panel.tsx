@@ -79,8 +79,8 @@ function TargetsSection({ targets, editable, onChange }: { targets: Target[]; ed
             const { icon: Icon, label } = targetLabel(target, networks)
             const count = covered(target)
             return (
-              <li key={targetKey(target)} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2 ring-1 ring-foreground/8">
-                <Icon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+              <li key={targetKey(target)} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2 ring-1 ring-border">
+                <Icon className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{label}</span>
                   {count !== undefined && (

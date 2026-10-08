@@ -44,7 +44,7 @@ export function SecretsSection({ set, files, editable }: { set: FileSet; files: 
           {names.map((name) => {
             const stored = set.secrets.find((s) => s.name === name)
             return (
-              <li key={name} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2 ring-1 ring-foreground/8">
+              <li key={name} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2 ring-1 ring-border">
                 {stored ? (
                   <CheckCircleIcon className="size-4 shrink-0 text-success" weight="fill" aria-label={t("Has a value")} />
                 ) : (

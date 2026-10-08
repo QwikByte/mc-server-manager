@@ -19,7 +19,7 @@ export function HubLayout({ hub, children = <Outlet /> }: { hub: Hub | typeof se
         <Tabs label={t(hub.label)}>
           {tabs.map((tab) => (
             <TabLink key={tab.to} to={tab.to} activeOptions={{ exact: "exact" in tab, includeSearch: false }}>
-              <tab.icon className="size-4" weight="duotone" />
+              <tab.icon className="size-4" />
               {t(tab.label)}
             </TabLink>
           ))}

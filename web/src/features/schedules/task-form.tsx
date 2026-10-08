@@ -58,7 +58,7 @@ export function TaskForm<S>({
   }
 
   return (
-    <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
+    <form onSubmit={submit} className="surface rounded-xl px-5 sm:px-8">
       <FormSection title={t("General")}>
         <Field>
           <FieldLabel htmlFor="task-name">{t("Name")}</FieldLabel>

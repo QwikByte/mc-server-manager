@@ -32,7 +32,7 @@ export function NewGroupPage() {
 export function GroupPage() {
   const { groupId } = route.useParams()
   const { data: group, isPending, error } = useQuery(groupQuery(groupId))
-  if (isPending) return <Skeleton className="h-96 rounded-2xl" />
+  if (isPending) return <Skeleton className="h-96 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
   // Remounting on save resets the form to what the master stored.
   return <GroupEditor key={JSON.stringify(group)} group={group} initial={group} />
@@ -74,7 +74,7 @@ function GroupEditor({ group, initial }: { group?: Group; initial: GroupInput })
   return (
     <>
       <BackLink to="/settings/groups">{t("Groups")}</BackLink>
-      <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
+      <form onSubmit={submit} className="surface rounded-xl px-5 sm:px-8">
         <fieldset disabled={!editable} className="contents">
           <FormSection title={t("Group")}>
             {group?.builtin && (
@@ -212,7 +212,7 @@ function ScopeOption({
   return (
     <FieldLabel htmlFor={`scope-${value}`}>
       <Field orientation="horizontal" className="items-start">
-        <Icon className="mt-0.5 size-5 shrink-0 text-violet" weight="duotone" />
+        <Icon className="mt-0.5 size-5 shrink-0 text-violet" />
         <FieldContent>
           <FieldTitle>{title}</FieldTitle>
           <FieldDescription>{description}</FieldDescription>

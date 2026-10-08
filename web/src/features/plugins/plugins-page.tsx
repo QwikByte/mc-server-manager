@@ -48,7 +48,7 @@ export function PluginsPage() {
       {view === "installed" ? (
         <InstalledTab kind={kind} />
       ) : (
-        <div className="surface rounded-2xl p-4 sm:p-6">
+        <div className="surface rounded-xl p-4 sm:p-6">
           {/* Each kind starts with its own filters. */}
           <PluginSearch key={kind} kind={kind} action={(hit) => <InstallDialog hit={hit} />} />
         </div>

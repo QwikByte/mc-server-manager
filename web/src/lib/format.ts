@@ -34,10 +34,6 @@ export const formatTime = (time: number | string | Date, options: Intl.DateTimeF
 /** The day of a time in the viewer's time zone as YYYY-MM-DD, e.g. to group times by days. */
 export const dayOf = (time: number | string | Date) => new Date(time).toLocaleDateString("sv", { timeZone })
 
-/** The hour of a time in the viewer's time zone, from 0 to 23. */
-export const hourOf = (time: number | string | Date) =>
-  Number(new Date(time).toLocaleString("en", { hour: "numeric", hourCycle: "h23", timeZone }))
-
 /** How far the viewer's time zone is ahead of UTC at a time, in milliseconds. */
 export function zoneOffset(time: number) {
   const parts = Object.fromEntries(

@@ -11,7 +11,10 @@ export interface Status {
   pulse?: boolean
 }
 
-/** A coloured dot; with a label it is announced, otherwise it is decorative. */
+/**
+ * A coloured lamp, square like a block, as are the servers it mostly stands for; with a label it is
+ * announced, otherwise it is decorative.
+ */
 export function StatusDot({ status, label, className }: { status: Status; label?: string; className?: string }) {
   return (
     <span
@@ -19,12 +22,12 @@ export function StatusDot({ status, label, className }: { status: Status; label?
       aria-label={label}
       aria-hidden={!label}
       title={label}
-      className={cn("relative flex size-2 shrink-0", className)}
+      className={cn("relative flex size-2 shrink-0 rounded-[2px]", className)}
     >
       {status.pulse && (
-        <span className={cn("absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:hidden", toneDots[status.tone])} />
+        <span className={cn("absolute inset-0 animate-ping rounded-[2px] opacity-60 motion-reduce:hidden", toneDots[status.tone])} />
       )}
-      <span className={cn("relative size-2 rounded-full", toneDots[status.tone])} />
+      <span className={cn("relative size-2 rounded-[2px]", toneDots[status.tone])} />
     </span>
   )
 }
@@ -34,7 +37,7 @@ export function Pill({ tone, children, className }: { tone: Tone; children: Reac
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
+        "inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
         toneClasses[tone],
         className,
       )}

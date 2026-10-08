@@ -40,7 +40,7 @@ export function GroupsPage() {
             <Link
               to="/settings/groups/$groupId"
               params={{ groupId: group.id }}
-              className="surface flex h-full flex-col gap-4 rounded-xl p-5 transition-all outline-none hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0"
+              className="surface flex h-full flex-col gap-4 rounded-xl p-5 lift outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="flex items-start gap-3">
                 <IconTile icon={group.builtin ? CrownIcon : UsersIcon} tone={group.builtin ? "warning" : "violet"} />

@@ -4,8 +4,9 @@ How the admin panel is organised, and what works the same on all of its pages.
 
 ## Overview
 
-The **Overview** is the panel's start page: the players online, the servers by state, the nodes with what they use, the
-networks, the servers with the most players, and what needs attention: crashing and unhealthy servers, offline nodes,
+The **Overview** is the panel's start page. Below its title it says whether everything runs or how many things need
+attention, and then shows the players online, the servers by state, the nodes with what they use, the networks, the
+servers with the most players, and what needs attention: crashing and unhealthy servers, offline nodes,
 nodes with more memory assigned than they can give, servers and nodes beyond a threshold of their usage, e.g. almost
 full storage ([Warnings](monitoring.md#warnings)), nodes whose certificate expires within two weeks, proxies that are
 stopped while their servers run, and backup jobs and schedules whose last run failed. It counts like the **Nodes** page:
@@ -17,14 +18,16 @@ has to be connected again with a new join token. The master stores when a node's
 renews it and when the node presents a newer one, so it warns about an offline node also after the master restarted.
 Of a node that was offline when the master was updated to store it, it learns it once the node is online again.
 
-The Overview is made of widgets: key figures, what needs attention, the nodes with their CPU of the last 24 hours, the
-load of all nodes over the last 24 hours, pinned servers, networks, the servers with the most players, the latest
+The Overview is made of widgets: key figures, the server map, what needs attention, the nodes with their CPU of the last
+24 hours, the load of all nodes over the last 24 hours, pinned servers, networks, the servers with the most players, the latest
 entries of the log, the next runs of backup jobs and schedules with those whose last run failed first, and quick
 actions to create a server or a network or add a node. Each user only gets the widgets
 their permissions allow. **Customize** arranges them: widgets are dragged by their handle to the place of another, or
 moved a place with the arrow keys on it, span one, two or all three columns, and are hidden and added again; **Reset**
 brings back the default layout. The master keeps the layout for each user, like the language, so it applies in all their
-browsers. The players online and the CPU load of the key figures show how they went while the panel is open.
+browsers. The players online and the CPU load of the key figures show how they went while the panel is open. The
+server map shows each node in a row with its servers as blocks in the colour of their state, solid while they run and
+hollow while they are stopped; a block names its server when pointed at and opens it.
 
 ## Navigation and pinned servers
 
@@ -32,9 +35,11 @@ Servers are pinned with the pin on their card, in the table or on their page. Pi
 in the sidebar and in their widget, which also starts and stops them. The master keeps them for each user too, up to 20;
 they follow a server that moves and go with a deleted server or a removed node. The sidebar lists the overview, servers,
 networks, players and nodes, the **Library** (templates, file sets, plugins and mods) and the **Automation** (backup
-jobs and schedules), each with its parts as tabs, and the log and settings at its foot. The menu of the user's name
-holds their account, the colour theme, the language and signing out. The sidebar folds to its icons, which each browser
-remembers. Lists, figures, charts, tabs and pages are animated, unless the operating system asks for less motion.
+jobs and schedules), each with its parts as tabs, the log and settings at its foot, and the user's name below them,
+whose menu holds their account, the colour theme, the language and signing out. The sidebar is dark in both colour
+themes and folds to its icons, which each browser remembers. The bar above each page shows where it is, e.g.
+**Servers › lobby › Files**, with links to the parts above it, and holds the search, the operations and the bell of
+warnings and errors. On small screens, the bar's menu holds the sidebar. Lists, figures, charts, tabs and pages are animated, unless the operating system asks for less motion.
 
 ## Settings of each user
 

@@ -9,7 +9,7 @@ export function GroupPicker({ groups, value, onChange }: { groups: Group[]; valu
     <ul className="grid gap-2">
       {groups.map((g) => (
         <li key={g.id}>
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-foreground/8 hover:bg-muted/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-primary/30">
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-border hover:bg-muted/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-primary/30">
             <Checkbox
               className="mt-0.5"
               checked={value.includes(g.id)}

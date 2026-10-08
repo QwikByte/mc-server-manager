@@ -41,7 +41,7 @@ export function RunHistory<S>({ taskApi, id }: { taskApi: TaskApi<S>; id: string
         <ErrorCallout error={error} />
       ) : runs.length === 0 ? (
         <p className="surface flex items-center gap-3 rounded-xl px-4 py-5 text-sm text-muted-foreground">
-          <ClockCounterClockwiseIcon className="size-5" weight="duotone" />
+          <ClockCounterClockwiseIcon className="size-5" />
           {t("It hasn't run yet.")}
         </p>
       ) : (
@@ -74,7 +74,7 @@ function RunRow({ run }: { run: Run }) {
           </span>
           {run.startedBy && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <UserIcon className="size-3.5" weight="duotone" />
+              <UserIcon className="size-3.5" />
               {t("started by {{user}}", { user: run.startedBy })}
             </span>
           )}
@@ -114,7 +114,7 @@ function StepRow({ step }: { step: Step }) {
   const outcome = outcomes[step.outcome] ?? outcomes.succeeded
   return (
     <li className="flex gap-2 text-sm">
-      <outcome.icon className={cn("mt-0.5 size-4 shrink-0", outcome.color)} weight="duotone" aria-label={t(outcome.label)} />
+      <outcome.icon className={cn("mt-0.5 size-4 shrink-0", outcome.color)} aria-label={t(outcome.label)} />
       <div className="min-w-0 space-y-0.5">
         <p>
           {describeStep(step)} <span className="text-xs text-muted-foreground">{step.node}</span>

@@ -12,7 +12,7 @@ import {
   UsersThreeIcon,
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { getRouteApi, Outlet, useNavigate } from "@tanstack/react-router"
+import { getRouteApi, Link, Outlet, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
@@ -144,7 +144,11 @@ export function ServerPage() {
                 <Chip icon={MemoryIcon} title={memoryTitle(server)}>
                   {formatMegabytes(server.memoryMb)}
                 </Chip>
-                {node && <Chip icon={HardDrivesIcon}>{node.name}</Chip>}
+                {node && (
+                  <Link to="/nodes/$nodeId" params={{ nodeId }} className="rounded-md outline-none hover:[&>span]:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
+                    <Chip icon={HardDrivesIcon}>{node.name}</Chip>
+                  </Link>
+                )}
                 <TagList tags={server.tags} className="items-center" />
                 <ServerSchedules nodeId={nodeId} serverId={serverId} />
               </span>
@@ -163,7 +167,7 @@ export function ServerPage() {
               .filter((tab) => tab.label && can(tab.permission, nodeId, serverId))
               .map(({ to, label, icon: Icon, exact }) => (
                 <TabLink key={to} to={to} params={{ nodeId, serverId }} activeOptions={{ exact, includeSearch: false }}>
-                  <Icon className="size-4" weight="duotone" />
+                  <Icon className="size-4" />
                   {label}
                 </TabLink>
               ))}

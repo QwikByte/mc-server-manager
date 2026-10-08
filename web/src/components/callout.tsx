@@ -25,7 +25,7 @@ export function Callout({
 }) {
   return (
     <div role={role} className={cn("flex gap-3 rounded-xl p-4 text-sm ring-1 ring-inset", toneClasses[tone], className)}>
-      <Icon className="mt-px size-5 shrink-0" weight="duotone" />
+      <Icon className="mt-px size-5 shrink-0" />
       <div className="min-w-0 space-y-1">
         {title && <p className="font-semibold">{title}</p>}
         <div className="text-foreground/80">{children}</div>

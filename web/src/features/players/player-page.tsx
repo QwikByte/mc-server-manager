@@ -21,7 +21,7 @@ import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { usePageName } from "@/components/page-title"
 import { Section } from "@/components/section"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -116,14 +116,14 @@ function Player({ name }: { name: string }) {
         }
         actions={<PlayerActions at={at} entries={entries} onAct={setDialog} />}
       />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatStrip className="grid-cols-2 lg:grid-cols-4">
         <StatCard icon={ClockCounterClockwiseIcon} tone="info" label={t("Last seen")} value={online.length > 0 ? t("Now") : history.servers.length > 0 ? formatAgo(history.lastSeen, now) : "–"}>
           {history.servers.length > 0 && formatDateTime(history.lastSeen)}
         </StatCard>
         <StatCard icon={HourglassIcon} tone="violet" label={t("Playtime")} value={formatMinutes(history.minutes)} />
         <StatCard icon={HardDrivesIcon} tone="success" label={t("Servers")} value={history.servers.length} />
         <StatCard icon={CalendarBlankIcon} tone="warning" label={t("First seen")} value={history.servers.length > 0 ? formatDate(history.firstSeen) : "–"} />
-      </div>
+      </StatStrip>
       {history.days.length > 0 && (
         <Section title={t("Activity")} description={t("Minutes played per day, in UTC")}>
           <Activity days={history.days} now={now} />

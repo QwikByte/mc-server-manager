@@ -124,7 +124,7 @@ function Frame({
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ ...rise(index).transition, layout: { type: "spring", bounce: 0.15, duration: 0.5 } }}
       className={cn(
-        "@container relative min-w-0 rounded-2xl outline-offset-6",
+        "@container relative min-w-0 rounded-xl outline-offset-6",
         spans[widget.columns],
         // The links and choices in the header of a widget make room for its tools.
         editing && "outline-2 outline-border outline-dashed **:data-[slot=panel-actions]:invisible",
@@ -191,7 +191,7 @@ function Ghost({ id }: { id: string }) {
   const def = widgetOf(id)
   return (
     def && (
-      <div className="flex h-full min-h-20 rotate-1 items-center gap-3 rounded-2xl bg-popover/90 p-5 shadow-2xl ring-2 ring-primary/50 backdrop-blur-xl">
+      <div className="flex h-full min-h-20 rotate-1 items-center gap-3 rounded-xl bg-popover/90 p-5 shadow-2xl ring-2 ring-primary/50 backdrop-blur-xl">
         <IconTile icon={def.icon} />
         <span className="heading text-lg">{t(def.title)}</span>
       </div>

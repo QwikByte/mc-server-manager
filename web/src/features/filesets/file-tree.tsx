@@ -77,9 +77,9 @@ export function FileTree({
             style={{ paddingLeft: 6 + depth * 14 + 18 }}
           >
             {file.data !== undefined ? (
-              <FileImageIcon aria-label={t("Binary file")} className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+              <FileImageIcon aria-label={t("Binary file")} className="size-4 shrink-0 text-muted-foreground" />
             ) : (
-              <FileIcon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+              <FileIcon className="size-4 shrink-0 text-muted-foreground" />
             )}
             <span className="min-w-0 flex-1 truncate font-mono text-xs" title={file.path}>
               {file.path.split("/").pop()}

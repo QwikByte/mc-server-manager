@@ -85,7 +85,7 @@ export function RuleDialog({ rule, channels, trigger }: { rule?: Rule; channels:
                       const Icon = kinds[c.kind].icon
                       return (
                         <SelectItem key={c.id} value={c.id}>
-                          <Icon weight="duotone" />
+                          <Icon />
                           {c.name}
                         </SelectItem>
                       )

@@ -130,7 +130,7 @@ export function BackendList({
                     ))}
                     {firewall && (
                       <Pill tone="warning">
-                        <ShieldWarningIcon className="size-3.5" weight="duotone" />
+                        <ShieldWarningIcon className="size-3.5" />
                         {t("Firewall rule")}
                       </Pill>
                     )}
@@ -233,7 +233,7 @@ export function BackendList({
                   {firewall && (
                     <div className="space-y-2 rounded-lg bg-warning/10 p-3 text-xs ring-1 ring-warning/20 ring-inset">
                       <p className="flex items-center gap-2 font-medium text-warning">
-                        <ShieldWarningIcon className="size-4" weight="duotone" />
+                        <ShieldWarningIcon className="size-4" />
                         {t("Let only the proxy reach port {{port}} on {{node}}:", { port: server.port, node: server.nodeName })}
                       </p>
                       <FirewallCommand server={server} proxyHost={proxyHost} />

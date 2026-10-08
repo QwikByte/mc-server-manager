@@ -124,7 +124,7 @@ function LogView({ datastore: ds }: { datastore: Datastore }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-console-overlay/10 px-3 py-2 text-xs text-console-muted">
         <span className="flex min-w-0 items-center gap-2 font-mono">
-          <ScrollIcon aria-hidden className="size-4 shrink-0 text-console-command" weight="duotone" />
+          <ScrollIcon aria-hidden className="size-4 shrink-0 text-console-command" />
           <span className="truncate">{`noryx-db-${ds.id}`}</span>
         </span>
         <p role="status" className="flex items-center gap-2">

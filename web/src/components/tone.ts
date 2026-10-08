@@ -18,3 +18,12 @@ export const toneDots: Record<Tone, string> = {
   destructive: "bg-destructive",
   neutral: "bg-muted-foreground/60",
 }
+
+export const toneText: Record<Tone, string> = {
+  success: "text-success",
+  info: "text-info",
+  violet: "text-violet",
+  warning: "text-warning",
+  destructive: "text-destructive",
+  neutral: "text-muted-foreground",
+}
