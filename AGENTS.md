@@ -71,7 +71,9 @@ internal/master/
   policy/              the panel's schedules (policies in the API): restarts with warnings, stops, starts, commands
   database/            SQLite and embedded migrations
   logs/                log in the database, logging of API requests, collecting the agents' logs, REST API, CLI
-  usage/               history of what nodes and servers use, from the agents' measurements, REST API
+  notify/              notifications of new log entries by rules to Discord, Slack, webhooks and mail, with a dialer
+                       that only reaches public addresses
+  usage/               history of what nodes, servers and datastores use, from the agents' measurements, REST API
   httpapi/             JSON helpers
 internal/agent/
   app/                 wiring, listeners, local CLI
