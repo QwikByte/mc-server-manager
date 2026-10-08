@@ -46,6 +46,7 @@ const (
 // podman is what the agent knows of Podman from its answers.
 type podman struct {
 	version atomic.Pointer[string] // e.g. "v5.4.2"
+	root    atomic.Pointer[string] // the version that told it runs as root
 }
 
 // newer reports whether the Podman that answered last is version or newer.
@@ -56,10 +57,10 @@ func (p *podman) newer(version string) bool {
 
 // check looks at every answer of the runtime. While another runtime answers at its socket than
 // the agent is set to use, e.g. as the package podman-docker points Docker's socket to Podman,
-// or a Podman too old, the call fails: the agent would rely on what that runtime does
-// differently, such as how it keeps servers apart.
+// or a Podman too old or rootless, the call fails: the agent would rely on what that runtime
+// does differently, such as how it keeps servers apart.
 func (d *Docker) check(res *http.Response) {
-	err := d.accept(res.Header.Get("Libpod-Api-Version")) // Podman's version, which Docker leaves out
+	err := d.accept(res.Request.Context(), res.Header.Get("Libpod-Api-Version")) // Podman's version, which Docker leaves out
 	var refusal *error
 	if err != nil {
 		refusal = &err
@@ -82,8 +83,11 @@ func (d *Docker) check(res *http.Response) {
 	res.Body, res.ContentLength = io.NopCloser(bytes.NewReader(body)), int64(len(body))
 }
 
-// accept checks the runtime that answered by the version of Podman it tells, if any.
-func (d *Docker) accept(libpod string) error {
+// accept checks the runtime that answered by the version of Podman it tells, if any, and asks
+// each version of Podman once whether it runs as root. Rootless Podman would publish ports past
+// the firewall of the private network, give containers no addresses on the node and map their
+// users to others.
+func (d *Docker) accept(ctx context.Context, libpod string) error {
 	switch {
 	case d.podman == nil && libpod != "":
 		return fmt.Errorf("%w: Podman %s answers at the socket of Docker; set the agent to Podman with --runtime podman, or to the socket of Docker with --runtime-socket", runtime.ErrWrongRuntime, libpod)
@@ -95,6 +99,20 @@ func (d *Docker) accept(libpod string) error {
 		return fmt.Errorf("%w: Podman %s is too old, the agent needs %s or newer", runtime.ErrWrongRuntime, libpod, strings.TrimPrefix(minPodman, "v"))
 	}
 	v := "v" + libpod
+	if root := d.podman.root.Load(); root == nil || *root != v {
+		var info struct {
+			Host struct{ Security struct{ Rootless bool } }
+		}
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute) // also if the call ends with its answer
+		defer cancel()
+		if err := d.libpod(ctx, "/info", &info); err != nil {
+			return fmt.Errorf("%w: can't tell whether Podman runs as root: %w", runtime.ErrWrongRuntime, err)
+		}
+		if info.Host.Security.Rootless {
+			return fmt.Errorf("%w: Podman runs rootless, but the agent needs it as root; set the agent to its socket with --runtime-socket, by default %s", runtime.ErrWrongRuntime, PodmanSocket)
+		}
+		d.podman.root.Store(&v)
+	}
 	d.podman.version.Store(&v)
 	return nil
 }

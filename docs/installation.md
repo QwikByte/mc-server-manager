@@ -96,7 +96,7 @@ sudo systemctl enable --now noryx-isolate.service   # keeps the servers apart be
 Then add `--runtime podman` to `NORYX_AGENT_OPTS` in `/etc/noryx/agent.env` and run
 `sudo systemctl restart noryx-agent`; `--runtime-socket <path>` names another socket than `/run/podman/podman.sock`.
 The agent refuses a socket at which the other runtime answers, e.g. Podman behind Docker's socket through the package
-`podman-docker`, and a Podman before 4.9: calls then fail and say why.
+`podman-docker`, a Podman before 4.9 and rootless Podman: calls then fail and say why.
 
 The runtime is chosen per node, not per server, as each runtime keeps its servers apart with networks and firewall
 rules of its own. A node doesn't take its servers along to another runtime: move them to another node first, then

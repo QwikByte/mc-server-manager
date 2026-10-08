@@ -38,10 +38,13 @@ func live(t *testing.T) *Docker {
 }
 
 // fakeEngine returns a runtime connected to an API that answers like Docker, or like Podman of
-// the version libpod, with the handlers of routes.
+// the version libpod as root, with the handlers of routes.
 func fakeEngine(t *testing.T, podmanAgent bool, libpod string, routes map[string]http.HandlerFunc) *Docker {
 	t.Helper()
 	mux := http.NewServeMux()
+	if routes[podmanInfo] == nil {
+		mux.HandleFunc(podmanInfo, reply(map[string]any{"host": map[string]any{"security": map[string]bool{"rootless": false}}}))
+	}
 	for pattern, handler := range routes {
 		mux.HandleFunc(pattern, handler)
 	}
@@ -70,27 +73,43 @@ func reply(v any) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) { _ = json.NewEncoder(w).Encode(v) }
 }
 
-// The agent refuses a runtime other than the one it is set to use, and a Podman too old, as it
-// relies on what each one does differently, e.g. to keep servers apart.
+// podmanInfo is the route of Podman's own information.
+const podmanInfo = "GET /v4.0.0/libpod/info"
+
+// The agent refuses a runtime other than the one it is set to use, and a Podman too old or
+// rootless, as it relies on what each one does differently, e.g. to keep servers apart.
 func TestRuntimeMismatch(t *testing.T) {
-	info := map[string]http.HandlerFunc{"GET /v1.41/info": reply(system.Info{ServerVersion: "1.2.3"})}
 	for _, tc := range []struct {
-		name   string
-		podman bool
-		libpod string
-		err    string // empty if accepted
+		name     string
+		podman   bool
+		libpod   string
+		rootless bool
+		err      string // empty if accepted
 	}{
-		{"Docker", false, "", ""},
-		{"Podman at Docker's socket", false, "5.4.2", "Podman 5.4.2 answers at the socket of Docker"},
-		{"Docker at Podman's socket", true, "", "Docker answers at the socket of Podman"},
-		{"Podman too old", true, "4.3.1", "Podman 4.3.1 is too old, the agent needs 4.9.0 or newer"},
-		{"Podman", true, "5.4.2", ""},
+		{"Docker", false, "", false, ""},
+		{"Podman at Docker's socket", false, "5.4.2", false, "Podman 5.4.2 answers at the socket of Docker"},
+		{"Docker at Podman's socket", true, "", false, "Docker answers at the socket of Podman"},
+		{"Podman too old", true, "4.3.1", false, "Podman 4.3.1 is too old, the agent needs 4.9.0 or newer"},
+		{"rootless Podman", true, "5.4.2", true, "Podman runs rootless"},
+		{"Podman", true, "5.4.2", false, ""},
 	} {
-		d := fakeEngine(t, tc.podman, tc.libpod, info)
+		asked := 0
+		d := fakeEngine(t, tc.podman, tc.libpod, map[string]http.HandlerFunc{
+			"GET /v1.41/info": reply(system.Info{ServerVersion: "1.2.3"}),
+			podmanInfo: func(w http.ResponseWriter, r *http.Request) {
+				asked++
+				reply(map[string]any{"host": map[string]any{"security": map[string]bool{"rootless": tc.rootless}}})(w, r)
+			},
+		})
 		got, err := d.Info(t.Context())
 		switch {
 		case tc.err == "" && (err != nil || got.Version != "1.2.3"):
 			t.Errorf("%s: %+v, %v", tc.name, got, err)
+		case tc.err == "" && tc.podman:
+			// Podman is asked once whether it runs as root.
+			if _, err := d.Info(t.Context()); err != nil || asked != 1 {
+				t.Errorf("%s: asked %d times, %v", tc.name, asked, err)
+			}
 		case tc.err != "" && (!errors.Is(err, runtime.ErrWrongRuntime) || !strings.Contains(err.Error(), tc.err)):
 			t.Errorf("%s: error %v, want %q", tc.name, err, tc.err)
 		case tc.err != "":

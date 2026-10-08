@@ -128,9 +128,10 @@ which Podman doesn't start the servers. An agent that can't set up the tables, e
 `nft_meta_bridge`, doesn't run. A network of the agent without such a bridge, e.g. of an older agent, is created again
 once no container uses it, and no server or datastore starts in it until then. The agent checks every answer of the
 runtime's socket and refuses one at which the other runtime answers, e.g. Podman behind Docker's socket, or a Podman
-older than 4.9, as it relies on how each one keeps servers apart. With SELinux, e.g. on RHEL, Podman also confines each
-container to the files labelled for it, and the agent has it label the mounts of each container for that container
-alone (`Z`). Rootless Podman isn't supported.
+older than 4.9 or rootless, as it relies on how each one keeps servers apart; whether Podman runs rootless, which
+Docker's API doesn't tell, it asks Podman's own API once for each version. With SELinux, e.g. on RHEL, Podman also
+confines each container to the files labelled for it, and the agent has it label the mounts of each container for that
+container alone (`Z`).
 
 ## Agent input
 
