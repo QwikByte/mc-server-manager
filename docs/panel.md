@@ -38,22 +38,35 @@ remembers. Lists, figures, charts, tabs and pages are animated, unless the opera
 
 ## Settings of each user
 
-Each user chooses on their account page, in the menu of their name, the colour theme, the accent colour, the density,
-whether times have 24 or 12 hours and the language of the panel; the menu itself offers the colour theme and the
-language too. The accent gives buttons, links and highlights their colour: emerald, blue, violet or graphite, each
-readable in both themes (WCAG AA), while the colours of states, such as running or failed, stay. The compact density
-tightens all spacing, e.g. for long lists of servers, on screens used with a mouse or touchpad; touch screens keep the
-comfortable one.
+Each user chooses on their account page, in the menu of their name, the colour theme, the accent colour, the density and
+the language of the panel; the menu itself offers the colour theme and the language too. The accent gives buttons, links
+and highlights their colour: emerald, blue, violet or graphite, each readable in both themes (WCAG AA), while the colours
+of states, such as running or failed, stay. The compact density tightens all spacing, e.g. for long lists of servers, on
+screens used with a mouse or touchpad; touch screens keep the comfortable one.
 
-Users who may see the log can also turn on [desktop notifications](monitoring.md#everywhere-else) there, in each
-browser.
+**Times and dates** chooses whether times have 24 or 12 hours, their time zone (the browser's, or one chosen for all
+browsers, e.g. UTC), whether times that tell how long ago something was, e.g. "5 minutes ago", show that or the date and
+time, with the other one in their tooltip, and whether weeks start on Monday or Sunday, or as the language has it, e.g.
+for the days of backup jobs and schedules. New schedules start in the chosen time zone. Changing these reloads the panel.
+
+**Console, terminal and editor** chooses the size of their text, whether they stay dark or are light in the light theme
+(with colours that meet WCAG AA, also those of Minecraft), whether each of them wraps long lines, whether the console
+shows when each line was written and how many lines it keeps, and how the editor indents and whether it takes Vim's keys;
+see [Console](servers.md#console) and [File manager](servers.md#file-manager).
+
+Users who may see the log choose which warnings and errors pop up and pause them, and turn on [desktop
+notifications](monitoring.md#everywhere-else) in each browser. **Exports** chooses whether CSV files of tables and of
+the log separate their cells with commas or semicolons, which spreadsheets in languages with a decimal comma, e.g.
+German, expect and which the language chooses unless the user does, and whether they start with a byte order mark,
+which Excel needs to read umlauts.
 
 The master keeps these choices for each user, as well as the view, sort and grouping of server lists chosen last, so
-that they apply in all their browsers. Each browser remembers the look and the clock it showed last and uses them until
-someone signs in; what a user never chose follows the browser. `GET /api/preferences` returns a user's settings with the
-layout of their overview and their pinned servers, and `PATCH /api/preferences/settings` changes some of them, e.g.
-`{"theme": "dark"}`, or takes one back to the browser's with `null`. The master refuses settings and values it doesn't
-know.
+that they apply in all their browsers. Each browser remembers the look and the formats of times it showed last and uses
+them until someone signs in; what a user never chose follows the browser. `GET /api/preferences` returns a user's
+settings with the layout of their overview, their pinned servers and what pops up for them; `PATCH
+/api/preferences/settings` changes some of the settings, e.g. `{"theme": "dark"}` or `{"timeZone": "Europe/Berlin"}`, or
+takes one back to the browser's with `null`, and `PUT /api/preferences/alerts` sets what pops up. The master refuses
+settings and values it doesn't know.
 
 ## Search
 

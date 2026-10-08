@@ -13,6 +13,7 @@ import { OperationStatus } from "@/features/operations/operation-status"
 import { retryAction } from "@/features/operations/retry"
 import { type Done, guard, useOperation } from "@/features/operations/use-operation"
 import { allServersQuery } from "@/features/servers/api"
+import { fromWallClock } from "@/lib/format"
 import { playerActions, playersLabel } from "./actions"
 import { type PlayerAction, type PlayerLists, type PlayerResult, playerListsQuery, useChangePlayer } from "./api"
 import { type Names, namesOf, useKnownNames } from "./names"
@@ -78,7 +79,7 @@ export function PlayerActionDialog({
   const title = info.title(names.length > 0 ? players : "…")
   const nameOf = (ref: ServerRef) => findServer(servers, ref)?.name ?? ref.serverId
   // When a ban ends, from the moment it is made.
-  const endOf = () => (duration === "until" ? new Date(until) : durations[duration].ms ? new Date(Date.now() + durations[duration].ms) : undefined)
+  const endOf = () => (duration === "until" ? fromWallClock(until) : durations[duration].ms ? new Date(Date.now() + durations[duration].ms) : undefined)
 
   function done(results: PlayerResult[]): Done {
     const failed = results.filter((r) => r.error)

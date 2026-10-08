@@ -1,20 +1,26 @@
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ArrowsInIcon,
+  ArrowsOutIcon,
   BroomIcon,
   DownloadSimpleIcon,
-  type Icon,
   MagnifyingGlassIcon,
+  SlidersHorizontalIcon,
   TerminalIcon,
   WarningIcon,
 } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
-import { type ComponentProps, memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { memo, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { ConsoleButton } from "@/components/console-button"
 import { useAccess } from "@/features/access/use-access"
+import { useSettings } from "@/features/preferences/api"
+import { CodeViewMenu } from "@/features/preferences/code-view"
 import { useServerUsage } from "@/features/usage/api"
-import { msg } from "@/lib/i18n"
+import { dayOf } from "@/lib/format"
+import { locale, msg, timeZone } from "@/lib/i18n"
+import { maximizedClass, useMaximized } from "@/lib/use-maximized"
 import { cn } from "@/lib/utils"
 import { earlierOutput, type Server, useSendCommand } from "./api"
 import { levelOf, literal, type Run, runs } from "./console-format"
@@ -31,11 +37,13 @@ interface Line {
   text: string
   runs: Run[]
   level?: "error" | "warn"
-  /** The ID of a line of the server's output: when it was written. */
+  /** The ID of a line of the server's output: when it was written, in nanoseconds since 1970. */
   time?: string
 }
 
-const maxLines = 2000
+/** When a line was written, with seconds, in the panel's locale and time zone. */
+const writtenAt = new Intl.DateTimeFormat(locale, { timeStyle: "medium", timeZone })
+const formatWritten = (time: string) => writtenAt.format(Number(time.slice(0, -6)))
 
 const connections: Record<Connection, { text: string; dot: string }> = {
   connecting: { text: msg("Connecting…"), dot: "bg-console-warn animate-pulse" },
@@ -53,10 +61,19 @@ const levelClass = { error: "text-console-error", warn: "text-console-warn" }
  */
 export function Console({ nodeId, server }: { nodeId: string; server: Server }) {
   const { can } = useAccess()
+  const { settings, change } = useSettings()
   const [lines, setLines] = useState<Line[]>([])
   const [connection, setConnection] = useState<Connection>("connecting")
   const [query, setQuery] = useState("")
-  const [problems, setProblems] = useState(false)
+  const [maximized, setMaximized] = useMaximized()
+  const problems = settings.consoleFilter === "problems"
+  const wrap = settings.consoleWrap !== "scroll"
+  const times = settings.consoleTimes === "show"
+  // How many lines the console keeps, which a ref gives the batches that add lines.
+  const maxLines = useRef(2000)
+  useEffect(() => {
+    maxLines.current = Number(settings.consoleLines ?? 2000)
+  })
   // Lines added while scrolled up, which the button to the end counts.
   const [unseen, setUnseen] = useState(0)
   const [earlier, setEarlier] = useState<"idle" | "loading" | "done">("idle")
@@ -90,7 +107,7 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
       frame.current = 0
       const batch = pending.current
       pending.current = []
-      setLines((current) => [...current, ...batch].slice(-maxLines))
+      setLines((current) => [...current, ...batch].slice(-maxLines.current))
       if (!stickToBottom.current) setUnseen((n) => n + batch.length)
     })
   }
@@ -191,8 +208,9 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
   const filtered = shown.length !== lines.length
 
   function download() {
-    const url = URL.createObjectURL(new Blob([shown.map((l) => `${l.text}\n`).join("")], { type: "text/plain" }))
-    const name = `${server.name}-console-${new Date().toISOString().slice(0, 10)}.txt`
+    const text = shown.map((l) => `${times && l.time ? `${formatWritten(l.time)} ` : ""}${l.text}\n`).join("")
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }))
+    const name = `${server.name}-console-${dayOf(Date.now())}.txt`
     Object.assign(document.createElement("a"), { href: url, download: name }).click()
     setTimeout(() => URL.revokeObjectURL(url))
   }
@@ -205,10 +223,14 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
 
   return (
     <section
+      data-code
       aria-labelledby="console-heading"
-      className="overflow-hidden rounded-2xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10"
+      className={cn(
+        "overflow-hidden rounded-2xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10",
+        maximized && maximizedClass,
+      )}
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/10 py-2 pr-2 pl-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-console-overlay/10 py-2 pr-2 pl-4">
         <h2 id="console-heading" className="flex items-center gap-2 text-sm font-semibold">
           <TerminalIcon className="size-4 text-console-command" weight="duotone" />
           {t("Console")}
@@ -229,7 +251,7 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("Search output")}
               aria-label={t("Search the output")}
-              className="h-8 w-full rounded-lg bg-white/[0.06] pr-16 pl-8 text-xs outline-none placeholder:text-console-muted focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden"
+              className="h-8 w-full rounded-lg bg-console-overlay/[0.06] pr-16 pl-8 text-xs outline-none placeholder:text-console-muted focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden"
             />
             {filtered && (
               <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[11px] text-console-muted tabular-nums">
@@ -237,17 +259,23 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
               </span>
             )}
           </div>
-          <ToolButton
+          <ConsoleButton
             icon={WarningIcon}
             label={t("Only warnings and errors")}
             aria-pressed={problems}
-            onClick={() => setProblems(!problems)}
+            onClick={() => change({ consoleFilter: problems ? "all" : "problems" })}
           />
-          <ToolButton icon={DownloadSimpleIcon} label={t("Download as text file")} disabled={!shown.length} onClick={download} />
-          <ToolButton icon={BroomIcon} label={t("Clear the output")} disabled={!lines.length} onClick={clear} />
+          <ConsoleButton icon={DownloadSimpleIcon} label={t("Download as text file")} disabled={!shown.length} onClick={download} />
+          <ConsoleButton icon={BroomIcon} label={t("Clear the output")} disabled={!lines.length} onClick={clear} />
+          <CodeViewMenu wrap="consoleWrap" times trigger={<ConsoleButton icon={SlidersHorizontalIcon} label={t("View")} />} />
+          <ConsoleButton
+            icon={maximized ? ArrowsInIcon : ArrowsOutIcon}
+            label={maximized ? t("Leave full window (Esc)") : t("Fill the window")}
+            onClick={() => setMaximized(!maximized)}
+          />
         </div>
       </div>
-      <div className="relative">
+      <div className={cn("relative", maximized && "min-h-0 flex-1")}>
         {/* Ligatures are off so that output like "<--" shows exactly what the server printed. */}
         <div
           ref={viewport}
@@ -259,7 +287,10 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
             stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32
             if (stickToBottom.current) setUnseen(0)
           }}
-          className="h-[60vh] min-h-72 overflow-y-auto px-4 py-3 font-mono text-xs leading-5 [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+          className={cn(
+            "h-[60vh] min-h-72 overflow-auto px-4 py-3 font-mono code-text [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+            maximized && "h-full min-h-0",
+          )}
         >
           {lines.some((l) => l.time) && <Earlier state={earlier} onLoad={loadEarlier} nodeId={nodeId} server={server} />}
           {lines.length === 0 ? (
@@ -267,7 +298,7 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
           ) : shown.length === 0 ? (
             <p className="text-console-muted">{t("No lines match.")}</p>
           ) : (
-            shown.map((l) => <OutputLine key={l.id} line={l} search={search} />)
+            shown.map((l) => <OutputLine key={l.id} line={l} search={search} wrap={wrap} times={times} />)
           )}
         </div>
         {unseen > 0 && (
@@ -295,19 +326,27 @@ export function Console({ nodeId, server }: { nodeId: string; server: Server }) 
 
 const noPlayers: string[] = []
 
-/** A line of the output; it renders again only when it or the search changes. */
-const OutputLine = memo(function OutputLine({ line, search }: { line: Line; search?: RegExp }) {
+/** A line of the output, with when it was written if times shows; it renders again only when it or how it shows changes. */
+const OutputLine = memo(function OutputLine({ line, search, wrap, times }: { line: Line; search?: RegExp; wrap: boolean; times: boolean }) {
   return (
     <div
       className={cn(
-        "break-words whitespace-pre-wrap",
+        wrap ? "break-words whitespace-pre-wrap" : "w-max whitespace-pre",
         line.kind === "command" ? "text-console-command" : line.level && levelClass[line.level],
       )}
     >
+      {times && (
+        <span className="mr-3 text-console-muted tabular-nums select-none">
+          {line.time ? formatWritten(line.time) : <span className="invisible">{blankTime}</span>}
+        </span>
+      )}
       <Highlighted runs={line.runs} search={search} />
     </div>
   )
 })
+
+// A time as wide as most, for the room of lines without one, e.g. commands.
+const blankTime = writtenAt.format(Date.UTC(2000, 0, 1, 22, 58, 58))
 
 /** The runs of a line, with what search found in it marked; search must be global. */
 function Highlighted({ runs, search }: { runs: Run[]; search?: RegExp }) {
@@ -359,14 +398,14 @@ function Earlier({
         type="button"
         onClick={onLoad}
         disabled={state === "loading"}
-        className="mx-auto mb-2 flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] text-console-muted ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-console-foreground disabled:animate-pulse"
+        className="mx-auto mb-2 flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] text-console-muted ring-1 ring-console-overlay/10 transition-colors hover:bg-console-overlay/10 hover:text-console-foreground disabled:animate-pulse"
       >
         <ArrowUpIcon className="size-3" weight="bold" />
         {state === "loading" ? t("Loading earlier output…") : t("Load earlier output")}
       </button>
     )
   return (
-    <p className="mb-2 border-b border-dashed border-white/10 pb-2 text-center text-[11px] text-console-muted">
+    <p className="mb-2 border-b border-dashed border-console-overlay/10 pb-2 text-center text-[11px] text-console-muted">
       {t("This is as far back as the console reaches.")}{" "}
       {readable && (
         <Link
@@ -380,24 +419,5 @@ function Earlier({
         </Link>
       )}
     </p>
-  )
-}
-
-/** A button of the console's toolbar with only an icon, named by its label and tooltip. */
-function ToolButton({ icon: Icon, label, ...props }: { icon: Icon; label: string } & ComponentProps<"button">) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          {...props}
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-console-muted transition-colors hover:bg-white/10 hover:text-console-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40 aria-pressed:bg-console-warn/15 aria-pressed:text-console-warn"
-        >
-          <Icon className="size-4" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
   )
 }

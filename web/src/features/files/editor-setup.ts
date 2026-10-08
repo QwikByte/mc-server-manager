@@ -85,21 +85,22 @@ const phrases = [
   msg("No diagnostics"),
 ]
 
-// Like the console, the editor is dark in both themes.
-export const theme = EditorView.theme(
-  {
-    "&": { height: "100%", color: "var(--console-foreground)", backgroundColor: "var(--console)", fontSize: "12px" },
-    "&.cm-focused": { outline: "none" },
-    ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.6" },
-    ".cm-content": { caretColor: "var(--console-foreground)", fontVariantLigatures: "none" },
-    ".cm-cursor": { borderLeftColor: "var(--console-foreground)" },
-    ".cm-gutters": { backgroundColor: "var(--console)", color: "var(--console-muted)", border: "none" },
-    ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "rgb(255 255 255 / 0.04)" },
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "rgb(108 199 172 / 0.28)" },
-    ".cm-panels": { backgroundColor: "var(--console)", color: "var(--console-foreground)" },
-  },
-  { dark: true },
-)
+// Like the console, the editor is dark in both themes unless the user lets it follow the theme; index.css sets its
+// colours and the size of its text, and darkness tells CodeMirror which of its own colours fit.
+export const theme = EditorView.theme({
+  "&": { height: "100%", color: "var(--console-foreground)", backgroundColor: "var(--console)", fontSize: "var(--code-size)" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.6" },
+  ".cm-content": { caretColor: "var(--console-foreground)", fontVariantLigatures: "none" },
+  ".cm-cursor": { borderLeftColor: "var(--console-foreground)" },
+  ".cm-gutters": { backgroundColor: "var(--console)", color: "var(--console-muted)", border: "none" },
+  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "color-mix(in srgb, var(--console-overlay) 4%, transparent)" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "rgb(108 199 172 / 0.28)" },
+  ".cm-panels": { backgroundColor: "var(--console)", color: "var(--console-foreground)" },
+})
+
+/** Tells CodeMirror whether the editor is dark, for the colours of its own parts, e.g. the search panel. */
+export const darkness = (dark: boolean) => EditorView.darkTheme.of(dark)
 
 export const highlight = HighlightStyle.define([
   {

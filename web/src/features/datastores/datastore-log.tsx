@@ -118,8 +118,11 @@ function LogView({ datastore: ds }: { datastore: Datastore }) {
   }, [lines])
 
   return (
-    <div className="overflow-hidden rounded-lg bg-console text-console-foreground ring-1 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-white/10 px-3 py-2 text-xs text-console-muted">
+    <div
+      data-code
+      className="overflow-hidden rounded-lg bg-console text-console-foreground ring-1 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-console-overlay/10 px-3 py-2 text-xs text-console-muted">
         <span className="flex min-w-0 items-center gap-2 font-mono">
           <ScrollIcon aria-hidden className="size-4 shrink-0 text-console-command" weight="duotone" />
           <span className="truncate">{`noryx-db-${ds.id}`}</span>
@@ -138,7 +141,7 @@ function LogView({ datastore: ds }: { datastore: Datastore }) {
           const el = e.currentTarget
           stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32
         }}
-        className="h-80 overflow-y-auto px-3 py-2 font-mono text-xs leading-5 [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        className="h-80 overflow-y-auto px-3 py-2 font-mono code-text [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       >
         {lines.length === 0 ? (
           <p className="text-console-muted">{connection === "connecting" ? t("Loading output…") : t("No output yet.")}</p>

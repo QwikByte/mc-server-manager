@@ -45,9 +45,15 @@ Commands typed in quick succession run one after the other, in their order. Prox
 commands once they were created again, e.g. by saving their settings.
 
 The output keeps the colours of the server and its plugins, and warnings and errors stand out. It can be searched,
-narrowed down to warnings and errors, cleared and downloaded as a text file of what is shown. While scrolled up, a button
-counts the new lines and leads back to the end. The console opens with the last 300 lines; **Load earlier output** adds
-the earlier ones of the last 1000 lines the node keeps, and older output is in the server's log files.
+narrowed down to warnings and errors, which the console remembers, cleared and downloaded as a text file of what is
+shown. While scrolled up, a button counts the new lines and leads back to the end. The console opens with the last 300
+lines; **Load earlier output** adds the earlier ones of the last 1000 lines the node keeps, and older output is in the
+server's log files. It keeps 2,000 lines unless the user chose 5,000 or 10,000.
+
+**View** in its toolbar chooses the size of the text, whether long lines wrap or scroll sideways, whether each line shows
+when it was written (in the user's time zone, also in the download), and whether the console is light in the light
+theme, like the terminal and the editor; the account page has these too ([Settings of each
+user](panel.md#settings-of-each-user)). **Fill the window** gives the console the whole window, and Esc leaves.
 
 The prompt keeps the commands of each server while the browser tab is open, and the arrow keys walk through them. While
 typing, it suggests Minecraft's commands (or the proxy's), their arguments, the names of the players online and earlier
@@ -82,7 +88,9 @@ saving shows the difference to the file on the server and offers to load that ve
 the editor the version of a file by when it was modified and its size; with agents of older versions, saving
 overwrites the file as before. Saving a JSON or YAML file with a syntax error, which servers and plugins may fail to
 read, asks first and names the line. The editor highlights JSON, JSON5, YAML, properties, TOML, INI-like files
-(`.conf`, `.cfg`, `.ini`), shell scripts, JavaScript and XML.
+(`.conf`, `.cfg`, `.ini`), shell scripts, JavaScript and XML. Each user chooses whether it wraps long lines, whether it
+indents with 2 or 4 spaces or tabs (YAML always with spaces), whether it takes Vim's keys, the size of its text and
+whether it is light in the light theme; **View** next to **Download** has some of these.
 
 Logs (`.log` files) open read only in a viewer that highlights warnings and errors. Of a large log, it shows the last
 2 MB and loads earlier parts on request; with agents of older versions, large logs can only be downloaded. Archived logs

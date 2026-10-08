@@ -5,7 +5,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -126,17 +128,30 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 // export downloads the entries that match the filter, oldest first, as CSV or JSON lines.
+// CSV separates cells with commas, or with semicolons for spreadsheets in languages whose
+// decimal separator is a comma (separator=semicolon), and starts with a byte order mark for
+// Excel if bom=on.
 func (h *Handler) export(w http.ResponseWriter, r *http.Request) {
 	f, err := FilterFrom(r)
+	q := r.URL.Query()
+	if err == nil && (!slices.Contains([]string{"", "comma", "semicolon"}, q.Get("separator")) || !slices.Contains([]string{"", "off", "on"}, q.Get("bom"))) {
+		err = httpapi.Errorf(http.StatusBadRequest, "Choose the separator comma or semicolon, and the byte order mark on or off.")
+	}
 	if err != nil {
 		httpapi.WriteError(w, r, err)
 		return
 	}
 	name := "noryx-log-" + time.Now().Format("2006-01-02-150405")
-	switch r.URL.Query().Get("format") {
+	switch q.Get("format") {
 	case "csv":
 		httpapi.Attachment(w, name+".csv")
+		if q.Get("bom") == "on" {
+			_, _ = io.WriteString(w, "\uFEFF")
+		}
 		out := csv.NewWriter(w)
+		if q.Get("separator") == "semicolon" {
+			out.Comma = ';' // encoding/csv quotes the cells that hold it
+		}
 		_ = out.Write([]string{"time", "level", "source", "category", "message", "user", "node", "node_id", "server", "server_id", "attributes"})
 		_ = h.store.Each(r.Context(), f, true, maxExport, func(e Entry) error {
 			attrs, _ := json.Marshal(e.Attrs)

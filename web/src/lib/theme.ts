@@ -45,7 +45,10 @@ function apply() {
   root.dataset.density = current.density
 }
 apply()
-media.addEventListener("change", apply)
+media.addEventListener("change", () => {
+  apply()
+  for (const listener of listeners) listener()
+})
 
 /** Changes parts of the look and keeps them in this browser. */
 export function setLook(change: Partial<Look>) {
@@ -80,3 +83,14 @@ export function useLook(): Look {
 
 /** The colour theme chosen by the user; "system" follows the operating system. */
 export const useTheme = () => useLook().theme
+
+/** Whether the panel shows the dark theme now, also where it follows the operating system. */
+export function useDark() {
+  return useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    () => document.documentElement.classList.contains("dark"),
+  )
+}

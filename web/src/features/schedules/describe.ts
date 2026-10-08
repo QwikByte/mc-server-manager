@@ -1,9 +1,10 @@
 import { t } from "i18next"
 import type { Schedule, Step } from "./api"
-import { locale, msg } from "@/lib/i18n"
+import { dayOf } from "@/lib/format"
+import { firstDay, locale, msg } from "@/lib/i18n"
 
-/** Weekdays in the order of the week, Monday first. */
-export const weekdays = [1, 2, 3, 4, 5, 6, 0]
+/** Weekdays in the order of the week, from the first day the user chose, 0 being Sunday. */
+export const weekdays = Array.from({ length: 7 }, (_, i) => (firstDay + i) % 7)
 
 /** The short name of a weekday, 0 being Sunday, in the panel's language. */
 export const dayName = (day: number) =>
@@ -19,8 +20,8 @@ export function formatTimeOfDay(hm: string) {
   return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString(locale, { timeStyle: "short" })
 }
 
-/** Today as YYYY-MM-DD in the browser's time zone. */
-export const today = () => new Date().toLocaleDateString("sv")
+/** Today as YYYY-MM-DD in the panel's time zone. */
+export const today = () => dayOf(Date.now())
 
 const same = (a: number[], b: number[]) => a.length === b.length && a.every((d) => b.includes(d))
 

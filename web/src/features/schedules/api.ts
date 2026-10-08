@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import { timeZone } from "@/lib/i18n"
 
 /** When a task runs: at the times of day on weekdays, on days of the month or on single dates, in a time zone. */
 export interface Schedule {
@@ -80,8 +81,8 @@ export interface Task<S> {
 
 export type TaskInput<S> = Pick<Task<S>, "name" | "enabled" | "schedule" | "targets" | "settings">
 
-/** The time zone of the browser, which new schedules start with. */
-const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+/** The time zone of the panel, which new schedules start with: the user's, else the browser's. */
+const localTimeZone = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
 
 export const defaultSchedule: Schedule = { days: [], times: ["04:00"], timeZone: localTimeZone }
 

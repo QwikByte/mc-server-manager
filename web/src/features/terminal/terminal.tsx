@@ -1,10 +1,23 @@
-import { BroomIcon, PaperPlaneRightIcon, StopIcon, TerminalWindowIcon } from "@phosphor-icons/react"
+import {
+  ArrowsInIcon,
+  ArrowsOutIcon,
+  BroomIcon,
+  PaperPlaneRightIcon,
+  SlidersHorizontalIcon,
+  StopIcon,
+  TerminalWindowIcon,
+} from "@phosphor-icons/react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
 import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import { Trans } from "react-i18next"
+import { ConsoleButton } from "@/components/console-button"
+import { useSettings, wraps } from "@/features/preferences/api"
+import { CodeViewMenu } from "@/features/preferences/code-view"
 import { useCommandHistory } from "@/lib/use-command-history"
+import { maximizedClass, useMaximized } from "@/lib/use-maximized"
+import { cn } from "@/lib/utils"
 import { commandsQuery, runCommand } from "./api"
 import { type Choice, commonStart, complete, insert, lookup, matching } from "./complete"
 
@@ -50,6 +63,8 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
   const [listed, setListed] = useState<Listed>()
   const lastTab = useRef<string>(undefined)
   const shown = listed?.target === target && listed.line === input ? listed : undefined
+  const wrap = wraps.terminalWrap.on(useSettings().settings)
+  const [maximized, setMaximized] = useMaximized()
 
   // Leaving the page stops a command that is still running.
   useEffect(() => () => controller.current?.abort(), [])
@@ -177,23 +192,27 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
 
   return (
     <section
+      data-code
       aria-labelledby="terminal-heading"
-      className="overflow-hidden rounded-2xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10"
+      className={cn(
+        "overflow-hidden rounded-2xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10",
+        maximized && maximizedClass,
+      )}
     >
-      <div className="flex items-center justify-between gap-4 border-b border-white/10 py-2 pr-2 pl-4">
+      <div className="flex items-center justify-between gap-4 border-b border-console-overlay/10 py-2 pr-2 pl-4">
         <h2 id="terminal-heading" className="flex min-w-0 items-center gap-2 text-sm font-semibold">
           <TerminalWindowIcon className="size-4 shrink-0 text-console-command" weight="duotone" />
           <span className="truncate font-mono">{prompt}</span>
         </h2>
-        <button
-          type="button"
-          onClick={() => setEntries([])}
-          disabled={entries.length === 0}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-console-muted transition-colors hover:bg-white/10 hover:text-console-foreground disabled:pointer-events-none disabled:opacity-40"
-        >
-          <BroomIcon className="size-4" />
-          {t("Clear")}
-        </button>
+        <div className="flex items-center gap-1">
+          <ConsoleButton icon={BroomIcon} label={t("Clear")} onClick={() => setEntries([])} disabled={entries.length === 0} />
+          <CodeViewMenu wrap="terminalWrap" trigger={<ConsoleButton icon={SlidersHorizontalIcon} label={t("View")} />} />
+          <ConsoleButton
+            icon={maximized ? ArrowsInIcon : ArrowsOutIcon}
+            label={maximized ? t("Leave full window (Esc)") : t("Fill the window")}
+            onClick={() => setMaximized(!maximized)}
+          />
+        </div>
       </div>
       <div
         ref={viewport}
@@ -206,7 +225,10 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
         }}
         // A click into the output focuses the prompt, unless it selected text to copy.
         onClick={() => window.getSelection()?.isCollapsed && inputRef.current?.focus()}
-        className="h-[60vh] min-h-72 space-y-3 overflow-y-auto px-4 py-3 font-mono text-xs leading-5 [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        className={cn(
+          "h-[60vh] min-h-72 space-y-3 overflow-y-auto px-4 py-3 font-mono code-text [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          maximized && "h-auto min-h-0 flex-1",
+        )}
       >
         {entries.length === 0 ? (
           <p className="text-console-muted">
@@ -219,21 +241,21 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
             />
           </p>
         ) : (
-          entries.map((entry) => <EntryView key={entry.id} entry={entry} />)
+          entries.map((entry) => <EntryView key={entry.id} entry={entry} wrap={wrap} />)
         )}
       </div>
       <div aria-live="polite">
         {shown && (
           <ul
             aria-label={t("Choices")}
-            className="grid max-h-40 grid-cols-[max-content_minmax(0,1fr)] gap-x-4 overflow-y-auto border-t border-white/10 px-2 py-1.5 font-mono text-xs [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin]"
+            className="grid max-h-40 grid-cols-[max-content_minmax(0,1fr)] gap-x-4 overflow-y-auto border-t border-console-overlay/10 px-2 py-1.5 font-mono code-text [scrollbar-color:var(--console-muted)_transparent] [scrollbar-width:thin]"
           >
             {shown.choices.map((choice) => (
               <li key={choice.value} className="col-span-2 grid grid-cols-subgrid">
                 <button
                   type="button"
                   onClick={() => choose(choice)}
-                  className="col-span-2 grid grid-cols-subgrid rounded-md px-2 py-1 text-left transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-ring"
+                  className="col-span-2 grid grid-cols-subgrid rounded-md px-2 py-1 text-left transition-colors hover:bg-console-overlay/10 focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <span>{choice.value}</span>
                   <span className="truncate text-console-muted">{choice.hint}</span>
@@ -245,9 +267,9 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
       </div>
       <form
         onSubmit={submit}
-        className="flex items-center gap-2 border-t border-white/10 bg-white/[0.03] py-1.5 pr-1.5 pl-4 focus-within:bg-white/[0.06]"
+        className="flex items-center gap-2 border-t border-console-overlay/10 bg-console-overlay/[0.03] py-1.5 pr-1.5 pl-4 focus-within:bg-console-overlay/[0.06]"
       >
-        <span aria-hidden className="font-mono text-xs font-bold text-console-command">
+        <span aria-hidden className="font-mono code-text font-bold text-console-command">
           $
         </span>
         <input
@@ -261,7 +283,7 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
           autoCapitalize="off"
           spellCheck={false}
           maxLength={1000}
-          className="h-9 min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-console-muted"
+          className="h-9 min-w-0 flex-1 bg-transparent font-mono code-text outline-none placeholder:text-console-muted"
         />
         {busy ? (
           <button
@@ -287,7 +309,7 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
   )
 }
 
-function EntryView({ entry }: { entry: Entry }) {
+function EntryView({ entry, wrap }: { entry: Entry; wrap: boolean }) {
   return (
     <div>
       <p className="break-words whitespace-pre-wrap">
@@ -295,8 +317,10 @@ function EntryView({ entry }: { entry: Entry }) {
         <span className="text-console-muted"> $ </span>
         {entry.command}
       </p>
-      {/* Not wrapped, so that tables stay aligned on small screens. */}
-      {entry.output && <pre className="overflow-x-auto font-mono [scrollbar-width:thin]">{entry.output}</pre>}
+      {/* Not wrapped unless chosen, so that tables stay aligned on small screens. */}
+      {entry.output && (
+        <pre className={cn("font-mono", wrap ? "break-words whitespace-pre-wrap" : "overflow-x-auto [scrollbar-width:thin]")}>{entry.output}</pre>
+      )}
       {entry.state === "failed" && <p className="text-console-error">{t("Error: {{error}}", { error: entry.error })}</p>}
       {entry.state === "stopped" && <p className="text-console-warn">{`^C ${t("Stopped.")}`}</p>}
       {entry.state === "running" && (

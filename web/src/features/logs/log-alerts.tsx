@@ -1,4 +1,4 @@
-import { BellIcon, BellRingingIcon } from "@phosphor-icons/react"
+import { BellIcon, BellRingingIcon, BellZIcon } from "@phosphor-icons/react"
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -11,15 +11,20 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { meQuery } from "@/features/auth/api"
 import { notifyDesktop } from "@/features/notify/desktop"
+import { popsUp, quiet, quietHours, useAlerts, usePinned } from "@/features/preferences/api"
+import { formatDateTime, formatDuration, formatTime } from "@/lib/format"
+import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 import { filterQuery, type LogEntry, type LogFilter, useLogStream } from "./api"
 import { formatEntryTime, levels } from "./meta"
-import { locale } from "@/lib/i18n"
 
 const problems: LogFilter = { level: "warn" }
 const shown = 8
@@ -53,7 +58,8 @@ const about = (e: LogEntry) =>
 /**
  * The bell with the latest warnings and errors and how many are new. New ones also show up
  * as toasts, except those of the user's own actions, which the panel reported already, and as
- * notifications of the operating system while the tab is in the background, if the user turned them on.
+ * notifications of the operating system while the tab is in the background, if the user turned them on;
+ * the user chooses which of them do, and can keep all of them from popping up for a while.
  */
 export function LogAlerts() {
   const { data: me } = useQuery(meQuery)
@@ -61,10 +67,14 @@ export function LogAlerts() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [seen, setSeen] = useState(readSeen)
+  const { alerts, change } = useAlerts()
+  const { pinned } = usePinned()
+  // Renders again while paused, so that the bell rings again once the pause ends.
+  const quietNow = quiet(alerts, useNow(quiet(alerts), 30_000))
 
   useLogStream(problems, (entry) => {
     void queryClient.invalidateQueries({ queryKey: problemsQuery.queryKey })
-    if (entry.user === me?.username) return
+    if (entry.user === me?.username || !popsUp(entry, alerts, pinned)) return
     const show = () => void navigate({ to: "/logs", search: { level: "warn" } })
     const notify = entry.level === "error" ? toast.error : toast.warning
     notify(entry.message, { description: about(entry), action: { label: t("Show"), onClick: show } })
@@ -84,7 +94,7 @@ export function LogAlerts() {
     <DropdownMenu onOpenChange={markSeen}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-sm" aria-label={label} title={label} className="relative shrink-0 text-muted-foreground">
-          {unread > 0 ? <BellRingingIcon weight="duotone" className="text-foreground" /> : <BellIcon />}
+          {quietNow ? <BellZIcon /> : unread > 0 ? <BellRingingIcon weight="duotone" className="text-foreground" /> : <BellIcon />}
           {unread > 0 && (
             <span
               aria-hidden
@@ -114,7 +124,7 @@ export function LogAlerts() {
                   <span className="block truncate text-xs text-muted-foreground">{about(e) || formatEntryTime(e.time)}</span>
                 </span>
                 <time dateTime={e.time} className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums">
-                  {new Date(e.time).toLocaleTimeString(locale, { timeStyle: "short" })}
+                  {formatTime(e.time, { timeStyle: "short" })}
                 </time>
               </Link>
             </DropdownMenuItem>
@@ -123,6 +133,27 @@ export function LogAlerts() {
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link to="/logs">{t("Open the log")}</Link>
+        </DropdownMenuItem>
+        {quietNow ? (
+          <DropdownMenuItem onSelect={() => change({ quietUntil: undefined })}>
+            {t("Pop up again (paused until {{time}})", { time: formatDateTime(alerts.quietUntil!) })}
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>{t("Pause pop-ups")}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {quietHours.map((hours) => (
+                <DropdownMenuItem key={hours} onSelect={() => change({ quietUntil: new Date(Date.now() + hours * 3_600_000).toISOString() })}>
+                  {t("For {{duration}}", { duration: formatDuration(hours * 3_600_000) })}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        <DropdownMenuItem asChild>
+          <Link to="/account" hash="notifications">
+            {t("Choose what pops up")}
+          </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

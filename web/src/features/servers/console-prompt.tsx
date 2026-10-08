@@ -110,10 +110,10 @@ export function ConsolePrompt({
   return (
     <form
       onSubmit={submit}
-      className="relative flex items-center gap-2 border-t border-white/10 bg-white/[0.03] py-1.5 pr-1.5 pl-4 focus-within:bg-white/[0.06]"
+      className="relative flex items-center gap-2 border-t border-console-overlay/10 bg-console-overlay/[0.03] py-1.5 pr-1.5 pl-4 focus-within:bg-console-overlay/[0.06]"
     >
       {open && (
-        <div className="absolute bottom-full left-2 z-10 mb-1.5 w-[min(calc(100%-1rem),26rem)] overflow-hidden rounded-xl bg-console shadow-2xl ring-1 shadow-black/40 ring-white/15">
+        <div className="absolute bottom-full left-2 z-10 mb-1.5 w-[min(calc(100%-1rem),26rem)] overflow-hidden rounded-xl bg-console shadow-2xl ring-1 shadow-black/40 ring-console-overlay/15">
           <ul id={list} role="listbox" aria-label={t("Suggestions")} className="flex flex-col-reverse py-1">
             {suggestions.map((s, i) => {
               const Icon = icons[s.kind]
@@ -126,8 +126,8 @@ export function ConsolePrompt({
                   onMouseDown={(e) => e.preventDefault()} // keeps the focus in the prompt
                   onClick={() => take(s)}
                   className={cn(
-                    "flex cursor-pointer items-center gap-2.5 px-3 py-1.5 font-mono text-xs text-console-foreground/80 hover:bg-white/[0.06]",
-                    i === active && "bg-white/10 text-console-foreground",
+                    "flex cursor-pointer items-center gap-2.5 px-3 py-1.5 font-mono code-text text-console-foreground/80 hover:bg-console-overlay/[0.06]",
+                    i === active && "bg-console-overlay/10 text-console-foreground",
                   )}
                 >
                   <Icon aria-hidden className={cn("size-3.5 shrink-0", s.kind === "player" ? "text-console-warn" : "text-console-muted")} />
@@ -136,15 +136,15 @@ export function ConsolePrompt({
               )
             })}
           </ul>
-          <p aria-hidden className="border-t border-white/10 px-3 py-1.5 text-[11px] text-console-muted">
+          <p aria-hidden className="border-t border-console-overlay/10 px-3 py-1.5 text-[11px] text-console-muted">
             <Trans
               i18nKey="<key>Tab</key> completes, <key>↑</key> <key>↓</key> choose"
-              components={{ key: <kbd className="rounded border border-white/15 px-1 font-mono text-[10px]" /> }}
+              components={{ key: <kbd className="rounded border border-console-overlay/15 px-1 font-mono text-[10px]" /> }}
             />
           </p>
         </div>
       )}
-      <span aria-hidden className="font-mono text-xs font-bold text-console-command">
+      <span aria-hidden className="font-mono code-text font-bold text-console-command">
         &gt;
       </span>
       <input
@@ -163,7 +163,7 @@ export function ConsolePrompt({
         autoComplete="off"
         spellCheck={false}
         maxLength={1000}
-        className="h-9 min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-console-muted disabled:cursor-not-allowed"
+        className="h-9 min-w-0 flex-1 bg-transparent font-mono code-text outline-none placeholder:text-console-muted disabled:cursor-not-allowed"
       />
       <button
         type="submit"

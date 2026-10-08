@@ -4,24 +4,24 @@ export interface Run {
   className?: string
 }
 
-// Minecraft's colours on the console's dark background; the darkest are lighter, so that they stay readable.
+// Minecraft's colours, which index.css defines for the console's dark and light background.
 const colors: Partial<Record<string, string>> = {
-  "0": "text-[#737b8c]",
-  "1": "text-[#6f7bff]",
-  "2": "text-[#3fbf3f]",
-  "3": "text-[#2fc2c2]",
-  "4": "text-[#e0524f]",
-  "5": "text-[#c260c2]",
-  "6": "text-[#ffaa00]",
-  "7": "text-[#aaaaaa]",
-  "8": "text-[#8a93a6]",
-  "9": "text-[#7b7bff]",
-  a: "text-[#55ff55]",
-  b: "text-[#55ffff]",
-  c: "text-[#ff6b6b]",
-  d: "text-[#ff6bff]",
-  e: "text-[#ffff55]",
-  f: "text-white",
+  "0": "text-(--mc-0)",
+  "1": "text-(--mc-1)",
+  "2": "text-(--mc-2)",
+  "3": "text-(--mc-3)",
+  "4": "text-(--mc-4)",
+  "5": "text-(--mc-5)",
+  "6": "text-(--mc-6)",
+  "7": "text-(--mc-7)",
+  "8": "text-(--mc-8)",
+  "9": "text-(--mc-9)",
+  a: "text-(--mc-a)",
+  b: "text-(--mc-b)",
+  c: "text-(--mc-c)",
+  d: "text-(--mc-d)",
+  e: "text-(--mc-e)",
+  f: "text-(--mc-f)",
 }
 // Bold and italic text, and the lines of struck through (m) and underlined (n) text, which need one class together.
 const formats: Partial<Record<string, string>> = {

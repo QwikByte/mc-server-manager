@@ -8,6 +8,7 @@ import { Section } from "@/components/section"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAccess } from "@/features/access/use-access"
+import { useCsvFormat } from "@/features/preferences/api"
 import { cn } from "@/lib/utils"
 import { exportUrl, type LogFilter, useLiveLogs } from "./api"
 import { LogOverview } from "./log-chart"
@@ -22,6 +23,7 @@ export function LogsPage() {
   const search = route.useSearch()
   const navigate = route.useNavigate()
   const [live, setLive] = useState(true)
+  const csvFormat = useCsvFormat()
   const { range, hour, ...rest } = search
   const time = useMemo(() => timeOf(range, hour), [range, hour])
   const filter: LogFilter = { ...rest, ...time }
@@ -64,7 +66,7 @@ export function LogsPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem asChild>
-                  <a href={exportUrl(filter, "csv")} download>
+                  <a href={exportUrl(filter, csvFormat)} download>
                     {t("CSV for spreadsheets")}
                   </a>
                 </DropdownMenuItem>

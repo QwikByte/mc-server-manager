@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { datastoresQuery } from "@/features/datastores/api"
 import { nodesQuery } from "@/features/nodes/api"
 import { serversQuery } from "@/features/servers/api"
-import { formatAgo, formatBytes } from "@/lib/format"
+import { Ago } from "@/components/ago"
+import { formatBytes } from "@/lib/format"
 import { locale } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { type OverlayPeer, type PortTest, type PublishedPort, useTestOverlayPeer } from "./api"
@@ -69,9 +70,9 @@ function PeerRow({ nodeId, peer, name, manage }: { nodeId: string; peer: Overlay
         <td className={cn(cell, "hidden font-mono text-xs lg:table-cell")}>{peer.endpoint ?? "–"}</td>
         <td className={cell}>
           {stale(peer.latestHandshake) ? (
-            <Pill tone="warning">{peer.latestHandshake ? formatAgo(peer.latestHandshake) : t("never")}</Pill>
+            <Pill tone="warning">{peer.latestHandshake ? <Ago time={peer.latestHandshake} /> : t("never")}</Pill>
           ) : (
-            formatAgo(peer.latestHandshake!)
+            <Ago time={peer.latestHandshake!} />
           )}
         </td>
         <td className={cn(cell, "hidden text-right tabular-nums md:table-cell")}>

@@ -1,6 +1,7 @@
 import { type InfiniteData, infiniteQueryOptions, keepPreviousData, queryOptions, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 import { api } from "@/lib/api"
+import type { CsvFormat } from "@/lib/csv"
 
 export type Level = "debug" | "info" | "warn" | "error"
 export type Source = "master" | "agent"
@@ -79,7 +80,9 @@ export const statsQuery = (filter: LogFilter) =>
     refetchInterval: 60_000,
   })
 
-export const exportUrl = (filter: LogFilter, format: "csv" | "jsonl") => `/api/logs/export?${filterQuery(filter, { format })}`
+/** Where the entries of a filter download as JSON lines, or as CSV in the user's format. */
+export const exportUrl = (filter: LogFilter, format: "jsonl" | CsvFormat) =>
+  `/api/logs/export?${filterQuery(filter, format === "jsonl" ? { format } : { format: "csv", separator: format.separator, bom: format.bom ? "on" : "off" })}`
 
 /**
  * Calls onEntry with every new entry that matches the filter while enabled, and tells whether

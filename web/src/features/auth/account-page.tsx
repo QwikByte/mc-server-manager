@@ -1,7 +1,6 @@
 import {
   ArrowsInLineVerticalIcon,
   CheckIcon,
-  ClockIcon,
   DesktopIcon,
   DeviceMobileIcon,
   DeviceTabletIcon,
@@ -29,10 +28,12 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
+import { AlertsSettings } from "@/features/notify/alerts-setting"
 import { DesktopNotificationsSetting } from "@/features/notify/desktop-setting"
 import { useSettings } from "@/features/preferences/api"
+import { CodeSettings, ExportSettings, TimesSettings } from "@/features/preferences/settings"
 import { formatAgo, formatDateTime } from "@/lib/format"
-import { type Clock, clock, languageName, languages, msg, timeWith } from "@/lib/i18n"
+import { languageName, languages, msg } from "@/lib/i18n"
 import { type Accent, accents, type Density, type Theme, useLook } from "@/lib/theme"
 import {
   meQuery,
@@ -82,11 +83,21 @@ export function AccountPage() {
         <FormSection title={t("Panel")}>
           <PanelSettings user={user} />
         </FormSection>
+        <FormSection title={t("Times and dates")}>
+          <TimesSettings />
+        </FormSection>
+        <FormSection id="code" title={t("Console, terminal and editor")}>
+          <CodeSettings />
+        </FormSection>
         {canSomewhere("logs.view") && (
-          <FormSection title={t("Notifications")}>
+          <FormSection id="notifications" title={t("Notifications")}>
             <DesktopNotificationsSetting />
+            <AlertsSettings />
           </FormSection>
         )}
+        <FormSection title={t("Exports")}>
+          <ExportSettings />
+        </FormSection>
       </div>
     </>
   )
@@ -98,12 +109,9 @@ const themes = [
   { value: "system", label: msg("System") },
 ] satisfies { value: Theme; label: string }[]
 
-// A time in the afternoon shows what each clock means, e.g. 14:30 and 2:30 PM.
-const afternoon = new Date(2000, 0, 1, 14, 30)
-
 /** How the panel looks for the user, in all their browsers. */
 function PanelSettings({ user }: { user: User }) {
-  const { settings, change } = useSettings()
+  const { change } = useSettings()
   const look = useLook()
   const setLanguage = useSetLanguage()
   return (
@@ -148,21 +156,6 @@ function PanelSettings({ user }: { user: User }) {
         }
       >
         {t("Compact fits more on the screen, e.g. long lists of servers. Touch screens keep the room to tap.")}
-      </AccountRow>
-      <AccountRow
-        icon={ClockIcon}
-        tone="info"
-        title={t("Time format")}
-        actions={
-          <Segmented<Clock>
-            label={t("Time format")}
-            value={settings.clock ?? clock}
-            options={(["24h", "12h"] as const).map((value) => ({ value, label: timeWith(value, afternoon) }))}
-            onChange={(value) => change({ clock: value })}
-          />
-        }
-      >
-        {t("Times show 24 hours, or 12 hours with AM and PM.")}
       </AccountRow>
       <AccountRow
         icon={TranslateIcon}

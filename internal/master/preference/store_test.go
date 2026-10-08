@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
@@ -130,12 +131,15 @@ func TestStore(t *testing.T) {
 		if want.Settings == nil {
 			want.Settings = Settings{}
 		}
+		if want.Alerts.Level == "" {
+			want.Alerts = noAlerts
+		}
 		got, err := s.Get(ctx, user)
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("Get(%d) = %+v, %v, want %+v", user, got, err, want)
 		}
 	}
-	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Settings: Settings{}}
+	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: noAlerts, Settings: Settings{}}
 	// Users start with the default layout and no pins, as empty lists rather than nil.
 	check(alice, none)
 
@@ -196,14 +200,21 @@ func TestStore(t *testing.T) {
 	if err := s.ChangeSettings(ctx, alice, map[string]*string{"theme": ptr("dark")}); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetAlerts(ctx, alice, Alerts{Level: "error"}); err != nil {
+		t.Fatal(err)
+	}
 	exec(t, db, `DELETE FROM users WHERE id = ?`, alice)
 	var left int
-	if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM dashboards) + (SELECT COUNT(*) FROM pinned_servers) + (SELECT COUNT(*) FROM user_settings)`).Scan(&left); err != nil || left != 0 {
+	if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM dashboards) + (SELECT COUNT(*) FROM pinned_servers) +
+		(SELECT COUNT(*) FROM user_settings) + (SELECT COUNT(*) FROM alert_filters)`).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("%d preferences left of a deleted user, %v", left, err)
 	}
 }
 
 func ptr(s string) *string { return &s }
+
+// noAlerts are the alerts of users who never chose any: all warnings and errors pop up.
+var noAlerts = Alerts{Level: "warn", Nodes: []string{}, Servers: []string{}, Categories: []string{}}
 
 func TestSettings(t *testing.T) {
 	db := open(t)
@@ -233,6 +244,12 @@ func TestSettings(t *testing.T) {
 		"empty":         {"clock": ptr("")},
 		"key of a list": {"serverview": ptr("table")},
 		"one of two":    {"theme": ptr("dark"), "clock": ptr("25h")},
+		"lines":         {"consoleLines": ptr("1000000")},
+		"time zone":     {"timeZone": ptr("Mars/Olympus_Mons")},
+		"no time zone":  {"timeZone": ptr("")},
+		"local":         {"timeZone": ptr("Local")},
+		"path":          {"timeZone": ptr("../../etc/passwd")},
+		"long":          {"timeZone": ptr("Europe/" + strings.Repeat("x", 64))},
 	} {
 		var apiErr *httpapi.Error
 		if err := s.ChangeSettings(ctx, alice, c); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
@@ -251,9 +268,65 @@ func TestSettings(t *testing.T) {
 	check(alice, Settings{"density": "compact", "clock": "24h", "serverSort": "cpu"})
 	check(bob, Settings{"theme": "light"})
 
+	// The time zone is any IANA time zone, the other settings one of their values.
+	change(bob, map[string]*string{"timeZone": ptr("America/Argentina/Buenos_Aires"), "codeSize": ptr("large"), "csvSeparator": ptr("semicolon")})
+	check(bob, Settings{"theme": "light", "timeZone": "America/Argentina/Buenos_Aires", "codeSize": "large", "csvSeparator": "semicolon"})
+	change(bob, map[string]*string{"timeZone": ptr("UTC"), "codeSize": nil, "csvSeparator": nil})
+	check(bob, Settings{"theme": "light", "timeZone": "UTC"})
+
 	// Values that a newer version stored, or an older one knew, aren't shown.
-	exec(t, db, `UPDATE user_settings SET settings = '{"theme":"sepia","clock":"12h","font":"large"}' WHERE user_id = ?`, bob)
+	exec(t, db, `UPDATE user_settings SET settings = '{"theme":"sepia","clock":"12h","font":"large","timeZone":"Local"}' WHERE user_id = ?`, bob)
 	check(bob, Settings{"clock": "12h"})
 	change(bob, map[string]*string{"theme": ptr("system")})
 	check(bob, Settings{"theme": "system", "clock": "12h"})
+}
+
+func TestAlerts(t *testing.T) {
+	db := open(t)
+	s, ctx, alice := NewStore(db), t.Context(), addUser(t, db, "alice")
+	node, srv := id(), id()
+	ids := func(n int) []string {
+		l := make([]string, n)
+		for i := range l {
+			l[i] = id()
+		}
+		return l
+	}
+	categories := make([]string, maxCategories+1)
+	for i := range categories {
+		categories[i] = string([]byte{'c', byte('a' + i/26), byte('a' + i%26)})
+	}
+	for name, a := range map[string]Alerts{
+		"no level":        {},
+		"info":            {Level: "info"},
+		"node":            {Level: "warn", Nodes: []string{"../" + node[3:]}},
+		"server":          {Level: "warn", Servers: []string{strings.ToUpper(srv)}},
+		"category":        {Level: "warn", Categories: []string{"Servers"}},
+		"many nodes":      {Level: "warn", Nodes: ids(maxChosen + 1)},
+		"many servers":    {Level: "warn", Servers: ids(maxChosen + 1)},
+		"many categories": {Level: "warn", Categories: categories},
+	} {
+		var apiErr *httpapi.Error
+		if err := s.SetAlerts(ctx, alice, a); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+			t.Errorf("%s: SetAlerts = %v, want a bad request", name, err)
+		}
+	}
+
+	// Lists are sorted without repeats; a later change replaces the earlier one.
+	quiet := time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC)
+	a := Alerts{Level: "error", Only: true, Pinned: true, Nodes: []string{node, node}, Servers: []string{srv},
+		Categories: []string{"usage", "servers", "usage"}, QuietUntil: &quiet}
+	if err := s.SetAlerts(ctx, alice, a); err != nil {
+		t.Fatal(err)
+	}
+	a.Nodes, a.Categories = []string{node}, []string{"servers", "usage"}
+	if p, err := s.Get(ctx, alice); err != nil || !reflect.DeepEqual(p.Alerts, a) {
+		t.Fatalf("alerts = %+v, %v, want %+v", p.Alerts, err, a)
+	}
+	if err := s.SetAlerts(ctx, alice, Alerts{Level: "warn"}); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := s.Get(ctx, alice); err != nil || !reflect.DeepEqual(p.Alerts, noAlerts) {
+		t.Fatalf("alerts = %+v, %v, want %+v", p.Alerts, err, noAlerts)
+	}
 }

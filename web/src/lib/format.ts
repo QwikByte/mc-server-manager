@@ -1,4 +1,4 @@
-import { locale } from "./i18n"
+import { locale, relativeTimes, timeZone } from "./i18n"
 
 const units = ["B", "KiB", "MiB", "GiB", "TiB"]
 
@@ -17,14 +17,42 @@ export function formatMegabytes(mb: number): string {
   return formatBytes(mb * 1024 ** 2)
 }
 
-/** Formats an ISO timestamp as a date in the viewer's locale, e.g. "30 Dec 2026". */
+/** Formats an ISO timestamp as a date in the viewer's locale and time zone, e.g. "30 Dec 2026". */
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(locale, { dateStyle: "medium" })
+  return new Date(iso).toLocaleDateString(locale, { dateStyle: "medium", timeZone })
 }
 
-/** Formats an ISO timestamp as date and time in the viewer's locale. */
+/** Formats an ISO timestamp as date and time in the viewer's locale and time zone. */
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })
+  return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short", timeZone })
+}
+
+/** Formats a time as the user wants times, with options of Intl.DateTimeFormat, e.g. { timeStyle: "short" }. */
+export const formatTime = (time: number | string | Date, options: Intl.DateTimeFormatOptions) =>
+  new Date(time).toLocaleString(locale, { timeZone, ...options })
+
+/** The day of a time in the viewer's time zone as YYYY-MM-DD, e.g. to group times by days. */
+export const dayOf = (time: number | string | Date) => new Date(time).toLocaleDateString("sv", { timeZone })
+
+/** The hour of a time in the viewer's time zone, from 0 to 23. */
+export const hourOf = (time: number | string | Date) =>
+  Number(new Date(time).toLocaleString("en", { hour: "numeric", hourCycle: "h23", timeZone }))
+
+/** How far the viewer's time zone is ahead of UTC at a time, in milliseconds. */
+export function zoneOffset(time: number) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en", { timeZone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" })
+      .formatToParts(time)
+      .map((p) => [p.type, Number(p.value)]),
+  )
+  const wall = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+  return wall - (time - (time % 1000))
+}
+
+/** The time that a date and time of a datetime-local input, e.g. 2026-10-08T14:30, means in the viewer's time zone. */
+export function fromWallClock(value: string) {
+  const wall = Date.parse(`${value}Z`)
+  return new Date(wall - zoneOffset(wall - zoneOffset(wall)))
 }
 
 /** Formats seconds in the viewer's locale, as minutes if they are whole ones, e.g. "30 seconds" or "2 minutes". */
@@ -63,8 +91,16 @@ export function formatElapsed(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`
 }
 
-/** Formats how long ago a time was in the viewer's locale, e.g. "3 minutes ago" or "yesterday". */
-export function formatAgo(iso: string, now = Date.now()): string {
+/**
+ * Formats when something was or will be as the user wants times: how long ago or until it, e.g. "3 minutes ago" or
+ * "yesterday", or else the date and time.
+ */
+export const formatAgo = (iso: string, now = Date.now()) => (relativeTimes ? relative(iso, now) : formatDateTime(iso))
+
+/** The other way of formatAgo to show a time, for its tooltip. */
+export const formatAgoTitle = (iso: string, now = Date.now()) => (relativeTimes ? formatDateTime(iso) : relative(iso, now))
+
+function relative(iso: string, now: number) {
   const seconds = Math.round((Date.parse(iso) - now) / 1000)
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
   if (Math.abs(seconds) < 60) return rtf.format(seconds, "second")

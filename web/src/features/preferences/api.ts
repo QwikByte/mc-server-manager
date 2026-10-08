@@ -1,11 +1,13 @@
 import { queryOptions, useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 import { toast } from "sonner"
+import type { LogEntry } from "@/features/logs/api"
 import type { Grouping, Sort, View } from "@/features/servers/browse"
 import { api } from "@/lib/api"
-import { type Clock, chooseClock } from "@/lib/i18n"
+import { type CsvFormat, languageSeparator } from "@/lib/csv"
+import { chooseFormats, type Formats, msg } from "@/lib/i18n"
 import type { Order } from "@/lib/sort"
-import { type Accent, type Density, setLook, type Theme } from "@/lib/theme"
+import { type Accent, type Density, setLook, type Theme, useDark } from "@/lib/theme"
 
 /** A widget of the overview and how many of its three columns it spans on large screens. */
 export interface Widget {
@@ -23,16 +25,49 @@ export interface ServerRef {
  * The user's other choices. The master takes the same keys and values (internal/master/preference);
  * those the user never made follow the browser.
  */
-export interface Settings {
+export interface Settings extends Formats {
   theme?: Theme
   accent?: Accent
   density?: Density
-  clock?: Clock
   /** How lists of servers are shown where their address doesn't say. */
   serverView?: View
   serverSort?: Sort
   serverOrder?: Order
   serverGroup?: Grouping
+  /** The size of the text of the console, the terminal and the editor, and whether they follow the colour theme or stay dark. */
+  codeSize?: "small" | "medium" | "large"
+  codeTheme?: "dark" | "panel"
+  /** Whether the console and the terminal wrap long lines; the console does unless chosen, the terminal doesn't. */
+  consoleWrap?: "wrap" | "scroll"
+  terminalWrap?: "scroll" | "wrap"
+  consoleTimes?: "hide" | "show"
+  /** How many lines the console keeps. */
+  consoleLines?: "2000" | "5000" | "10000"
+  consoleFilter?: "all" | "problems"
+  editorWrap?: "off" | "on"
+  /** Two or four spaces, or tabs; YAML always indents with spaces. */
+  editorIndent?: "2" | "4" | "tab"
+  editorKeys?: "standard" | "vim"
+  csvSeparator?: CsvFormat["separator"]
+  csvBom?: "off" | "on"
+}
+
+/** A change of settings; null takes one back to the browser's. */
+export type SettingsChange = { [K in keyof Settings]?: Settings[K] | null }
+
+/**
+ * Which new warnings and errors pop up as toasts and on the desktop: those of at least a level, and only
+ * those of pinned servers and of the chosen nodes, servers and categories if only is set, unless quietUntil
+ * hasn't passed yet. The bell lists all of them either way.
+ */
+export interface Alerts {
+  level: "warn" | "error"
+  only: boolean
+  pinned: boolean
+  nodes: string[]
+  servers: string[]
+  categories: string[]
+  quietUntil?: string
 }
 
 /** What the signed-in user set up in the panel; the master keeps it, so it applies in all their browsers. */
@@ -40,6 +75,7 @@ export interface Preferences {
   /** The order of the widgets of the overview; empty shows the default layout. */
   dashboard: Widget[]
   pinned: ServerRef[]
+  alerts: Alerts
   settings: Settings
 }
 
@@ -54,12 +90,12 @@ export const preferencesQuery = queryOptions({
  * Changes a part of the preferences right away and stores it. Changes are sent one after the
  * other, so that the last one wins, and a failed one is undone.
  */
-function useChange<K extends keyof Preferences>(part: K, field: string) {
+function useChange<K extends keyof Preferences>(part: K, field?: string) {
   const queryClient = useQueryClient()
   const key = preferencesQuery.queryKey
   return useMutation({
     scope: { id: `preferences/${part}` },
-    mutationFn: (value: Preferences[K]) => api<Preferences>(`/preferences/${part}`, { method: "PUT", body: { [field]: value } }),
+    mutationFn: (value: Preferences[K]) => api<Preferences>(`/preferences/${part}`, { method: "PUT", body: field ? { [field]: value } : value }),
     onMutate: async (value) => {
       await queryClient.cancelQueries({ queryKey: key })
       const before = queryClient.getQueryData(key)
@@ -74,6 +110,35 @@ function useChange<K extends keyof Preferences>(part: K, field: string) {
 }
 
 export const useSetDashboard = () => useChange("dashboard", "widgets")
+
+export const defaultAlerts: Alerts = { level: "warn", only: false, pinned: false, nodes: [], servers: [], categories: [] }
+
+/** How long the user can keep warnings and errors from popping up. */
+export const quietHours = [1, 8, 24]
+
+/** Whether the user keeps warnings and errors from popping up now. */
+export const quiet = (alerts: Alerts, now = Date.now()) => !!alerts.quietUntil && Date.parse(alerts.quietUntil) > now
+
+/** Whether a new entry pops up as the user chose: of at least their level, of what they chose if they did, and not while quiet. */
+export function popsUp(e: LogEntry, alerts: Alerts, pinned: ServerRef[]) {
+  if (quiet(alerts) || (alerts.level === "error" && e.level !== "error")) return false
+  if (!alerts.only) return true
+  const server = e.serverId ?? ""
+  return (
+    (alerts.pinned && pinned.some((p) => p.serverId === server)) ||
+    alerts.servers.includes(server) ||
+    alerts.nodes.includes(e.nodeId ?? "") ||
+    alerts.categories.includes(e.category)
+  )
+}
+
+/** The alerts the user chose, and a change of them. */
+export function useAlerts() {
+  const { data } = useQuery(preferencesQuery)
+  const set = useChange("alerts")
+  const alerts = data?.alerts ?? defaultAlerts
+  return { alerts, change: (change: Partial<Alerts>) => set.mutate({ ...alerts, ...change }) }
+}
 
 /**
  * The servers the user pinned, and a toggle that pins or unpins one. Servers are found by
@@ -104,38 +169,75 @@ export function useSettings() {
   const { mutate } = useMutation({
     mutationKey: settingsKey,
     scope: { id: "preferences/settings" },
-    mutationFn: (change: Settings) => api<Preferences>("/preferences/settings", { method: "PATCH", body: change }),
+    mutationFn: (change: SettingsChange) => api<Preferences>("/preferences/settings", { method: "PATCH", body: change }),
     onMutate: async (change) => {
       await queryClient.cancelQueries({ queryKey: key })
       // What the change replaces comes back if it fails, before the panel applies it, e.g. reloads for another clock.
       const settings = queryClient.getQueryData(key)?.settings ?? {}
-      const before: Settings = Object.fromEntries(Object.keys(change).map((k) => [k, settings[k as keyof Settings]]))
-      queryClient.setQueryData(key, (p) => p && { ...p, settings: { ...p.settings, ...change } })
+      const before: SettingsChange = Object.fromEntries(Object.keys(change).map((k) => [k, settings[k as keyof Settings] ?? null]))
+      queryClient.setQueryData(key, (p) => p && { ...p, settings: merge(p.settings, change) })
       return { before }
     },
     onError: (error, _, context) => {
-      if (context) queryClient.setQueryData(key, (p) => p && { ...p, settings: { ...p.settings, ...context.before } })
+      if (context) queryClient.setQueryData(key, (p) => p && { ...p, settings: merge(p.settings, context.before) })
       toast.error(error.message)
       void queryClient.invalidateQueries({ queryKey: key })
     },
   })
   return {
     settings: data?.settings ?? {},
-    change: (change: Settings) => {
-      setLook(change)
+    change: (change: SettingsChange) => {
+      setLook({ theme: change.theme ?? undefined, accent: change.accent ?? undefined, density: change.density ?? undefined })
       mutate(change)
     },
   }
 }
 
+/** Settings with a change, without those it takes back. */
+const merge = (settings: Settings, change: SettingsChange): Settings =>
+  Object.fromEntries(Object.entries({ ...settings, ...change }).filter(([, v]) => v !== null))
+
+/** How the user wants CSV files: with the separator of their language unless they chose one. */
+export function useCsvFormat(): CsvFormat {
+  const { settings } = useSettings()
+  return { separator: settings.csvSeparator ?? languageSeparator, bom: settings.csvBom === "on" }
+}
+
 /** Applies the signed-in user's settings in this browser, which keeps them for the next visit. */
 export function useApplySettings() {
   const { data } = useQuery(preferencesQuery)
-  // Another clock reloads the panel, so it waits until the changes are stored.
+  // Other formats of times reload the panel, so it waits until the changes are stored.
   const storing = useIsMutating({ mutationKey: settingsKey }) > 0
-  const { theme, accent, density, clock } = data?.settings ?? {}
+  const { theme, accent, density, clock, timeZone, times, weekStart, codeSize, codeTheme } = data?.settings ?? {}
   useEffect(() => setLook({ theme, accent, density }), [theme, accent, density])
+  // The console, the terminal and the editor take their size and colours from <html>, see index.css.
   useEffect(() => {
-    if (clock && !storing) chooseClock(clock)
-  }, [clock, storing])
+    const root = document.documentElement.dataset
+    root.codeSize = codeSize ?? "small"
+    root.codeTheme = codeTheme ?? "dark"
+  }, [codeSize, codeTheme])
+  const loaded = data !== undefined
+  useEffect(() => {
+    if (loaded && !storing) chooseFormats({ clock, timeZone, times, weekStart })
+  }, [loaded, storing, clock, timeZone, times, weekStart])
+}
+
+/** The sizes of the text of the console, the terminal and the editor. */
+export const codeSizes = [
+  { value: "small", label: msg("Small") },
+  { value: "medium", label: msg("Medium") },
+  { value: "large", label: msg("Large") },
+] satisfies { value: NonNullable<Settings["codeSize"]>; label: string }[]
+
+/** Where each of them wraps long lines: the console unless chosen otherwise, the terminal and the editor only if chosen. */
+export const wraps = {
+  consoleWrap: { on: (s: Settings) => s.consoleWrap !== "scroll", set: (on: boolean): Settings => ({ consoleWrap: on ? "wrap" : "scroll" }) },
+  terminalWrap: { on: (s: Settings) => s.terminalWrap === "wrap", set: (on: boolean): Settings => ({ terminalWrap: on ? "wrap" : "scroll" }) },
+  editorWrap: { on: (s: Settings) => s.editorWrap === "on", set: (on: boolean): Settings => ({ editorWrap: on ? "on" : "off" }) },
+}
+
+/** Whether the console, the terminal and the editor are dark: in both themes, unless the user lets them follow it. */
+export function useCodeDark() {
+  const dark = useDark()
+  return useSettings().settings.codeTheme !== "panel" || dark
 }
