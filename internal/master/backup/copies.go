@@ -238,7 +238,9 @@ func (c *Copies) Sync(ctx context.Context, t schedule.Task, s JobSettings, srv s
 	if err != nil {
 		return "", err
 	}
-	res, err := noryxv1.NewBackupServiceClient(conn).ListBackups(ctx, &noryxv1.ListBackupsRequest{ServerId: srv.GetId()})
+	listCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+	res, err := noryxv1.NewBackupServiceClient(conn).ListBackups(listCtx, &noryxv1.ListBackupsRequest{ServerId: srv.GetId()})
+	cancel()
 	if err != nil {
 		return "", err
 	}
@@ -347,22 +349,28 @@ func (c *Copies) copy(ctx context.Context, p place, t schedule.Task, srv schedul
 			Id: cp.BackupID, Label: cp.Label, CreatedUnix: b.GetCreatedUnix(), Size: b.GetSize(), Location: p.Location, Paths: cp.Paths,
 			Exclude: cp.Exclude, JobId: t.ID, Kept: cp.Kept,
 		}}
-		res, err := node.Relay(ctx, download, noryxv1.NewBackupServiceClient(to).ImportCopy,
-			&noryxv1.ImportCopyRequest{Content: &noryxv1.ImportCopyRequest_Header{Header: header}},
-			func(data []byte) *noryxv1.ImportCopyRequest {
-				return &noryxv1.ImportCopyRequest{Content: &noryxv1.ImportCopyRequest_Data{Data: data}}
-			},
-			func(int) {})
-		switch status.Code(err) {
-		case codes.OK:
-			cp.Size = res.GetBackup().GetSize()
-		case codes.AlreadyExists: // copied before, but not recorded
-			cp.Size = b.GetSize()
-		case codes.Unimplemented:
+		relay := func() (*noryxv1.ImportCopyResponse, error) {
+			return node.Relay(ctx, download, noryxv1.NewBackupServiceClient(to).ImportCopy,
+				&noryxv1.ImportCopyRequest{Content: &noryxv1.ImportCopyRequest_Header{Header: header}},
+				func(data []byte) *noryxv1.ImportCopyRequest {
+					return &noryxv1.ImportCopyRequest{Content: &noryxv1.ImportCopyRequest_Data{Data: data}}
+				},
+				func(int) {})
+		}
+		res, err := relay()
+		if status.Code(err) == codes.AlreadyExists { // copied before, but not recorded
+			_, err = noryxv1.NewBackupServiceClient(to).DeleteCopy(ctx, &noryxv1.DeleteCopyRequest{ServerId: cp.ServerID, BackupId: cp.BackupID})
+			if err == nil {
+				res, err = relay()
+			}
+		}
+		if status.Code(err) == codes.Unimplemented {
 			return cp, httpapi.Errorf(http.StatusNotImplemented, "Update the agent of %s to keep copies of backups.", p.name)
-		default:
+		}
+		if err != nil {
 			return cp, err
 		}
+		cp.Size = res.GetBackup().GetSize()
 	}
 	cp.CopiedAt = time.Now()
 	return cp, c.add(context.WithoutCancel(ctx), &cp)
@@ -571,7 +579,8 @@ func (h *Handler) restoreCopy(w http.ResponseWriter, r *http.Request) {
 			Id: noryxv1.NewBackupID(cp.CreatedAt), Label: cmp.Or(cp.Label, cp.ServerName), CreatedUnix: cp.CreatedAt.Unix(), Size: cp.Size,
 			Paths: cp.Paths, Exclude: cp.Exclude,
 		}}
-		imported, err := upload(ctx, conn, header, archive, func(n int64) { operation.Count(ctx, n, cp.Size, "bytes") })
+		// The storage or node that keeps the copy can't make it larger than it was.
+		imported, err := upload(ctx, conn, header, io.LimitReader(archive, cp.Size), func(n int64) { operation.Count(ctx, n, cp.Size, "bytes") })
 		if err != nil {
 			return nil, err
 		}
