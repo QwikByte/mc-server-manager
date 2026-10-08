@@ -49,6 +49,8 @@ var (
 	Terminal  = Category("terminal")
 	Databases = Category("databases")
 	Usage     = Category("usage")
+	// Notifications are about the channels that send warnings elsewhere, e.g. to Discord.
+	Notifications = Category("notifications")
 )
 
 // Category returns the attribute of a category, e.g. for slog.Info("…", logging.Nodes).

@@ -53,7 +53,8 @@ const (
 	PoliciesView     Permission = "policies.view"
 	PoliciesManage   Permission = "policies.manage"
 
-	LogsView Permission = "logs.view"
+	LogsView            Permission = "logs.view"
+	NotificationsManage Permission = "notifications.manage"
 
 	SettingsView Permission = "settings.view"
 	SettingsEdit Permission = "settings.edit"
@@ -149,6 +150,7 @@ var Catalog = []Area{
 	}},
 	{"Logs", []Info{
 		scoped(LogsView, "See logs", "Actions, warnings and errors of the master and the agents. Entries about users, groups, settings and the master itself need it for all servers."),
+		global(NotificationsManage, "Manage notifications", "Send entries of the log to Discord, Slack, webhooks and by mail, with rules that apply to all nodes and servers, so it also needs the permission to see logs for all servers. The addresses of webhooks and the passwords of mail servers can be set but never seen."),
 	}},
 	{"System", []Info{
 		global(SettingsView, "See the master's settings", "Its version, addresses and settings."),

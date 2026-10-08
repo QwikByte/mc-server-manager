@@ -1,4 +1,12 @@
-import { GearSixIcon, HardDrivesIcon, SlidersHorizontalIcon, TerminalWindowIcon, UserCircleIcon, UsersThreeIcon } from "@phosphor-icons/react"
+import {
+  BellSimpleIcon,
+  GearSixIcon,
+  HardDrivesIcon,
+  SlidersHorizontalIcon,
+  TerminalWindowIcon,
+  UserCircleIcon,
+  UsersThreeIcon,
+} from "@phosphor-icons/react"
 import type { Access } from "@/features/access/use-access"
 import { msg } from "@/lib/i18n"
 
@@ -13,6 +21,13 @@ export const settings = {
     { to: "/settings/groups", label: msg("Groups"), icon: UsersThreeIcon, visible: (a: Access) => a.can("users.view") },
     { to: "/settings/agents", label: msg("Agents"), icon: HardDrivesIcon, visible: (a: Access) => a.canSomewhere("nodes.view") },
     { to: "/settings/terminal", label: msg("Terminal"), icon: TerminalWindowIcon, visible: (a: Access) => a.can("terminal.use") },
+    {
+      to: "/settings/notifications",
+      label: msg("Notifications"),
+      icon: BellSimpleIcon,
+      // Rules send entries about every server.
+      visible: (a: Access) => a.can("notifications.manage") && a.can("logs.view"),
+    },
   ],
 } as const
 

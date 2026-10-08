@@ -62,7 +62,7 @@ all nodes while the Minecraft servers keep running.
 | [Templates, file sets, plugins and mods](docs/library.md) | Templates, file sets, Modrinth, Hangar, modpacks                               |
 | [Backups and schedules](docs/automation.md)               | Backups of servers, datastores and the master; scheduled restarts and commands |
 | [Players](docs/players.md)                                | Kicks, bans, whitelists and operators                                          |
-| [Usage and logs](docs/monitoring.md)                      | Measurements, their history and the log                                        |
+| [Usage and logs](docs/monitoring.md)                      | Measurements, their history, the log and notifications                         |
 | [Settings, users and permissions](docs/administration.md) | Settings of the master, terminal, users, groups, two-factor authentication     |
 | [REST API and API tokens](docs/api.md)                    | Scripts with API tokens, the description of the API                            |
 | [Security model](docs/security.md)                        | How master, agents and servers are protected                                   |

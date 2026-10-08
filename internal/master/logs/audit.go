@@ -146,6 +146,13 @@ var actions = map[string]action{
 	"DELETE /api/filesets/{id}/secrets/{name}":                 {logging.Files, "Delete secret of file set"},
 	"POST /api/filesets/{id}/preview":                          {logging.Files, "Preview file set"},
 	"POST /api/filesets/{id}/apply":                            {logging.Files, "Apply file set"},
+	"POST /api/notifications/channels":                         {logging.Notifications, "Create notification channel"},
+	"PUT /api/notifications/channels/{id}":                     {logging.Notifications, "Change notification channel"},
+	"DELETE /api/notifications/channels/{id}":                  {logging.Notifications, "Delete notification channel"},
+	"POST /api/notifications/channels/{id}/test":               {logging.Notifications, "Send test notification"},
+	"POST /api/notifications/rules":                            {logging.Notifications, "Create notification rule"},
+	"PUT /api/notifications/rules/{id}":                        {logging.Notifications, "Change notification rule"},
+	"DELETE /api/notifications/rules/{id}":                     {logging.Notifications, "Delete notification rule"},
 }
 
 var wildcard = regexp.MustCompile(`\{(\w+)\}`)

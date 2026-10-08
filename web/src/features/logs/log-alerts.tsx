@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { meQuery } from "@/features/auth/api"
+import { notifyDesktop } from "@/features/notify/desktop"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 import { filterQuery, type LogEntry, type LogFilter, useLogStream } from "./api"
@@ -51,7 +52,8 @@ const about = (e: LogEntry) =>
 
 /**
  * The bell with the latest warnings and errors and how many are new. New ones also show up
- * as toasts, except those of the user's own actions, which the panel reported already.
+ * as toasts, except those of the user's own actions, which the panel reported already, and as
+ * notifications of the operating system while the tab is in the background, if the user turned them on.
  */
 export function LogAlerts() {
   const { data: me } = useQuery(meQuery)
@@ -63,11 +65,10 @@ export function LogAlerts() {
   useLogStream(problems, (entry) => {
     void queryClient.invalidateQueries({ queryKey: problemsQuery.queryKey })
     if (entry.user === me?.username) return
+    const show = () => void navigate({ to: "/logs", search: { level: "warn" } })
     const notify = entry.level === "error" ? toast.error : toast.warning
-    notify(entry.message, {
-      description: about(entry),
-      action: { label: t("Show"), onClick: () => void navigate({ to: "/logs", search: { level: "warn" } }) },
-    })
+    notify(entry.message, { description: about(entry), action: { label: t("Show"), onClick: show } })
+    notifyDesktop(entry, about(entry), show)
   })
 
   const unread = entries.filter((e) => e.id > seen).length

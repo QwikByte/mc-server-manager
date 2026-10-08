@@ -314,10 +314,35 @@ are cut to a maximum size. Besides its retention, the log is kept under a size l
 checks every minute, so that agents can only exceed it by what they add in a minute, a few MiB each. SQLite reuses the
 space of deleted entries, so the log takes at most about twice its limit on disk, however long the retention. So a
 compromised agent can't fill the database, also over weeks, or write entries about other nodes. Request fields that may hold
-secrets, such as the forwarding secret of a network, are never logged. Exports protect spreadsheets from formulas in
-entries, and log files are only readable by their owner. A live stream ends every 5 minutes and the browser connects
-again, which checks the session and the permissions again. Behind a reverse proxy, the logged IP address is that of the
-proxy, unless `--trusted-proxy` names it.
+secrets, such as the forwarding secret of a network or the URL of a webhook, are never logged. Exports protect
+spreadsheets from formulas in entries, and log files are only readable by their owner. A live stream ends every 5
+minutes and the browser connects again, which checks the session and the permissions again. Behind a reverse proxy, the
+logged IP address is that of the proxy, unless `--trusted-proxy` names it.
+
+## Notifications
+
+Managing notifications needs the permission to see the log for all servers besides its own, as rules send entries about
+every node and server, and their channels take them out of the master. The URLs of webhooks and the passwords of mail
+servers are stored in the master's database like the forwarding secret; the API never returns them, the log never names
+them, also not in errors, and an empty field keeps them, so that nobody who may manage notifications learns them. A mail
+channel keeps its password only while its server, port and user stay the same, so that it can't be sent to another
+server. Messages carry the texts of entries, never secrets, which aren't logged; entries can hold IP addresses and the
+names of players, which the panel says where channels are set up.
+
+Channels connect to public addresses only, so that the master can't be used to reach its own network: the address of
+every connection is checked right before it is made, after DNS answered, so that a name can't resolve to another address
+later. Refused are loopback, private (which include the private network of the nodes, as it must be one), link-local,
+shared (carrier-grade NAT), multicast, unspecified, reserved, documentation and benchmarking addresses, IPv6 unique
+local addresses, 6to4 and Teredo, and IPv4-mapped and NAT64 forms of refused IPv4 addresses. Webhooks need HTTPS with a
+certificate that the system trusts, redirects aren't followed and proxies of the environment aren't used, as they would
+connect elsewhere; mails go over TLS from the start or after STARTTLS, and the master refuses to sign in or send without
+it. Every request and mail has a timeout, and only the status of an answer is shown, not its body. Discord and Slack get
+the texts of entries, which agents and servers write, as text that can't mention anyone or be formatted: escaped for
+Discord, which also gets no mentions allowed, and as Slack's plain text with `&`, `<` and `>` escaped. The subjects of
+mails are a single line without control characters and encoded, so that an entry can't add headers. A compromised agent
+can only add warnings about its own node and servers, at the limited rate of the log, and each channel sends 5 messages
+at once, then one a minute at most, which counts what it leaves out. **Send test** works three times at once, then once
+every 20 seconds per channel.
 
 ## Usage
 
