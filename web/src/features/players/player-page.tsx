@@ -31,6 +31,7 @@ import { useAccess } from "@/features/access/use-access"
 import type { ServerRef } from "@/features/networks/api"
 import { findServer, key, refOf, useNetworkOf } from "@/features/networks/servers"
 import { allServersQuery } from "@/features/servers/api"
+import { Ago } from "@/components/ago"
 import { formatAgo, formatDate, formatDateTime, formatMinutes } from "@/lib/format"
 import { locale } from "@/lib/i18n"
 import { useNow } from "@/lib/use-now"
@@ -159,8 +160,8 @@ function Player({ name }: { name: string }) {
                           "–"
                         )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground" title={formatDateTime(s.lastSeen)}>
-                        {online.some((p) => key(refOf(p.server)) === key(s)) ? t("Now") : formatAgo(s.lastSeen, now)}
+                      <TableCell className="text-muted-foreground">
+                        {online.some((p) => key(refOf(p.server)) === key(s)) ? t("Now") : <Ago time={s.lastSeen} now={now} />}
                       </TableCell>
                       <TableCell className="pr-4 text-right tabular-nums">{formatMinutes(s.minutes)}</TableCell>
                     </TableRow>

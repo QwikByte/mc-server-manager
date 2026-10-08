@@ -1,7 +1,8 @@
 import { BugIcon, type Icon, InfoIcon, WarningIcon, WarningOctagonIcon } from "@phosphor-icons/react"
 import { t } from "i18next"
 import type { Tone } from "@/components/tone"
-import { locale, msg } from "@/lib/i18n"
+import { dayOf, formatTime } from "@/lib/format"
+import { msg } from "@/lib/i18n"
 import type { Level } from "./api"
 
 /** How levels look; colour always comes with an icon and a label. The labels are translated with t. */
@@ -38,7 +39,6 @@ export const categoryLabel = (category: string) => (categories[category] ? t(cat
 
 /** Formats the time of an entry: the time of day with seconds, and the date if it isn't today. */
 export function formatEntryTime(iso: string) {
-  const date = new Date(iso)
-  const time = date.toLocaleTimeString(locale, { timeStyle: "medium" })
-  return date.toDateString() === new Date().toDateString() ? time : `${date.toLocaleDateString(locale, { dateStyle: "medium" })}, ${time}`
+  const time = formatTime(iso, { timeStyle: "medium" })
+  return dayOf(iso) === dayOf(Date.now()) ? time : `${formatTime(iso, { dateStyle: "medium" })}, ${time}`
 }

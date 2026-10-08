@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils"
 import { type HistoryPoint, type HistoryQuery, type UsagePoint, type UsageRange, ranges } from "./api"
 import { type ChartSeries, TimeChart } from "./time-chart"
-import { locale } from "@/lib/i18n"
+import { locale, timeZone } from "@/lib/i18n"
 
 /** A chart of the history: one measure, so one scale. */
 export interface ChartSpec<P extends HistoryPoint = UsagePoint> {
@@ -103,7 +103,7 @@ function UsageTable<P extends HistoryPoint>({ points, charts, range }: { points:
   const time = (iso: string) =>
     new Date(iso).toLocaleString(
       locale,
-      range === "day" ? { hour: "2-digit", minute: "2-digit" } : { dateStyle: "short", timeStyle: "short" },
+      range === "day" ? { hour: "2-digit", minute: "2-digit", timeZone } : { dateStyle: "short", timeStyle: "short", timeZone },
     )
   return (
     <div className="surface max-h-[28rem] overflow-auto rounded-xl">

@@ -8,7 +8,8 @@ import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { locale, msg } from "@/lib/i18n"
+import { dayOf, formatTime } from "@/lib/format"
+import { msg } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { type LogEntry, type LogFilter, logsQuery } from "./api"
 import { categoryLabel, formatEntryTime, levels } from "./meta"
@@ -71,13 +72,13 @@ export function LogList({
   const days: LogEntry[][] = []
   for (const entry of entries) {
     const day = days.at(-1)
-    if (day && new Date(day[0].time).toDateString() === new Date(entry.time).toDateString()) day.push(entry)
+    if (day && dayOf(day[0].time) === dayOf(entry.time)) day.push(entry)
     else days.push([entry])
   }
   return (
     <div className={cn("surface overflow-hidden rounded-xl transition-opacity", isPlaceholderData && "opacity-60")}>
       {days.map((items) => (
-        <section key={new Date(items[0].time).toDateString()} aria-label={dayLabel(items[0].time)}>
+        <section key={dayOf(items[0].time)} aria-label={dayLabel(items[0].time)}>
           <h3 className="border-b bg-muted/50 px-4 py-1.5 text-xs font-semibold text-muted-foreground">{dayLabel(items[0].time)}</h3>
           <ul className="divide-y">
             {items.map((entry) => (
@@ -98,10 +99,10 @@ export function LogList({
 }
 
 function dayLabel(iso: string) {
-  const day = new Date(iso).toDateString()
-  if (day === new Date().toDateString()) return t("Today")
-  if (day === new Date(Date.now() - 86_400_000).toDateString()) return t("Yesterday")
-  return new Date(iso).toLocaleDateString(locale, { dateStyle: "full" })
+  const day = dayOf(iso)
+  if (day === dayOf(Date.now())) return t("Today")
+  if (day === dayOf(Date.now() - 86_400_000)) return t("Yesterday")
+  return formatTime(iso, { dateStyle: "full" })
 }
 
 function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogFilter) => void }) {
@@ -146,7 +147,7 @@ function LogRow({ entry, onFilter }: { entry: LogEntry; onFilter?: (change: LogF
 
 function EntryDetails({ id, entry, onFilter }: { id: string; entry: LogEntry; onFilter?: (change: LogFilter) => void }) {
   const facts: [string, string | undefined][] = [
-    [t("Time"), new Date(entry.time).toLocaleString(locale, { dateStyle: "full", timeStyle: "medium" })],
+    [t("Time"), formatTime(entry.time, { dateStyle: "full", timeStyle: "medium" })],
     [t("Level"), t(levels[entry.level].label)],
     [t("Logged by"), entry.source === "agent" ? t("The agent of {{node}}", { node: entry.nodeName ?? entry.nodeId }) : t("The master")],
     [t("Category"), categoryLabel(entry.category)],

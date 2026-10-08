@@ -12,6 +12,7 @@ import { useAccess } from "@/features/access/use-access"
 import { jobs } from "@/features/backups/api"
 import { type AutomationTask, useAutomationTasks } from "@/features/dashboard/tasks"
 import { policies } from "@/features/policies/api"
+import { dayOf, formatTime } from "@/lib/format"
 import { locale } from "@/lib/i18n"
 import { today } from "./describe"
 
@@ -20,13 +21,13 @@ interface Entry extends AutomationTask {
   times: string[]
 }
 
-/** The days of the next week that tasks run on, in the browser's time zone, with the tasks of each in order. */
+/** The days of the next week that tasks run on, in the panel's time zone, with the tasks of each in order. */
 function byDay(tasks: AutomationTask[], upcoming: { id: string; at: string }[]) {
   const days = new Map<string, Map<string, Entry>>()
   for (const { id, at } of upcoming.toSorted((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
     const task = tasks.find((a) => a.task.id === id)
     if (!task) continue
-    const day = new Date(at).toLocaleDateString("sv")
+    const day = dayOf(at)
     if (!days.has(day)) days.set(day, new Map())
     const entries = days.get(day)!
     if (!entries.has(id)) entries.set(id, { ...task, times: [] })
@@ -36,14 +37,14 @@ function byDay(tasks: AutomationTask[], upcoming: { id: string; at: string }[]) 
 }
 
 function dayTitle(day: string) {
-  const date = new Date(`${day}T12:00:00`)
-  const name = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long" }).format(date)
+  const date = Date.parse(`${day}T12:00:00Z`)
+  const name = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(date)
   if (day === today()) return t("Today, {{date}}", { date: name })
-  const tomorrow = new Date(Date.now() + 86_400_000).toLocaleDateString("sv")
+  const tomorrow = dayOf(Date.now() + 86_400_000)
   return day === tomorrow ? t("Tomorrow, {{date}}", { date: name }) : name
 }
 
-const time = (at: string) => new Date(at).toLocaleTimeString(locale, { timeStyle: "short" })
+const time = (at: string) => formatTime(at, { timeStyle: "short" })
 
 /** The times of a task on a day, e.g. "04:00 · 16:00", or how often it runs if that is often. */
 const describeTimes = (times: string[]) =>

@@ -45,6 +45,10 @@ doesn't cut them off. A node's page opens its terminal directly.
 Besides the permission to use the terminal, every command needs its own, e.g. `server restart <id>` the one to restart
 this server.
 
+**View** chooses the size of the text, whether long lines wrap, which they don't unless chosen, so that tables stay
+aligned, and whether the terminal is light in the light theme, and **Fill the window** gives it the whole window until
+Esc.
+
 Tab completes the commands the user may run, their flags and their arguments: IDs of servers, also from the first
 letters of their names, and of nodes, datastores, databases and backups. When several choices are left, a second Tab
 lists them, e.g. servers with their names, and a click takes one. Tab in an empty line moves on to the next control.

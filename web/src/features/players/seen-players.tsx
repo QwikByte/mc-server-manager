@@ -9,7 +9,8 @@ import { SortableHead, Table, TableBody, TableCell, TableHead, TableHeader, Tabl
 import type { Network } from "@/features/networks/api"
 import { findServer, refOf } from "@/features/networks/servers"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
-import { formatAgo, formatDateTime, formatMinutes } from "@/lib/format"
+import { Ago } from "@/components/ago"
+import { formatMinutes } from "@/lib/format"
 import { type Sorting, sortBy } from "@/lib/sort"
 import { useDebounced } from "@/lib/use-debounced"
 import { useNow } from "@/lib/use-now"
@@ -106,8 +107,8 @@ export function SeenPlayers({
                 <TableCell className={cn(!selection && "pl-4")}>
                   <PlayerName name={p.name} />
                 </TableCell>
-                <TableCell className="text-muted-foreground" title={formatDateTime(p.lastSeen)}>
-                  {formatAgo(p.lastSeen, now)}
+                <TableCell className="text-muted-foreground">
+                  <Ago time={p.lastSeen} now={now} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums max-sm:hidden">{formatMinutes(p.minutes)}</TableCell>
                 {!server && (

@@ -42,6 +42,7 @@
   --color-console-command: var(--console-command);
   --color-console-warn: var(--console-warn);
   --color-console-error: var(--console-error);
+  --color-console-overlay: var(--console-overlay);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -78,13 +79,34 @@
   --violet: #6d28d9;
   --glow-2: rgb(139 92 246 / 0.1);
 
-  /* The console stays dark in both themes, like a terminal. */
+  /* The console stays dark in both themes, like a terminal, unless the user chooses otherwise (see below). */
   --console: #0b0f17;
   --console-foreground: #d7dce6;
   --console-muted: #7d8699;
   --console-command: #34d399;
   --console-warn: #fbbf24;
   --console-error: #fb7185;
+  /* What lies on the console, e.g. hovered buttons and borders, in its opacities. */
+  --console-overlay: #ffffff;
+  /* Minecraft's colours on the console; the darkest are lighter, so that they stay readable. */
+  --mc-0: #737b8c;
+  --mc-1: #6f7bff;
+  --mc-2: #3fbf3f;
+  --mc-3: #2fc2c2;
+  --mc-4: #e0524f;
+  --mc-5: #c260c2;
+  --mc-6: #ffaa00;
+  --mc-7: #aaaaaa;
+  --mc-8: #8a93a6;
+  --mc-9: #7b7bff;
+  --mc-a: #55ff55;
+  --mc-b: #55ffff;
+  --mc-c: #ff6b6b;
+  --mc-d: #ff6bff;
+  --mc-e: #ffff55;
+  --mc-f: #ffffff;
+  /* The size of the text of the console, the terminal and the editor. */
+  --code-size: 0.75rem;
   /* Series of charts, apart from the status colours; checked for colour vision deficiencies. */
   --series-1: #2a78d6;
   --series-2: #b5338a;
@@ -180,6 +202,48 @@
   }
 }
 
+/*
+ * The console, the terminal and the editor, which have data-code on their surface, are dark in both themes unless the
+ * user lets them follow the theme (data-code-theme="panel" on <html>). Their colours then meet WCAG AA on white, also
+ * those of Minecraft, which are darker than in the game. data-code-size on <html> chooses the size of their text.
+ */
+:root[data-code-theme="panel"]:not(.dark) [data-code] {
+  --console: #ffffff;
+  --console-foreground: #1f2533;
+  --console-muted: #5b6478;
+  --console-command: #047857;
+  --console-warn: #b45309;
+  --console-error: #be123c;
+  --console-overlay: #0b0f17;
+  --code-string: #92400e;
+  --code-literal: #1d4ed8;
+  --code-keyword: #a21caf;
+  --mc-0: #1f2533;
+  --mc-1: #1e40af;
+  --mc-2: #15803d;
+  --mc-3: #0e7490;
+  --mc-4: #b91c1c;
+  --mc-5: #86198f;
+  --mc-6: #b45309;
+  --mc-7: #4b5563;
+  --mc-8: #6b7280;
+  --mc-9: #4338ca;
+  --mc-a: #166534;
+  --mc-b: #0f766e;
+  --mc-c: #dc2626;
+  --mc-d: #a21caf;
+  --mc-e: #a16207;
+  --mc-f: #1f2533;
+}
+
+:root[data-code-size="medium"] {
+  --code-size: 0.875rem;
+}
+
+:root[data-code-size="large"] {
+  --code-size: 1rem;
+}
+
 /* Compact tightens all spacing, e.g. for long lists of servers; touch screens keep room to tap. */
 @media (pointer: fine) {
   [data-density="compact"] {
@@ -207,6 +271,12 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+}
+
+/* Text of the console, the terminal and the editor, in the size the user chose. */
+@utility code-text {
+  font-size: var(--code-size);
+  line-height: calc(var(--code-size) * 5 / 3);
 }
 
 @utility heading {

@@ -6,13 +6,13 @@ import { TimeZonePicker } from "@/components/time-zone-picker"
 import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { formatTimeZone } from "@/lib/format"
+import { dayOf, formatTimeZone } from "@/lib/format"
 import type { Schedule } from "./api"
 import { dayName, describeSchedule, everyHours, formatDay, formatTimeOfDay, today, weekdays } from "./describe"
 
 const repeats = [1, 3, 6, 12]
 const monthDays = Array.from({ length: 31 }, (_, i) => i + 1)
-const tomorrow = () => new Date(Date.now() + 86_400_000).toLocaleDateString("sv")
+const tomorrow = () => dayOf(Date.now() + 86_400_000)
 
 type Mode = "weekly" | "monthly" | "dates"
 
@@ -26,7 +26,7 @@ export function ScheduleField({ value, onChange }: { value: Schedule; onChange: 
   function choose(next: Mode) {
     // Each kind of days starts afresh, with a day that runs soon.
     const days = { days: [], monthDays: [], dates: [] }
-    if (next === "monthly") set({ ...days, monthDays: [new Date().getDate()] })
+    if (next === "monthly") set({ ...days, monthDays: [Number(today().slice(8))] })
     else if (next === "dates") set({ ...days, dates: [tomorrow()] })
     else set(days)
   }

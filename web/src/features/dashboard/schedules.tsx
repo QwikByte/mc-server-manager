@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { IconTile } from "@/components/icon-tile"
 import { useAccess } from "@/features/access/use-access"
 import { describeSchedule } from "@/features/schedules/describe"
-import { formatAgo, formatDateTime } from "@/lib/format"
+import { Ago } from "@/components/ago"
 import { rise } from "@/lib/motion"
 import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
@@ -52,11 +52,7 @@ export function Schedules({ title }: { title: string }) {
                     <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
                       {task.running
                         ? t("Running")
-                        : task.nextRun && (
-                            <time dateTime={task.nextRun} title={formatDateTime(task.nextRun)}>
-                              {formatAgo(task.nextRun, now)}
-                            </time>
-                          )}
+                        : task.nextRun && <Ago time={task.nextRun} now={now} />}
                     </span>
                   </Link>
                 </motion.li>

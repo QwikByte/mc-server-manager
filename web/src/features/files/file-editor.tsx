@@ -1,4 +1,4 @@
-import { ArrowCounterClockwiseIcon, CaretLeftIcon, DownloadSimpleIcon, FloppyDiskIcon } from "@phosphor-icons/react"
+import { ArrowCounterClockwiseIcon, CaretLeftIcon, DownloadSimpleIcon, FloppyDiskIcon, SlidersHorizontalIcon } from "@phosphor-icons/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -10,6 +10,7 @@ import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CodeViewMenu } from "@/features/preferences/code-view"
 import { useAccess } from "@/features/access/use-access"
 import { guard } from "@/features/operations/use-operation"
 import { ApiError } from "@/lib/api"
@@ -120,6 +121,14 @@ export function FileEditor({ files, path, onClose }: { files: ServerFiles; path:
           {dirty && <Pill tone="warning">{t("Unsaved")}</Pill>}
         </div>
         <div className="flex gap-2">
+          <CodeViewMenu
+            wrap="editorWrap"
+            trigger={
+              <Button variant="outline" size="icon" aria-label={t("View")} title={t("View")}>
+                <SlidersHorizontalIcon />
+              </Button>
+            }
+          />
           <Button variant="outline" asChild>
             <a href={contentUrl(files, path)} download>
               <DownloadSimpleIcon />

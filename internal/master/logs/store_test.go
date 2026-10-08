@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -256,5 +258,38 @@ func TestAgentBudget(t *testing.T) {
 	// Each entry encodes "<" as six bytes, so the bytes run out long before the entries.
 	if allowed == 0 || allowed >= agentBurst/10 {
 		t.Errorf("%d of %d large entries allowed at once", allowed, agentBurst)
+	}
+}
+
+func TestExport(t *testing.T) {
+	s, ctx := newStore(t)
+	s.Start(ctx)
+	log := slog.New(s.Handler(slog.LevelInfo))
+	log.Warn("a; b", logging.Servers)
+	log.Error("=1+1", logging.Auth)
+	s.Close()
+
+	export := func(query string) (int, string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		NewHandler(s).export(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/logs/export?format=csv&"+query, nil))
+		return rec.Code, rec.Body.String()
+	}
+	// Cells that hold the separator are quoted, and formulas don't run in spreadsheets either way.
+	for query, want := range map[string][]string{
+		"":                           {"time,level,", ",a; b,"},
+		"separator=comma&bom=off":    {"time,level,", ",a; b,"},
+		"separator=semicolon":        {"time;level;", `;"a; b";`},
+		"separator=semicolon&bom=on": {"\uFEFFtime;level;", `;"a; b";`},
+	} {
+		code, body := export(query)
+		if code != http.StatusOK || !strings.HasPrefix(body, want[0]) || !strings.Contains(body, want[1]) || !strings.Contains(body, "'=1+1") {
+			t.Errorf("%q: %d %q, want %q", query, code, body, want)
+		}
+	}
+	for _, query := range []string{"separator=tab", "bom=yes"} {
+		if code, _ := export(query); code != http.StatusBadRequest {
+			t.Errorf("%q: %d, want a bad request", query, code)
+		}
 	}
 }

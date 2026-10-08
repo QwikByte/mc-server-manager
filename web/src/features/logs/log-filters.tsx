@@ -11,7 +11,7 @@ import { nodesQuery } from "@/features/nodes/api"
 import { serversQuery } from "@/features/servers/api"
 import { categories } from "./meta"
 import { type LogSearch, ranges } from "./search"
-import { locale } from "@/lib/i18n"
+import { formatDateTime } from "@/lib/format"
 
 /** The filters of the log page in one row, and the narrower ones as removable chips below it. */
 export function LogFilters({ search, onChange }: { search: LogSearch; onChange: (change: Partial<LogSearch>) => void }) {
@@ -32,7 +32,7 @@ export function LogFilters({ search, onChange }: { search: LogSearch; onChange: 
   const chips: [string, Partial<LogSearch>][] = []
   if (search.hour)
     chips.push([
-      t("From {{time}}, one hour", { time: new Date(search.hour).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" }) }),
+      t("From {{time}}, one hour", { time: formatDateTime(search.hour) }),
       { hour: undefined },
     ])
   if (search.user) chips.push([t("User {{user}}", { user: search.user }), { user: undefined }])

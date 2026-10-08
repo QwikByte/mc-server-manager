@@ -19,6 +19,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/preferences", auth.SessionOnly(h.get))
 	mux.HandleFunc("PUT /api/preferences/dashboard", auth.SessionOnly(h.setDashboard))
 	mux.HandleFunc("PUT /api/preferences/pinned", auth.SessionOnly(h.setPinned))
+	mux.HandleFunc("PUT /api/preferences/alerts", auth.SessionOnly(h.setAlerts))
 	mux.HandleFunc("PATCH /api/preferences/settings", auth.SessionOnly(h.changeSettings))
 }
 
@@ -46,6 +47,17 @@ func (h *Handler) setPinned(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		user, _ := auth.UserFrom(r.Context())
 		err = h.store.SetPinned(r.Context(), user.ID, req.Servers)
+	}
+	h.reply(w, r, err)
+}
+
+// setAlerts stores which new warnings and errors pop up for the user.
+func (h *Handler) setAlerts(w http.ResponseWriter, r *http.Request) {
+	var alerts Alerts
+	err := httpapi.ReadJSON(w, r, &alerts)
+	if err == nil {
+		user, _ := auth.UserFrom(r.Context())
+		err = h.store.SetAlerts(r.Context(), user.ID, alerts)
 	}
 	h.reply(w, r, err)
 }

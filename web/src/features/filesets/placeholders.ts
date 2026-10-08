@@ -24,7 +24,7 @@ export const placeholders = [
   ),
   EditorView.baseTheme({
     ".cm-placeholder-variable, .cm-placeholder-secret": { borderRadius: "3px", padding: "0 1px" },
-    ".cm-placeholder-variable": { color: "var(--code-keyword)", backgroundColor: "rgb(255 255 255 / 0.08)" },
+    ".cm-placeholder-variable": { color: "var(--code-keyword)", backgroundColor: "color-mix(in srgb, var(--console-overlay) 8%, transparent)" },
     ".cm-placeholder-secret": { color: "var(--code-string)", backgroundColor: "rgb(252 211 77 / 0.14)" },
   }),
 ]

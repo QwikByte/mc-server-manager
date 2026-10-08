@@ -1,6 +1,6 @@
 // Package preference keeps each user's preferences of the panel: the layout of their
-// overview, the servers they pinned and settings such as the colour theme. They follow the
-// user into every browser.
+// overview, the servers they pinned, which warnings and errors pop up, and settings such as
+// the colour theme. They follow the user into every browser.
 package preference
 
 import (
@@ -13,20 +13,26 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
+	_ "time/tzdata" // the time zone of the panel is an IANA time zone, which minimal systems don't have
 
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
 const (
-	maxWidgets = 32
-	maxColumns = 3
-	maxPinned  = 20
+	maxWidgets    = 32
+	maxColumns    = 3
+	maxPinned     = 20
+	maxChosen     = 100
+	maxCategories = 32
 )
 
 var (
 	widgetPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 	// idPattern matches the IDs of nodes and servers, which are random base32 in lowercase.
 	idPattern = regexp.MustCompile(`^[a-z2-7]{26}$`)
+	// categoryPattern matches the categories of the log, as the notifications do.
+	categoryPattern = regexp.MustCompile(`^[a-z][a-z-]{0,31}$`)
 )
 
 // settings are the keys of Settings and the values each takes, which the panel knows too
@@ -41,6 +47,43 @@ var settings = map[string][]string{
 	"serverSort":  {"name", "state", "players", "cpu", "memory", "node"},
 	"serverOrder": {"asc", "desc"},
 	"serverGroup": {"none", "network", "node", "type", "tag"},
+	// The console, the terminal and the editor: the size of their text, and whether they
+	// follow the colour theme or stay dark.
+	"codeSize":  {"small", "medium", "large"},
+	"codeTheme": {"dark", "panel"},
+	// Whether the console and the terminal wrap long lines, whether the console shows the time
+	// of each line, how many lines it keeps and whether it only shows warnings and errors.
+	"consoleWrap":   {"wrap", "scroll"},
+	"terminalWrap":  {"scroll", "wrap"},
+	"consoleTimes":  {"hide", "show"},
+	"consoleLines":  {"2000", "5000", "10000"},
+	"consoleFilter": {"all", "problems"},
+	// Whether the editor wraps long lines, how it indents and which keys it follows.
+	"editorWrap":   {"off", "on"},
+	"editorIndent": {"2", "4", "tab"},
+	"editorKeys":   {"standard", "vim"},
+	// Whether times show how long ago they were or the date and time, the first day of the
+	// week, and the time zone of times, an IANA time zone (see valid).
+	"times":     {"relative", "absolute"},
+	"weekStart": {"monday", "sunday"},
+	"timeZone":  nil,
+	// The separator of the cells of CSV files, and whether they start with a byte order mark.
+	"csvSeparator": {"comma", "semicolon"},
+	"csvBom":       {"off", "on"},
+}
+
+// valid tells whether a setting takes a value.
+func valid(key, value string) bool {
+	if key == "timeZone" {
+		// LoadLocation also takes "" and "Local", which mean the master's own time zone. IANA
+		// names are short, so longer ones aren't looked up at all.
+		if len(value) > 64 || value == "" || value == "Local" {
+			return false
+		}
+		_, err := time.LoadLocation(value)
+		return err == nil
+	}
+	return slices.Contains(settings[key], value)
 }
 
 // Preferences are what a user chose for the panel.
@@ -49,8 +92,26 @@ type Preferences struct {
 	Dashboard []Widget `json:"dashboard"`
 	// Pinned are the servers the user pinned, in their order.
 	Pinned []Server `json:"pinned"`
+	// Alerts choose which new warnings and errors pop up.
+	Alerts Alerts `json:"alerts"`
 	// Settings are the user's other choices, e.g. the colour theme.
 	Settings Settings `json:"settings"`
+}
+
+// Alerts choose which new warnings and errors of the log the panel shows the user as they
+// come, as toasts and on the desktop. The bell lists all of them either way.
+type Alerts struct {
+	// Level is the least level that pops up: "warn" or "error".
+	Level string `json:"level"`
+	// Only lets only the entries of pinned servers pop up if Pinned, and those about the
+	// chosen nodes, servers and categories, rather than all.
+	Only       bool     `json:"only"`
+	Pinned     bool     `json:"pinned"`
+	Nodes      []string `json:"nodes"`
+	Servers    []string `json:"servers"`
+	Categories []string `json:"categories"`
+	// QuietUntil keeps all of them from popping up until then, e.g. for an hour.
+	QuietUntil *time.Time `json:"quietUntil,omitempty"`
 }
 
 // Settings are values of the panel's settings by their keys, e.g. {"theme": "dark"}. Keys a
@@ -76,15 +137,19 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 // Get returns the preferences of a user. Those the user never set are empty, not nil.
 func (s *Store) Get(ctx context.Context, userID int64) (Preferences, error) {
-	p := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Settings: Settings{}}
+	p := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: Alerts{Level: "warn"}, Settings: Settings{}}
 	if err := s.readJSON(ctx, `SELECT widgets FROM dashboards WHERE user_id = ?`, userID, &p.Dashboard); err != nil {
 		return p, err
 	}
+	if err := s.readJSON(ctx, `SELECT filter FROM alert_filters WHERE user_id = ?`, userID, &p.Alerts); err != nil {
+		return p, err
+	}
+	p.Alerts.Nodes, p.Alerts.Servers, p.Alerts.Categories = list(p.Alerts.Nodes), list(p.Alerts.Servers), list(p.Alerts.Categories)
 	if err := s.readJSON(ctx, `SELECT settings FROM user_settings WHERE user_id = ?`, userID, &p.Settings); err != nil {
 		return p, err
 	}
 	// Values that only an older version knew are left out.
-	maps.DeleteFunc(p.Settings, func(key, value string) bool { return !slices.Contains(settings[key], value) })
+	maps.DeleteFunc(p.Settings, func(key, value string) bool { return !valid(key, value) })
 	rows, err := s.db.QueryContext(ctx, `SELECT node_id, server_id FROM pinned_servers WHERE user_id = ? ORDER BY position`, userID)
 	if err != nil {
 		return p, err
@@ -139,6 +204,20 @@ func (s *Store) SetPinned(ctx context.Context, userID int64, servers []Server) e
 		}
 	}
 	return tx.Commit()
+}
+
+// SetAlerts stores which new warnings and errors pop up for a user.
+func (s *Store) SetAlerts(ctx context.Context, userID int64, alerts Alerts) error {
+	if err := checkAlerts(&alerts); err != nil {
+		return err
+	}
+	data, err := json.Marshal(alerts)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO alert_filters (user_id, filter) VALUES (?, ?)
+		ON CONFLICT (user_id) DO UPDATE SET filter = excluded.filter`, userID, string(data))
+	return err
 }
 
 // ChangeSettings changes some of a user's settings: a value sets its key, null removes it so
@@ -224,13 +303,46 @@ func checkPinned(servers []Server) error {
 	return nil
 }
 
+// checkAlerts checks alerts, and sorts their lists without repeats.
+func checkAlerts(a *Alerts) error {
+	for _, l := range []*[]string{&a.Nodes, &a.Servers, &a.Categories} {
+		*l = list(*l)
+		slices.Sort(*l)
+		*l = slices.Compact(*l)
+	}
+	switch {
+	case a.Level != "warn" && a.Level != "error":
+		return httpapi.Errorf(http.StatusBadRequest, "Choose the level warn or error.")
+	case len(a.Nodes) > maxChosen || len(a.Servers) > maxChosen:
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d nodes and %d servers.", maxChosen, maxChosen)
+	case slices.ContainsFunc(a.Nodes, invalidID) || slices.ContainsFunc(a.Servers, invalidID):
+		return httpapi.Errorf(http.StatusBadRequest, "Nodes and servers are chosen by their IDs.")
+	case len(a.Categories) > maxCategories || slices.ContainsFunc(a.Categories, func(c string) bool { return !categoryPattern.MatchString(c) }):
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d categories of the log.", maxCategories)
+	}
+	return nil
+}
+
+func invalidID(id string) bool { return !idPattern.MatchString(id) }
+
+// list returns l, or an empty list for nil, so that JSON has a list.
+func list(l []string) []string {
+	if l == nil {
+		return []string{}
+	}
+	return l
+}
+
 func checkSettings(change map[string]*string) error {
 	for _, key := range slices.Sorted(maps.Keys(change)) {
 		values, known := settings[key]
 		switch {
 		case !known:
 			return httpapi.Errorf(http.StatusBadRequest, "The panel has no setting %q.", key)
-		case change[key] != nil && !slices.Contains(values, *change[key]):
+		case change[key] == nil || valid(key, *change[key]):
+		case key == "timeZone":
+			return httpapi.Errorf(http.StatusBadRequest, "The setting %q is an IANA time zone, e.g. Europe/Berlin, or null.", key)
+		default:
 			return httpapi.Errorf(http.StatusBadRequest, "The setting %q is one of %s, or null.", key, strings.Join(values, ", "))
 		}
 	}

@@ -19,7 +19,7 @@ import { useAccess } from "@/features/access/use-access"
 import { meQuery } from "@/features/auth/api"
 import { preferencesQuery, useSetDashboard, type Widget } from "@/features/preferences/api"
 import { allServersQuery } from "@/features/servers/api"
-import { locale } from "@/lib/i18n"
+import { formatTime, hourOf } from "@/lib/format"
 import { useNow } from "@/lib/use-now"
 import { WidgetGrid } from "./widget-grid"
 import { arrange, widgetOf, widgets } from "./widgets"
@@ -54,8 +54,8 @@ export function DashboardPage() {
     <>
       <PageHeader
         icon={SquaresFourIcon}
-        title={greeting(user?.username ?? "", now.getHours())}
-        description={now.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}
+        title={greeting(user?.username ?? "", hourOf(now))}
+        description={formatTime(now, { weekday: "long", day: "numeric", month: "long" })}
         actions={
           editing ? (
             <>

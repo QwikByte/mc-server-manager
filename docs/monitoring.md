@@ -97,7 +97,10 @@ a restart of either. Calls that only read are logged at the debug level, downloa
 The **Logs** page lists the entries newest first, with new ones streaming in. Filters for the time, level, category,
 source, node and a text search are part of the address, so a view can be shared. An entry opens to show all its details
 and narrows the list to its user, server or category. Key figures and a chart show the warnings and errors of the last
-24 hours; selecting an hour shows its entries. The entries are exported as CSV or JSON lines.
+24 hours; selecting an hour shows its entries. The entries are exported as CSV or JSON lines; CSV files are separated
+by commas or semicolons and start with a byte order mark as the user chose ([Settings of each
+user](panel.md#settings-of-each-user)). `GET /api/logs/export?format=csv` takes them as `separator=comma|semicolon`
+and `bom=on|off`.
 
 ### Everywhere else
 
@@ -112,6 +115,13 @@ a tab in the background, new warnings and errors show as notifications of the op
 user's own actions. Later ones replace the notification and count how many came since the tab was left, so that a burst
 doesn't fill the screen; a click opens the log. The browser asks for its permission when they are turned on. Some
 browsers, e.g. Chrome on Android, only show notifications of sites with a service worker, which the panel has none of.
+
+**What pops up** on the account page chooses which of them show as notifications and on the desktop: warnings and errors,
+or errors only, about everything the user may see, or only about their pinned servers and chosen servers, nodes (with
+all their servers) and categories, the latter also for entries about no server, e.g. of sign-ins. **Pause pop-ups** in
+the menu of the bell, or **Pause** on the account page, keeps all of them from popping up for an hour, 8 hours or a day,
+and **Pop up again** ends it sooner. The bell lists and counts all warnings and errors either way. The master keeps these choices for each
+user, so that they apply in all their browsers.
 
 ### Command line
 

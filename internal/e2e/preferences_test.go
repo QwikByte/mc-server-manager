@@ -12,8 +12,8 @@ import (
 	"github.com/QwikByte/noryx/internal/master/preference"
 )
 
-// Each user keeps the layout of their overview, the servers they pinned and their settings,
-// which every browser of the user gets. A deleted server is unpinned.
+// Each user keeps the layout of their overview, the servers they pinned, what pops up for them
+// and their settings, which every browser of the user gets. A deleted server is unpinned.
 func TestPreferences(t *testing.T) {
 	m := startMaster(t)
 	svc := m.services(t)
@@ -35,18 +35,22 @@ func TestPreferences(t *testing.T) {
 	browser(t, srv).do("GET", "/api/preferences", nil, http.StatusUnauthorized, nil)
 
 	first := login("admin", "the-admins-password")
-	if body := first.do("GET", "/api/preferences", nil, http.StatusOK, nil); strings.TrimSpace(body) != `{"dashboard":[],"pinned":[],"settings":{}}` {
+	if body := first.do("GET", "/api/preferences", nil, http.StatusOK, nil); strings.TrimSpace(body) != `{"dashboard":[],"pinned":[],`+
+		`"alerts":{"level":"warn","only":false,"pinned":false,"nodes":[],"servers":[],"categories":[]},"settings":{}}` {
 		t.Fatalf("preferences of a new user = %s", body)
 	}
 	want := preference.Preferences{
 		Dashboard: []preference.Widget{{ID: "servers", Columns: 2}, {ID: "nodes", Columns: 1, Hidden: true}},
 		Pinned:    []preference.Server{{NodeID: game.NodeID, ServerID: game.ServerID}, {NodeID: lobby.NodeID, ServerID: lobby.ServerID}},
-		Settings:  preference.Settings{"theme": "dark", "clock": "12h"},
+		Alerts: preference.Alerts{Level: "error", Only: true, Nodes: []string{a.node.ID}, Servers: []string{lobby.ServerID},
+			Categories: []string{"servers"}},
+		Settings: preference.Settings{"theme": "dark", "clock": "12h", "timeZone": "Europe/Berlin"},
 	}
 	var got preference.Preferences
 	first.do("PUT", "/api/preferences/dashboard", map[string]any{"widgets": want.Dashboard}, http.StatusOK, nil)
 	first.do("PATCH", "/api/preferences/settings", map[string]any{"theme": "dark", "serverView": "table"}, http.StatusOK, nil)
-	first.do("PATCH", "/api/preferences/settings", map[string]any{"clock": "12h", "serverView": nil}, http.StatusOK, nil)
+	first.do("PATCH", "/api/preferences/settings", map[string]any{"clock": "12h", "serverView": nil, "timeZone": "Europe/Berlin"}, http.StatusOK, nil)
+	first.do("PUT", "/api/preferences/alerts", want.Alerts, http.StatusOK, nil)
 	first.do("PUT", "/api/preferences/pinned", map[string]any{"servers": want.Pinned}, http.StatusOK, &got)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("preferences = %+v, want %+v", got, want)
@@ -54,10 +58,12 @@ func TestPreferences(t *testing.T) {
 	for path, body := range map[string]any{
 		"dashboard": map[string]any{"widgets": []preference.Widget{{ID: "servers", Columns: 4}}},
 		"pinned":    map[string]any{"servers": append(want.Pinned, want.Pinned[0])},
+		"alerts":    preference.Alerts{Level: "debug"},
 	} {
 		first.do("PUT", "/api/preferences/"+path, body, http.StatusBadRequest, nil)
 	}
-	for _, body := range []any{map[string]any{"theme": "blue"}, map[string]any{"userId": "2"}, map[string]any{"theme": 1}, []string{"theme"}} {
+	for _, body := range []any{map[string]any{"theme": "blue"}, map[string]any{"userId": "2"}, map[string]any{"theme": 1}, []string{"theme"},
+		map[string]any{"timeZone": "Local"}} {
 		first.do("PATCH", "/api/preferences/settings", body, http.StatusBadRequest, nil)
 	}
 	first.do("PUT", "/api/preferences/pinned", map[string]any{"servers": []map[string]string{{"nodeId": "../" + game.NodeID, "serverId": game.ServerID}}}, http.StatusBadRequest, nil)
@@ -72,7 +78,7 @@ func TestPreferences(t *testing.T) {
 		t.Fatalf("preferences in another browser = %+v, want %+v", inSecond, want)
 	}
 	login("other", "the-others-password").do("GET", "/api/preferences", nil, http.StatusOK, &others)
-	if len(others.Dashboard) != 0 || len(others.Pinned) != 0 || len(others.Settings) != 0 {
+	if len(others.Dashboard) != 0 || len(others.Pinned) != 0 || len(others.Settings) != 0 || others.Alerts.Only {
 		t.Fatalf("preferences of another user = %+v", others)
 	}
 
