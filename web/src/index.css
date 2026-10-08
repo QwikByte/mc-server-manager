@@ -1,15 +1,16 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/plus-jakarta-sans";
+/* Mona Sans with its width axis: headings and figures run wide, labels narrow, text in between. */
+@import "@fontsource-variable/mona-sans/wdth.css";
 @import "@fontsource-variable/jetbrains-mono";
 
 /* The theme is a class on <html>; public/theme.js sets it before the first paint. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Mona Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Mona Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -52,32 +53,32 @@
 
 /*
  * Emerald for actions and running servers, sky for nodes, violet for networks,
- * amber for anything in between and rose for destructive actions.
+ * amber for anything in between and rose for destructive actions. The neutrals are a cool
+ * graphite, so that the colours of states stand out on them.
  */
 :root {
   color-scheme: light;
-  --radius: 0.75rem;
-  --background: #f6f7fb;
-  --foreground: #0f1524;
+  --radius: 0.4rem;
+  --background: #f3f5f8;
+  --foreground: #0d131d;
   --card: #ffffff;
-  --card-foreground: #0f1524;
+  --card-foreground: #0d131d;
   --popover: #ffffff;
-  --popover-foreground: #0f1524;
-  --secondary: #eceff5;
-  --secondary-foreground: #0f1524;
-  --muted: #eef0f5;
-  --muted-foreground: #5b6478;
-  --accent: #eceff5;
-  --accent-foreground: #0f1524;
+  --popover-foreground: #0d131d;
+  --secondary: #edf0f4;
+  --secondary-foreground: #0d131d;
+  --muted: #eef1f5;
+  --muted-foreground: #566070;
+  --accent: #edf0f4;
+  --accent-foreground: #0d131d;
   --destructive: #e11d48;
-  --border: #e2e5ee;
-  --input: #d6dbe6;
+  --border: #dde2e9;
+  --input: #cdd4de;
   --sidebar: #ffffff;
   --success: #047857;
   --warning: #b45309;
   --info: #0369a1;
   --violet: #6d28d9;
-  --glow-2: rgb(139 92 246 / 0.1);
 
   /* The console stays dark in both themes, like a terminal, unless the user chooses otherwise (see below). */
   --console: #0b0f17;
@@ -116,90 +117,89 @@
   --code-keyword: #f0abfc;
 }
 
+/* The dark theme; the sidebar has it in both themes. */
 .dark {
   color-scheme: dark;
   --series-1: #3987e5;
   --series-2: #c2409a;
-  --background: #0a0d14;
-  --foreground: #e9ecf3;
-  --card: #11151f;
-  --card-foreground: #e9ecf3;
-  --popover: #151a25;
-  --popover-foreground: #e9ecf3;
-  --secondary: #1b2130;
-  --secondary-foreground: #e9ecf3;
-  --muted: #171c28;
-  --muted-foreground: #8b93a7;
-  --accent: #1b2130;
-  --accent-foreground: #e9ecf3;
+  --background: #0c0f14;
+  --foreground: #e6e9ef;
+  --card: #12161d;
+  --card-foreground: #e6e9ef;
+  --popover: #171c25;
+  --popover-foreground: #e6e9ef;
+  --secondary: #1a202a;
+  --secondary-foreground: #e6e9ef;
+  --muted: #171c24;
+  --muted-foreground: #8b95a7;
+  --accent: #1a202a;
+  --accent-foreground: #e6e9ef;
   --destructive: #fb7185;
-  --border: #1f2533;
-  --input: #2a3141;
-  --sidebar: #0d1119;
+  --border: #232a35;
+  --input: #2d3543;
+  --sidebar: #080a0e;
   --success: #34d399;
   --warning: #fbbf24;
   --info: #38bdf8;
   --violet: #a78bfa;
-  --glow-2: rgb(167 139 250 / 0.09);
 }
 
 /*
  * The accent is the colour of actions, links and focus, apart from the colours of states; emerald
  * is the default. data-accent chooses one on <html>, and shows one on a swatch. Each meets WCAG AA
- * (4.5:1) in both themes for text on it and for it on the background, cards and the sidebar.
- * Emerald comes first, as the others replace it.
+ * (4.5:1) in both themes for text on it and for it on the background, cards and the sidebar; the
+ * ring meets the 3:1 that focus needs. Each accent holds both of its themes, and the theme of a
+ * surface picks one, so that the dark sidebar of the light theme gets the dark one.
  */
 :root,
 [data-accent="emerald"] {
-  --primary: #047857;
-  --primary-foreground: #ffffff;
-  --ring: #059669; /* 3.5:1 on the background, as focus needs 3:1 */
-  --glow-1: rgb(16 185 129 / 0.13);
-  &:is(.dark, .dark *) {
-    --primary: #34d399;
-    --primary-foreground: #04241a;
-    --ring: #34d399;
-    --glow-1: rgb(52 211 153 / 0.1);
-  }
+  --accent-light: #047857;
+  --accent-light-foreground: #ffffff;
+  --accent-light-ring: #059669;
+  --accent-dark: #34d399;
+  --accent-dark-foreground: #04241a;
+  --accent-dark-ring: #34d399;
 }
 
 [data-accent="blue"] {
-  --primary: #1d4ed8;
-  --primary-foreground: #ffffff;
-  --ring: #3b82f6;
-  --glow-1: rgb(59 130 246 / 0.13);
-  &:is(.dark, .dark *) {
-    --primary: #60a5fa;
-    --primary-foreground: #081a33;
-    --ring: #60a5fa;
-    --glow-1: rgb(96 165 250 / 0.1);
-  }
+  --accent-light: #1d4ed8;
+  --accent-light-foreground: #ffffff;
+  --accent-light-ring: #3b82f6;
+  --accent-dark: #60a5fa;
+  --accent-dark-foreground: #081a33;
+  --accent-dark-ring: #60a5fa;
 }
 
 [data-accent="violet"] {
-  --primary: #6d28d9;
-  --primary-foreground: #ffffff;
-  --ring: #8b5cf6;
-  --glow-1: rgb(139 92 246 / 0.13);
-  &:is(.dark, .dark *) {
-    --primary: #a78bfa;
-    --primary-foreground: #1a0b40;
-    --ring: #a78bfa;
-    --glow-1: rgb(167 139 250 / 0.1);
-  }
+  --accent-light: #6d28d9;
+  --accent-light-foreground: #ffffff;
+  --accent-light-ring: #8b5cf6;
+  --accent-dark: #a78bfa;
+  --accent-dark-foreground: #1a0b40;
+  --accent-dark-ring: #a78bfa;
 }
 
 [data-accent="graphite"] {
-  --primary: #334155;
-  --primary-foreground: #ffffff;
-  --ring: #64748b;
-  --glow-1: rgb(100 116 139 / 0.12);
-  &:is(.dark, .dark *) {
-    --primary: #e2e8f0;
-    --primary-foreground: #0f1524;
-    --ring: #94a3b8;
-    --glow-1: rgb(148 163 184 / 0.08);
-  }
+  --accent-light: #334155;
+  --accent-light-foreground: #ffffff;
+  --accent-light-ring: #64748b;
+  --accent-dark: #e2e8f0;
+  --accent-dark-foreground: #0f1524;
+  --accent-dark-ring: #94a3b8;
+}
+
+:root,
+[data-accent] {
+  --primary: var(--accent-light);
+  --primary-foreground: var(--accent-light-foreground);
+  --ring: var(--accent-light-ring);
+}
+
+.dark,
+.dark [data-accent] {
+  --primary: var(--accent-dark);
+  --primary-foreground: var(--accent-dark-foreground);
+  --ring: var(--accent-dark-ring);
 }
 
 /*
@@ -258,14 +258,8 @@
   html {
     @apply font-sans antialiased;
   }
-  /* Two soft glows behind the content keep the large surfaces from looking flat. */
   body {
     @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(56rem 28rem at 0% -8rem, var(--glow-1), transparent 70%),
-      radial-gradient(48rem 26rem at 100% -10rem, var(--glow-2), transparent 70%);
-    background-attachment: fixed;
-    background-repeat: no-repeat;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -279,24 +273,37 @@
   line-height: calc(var(--code-size) * 5 / 3);
 }
 
+/* Headings and key figures run wide, which sets them apart from the text without making them loud. */
 @utility heading {
   font-family: var(--font-heading);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 640;
+  font-stretch: 116%;
+  letter-spacing: -0.012em;
   line-height: 1.15;
 }
 
-/* A faint grid of blocks that fades out towards the edges. */
-@utility bg-blocks {
-  background-image:
-    linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px);
-  background-size: 2.5rem 2.5rem;
-  mask-image: radial-gradient(ellipse at center, black 15%, transparent 70%);
+@utility figure {
+  font-family: var(--font-heading);
+  font-weight: 620;
+  font-stretch: 112%;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small labels above values and groups run narrow, in capitals. */
+@utility eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  font-stretch: 90%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* The raised surface of cards, lists and panels. */
 @utility surface {
-  @apply bg-card shadow-xs ring-1 ring-foreground/8 dark:shadow-none;
+  @apply bg-card shadow-[0_1px_2px_0_rgb(13_19_29/0.05)] ring-1 ring-border dark:shadow-none;
 }
 
 /* A bar that runs back and forth while it is unknown how long something takes. */
@@ -327,7 +334,7 @@
   animation: shimmer 1.6s ease-in-out infinite;
 }
 
-/* Cards that open something rise a little under the pointer. */
+/* Cards that open something cast a shadow under the pointer. */
 @utility lift {
-  @apply transition-[translate,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg motion-reduce:hover:translate-y-0;
+  @apply transition-[box-shadow] duration-200 hover:shadow-[0_6px_20px_-6px_rgb(13_19_29/0.18)] dark:hover:shadow-[0_6px_20px_-6px_rgb(0_0_0/0.6)];
 }

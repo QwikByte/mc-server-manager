@@ -73,7 +73,7 @@ function ModpackSection({ nodeId, server, pack }: { nodeId: string; server: Serv
 
   const action = older ? t("Change version") : t("Update modpack")
   return (
-    <section className="surface space-y-5 rounded-2xl px-5 py-5 sm:px-8" aria-label={t("Modpack")}>
+    <section className="surface space-y-5 rounded-xl px-5 py-5 sm:px-8" aria-label={t("Modpack")}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <PluginIcon src={pack.project.icon} />
         {/* Wide enough for the version, so that the note of a newer one moves below on phones. */}

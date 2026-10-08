@@ -94,7 +94,7 @@ export function LogAlerts() {
     <DropdownMenu onOpenChange={markSeen}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-sm" aria-label={label} title={label} className="relative shrink-0 text-muted-foreground">
-          {quietNow ? <BellZIcon /> : unread > 0 ? <BellRingingIcon weight="duotone" className="text-foreground" /> : <BellIcon />}
+          {quietNow ? <BellZIcon /> : unread > 0 ? <BellRingingIcon className="text-foreground" /> : <BellIcon />}
           {unread > 0 && (
             <span
               aria-hidden
@@ -116,7 +116,7 @@ export function LogAlerts() {
               <Link to="/logs" search={{ level: "warn" }}>
                 <Icon
                   aria-label={t(label)}
-                  weight="duotone"
+                 
                   className={cn("mt-0.5", tone === "destructive" ? "text-destructive" : "text-warning")}
                 />
                 <span className="min-w-0 flex-1">

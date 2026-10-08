@@ -72,7 +72,7 @@ function UpdateImage({ nodeId, server }: { nodeId: string; server: Server }) {
     </Button>
   )
   return (
-    <section className="surface flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-5 sm:px-8" aria-label={t("Image")}>
+    <section className="surface flex flex-wrap items-center justify-between gap-4 rounded-xl px-5 py-5 sm:px-8" aria-label={t("Image")}>
       <h2 className="heading text-base">{t("Image")}</h2>
       {running ? (
         <ConfirmDialog
@@ -118,7 +118,7 @@ function SettingsForm({ nodeId, server }: { nodeId: string; server: Server }) {
   }
 
   return (
-    <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
+    <form onSubmit={submit} className="surface rounded-xl px-5 sm:px-8">
       <FormSection title={t("General")}>
         <Field>
           <FieldLabel htmlFor="settings-name">{t("Name")}</FieldLabel>

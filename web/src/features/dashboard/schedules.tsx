@@ -41,7 +41,7 @@ export function Schedules({ title }: { title: string }) {
               const error = failed(task) && task.lastRun?.error
               return (
                 <motion.li key={`${link.to}/${task.id}`} layout {...rise(i)} exit={{ opacity: 0, x: 16 }}>
-                  <Link {...link} className={cn("flex items-center gap-3 px-5 py-2.5", row)}>
+                  <Link {...link} className={cn("flex items-center gap-3 px-4 py-2.5", row)}>
                     <IconTile icon={error ? WarningCircleIcon : icon} tone={error ? "destructive" : tone} size="sm" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{task.name}</span>

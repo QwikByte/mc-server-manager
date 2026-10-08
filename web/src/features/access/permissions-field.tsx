@@ -46,7 +46,7 @@ export function PermissionsField({
               {area.permissions.map((p) => (
                 <label
                   key={p.id}
-                  className="flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-foreground/8 hover:bg-muted/50 has-disabled:cursor-default has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-primary/30"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-border hover:bg-muted/50 has-disabled:cursor-default has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-primary/30"
                 >
                   <Checkbox
                     className="mt-0.5"

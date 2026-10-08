@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { Meter } from "@/components/meter"
 import { PageHeader } from "@/components/page-header"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { OverlaySettingsSection } from "@/features/overlay/overlay-settings"
@@ -65,7 +65,7 @@ function Overview({ nodes, servers }: { nodes: Node[]; servers?: NodeServer[] })
   const assignedMb = servers && assignedMemoryMb(servers)
   const capacityMb = onlineCapacityMb(nodes)
   return (
-    <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <StatStrip className="mb-7 grid-cols-2 lg:grid-cols-4">
       <StatCard
         icon={HardDrivesIcon}
         tone="info"
@@ -104,7 +104,7 @@ function Overview({ nodes, servers }: { nodes: Node[]; servers?: NodeServer[] })
         label={t("CPU cores")}
         value={<AnimatedNumber value={online.reduce((sum, n) => sum + (n.info?.cpuCount ?? 0), 0)} />}
       />
-    </div>
+    </StatStrip>
   )
 }
 
@@ -116,7 +116,7 @@ function NodeCard({ node, servers }: { node: Node; servers?: NodeServer[] }) {
     <Link
       to="/nodes/$nodeId"
       params={{ nodeId: node.id }}
-      className="group surface flex h-full flex-col gap-5 rounded-xl p-5 transition-all outline-none hover:-translate-y-0.5 hover:shadow-lg hover:ring-info/40 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:hover:translate-y-0"
+      className="group surface flex h-full flex-col gap-5 rounded-xl p-5 lift outline-none hover:ring-info/40 focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex items-start gap-3">
         <IconTile icon={HardDrivesIcon} tone="info" />

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
+import { StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -16,24 +17,24 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
-import { meQuery } from "@/features/auth/api"
 import { preferencesQuery, useSetDashboard, type Widget } from "@/features/preferences/api"
 import { allServersQuery } from "@/features/servers/api"
-import { formatTime, hourOf } from "@/lib/format"
+import { formatTime } from "@/lib/format"
 import { useNow } from "@/lib/use-now"
+import { useProblems } from "./overview"
 import { WidgetGrid } from "./widget-grid"
 import { arrange, widgetOf, widgets } from "./widgets"
 
-/** The start page: widgets the user arranges, e.g. the players, servers and nodes at a glance and what needs attention. */
+/**
+ * The start page: whether everything runs, and widgets the user arranges, e.g. the players, servers and nodes at a
+ * glance and what needs attention.
+ */
 export function DashboardPage() {
   const access = useAccess()
-  const { data: user } = useQuery(meQuery)
   const { data: servers } = useQuery(allServersQuery)
   const { data: preferences, isPending } = useQuery(preferencesQuery)
   const setDashboard = useSetDashboard()
   const [editing, setEditing] = useState(false)
-  // The greeting follows the time of day.
-  const now = new Date(useNow(true, 60_000))
   if (!servers || isPending) return <Skeleton className="h-96 rounded-xl" />
 
   const available = widgets.filter((w) => w.visible(access))
@@ -54,8 +55,8 @@ export function DashboardPage() {
     <>
       <PageHeader
         icon={SquaresFourIcon}
-        title={greeting(user?.username ?? "", hourOf(now))}
-        description={formatTime(now, { weekday: "long", day: "numeric", month: "long" })}
+        title={t("Overview")}
+        description={<Health />}
         actions={
           editing ? (
             <>
@@ -73,7 +74,7 @@ export function DashboardPage() {
                     const def = widgetOf(w.id)!
                     return (
                       <DropdownMenuItem key={w.id} onSelect={() => save(layout.map((l) => (l.id === w.id ? { id: l.id, columns: l.columns } : l)))}>
-                        <def.icon weight="duotone" />
+                        <def.icon />
                         {t(def.title)}
                       </DropdownMenuItem>
                     )
@@ -116,9 +117,23 @@ export function DashboardPage() {
   )
 }
 
-function greeting(name: string, hour: number) {
-  if (hour < 5) return t("Still up, {{name}}?", { name })
-  if (hour < 12) return t("Good morning, {{name}}", { name })
-  if (hour < 18) return t("Good afternoon, {{name}}", { name })
-  return t("Good evening, {{name}}", { name })
+/** Whether something needs attention, and today's date. */
+function Health() {
+  const problems = useProblems()
+  const now = new Date(useNow(true, 60_000))
+  const tone = problems.some((p) => p.tone === "destructive") ? "destructive" : problems.length > 0 ? "warning" : "success"
+  return (
+    <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 max-sm:flex-col max-sm:items-start">
+      <span className="inline-flex items-center gap-2 font-medium text-foreground">
+        <StatusDot status={{ tone, label: "", pulse: tone === "destructive" }} />
+        {problems.length === 0
+          ? t("Everything is running smoothly.")
+          : t("{{count}} things need attention", { count: problems.length, defaultValue_one: "{{count}} thing needs attention" })}
+      </span>
+      <span aria-hidden className="text-muted-foreground/50 max-sm:hidden">
+        /
+      </span>
+      <span className="whitespace-nowrap">{formatTime(now, { weekday: "long", day: "numeric", month: "long" })}</span>
+    </span>
+  )
 }

@@ -122,9 +122,9 @@ function Measure({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg p-3 ring-1 ring-foreground/8">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg p-3 ring-1 ring-border">
       <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        <Icon className="size-3.5" weight="duotone" />
+        <Icon className="size-3.5" />
         {label}
       </p>
       <p className="text-lg font-semibold tabular-nums">{value}</p>

@@ -138,7 +138,7 @@ export function TagsDialog({ servers, onOpenChange }: { servers: TaggedServer[];
                   tag={tag}
                   detail={servers.length > 1 && n < servers.length ? `${n}/${servers.length}` : undefined}
                   onRemove={() => removeTag(tag)}
-                  className="h-6 bg-card text-xs ring-1 ring-foreground/8"
+                  className="h-6 bg-card text-xs ring-1 ring-border"
                 />
               )
             })}
@@ -224,7 +224,7 @@ export function TagsField({ id, value, onChange }: { id: string; value: string[]
               key={tag}
               tag={tag}
               onRemove={() => onChange(value.filter((x) => x !== tag))}
-              className="h-6 bg-card text-xs ring-1 ring-foreground/8"
+              className="h-6 bg-card text-xs ring-1 ring-border"
             />
           ))}
         </div>

@@ -81,7 +81,7 @@ export function ServerIcon({ nodeId, serverId }: ServerFiles) {
         {icon ? (
           <img src={icon} alt={t("Server icon")} width={size} height={size} className="[image-rendering:pixelated]" />
         ) : (
-          <ImageIcon className="size-6 text-muted-foreground" weight="duotone" aria-hidden />
+          <ImageIcon className="size-6 text-muted-foreground" aria-hidden />
         )}
       </div>
       <div className="min-w-0 space-y-2">

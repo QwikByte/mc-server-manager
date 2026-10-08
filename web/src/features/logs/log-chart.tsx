@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { useState } from "react"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { niceMax } from "@/lib/chart"
 import { cn } from "@/lib/utils"
@@ -28,7 +28,7 @@ export function LogOverview({ filter, onSelectHour }: { filter: LogFilter; onSel
   const sum = (key: "warn" | "error") => buckets.reduce((n, b) => n + b[key], 0)
   return (
     <div className={cn("space-y-4 transition-opacity", isPlaceholderData && "opacity-60")}>
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <StatStrip className="grid-cols-3">
         <StatCard
           icon={levels.info.icon}
           tone="info"
@@ -43,7 +43,7 @@ export function LogOverview({ filter, onSelectHour }: { filter: LogFilter; onSel
         <StatCard icon={levels.error.icon} tone="destructive" label={t("Errors")} value={count.format(sum("error"))}>
           {t("failures to look into")}
         </StatCard>
-      </div>
+      </StatStrip>
       <HourChart buckets={buckets} onSelectHour={onSelectHour} />
     </div>
   )
@@ -64,7 +64,7 @@ function HourChart({ buckets, onSelectHour }: { buckets: LogBucket[]; onSelectHo
             return (
               <span key={key} className="flex items-center gap-1.5">
                 <span aria-hidden className={cn("size-2.5 rounded-[3px]", fill)} />
-                <Icon aria-hidden className="size-3.5" weight="duotone" />
+                <Icon aria-hidden className="size-3.5" />
                 {t(plural)}
               </span>
             )

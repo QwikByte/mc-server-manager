@@ -88,7 +88,7 @@ export function Activity() {
             {ops.map((op) => (
               <li
                 key={op.id}
-                className="relative flex items-start gap-3 rounded-xl p-3 ring-1 ring-foreground/8 transition-colors has-[a:hover]:bg-muted/50"
+                className="relative flex items-start gap-3 rounded-xl p-3 ring-1 ring-border transition-colors has-[a:hover]:bg-muted/50"
               >
                 <StateIcon op={op} />
                 <div className="min-w-0 flex-1 space-y-1">

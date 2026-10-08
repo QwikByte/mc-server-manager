@@ -1,19 +1,20 @@
-import { ListIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
+import { CaretRightIcon, ListIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, Outlet, useLocation, useMatches } from "@tanstack/react-router"
 import { t } from "i18next"
 import { LayoutGroup, motion } from "motion/react"
-import { type ReactElement, useEffect, useId, useState } from "react"
+import { Fragment, type ReactElement, useEffect, useId, useState } from "react"
 import { ConnectionBanner } from "@/components/connection-banner"
 import { Logo } from "@/components/logo"
 import { navigation } from "@/components/navigation"
 import { contentId } from "@/components/page-focus"
+import { usePageTrail } from "@/components/page-title"
 import { SkipLink } from "@/components/skip-link"
 import { StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useAccess } from "@/features/access/use-access"
+import { type Access, useAccess } from "@/features/access/use-access"
 import { AccountMenu } from "@/features/auth/account-menu"
 import { meQuery } from "@/features/auth/api"
 import { LogAlerts } from "@/features/logs/log-alerts"
@@ -45,8 +46,9 @@ function storeCollapsed(collapsed: boolean) {
 }
 
 /**
- * A sidebar on large screens, which folds to its icons; on small ones, a bar at the top whose
- * menu holds the navigation.
+ * A dark sidebar with the navigation on large screens, which folds to its icons, and a bar above
+ * the page with where it is, the search, the operations and the warnings. On small screens, the
+ * bar's menu holds the navigation.
  */
 export function AppShell() {
   const { data: user } = useQuery(meQuery)
@@ -64,35 +66,21 @@ export function AppShell() {
   const toggleLabel = collapsed ? t("Expand the sidebar") : t("Collapse the sidebar")
 
   return (
-    <div className="flex min-h-svh flex-col md:flex-row">
+    <div className="flex min-h-svh">
       <SkipLink />
       <aside
         className={cn(
-          "sticky top-0 z-30 flex shrink-0 items-center gap-1.5 border-b bg-sidebar/80 px-3 py-2.5 backdrop-blur-xl md:h-svh md:flex-col md:items-stretch md:gap-4 md:overflow-x-hidden md:overflow-y-auto md:border-r md:border-b-0 md:py-4 md:transition-[width] md:duration-300 md:ease-out",
-          collapsed ? "md:w-17" : "md:w-60",
+          "dark sticky top-0 z-30 hidden h-svh shrink-0 flex-col overflow-x-hidden border-r bg-sidebar text-foreground transition-[width] duration-300 ease-out md:flex",
+          collapsed ? "w-16" : "w-60",
         )}
       >
-        <Sheet open={menu} onOpenChange={setMenu}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={t("Menu")} className="md:hidden">
-              <ListIcon />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" aria-describedby={undefined} className="w-72 gap-6 overflow-y-auto bg-sidebar px-3 py-5">
-            <SheetTitle className="flex items-center gap-2.5 px-2 text-base font-bold tracking-tight">
-              <Logo className="size-8" />
-              {t("Noryx")}
-            </SheetTitle>
-            <MainNav onNavigate={() => setMenu(false)} />
-          </SheetContent>
-        </Sheet>
-
-        <div className={cn("flex items-center gap-2 md:px-1", collapsed && "md:flex-col md:px-0")}>
-          <Link to="/" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <Logo className="size-8" />
-            <span className={cn("text-base font-bold tracking-tight whitespace-nowrap max-md:sr-only", collapsed && "md:sr-only")}>
-              {t("Noryx")}
-            </span>
+        <div className={cn("flex h-14 shrink-0 items-center gap-2 border-b px-3", collapsed && "justify-center px-0")}>
+          <Link
+            to="/"
+            className={cn("flex min-w-0 flex-1 items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring", collapsed && "sr-only")}
+          >
+            <Logo className="size-7" />
+            <span className="heading text-[0.9375rem] whitespace-nowrap">{t("Noryx")}</span>
           </Link>
           <Button
             variant="ghost"
@@ -104,34 +92,49 @@ export function AppShell() {
               setCollapsed(!collapsed)
               storeCollapsed(!collapsed)
             }}
-            className="text-muted-foreground max-md:hidden"
+            className="text-muted-foreground"
           >
             <SidebarSimpleIcon />
           </Button>
         </div>
+        <MainNav className="flex-1 overflow-y-auto px-2.5 py-3" collapsed={collapsed} />
+        <div className={cn("shrink-0 border-t p-2", collapsed && "flex justify-center")}>
+          <AccountMenu folded={collapsed} className={cn(!collapsed && "w-full")} />
+        </div>
+      </aside>
 
-        <PaletteButton
-          folded={collapsed}
-          className={cn("max-md:ml-auto max-md:size-9 max-md:justify-center max-md:px-0", collapsed && "md:size-9 md:self-center md:px-0")}
-        />
-        <MainNav className="max-md:hidden md:flex-1" collapsed={collapsed} />
-
-        {/* Operations, warnings and the account: at the foot of the sidebar, at the end of the bar on small screens. */}
-        <div className={cn("flex items-center gap-1 md:border-t md:pt-3", collapsed && "md:flex-col md:gap-2")}>
-          <AccountMenu folded={collapsed} className={cn("max-md:order-last max-md:p-0.5", !collapsed && "md:min-w-0 md:flex-1")} />
-          <div className={cn("flex items-center gap-1 max-md:contents", collapsed && "md:order-first md:flex-col")}>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-1.5 border-b bg-background/85 px-3 backdrop-blur-xl sm:px-6 lg:px-8">
+          <Sheet open={menu} onOpenChange={setMenu}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label={t("Menu")} className="-ml-1 md:hidden">
+                <ListIcon />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" aria-describedby={undefined} className="dark w-72 gap-0 overflow-y-auto bg-sidebar p-0 text-foreground">
+              <SheetTitle className="flex h-14 items-center gap-2.5 border-b px-4">
+                <Logo className="size-7" />
+                <span className="heading text-[0.9375rem]">{t("Noryx")}</span>
+              </SheetTitle>
+              <MainNav className="flex-1 px-2.5 py-3" onNavigate={() => setMenu(false)} />
+            </SheetContent>
+          </Sheet>
+          <Breadcrumbs />
+          <PaletteButton className="ml-auto" />
+          <div className="flex items-center gap-0.5">
             <Activity />
             {access.canSomewhere("logs.view") && <LogAlerts />}
           </div>
-        </div>
-      </aside>
-      <main id={contentId} tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6 md:px-10 md:py-9">
-        <div className="mx-auto max-w-6xl">
-          <ConnectionBanner />
-          {access.admin && <UpdateBanner />}
-          <Page />
-        </div>
-      </main>
+          <AccountMenu folded className="md:hidden" />
+        </header>
+        <main id={contentId} tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-7xl">
+            <ConnectionBanner />
+            {access.admin && <UpdateBanner />}
+            <Page />
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
@@ -143,9 +146,75 @@ export function AppShell() {
 function Page() {
   const page = useMatches({ select: (matches) => matches[2] && `${matches[2].routeId}${matches[2].pathname}` })
   return (
-    <motion.div key={page} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: "easeOut" }}>
+    <motion.div key={page} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }}>
       <Outlet />
     </motion.div>
+  )
+}
+
+type Entry = (typeof navigation.main)[number] | (typeof navigation.system)[number]
+
+/** Where an entry of the navigation leads the user: a hub to its first tab they may see. */
+const targetOf = (entry: Entry, access: Access) =>
+  "tabs" in entry ? entry.tabs.find((tab) => tab.visible(access))?.to : entry.visible(access) ? entry.to : undefined
+
+/** Whether the open page belongs to an entry of the navigation. A hub stays active on all its tabs. */
+function useActive() {
+  const pathname = useLocation({ select: (l) => l.pathname })
+  const under = (path: string) => pathname === path || pathname.startsWith(`${path}/`)
+  // Servers open under their node, but belong to the servers section.
+  const onServer = /^\/nodes\/[^/]+\/servers\//.test(pathname)
+  return (entry: Entry) => {
+    if ("tabs" in entry) return entry.tabs.some((tab) => under(tab.to))
+    if (entry.to === "/") return pathname === "/"
+    if (entry.to === "/servers") return under("/servers") || onServer
+    if (entry.to === "/nodes") return under("/nodes") && !onServer
+    return under(entry.to)
+  }
+}
+
+/**
+ * Where the open page is: its section of the navigation, then the names and tabs within it, e.g.
+ * Servers › lobby › Files. On small screens only the last two show.
+ */
+function Breadcrumbs() {
+  const access = useAccess()
+  const active = useActive()
+  const trail = usePageTrail()
+  const entry = [...navigation.main, ...navigation.system].find(active)
+  const section = entry && { label: t(entry.label), to: targetOf(entry, access) ?? "/" }
+  const crumbs = section ? [section, ...trail.filter((c) => c.label !== section.label)] : trail
+  return (
+    <nav aria-label={t("Breadcrumb")} className="min-w-0 flex-1">
+      <ol className="flex min-w-0 items-center gap-1 text-sm">
+        {crumbs.map((crumb, i) => {
+          const last = i === crumbs.length - 1
+          return (
+            <Fragment key={`${crumb.to}/${crumb.label}`}>
+              {i > 0 && (
+                <li aria-hidden className={cn("shrink-0 text-muted-foreground/60", i < crumbs.length - 2 && "max-sm:hidden")}>
+                  <CaretRightIcon className="size-3" weight="bold" />
+                </li>
+              )}
+              <li className={cn("min-w-0", last ? "shrink" : "shrink-[2]", i < crumbs.length - 2 && "max-sm:hidden")}>
+                {last ? (
+                  <span aria-current="page" className="block truncate font-semibold">
+                    {crumb.label}
+                  </span>
+                ) : (
+                  <Link
+                    to={crumb.to}
+                    className="block truncate rounded-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {crumb.label}
+                  </Link>
+                )}
+              </li>
+            </Fragment>
+          )
+        })}
+      </ol>
+    </nav>
   )
 }
 
@@ -161,21 +230,19 @@ function Hint({ label, children }: { label?: string; children: ReactElement }) {
 }
 
 const linkClass =
-  "relative isolate flex h-9 shrink-0 items-center gap-3 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[status=active]:text-primary"
+  "relative isolate flex h-9 shrink-0 items-center gap-3 rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-white/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[status=active]:text-foreground"
 
-/** The highlight of the active link, which glides over to the next one. */
+/** The highlight of the active link, with a bar in the accent at its edge, which glides over to the next one. */
 const ActiveMark = () => (
   <motion.span
     layoutId="active"
     aria-hidden
-    className="absolute inset-0 -z-10 rounded-lg bg-primary/10"
+    className="absolute inset-0 -z-10 rounded-md bg-white/[0.07] before:absolute before:inset-y-2 before:-left-2.5 before:w-0.75 before:rounded-r-full before:bg-primary"
     transition={{ type: "spring", bounce: 0.15, duration: 0.45 }}
   />
 )
 
-const heading = "px-2.5 pt-4 pb-1.5 text-[0.6875rem] font-semibold tracking-wider whitespace-nowrap text-muted-foreground uppercase"
-
-type Entry = (typeof navigation.main)[number] | (typeof navigation.system)[number]
+const heading = "eyebrow px-2.5 pt-5 pb-1.5 whitespace-nowrap text-muted-foreground/80"
 
 /**
  * The sections of the panel the user may see, the servers they pinned, and those of the system
@@ -183,21 +250,11 @@ type Entry = (typeof navigation.main)[number] | (typeof navigation.system)[numbe
  */
 function MainNav({ className, collapsed, onNavigate }: { className?: string; collapsed?: boolean; onNavigate?: () => void }) {
   const access = useAccess()
-  const pathname = useLocation({ select: (l) => l.pathname })
-  const under = (path: string) => pathname === path || pathname.startsWith(`${path}/`)
-  // Servers open under their node, but belong to the servers section.
-  const onServer = /^\/nodes\/[^/]+\/servers\//.test(pathname)
-  const active = (entry: Entry) => {
-    if ("tabs" in entry) return entry.tabs.some((tab) => under(tab.to))
-    if (entry.to === "/") return pathname === "/"
-    if (entry.to === "/servers") return under("/servers") || onServer
-    if (entry.to === "/nodes") return under("/nodes") && !onServer
-    return under(entry.to)
-  }
+  const active = useActive()
 
   const links = (entries: readonly Entry[]) =>
     entries.map((entry) => {
-      const to = "tabs" in entry ? entry.tabs.find((tab) => tab.visible(access))?.to : entry.visible(access) && entry.to
+      const to = targetOf(entry, access)
       if (!to) return null
       const isActive = active(entry)
       return (
@@ -207,11 +264,11 @@ function MainNav({ className, collapsed, onNavigate }: { className?: string; col
             activeOptions={{ exact: true, includeSearch: false }}
             {...(isActive && { "data-status": "active", "aria-current": "page" as const })}
             onClick={onNavigate}
-            className={linkClass}
+            className={cn(linkClass, collapsed && "w-10 justify-center px-0")}
           >
             {isActive && <ActiveMark />}
-            <entry.icon className="size-5 shrink-0" weight={isActive ? "fill" : "duotone"} />
-            <span className={cn("truncate", collapsed && "md:sr-only")}>{t(entry.label)}</span>
+            <entry.icon className={cn("size-[1.125rem] shrink-0", isActive && "text-primary")} weight={isActive ? "fill" : "regular"} />
+            <span className={cn("truncate", collapsed && "sr-only")}>{t(entry.label)}</span>
           </Link>
         </Hint>
       )
@@ -220,7 +277,7 @@ function MainNav({ className, collapsed, onNavigate }: { className?: string; col
   return (
     // Each navigation, in the sidebar and in the menu, glides its own highlight.
     <LayoutGroup id={useId()}>
-      <nav aria-label={t("Main")} className={cn("flex flex-col gap-0.5", collapsed && "md:items-center", className)}>
+      <nav aria-label={t("Main")} className={cn("flex flex-col gap-0.5", collapsed && "items-center", className)}>
         {links(navigation.main)}
         <PinnedServers collapsed={collapsed} onNavigate={onNavigate} />
         <div aria-hidden className="min-h-4 flex-1" />
@@ -238,8 +295,8 @@ function PinnedServers({ collapsed, onNavigate }: { collapsed?: boolean; onNavig
   if (servers.length === 0) return null
   return (
     <>
-      <p className={cn(heading, collapsed && "md:sr-only")}>{t("Pinned")}</p>
-      {collapsed && <hr aria-hidden className="my-2 w-6 max-md:hidden" />}
+      <p className={cn(heading, collapsed && "sr-only")}>{t("Pinned")}</p>
+      {collapsed && <hr aria-hidden className="my-2 w-6" />}
       {servers.map((s) => {
         const status = statusOf(s)
         const { icon: Icon } = serverLook(s.type)
@@ -250,14 +307,14 @@ function PinnedServers({ collapsed, onNavigate }: { collapsed?: boolean; onNavig
               params={{ nodeId: s.nodeId, serverId: s.id }}
               activeOptions={{ includeSearch: false }}
               onClick={onNavigate}
-              className={linkClass}
+              className={cn(linkClass, collapsed && "w-10 justify-center px-0")}
             >
               {/* The servers section keeps the highlight; a pinned server only takes its colour. */}
-              <span className="relative grid size-5 shrink-0 place-items-center">
-                <Icon className="size-5" weight="duotone" />
-                <StatusDot status={status} className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-sidebar" />
+              <span className="relative grid size-[1.125rem] shrink-0 place-items-center">
+                <Icon className="size-[1.125rem]" />
+                <StatusDot status={status} className="absolute -right-0.5 -bottom-0.5 ring-2 ring-sidebar" />
               </span>
-              <span className={cn("truncate", collapsed && "md:sr-only")}>{s.name}</span>
+              <span className={cn("truncate", collapsed && "sr-only")}>{s.name}</span>
               <span className="sr-only">{t(status.label)}</span>
             </Link>
           </Hint>

@@ -17,7 +17,7 @@ export function TerminalPage() {
   const navigate = route.useNavigate()
   const { data: nodes } = useQuery(nodesQuery)
   // Without the nodes, a command meant for a node could run on the master.
-  if (target && !nodes) return <Skeleton className="h-[60vh] rounded-2xl" />
+  if (target && !nodes) return <Skeleton className="h-[60vh] rounded-xl" />
 
   const enrolled = nodes?.filter((n) => n.enrolledAt) ?? []
   const node = enrolled.find((n) => n.id === target)

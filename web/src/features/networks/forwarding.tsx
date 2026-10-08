@@ -49,7 +49,7 @@ export function ForwardingChoice({
             "aria-checked:bg-primary/5 aria-checked:ring-2 aria-checked:ring-primary enabled:hover:bg-muted/50 disabled:cursor-default",
           )}
         >
-          <o.icon className={cn("mt-0.5 size-5 shrink-0", o.value === "modern" ? "text-success" : "text-warning")} weight="duotone" />
+          <o.icon className={cn("mt-0.5 size-5 shrink-0", o.value === "modern" ? "text-success" : "text-warning")} />
           <span className="space-y-1">
             <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
               {o.title}

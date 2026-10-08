@@ -154,7 +154,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
           path: at("players", p.name),
           label: p.name,
           labelClass: "font-mono",
-          icon: <UserIcon weight="duotone" className="text-success" />,
+          icon: <UserIcon className="text-success" />,
           detail: p.server.name,
         })),
         ...offline.map((p) => ({
@@ -162,7 +162,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
           path: at("players", p.name),
           label: p.name,
           labelClass: "font-mono",
-          icon: <UserIcon weight="duotone" className="text-info" />,
+          icon: <UserIcon className="text-info" />,
           detail: t("Seen {{ago}}", { ago: formatAgo(p.lastSeen) }),
         })),
       ],
@@ -174,7 +174,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         path: at("networks", n.id),
         label: n.name,
         keywords: [serverType(n.proxyType).label],
-        icon: <GraphIcon weight="duotone" className="text-violet" />,
+        icon: <GraphIcon className="text-violet" />,
         detail: t("{{count}} servers", { count: n.backends.length, defaultValue_one: "{{count}} server" }),
       })),
     },
@@ -185,7 +185,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         path: at("nodes", n.id),
         label: n.name,
         keywords: [n.address ?? ""],
-        icon: <HardDrivesIcon weight="duotone" className="text-info" />,
+        icon: <HardDrivesIcon className="text-info" />,
         status: { tone: n.status === "online" ? "success" : n.status === "pending" ? "warning" : "destructive", label: "" },
       })),
     },
@@ -197,7 +197,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         path: at("templates", tpl.id),
         label: tpl.name,
         keywords: [tpl.description],
-        icon: <StackIcon weight="duotone" className="text-info" />,
+        icon: <StackIcon className="text-info" />,
         detail: serverType(tpl.type).label,
       })),
     },
@@ -209,7 +209,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         path: at("filesets", set.id),
         label: set.name,
         keywords: [set.description],
-        icon: <FilesIcon weight="duotone" className="text-info" />,
+        icon: <FilesIcon className="text-info" />,
         detail: t("{{count}} files", { count: set.paths.length, defaultValue_one: "{{count}} file" }),
       })),
     },
@@ -220,7 +220,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         value: `backupjob/${job.id}`,
         path: at("backups", job.id),
         label: job.name,
-        icon: <ArchiveIcon weight="duotone" className="text-warning" />,
+        icon: <ArchiveIcon className="text-warning" />,
         detail: describeSchedule(job.schedule),
       })),
     },
@@ -232,7 +232,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         path: at("policies", policy.id),
         label: policy.name,
         keywords: [t(policyActions[policy.settings.action].label)],
-        icon: <CalendarCheckIcon weight="duotone" className="text-warning" />,
+        icon: <CalendarCheckIcon className="text-warning" />,
         detail: describeSchedule(policy.schedule),
       })),
     },
@@ -243,7 +243,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         value: `user/${user.id}`,
         path: "/settings/users",
         label: user.username,
-        icon: <UserCircleIcon weight="duotone" />,
+        icon: <UserCircleIcon />,
         detail: user.disabled ? t("Disabled") : undefined,
       })),
     },
@@ -317,7 +317,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
                       keywords={[a.label(), a.label().replace(/\s/g, ""), s.name, s.nodeName, ...s.tags]}
                       onSelect={() => act(a.kind, s)}
                     >
-                      <a.icon weight="duotone" />
+                      <a.icon />
                       <span className="truncate">
                         {a.label()}: <span className="font-medium">{s.name}</span>
                       </span>
@@ -340,7 +340,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
             <CommandGroup heading={t("Create")}>
               {creatable.map((c) => (
                 <CommandItem key={c.opens} value={`create/${c.opens}`} keywords={[t(c.label)]} onSelect={() => onOpen(c.opens)}>
-                  <c.icon weight="duotone" />
+                  <c.icon />
                   {t(c.label)}
                   <CommandShortcut>
                     <Keys keys={["c", c.key]} />
@@ -354,7 +354,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
               const key = pageKeys[to]
               return (
                 <CommandItem key={to} value={`page${to}`} keywords={[t(label)]} onSelect={() => go(() => navigate({ to }))}>
-                  <Icon weight="duotone" />
+                  <Icon />
                   {t(label)}
                   {key && (
                     <CommandShortcut>
@@ -365,7 +365,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
               )
             })}
             <CommandItem value="shortcuts" keywords={[t("Keyboard shortcuts")]} onSelect={() => onOpen("shortcuts")}>
-              <KeyboardIcon weight="duotone" />
+              <KeyboardIcon />
               {t("Keyboard shortcuts")}
               <CommandShortcut>
                 <Keys keys={["?"]} />

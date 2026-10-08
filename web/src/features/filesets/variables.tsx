@@ -68,7 +68,7 @@ export function VariablesSection({
             const variable = variables.find((v) => v.name === name)
             const count = variable?.values.length ?? 0
             return (
-              <li key={name} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2 ring-1 ring-foreground/8">
+              <li key={name} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2 ring-1 ring-border">
                 {count > 0 ? (
                   <CheckCircleIcon className="size-4 shrink-0 text-success" weight="fill" aria-label={t("Has values")} />
                 ) : (
@@ -197,7 +197,7 @@ function ValueRow({ value: v, index, onChange, onRemove }: { value: Value; index
   // On phones, the kind and the button to remove share a line, and the servers and the value take one each.
   const wide = "col-span-2 sm:col-span-1"
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg p-2 ring-1 ring-foreground/8 sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)_auto]">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg p-2 ring-1 ring-border sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)_auto]">
       <Button type="button" size="icon-sm" variant="ghost" aria-label={t("Remove value {{number}}", { number: index + 1 })} className="col-start-2 row-start-1 sm:col-start-4" onClick={onRemove}>
         <XIcon />
       </Button>

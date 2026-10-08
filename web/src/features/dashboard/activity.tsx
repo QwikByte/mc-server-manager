@@ -32,7 +32,7 @@ export function RecentActivity({ title }: { title: string }) {
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="flex items-center gap-3 px-5 py-2.5"
+                className="flex items-center gap-3 px-4 py-2.5"
               >
                 <IconTile icon={levels[e.level].icon} tone={levels[e.level].tone} size="sm" />
                 <span className="min-w-0 flex-1">

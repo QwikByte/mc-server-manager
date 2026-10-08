@@ -294,7 +294,7 @@ function Row({
   detail: string
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 ring-1 ring-foreground/8 hover:bg-muted/50">
+    <label className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 ring-1 ring-border hover:bg-muted/50">
       <Checkbox checked={checked} onCheckedChange={(on) => onChange(on === true)} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
@@ -311,7 +311,7 @@ function Results({ results, servers, versions }: { results: InstallResult[]; ser
     <div className="grid gap-3">
       <ul className="grid gap-2">
         {results.map((r) => (
-          <li key={key(r)} className="flex items-start gap-3 rounded-lg px-3 py-2 text-sm ring-1 ring-foreground/8">
+          <li key={key(r)} className="flex items-start gap-3 rounded-lg px-3 py-2 text-sm ring-1 ring-border">
             {r.error ? (
               <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" weight="fill" />
             ) : (

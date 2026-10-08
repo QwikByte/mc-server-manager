@@ -123,7 +123,7 @@ function PropertiesForm({ nodeId, server, data }: { nodeId: string; server: Serv
         )
       })}
       {count > 0 && (
-        <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-popover/90 px-4 py-3 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-xl">
+        <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-popover/90 px-4 py-3 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-xl">
           <p className="flex items-center gap-2.5 text-sm font-medium">
             <span aria-hidden className="size-2 rounded-full bg-warning" />
             {t("{{count}} unsaved changes", { count, defaultValue_one: "{{count}} unsaved change" })}

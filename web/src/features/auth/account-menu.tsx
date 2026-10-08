@@ -67,13 +67,13 @@ export function AccountMenu({ folded, className }: { folded?: boolean; className
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link to="/account">
-            <UserCircleIcon weight="duotone" />
+            <UserCircleIcon />
             {t("Your account")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            <PaletteIcon weight="duotone" />
+            <PaletteIcon />
             {t("Colour theme")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-40">
@@ -82,7 +82,7 @@ export function AccountMenu({ folded, className }: { folded?: boolean; className
         </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            <TranslateIcon weight="duotone" />
+            <TranslateIcon />
             {t("Language")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-44">

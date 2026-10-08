@@ -65,7 +65,7 @@ export function BulkBar({ selected, onClear }: { selected: NodeServer[]; onClear
   }
 
   return (
-    <div className="sticky bottom-4 z-20 mt-6 flex flex-wrap items-center gap-2 rounded-2xl bg-popover/90 px-3 py-2.5 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-xl">
+    <div className="sticky bottom-4 z-20 mt-6 flex flex-wrap items-center gap-2 rounded-xl bg-popover/90 px-3 py-2.5 shadow-2xl ring-1 ring-foreground/10 backdrop-blur-xl">
       <Button variant="ghost" size="icon-sm" aria-label={t("Clear the selection")} title={t("Clear the selection")} onClick={onClear}>
         <XIcon />
       </Button>

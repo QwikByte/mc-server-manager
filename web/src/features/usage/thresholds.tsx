@@ -102,7 +102,7 @@ export function ThresholdFields({
         return (
           <li key={measure} className="space-y-3 p-4">
             <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-              <Field orientation="horizontal" className="w-auto min-w-0 flex-1">
+              <Field orientation="horizontal" className="w-auto min-w-0 flex-[1_1_14rem]">
                 <Switch id={`${key}-on`} checked={!threshold.off} disabled={fixed} onCheckedChange={(on) => change({ off: !on })} />
                 <FieldContent>
                   <FieldLabel htmlFor={`${key}-on`}>{t(label)}</FieldLabel>
@@ -152,7 +152,7 @@ export function UsageWarnings({
 }) {
   const { data, error } = useQuery(thresholdsQuery(nodeId, serverId))
   if (error) return <ErrorCallout error={error} className={className} />
-  if (!data) return <Skeleton className={cn("h-64 rounded-2xl", className)} />
+  if (!data) return <Skeleton className={cn("h-64 rounded-xl", className)} />
   // Remounting on save resets the form to what the master stored.
   return (
     <ThresholdsForm key={JSON.stringify(data.own)} nodeId={nodeId} serverId={serverId} view={data} editable={editable} className={className} />
@@ -187,7 +187,7 @@ function ThresholdsForm({
   }
 
   return (
-    <form onSubmit={submit} className={cn("surface rounded-2xl px-5 sm:px-8", className)}>
+    <form onSubmit={submit} className={cn("surface rounded-xl px-5 sm:px-8", className)}>
       <fieldset disabled={!editable} className="contents">
         <FormSection title={t("Usage warnings")}>
           <ThresholdsHelp />

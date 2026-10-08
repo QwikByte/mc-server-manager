@@ -1,5 +1,4 @@
 import { CheckCircleIcon, GraphIcon, PushPinIcon, UsersThreeIcon, WarningCircleIcon } from "@phosphor-icons/react"
-import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { AnimatePresence, motion } from "motion/react"
@@ -7,37 +6,25 @@ import { IconTile } from "@/components/icon-tile"
 import { Meter } from "@/components/meter"
 import { rise } from "@/lib/motion"
 import { StatusDot } from "@/components/status"
-import { useAccess } from "@/features/access/use-access"
-import { datastoresQuery } from "@/features/datastores/api"
 import { playersOnline } from "@/features/networks/usage"
 import type { Node } from "@/features/nodes/api"
 import { CpuTrend } from "@/features/nodes/cpu-trend"
-import { overlayQuery } from "@/features/overlay/api"
 import { usePinned } from "@/features/preferences/api"
 import { ServerActions } from "@/features/servers/server-actions"
 import { StateBar } from "@/features/servers/server-state"
 import { serverLook, statusOf } from "@/features/servers/server-types"
-import { warningsQuery } from "@/features/usage/api"
 import { formatCores, formatNumber } from "@/features/usage/format"
 import { formatBytes } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { problemsOf } from "./attention"
-import { useOverview } from "./overview"
+import { useOverview, useProblems } from "./overview"
 import { Calm, Panel } from "./panel"
-import { useAutomationTasks } from "./tasks"
 
 /** A row of a widget that links somewhere. */
 export const row = "transition-colors hover:bg-muted/50"
 
 /** What needs an operator, the most urgent first; solved problems fade away. */
 export function Attention({ title }: { title: string }) {
-  const access = useAccess()
-  const { nodes, servers = [], networks, usages } = useOverview()
-  const { data: overlay } = useQuery(overlayQuery)
-  const { data: datastores } = useQuery({ ...datastoresQuery, enabled: access.can("datastores.view") })
-  const tasks = useAutomationTasks()
-  const { data: warnings } = useQuery(warningsQuery)
-  const problems = problemsOf(nodes, servers, networks, usages, overlay, datastores, tasks, warnings)
+  const problems = useProblems()
   return (
     <Panel title={title} count={problems.length}>
       {problems.length === 0 ? (
@@ -49,7 +36,7 @@ export function Attention({ title }: { title: string }) {
           <AnimatePresence initial={false}>
             {problems.map((p, i) => (
               <motion.li key={p.key} layout {...rise(i)} exit={{ opacity: 0, x: 16 }}>
-                <Link {...p.link} className={cn("flex items-center gap-3 px-5 py-3", row)}>
+                <Link {...p.link} className={cn("flex items-center gap-3 px-4 py-3", row)}>
                   <IconTile icon={WarningCircleIcon} tone={p.tone} size="sm" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{p.title}</span>
@@ -85,7 +72,7 @@ function NodeRow({ node, servers }: { node: Node; servers: number }) {
   const live = useOverview().usages.node(node.id)
   const tone = node.status === "online" ? "success" : node.status === "pending" ? "warning" : "destructive"
   return (
-    <Link to="/nodes/$nodeId" params={{ nodeId: node.id }} className={cn("block space-y-2 px-5 py-3", row)}>
+    <Link to="/nodes/$nodeId" params={{ nodeId: node.id }} className={cn("block space-y-2 px-4 py-3", row)}>
       <span className="flex items-center gap-2 text-sm font-medium">
         <StatusDot status={{ tone, label: "" }} />
         <span className="flex-1 truncate">{node.name}</span>
@@ -140,7 +127,7 @@ export function Networks({ title }: { title: string }) {
                 <Link
                   to="/networks/$networkId"
                   params={{ networkId: n.id }}
-                  className={cn("grid gap-3 px-5 py-3 @lg:grid-cols-[12rem_1fr_auto] @lg:items-center", row)}
+                  className={cn("grid gap-3 px-4 py-3 @lg:grid-cols-[12rem_1fr_auto] @lg:items-center", row)}
                 >
                   <span className="flex min-w-0 items-center gap-3">
                     <IconTile icon={GraphIcon} tone="violet" size="sm" />
@@ -181,7 +168,7 @@ export function TopServers({ title }: { title: string }) {
               <Link
                 to="/nodes/$nodeId/servers/$serverId"
                 params={{ nodeId: s.nodeId, serverId: s.id }}
-                className={cn("relative isolate flex items-center gap-3 px-5 py-2.5", row)}
+                className={cn("relative isolate flex items-center gap-3 px-4 py-2.5", row)}
               >
                 <motion.span
                   aria-hidden
@@ -219,10 +206,10 @@ export function Pinned({ title }: { title: string }) {
               const { icon: Icon, tone } = serverLook(s.type)
               const status = statusOf(s)
               return (
-                <motion.li key={s.id} layout {...rise(i)} exit={{ opacity: 0, x: 16 }} className="flex items-center gap-3 px-5 py-2.5">
+                <motion.li key={s.id} layout {...rise(i)} exit={{ opacity: 0, x: 16 }} className="flex items-center gap-3 px-4 py-2.5">
                   <span className="relative">
                     <IconTile icon={Icon} tone={tone} size="sm" />
-                    <StatusDot status={status} label={t(status.label)} className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-card" />
+                    <StatusDot status={status} label={t(status.label)} className="absolute -right-0.5 -bottom-0.5 ring-2 ring-card" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <Link

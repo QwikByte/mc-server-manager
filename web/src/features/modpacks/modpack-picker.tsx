@@ -34,7 +34,7 @@ export function ModpackPicker({ onChange }: { onChange: (choice?: ModpackChoice)
 
   if (pack)
     return (
-      <div className="grid grid-cols-1 gap-3 rounded-xl p-3 ring-1 ring-foreground/8">
+      <div className="grid grid-cols-1 gap-3 rounded-xl p-3 ring-1 ring-border">
         <div className="flex items-center gap-3">
           <PluginIcon src={pack.icon} />
           <p className="min-w-0 flex-1 truncate text-sm font-semibold">
@@ -90,7 +90,7 @@ export function ModpackPicker({ onChange }: { onChange: (choice?: ModpackChoice)
       ) : hits.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted-foreground">{t("Nothing found. Try another search.")}</p>
       ) : (
-        <ul className="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto rounded-xl p-1 ring-1 ring-foreground/8">
+        <ul className="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto rounded-xl p-1 ring-1 ring-border">
           {hits.map((hit) => (
             <li key={hit.id}>
               <button

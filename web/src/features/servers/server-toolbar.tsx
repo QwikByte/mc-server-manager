@@ -105,54 +105,56 @@ export function ServerToolbar({
 
   return (
     <div className="mb-5 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <InputGroup className="w-full sm:max-w-xs">
-          <InputGroupAddon>
-            <MagnifyingGlassIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            placeholder={t("Search servers")}
-            aria-label={t("Search servers")}
-            value={search.q ?? ""}
-            onChange={(e) => onSearch({ q: e.target.value || undefined })}
-          />
-        </InputGroup>
-        {filters.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <FunnelSimpleIcon />
-                {t("Filter")}
-                {active.length > 0 && (
-                  <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">{active.length}</span>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              {filters.map(({ property, options }) => (
-                <DropdownMenuSub key={property}>
-                  <DropdownMenuSubTrigger>{propertyLabels[property]()}</DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
-                    <DropdownMenuRadioGroup
-                      value={search[property] ?? ""}
-                      onValueChange={(value) => onSearch({ [property]: value || undefined })}
-                    >
-                      <DropdownMenuRadioItem value="">{t("All")}</DropdownMenuRadioItem>
-                      {options.map((o) => (
-                        <DropdownMenuRadioItem key={o.value} value={o.value}>
-                          <span className="min-w-0 flex-1 truncate">{o.label}</span>
-                          <span className="text-xs text-muted-foreground tabular-nums">{o.count}</span>
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:min-w-72 sm:flex-1 lg:max-w-md">
+          <InputGroup className="min-w-0 flex-1">
+            <InputGroupAddon>
+              <MagnifyingGlassIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              placeholder={t("Search servers")}
+              aria-label={t("Search servers")}
+              value={search.q ?? ""}
+              onChange={(e) => onSearch({ q: e.target.value || undefined })}
+            />
+          </InputGroup>
+          {filters.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <FunnelSimpleIcon />
+                  {t("Filter")}
+                  {active.length > 0 && (
+                    <span className="rounded-sm bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">{active.length}</span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                {filters.map(({ property, options }) => (
+                  <DropdownMenuSub key={property}>
+                    <DropdownMenuSubTrigger>{propertyLabels[property]()}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
+                      <DropdownMenuRadioGroup
+                        value={search[property] ?? ""}
+                        onValueChange={(value) => onSearch({ [property]: value || undefined })}
+                      >
+                        <DropdownMenuRadioItem value="">{t("All")}</DropdownMenuRadioItem>
+                        {options.map((o) => (
+                          <DropdownMenuRadioItem key={o.value} value={o.value}>
+                            <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                            <span className="text-xs text-muted-foreground tabular-nums">{o.count}</span>
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <Choice
             icon={sorting.order === "asc" ? SortAscendingIcon : SortDescendingIcon}
             label={t("Sort")}
@@ -175,7 +177,7 @@ export function ServerToolbar({
               .map((value) => ({ value, label: t(groupings[value]) }))}
             onChange={(group) => onSearch({ group: group === "none" ? undefined : group })}
           />
-          <div role="radiogroup" aria-label={t("Layout")} className="inline-flex rounded-lg bg-muted p-0.5">
+          <div role="radiogroup" aria-label={t("Layout")} className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-border ring-inset">
             {(
               [
                 ["grid", SquaresFourIcon, t("Cards")],
@@ -197,7 +199,7 @@ export function ServerToolbar({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <div role="radiogroup" aria-label={t("State")} className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-0.5">
+        <div role="radiogroup" aria-label={t("State")} className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-0.5 ring-1 ring-border ring-inset [scrollbar-width:none]">
           {[undefined, ...states].map((state) => (
             <button
               key={state ?? "all"}

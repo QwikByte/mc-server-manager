@@ -20,7 +20,7 @@ import { Callout, ErrorCallout } from "@/components/callout"
 import { Chip } from "@/components/chip"
 import { PageHeader } from "@/components/page-header"
 import { usePageName } from "@/components/page-title"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { Pill } from "@/components/status"
 import { TabLink } from "@/components/tab-link"
 import { Tabs } from "@/components/tabs"
@@ -128,7 +128,7 @@ export function NetworkPage() {
           {network.applyError}
         </Callout>
       )}
-      <div className="mb-8 grid gap-3 sm:grid-cols-3">
+      <StatStrip className="mb-7 sm:grid-cols-3">
         <StatCard
           to={canSomewhere("servers.view") ? "/players" : undefined}
           search={{ network: network.id }}
@@ -139,21 +139,21 @@ export function NetworkPage() {
         />
         <StatCard icon={CubeIcon} tone="success" label={t("Servers running")} value={`${running} / ${network.backends.length}`} />
         <StatCard icon={ArrowsSplitIcon} tone="violet" label={t("Proxy")} value={<ProxyLink network={network} />} />
-      </div>
+      </StatStrip>
       <Tabs label={t("Network")}>
         <TabLink to="/networks/$networkId" params={{ networkId }} activeOptions={{ exact: true }}>
-          <GraphIcon className="size-4" weight="duotone" />
+          <GraphIcon className="size-4" />
           {t("Overview")}
         </TabLink>
         {can("properties.edit", network.proxy.nodeId, network.proxy.serverId) && (
           <TabLink to="/networks/$networkId/proxy" params={{ networkId }}>
-            <SlidersHorizontalIcon className="size-4" weight="duotone" />
+            <SlidersHorizontalIcon className="size-4" />
             {t("Proxy configuration")}
           </TabLink>
         )}
         {can("datastores.view") && (
           <TabLink to="/networks/$networkId/databases" params={{ networkId }}>
-            <DatabaseIcon className="size-4" weight="duotone" />
+            <DatabaseIcon className="size-4" />
             {t("Databases")}
           </TabLink>
         )}

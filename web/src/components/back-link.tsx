@@ -7,7 +7,7 @@ export const BackLink = createLink(function BackLink({ children, ...props }: Com
   return (
     <a
       {...props}
-      className="group mb-5 inline-flex items-center gap-1.5 rounded-full py-1 pr-3 pl-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className="group mb-4 inline-flex items-center gap-1 rounded-sm text-[0.8125rem] font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       <CaretLeftIcon className="size-3.5 transition-transform group-hover:-translate-x-0.5" weight="bold" />
       {children}

@@ -18,9 +18,9 @@ export function ServerSchedules({ nodeId, serverId }: { nodeId: string; serverId
           to="/policies/$policyId"
           params={{ policyId: policy.id }}
           title={`${t("Schedule")}: ${describePolicy(policy.settings)} · ${describeSchedule(policy.schedule)}`}
-          className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium whitespace-nowrap outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-6 items-center gap-1.5 rounded-md bg-muted/60 px-2 text-xs font-medium whitespace-nowrap ring-1 ring-border outline-none ring-inset hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Icon className="size-3.5 text-warning" weight="duotone" />
+          <Icon className="size-3.5 text-warning" />
           {policy.name}
         </Link>
       )

@@ -203,7 +203,7 @@ export function PluginSearch({
                     onCheckedChange={(on) => toggle(value, on)}
                     onSelect={(e) => e.preventDefault()}
                   >
-                    <Icon className="text-muted-foreground" weight="duotone" />
+                    <Icon className="text-muted-foreground" />
                     {t(label)}
                   </DropdownMenuCheckboxItem>
                 ))}
@@ -263,9 +263,10 @@ export function PluginSearch({
 function Hit({ hit, loaders, action }: { hit: SearchHit; loaders: boolean; action: ReactNode }) {
   const clientToo = hit.clientSide === "required" && hit.loaders.some((l) => modLoaders.includes(l))
   return (
-    <li className="flex items-start gap-3 rounded-xl p-3 ring-1 ring-foreground/8 transition-colors hover:bg-muted/50">
+    // On small screens, the action goes below the project, which keeps the room of its facts.
+    <li className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2.5 rounded-xl p-3 ring-1 ring-border transition-colors hover:bg-muted/50 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
       <PluginIcon src={hit.icon} />
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="min-w-0 space-y-1">
         <p className="truncate text-sm font-semibold">
           <a href={projectUrl(hit)} target="_blank" rel="noreferrer" className="hover:underline">
             {hit.title}
@@ -300,7 +301,7 @@ function Hit({ hit, loaders, action }: { hit: SearchHit; loaders: boolean; actio
             ))}
         </div>
       </div>
-      <div className="shrink-0 self-center">{action}</div>
+      <div className="col-start-2 sm:col-start-auto sm:self-center">{action}</div>
     </li>
   )
 }

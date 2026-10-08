@@ -65,7 +65,7 @@ export function AccountPage() {
         title={t("Your account")}
         description={t("Signed in as {{name}}.", { name: user.username })}
       />
-      <div className="surface rounded-2xl px-5 sm:px-8 [&>section:last-child]:border-b-0">
+      <div className="surface rounded-xl px-5 sm:px-8 [&>section:last-child]:border-b-0">
         <FormSection title={t("Password")}>
           <AccountRow icon={KeyIcon} tone="info" title={t("Password")} actions={<PasswordDialog username={user.username} />}>
             {t("At least 12 characters that you don't use anywhere else.")}

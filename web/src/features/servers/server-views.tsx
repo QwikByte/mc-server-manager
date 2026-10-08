@@ -1,10 +1,10 @@
-import { CaretRightIcon, CpuIcon, GraphIcon, HardDrivesIcon, HashIcon, MemoryIcon, UsersIcon } from "@phosphor-icons/react"
+import { CaretRightIcon, GraphIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
 import { motion } from "motion/react"
 import type { ReactNode } from "react"
-import { Chip } from "@/components/chip"
 import { IconTile } from "@/components/icon-tile"
+import { Meter } from "@/components/meter"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SortableHead, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PinButton } from "@/features/preferences/pin-button"
@@ -147,9 +147,19 @@ export function ServerGrid({ groups, facts, showNode, selected, onSelect, collap
   )
 }
 
+/** A fact of a server card, e.g. its port, with its label above it. */
+function Fact({ label, children, title }: { label: string; children: ReactNode; title?: string }) {
+  return (
+    <div className="min-w-0" title={title}>
+      <dt className="eyebrow text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate text-sm tabular-nums">{children}</dd>
+    </div>
+  )
+}
+
 /**
- * The whole card opens the server; its buttons sit above the link. Running servers show what they
- * use.
+ * The whole card opens the server; its buttons sit above the link. Its facts are labelled, and running servers
+ * show what they use.
  */
 function ServerCard({
   index,
@@ -173,22 +183,21 @@ function ServerCard({
     <motion.li
       {...rise(index)}
       className={cn(
-        "group surface lift relative flex flex-col gap-4 rounded-xl p-5 hover:ring-primary/30",
-        selected && "ring-2 ring-primary/50 hover:ring-primary/50",
+        "group surface lift relative flex flex-col rounded-xl hover:ring-primary/40",
+        selected && "ring-2 ring-primary/60 hover:ring-primary/60",
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 p-4 pb-3">
         <IconTile icon={look.icon} tone={look.tone} />
         <div className="min-w-0 flex-1">
           <ServerLink
             server={server}
-            className="block truncate font-semibold outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
+            className="line-clamp-2 font-semibold break-words outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
           />
           <p className="truncate text-xs text-muted-foreground">
             {serverType(server.type).label} {displayVersion(server.version)}
           </p>
         </div>
-        <ServerStateBadge server={server} nodeId={server.nodeId} />
         {/* Shows on hover, and always once pinned or without a pointer that hovers. */}
         <PinButton
           nodeId={server.nodeId}
@@ -200,30 +209,46 @@ function ServerCard({
           checked={selected}
           aria-label={t("Select {{name}}", { name: server.name })}
           onCheckedChange={(on) => onSelect(on === true)}
-          className="relative z-10 mt-1"
+          className="relative z-10 mt-0.5"
         />
       </div>
-      <div className="flex flex-wrap gap-2">
-        {network && <Chip icon={GraphIcon}>{network.name}</Chip>}
-        {showNode && <Chip icon={HardDrivesIcon}>{server.nodeName}</Chip>}
-        <Chip icon={HashIcon}>
-          <span className="font-mono">{server.port}</span>
-        </Chip>
-        {/* While it runs, its memory of the container's limit, which includes what Java needs besides the heap. */}
-        <Chip icon={MemoryIcon} title={memoryTitle(server)}>
-          {usage?.memoryLimitBytes
-            ? `${formatBytes(usage.memoryBytes)} / ${formatBytes(usage.memoryLimitBytes)}`
-            : formatMegabytes(server.memoryMb)}
-        </Chip>
-        {usage && <Chip icon={CpuIcon}>{formatCores(usage.cpuMillis)}</Chip>}
-        {usage?.players && (
-          <Chip icon={UsersIcon}>
-            {usage.players.online} / {usage.players.max}
-          </Chip>
+      <div className="flex min-w-0 flex-wrap items-center gap-2 px-4">
+        <ServerStateBadge server={server} nodeId={server.nodeId} />
+        {network && (
+          <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <GraphIcon className="size-3.5 shrink-0" />
+            <span className="truncate">{network.name}</span>
+          </span>
         )}
       </div>
-      <TagList tags={server.tags} />
-      <div className="relative z-10 mt-auto border-t pt-4 empty:hidden">
+      <dl className="grid grid-cols-3 gap-x-4 gap-y-3 px-4 pt-4 pb-3">
+        {showNode && <Fact label={t("Node")}>{server.nodeName}</Fact>}
+        <Fact label={t("Port")}>
+          <span className="font-mono text-[0.8125rem]">{server.port}</span>
+        </Fact>
+        {/* While it runs, its memory of the container's limit, which includes what Java needs besides the heap. */}
+        <Fact
+          label={t("Memory")}
+          title={usage?.memoryLimitBytes ? `${formatBytes(usage.memoryBytes)} / ${formatBytes(usage.memoryLimitBytes)}` : memoryTitle(server)}
+        >
+          {usage?.memoryLimitBytes ? (
+            <>
+              {formatBytes(usage.memoryBytes)}
+              <Meter value={usage.memoryBytes / usage.memoryLimitBytes} label={t("Memory used")} className="mt-1 h-1" />
+            </>
+          ) : (
+            formatMegabytes(server.memoryMb)
+          )}
+        </Fact>
+        {usage && <Fact label={t("CPU")}>{formatCores(usage.cpuMillis)}</Fact>}
+        {usage?.players && (
+          <Fact label={t("Players")}>
+            {usage.players.online} <span className="text-muted-foreground">/ {usage.players.max}</span>
+          </Fact>
+        )}
+      </dl>
+      <TagList tags={server.tags} className="px-4 pb-3" />
+      <div className="relative z-10 mt-auto border-t px-4 py-3 empty:hidden">
         <ServerActions nodeId={server.nodeId} server={server} />
       </div>
     </motion.li>
@@ -236,7 +261,7 @@ export function ServerTable({ groups, facts, sorting, showNode, selected, onSele
   const showNetwork = all.some((s) => facts.network(s))
   const columns = 7 + Number(showNode) + Number(showNetwork)
   return (
-    <div className="surface overflow-hidden rounded-xl">
+    <div className="surface @container overflow-hidden rounded-xl">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -245,11 +270,11 @@ export function ServerTable({ groups, facts, sorting, showNode, selected, onSele
             </TableHead>
             <SortableHead sorting={sorting} column="name">{t("Server")}</SortableHead>
             <SortableHead sorting={sorting} column="state">{t("State")}</SortableHead>
-            {showNode && <SortableHead sorting={sorting} column="node" className="max-md:hidden">{t("Node")}</SortableHead>}
-            {showNetwork && <TableHead className="max-lg:hidden">{t("Network")}</TableHead>}
+            {showNode && <SortableHead sorting={sorting} column="node" className="@max-3xl:hidden">{t("Node")}</SortableHead>}
+            {showNetwork && <TableHead className="@max-5xl:hidden">{t("Network")}</TableHead>}
             <SortableHead sorting={sorting} column="players" className="text-right">{t("Players")}</SortableHead>
-            <SortableHead sorting={sorting} column="cpu" className="text-right max-sm:hidden">{t("CPU")}</SortableHead>
-            <SortableHead sorting={sorting} column="memory" className="text-right max-sm:hidden">{t("Memory")}</SortableHead>
+            <SortableHead sorting={sorting} column="cpu" className="text-right @max-xl:hidden">{t("CPU")}</SortableHead>
+            <SortableHead sorting={sorting} column="memory" className="text-right @max-xl:hidden">{t("Memory")}</SortableHead>
             <TableHead className="w-0">
               <span className="sr-only">{t("Actions")}</span>
             </TableHead>
@@ -302,17 +327,17 @@ export function ServerTable({ groups, facts, sorting, showNode, selected, onSele
                     <TableCell>
                       <ServerStateBadge server={server} nodeId={server.nodeId} />
                     </TableCell>
-                    {showNode && <TableCell className="text-muted-foreground max-md:hidden">{server.nodeName}</TableCell>}
+                    {showNode && <TableCell className="text-muted-foreground @max-3xl:hidden">{server.nodeName}</TableCell>}
                     {showNetwork && (
-                      <TableCell className="text-muted-foreground max-lg:hidden">{facts.network(server)?.name ?? "–"}</TableCell>
+                      <TableCell className="text-muted-foreground @max-5xl:hidden">{facts.network(server)?.name ?? "–"}</TableCell>
                     )}
                     <TableCell className="text-right tabular-nums">
                       {usage?.players ? `${usage.players.online} / ${usage.players.max}` : <span className="text-muted-foreground">–</span>}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums max-sm:hidden">
+                    <TableCell className="text-right tabular-nums @max-xl:hidden">
                       {usage ? formatCores(usage.cpuMillis) : <span className="text-muted-foreground">–</span>}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums max-sm:hidden">
+                    <TableCell className="text-right tabular-nums @max-xl:hidden">
                       {usage ? (
                         formatBytes(usage.memoryBytes)
                       ) : (

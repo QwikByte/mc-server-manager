@@ -142,7 +142,7 @@ function PolicyForm({
               {Object.entries(actions).map(([action, { label, description, icon: Icon }]) => (
                 <FieldLabel key={action} htmlFor={`action-${action}`}>
                   <Field orientation="horizontal" className="items-start">
-                    <Icon className="mt-0.5 size-5 shrink-0 text-warning" weight="duotone" />
+                    <Icon className="mt-0.5 size-5 shrink-0 text-warning" />
                     <FieldContent>
                       <FieldTitle>{t(label)}</FieldTitle>
                       <FieldDescription>{t(description)}</FieldDescription>

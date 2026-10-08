@@ -195,13 +195,13 @@ export function Terminal({ target, prompt }: { target: string; prompt: string })
       data-code
       aria-labelledby="terminal-heading"
       className={cn(
-        "overflow-hidden rounded-2xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10",
+        "overflow-hidden rounded-xl bg-console text-console-foreground shadow-xl ring-1 shadow-black/10 ring-black/5 [font-variant-ligatures:none] dark:ring-white/10",
         maximized && maximizedClass,
       )}
     >
       <div className="flex items-center justify-between gap-4 border-b border-console-overlay/10 py-2 pr-2 pl-4">
         <h2 id="terminal-heading" className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <TerminalWindowIcon className="size-4 shrink-0 text-console-command" weight="duotone" />
+          <TerminalWindowIcon className="size-4 shrink-0 text-console-command" />
           <span className="truncate font-mono">{prompt}</span>
         </h2>
         <div className="flex items-center gap-1">

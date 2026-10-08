@@ -250,7 +250,7 @@ function Databases({ datastore: ds }: { datastore: Datastore }) {
       {ds.databases.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("No databases yet. Each plugin gets one, with a user of the same name.")}</p>
       ) : (
-        <ul className="divide-y rounded-lg ring-1 ring-foreground/8">
+        <ul className="divide-y rounded-lg ring-1 ring-border">
           {ds.databases.map((db) => (
             <DatabaseRow key={db.name} datastore={ds} database={db} />
           ))}
@@ -453,7 +453,7 @@ function Dumps({ datastore: ds }: { datastore: Datastore }) {
       ) : dumps.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("No backups yet. Backup jobs can back the datastore up on a schedule.")}</p>
       ) : (
-        <ul className="divide-y rounded-lg ring-1 ring-foreground/8">
+        <ul className="divide-y rounded-lg ring-1 ring-border">
           {dumps.map((d) => (
             <DumpRow key={d.id} datastore={ds} dump={d} />
           ))}

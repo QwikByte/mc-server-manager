@@ -3,7 +3,7 @@ import { t } from "i18next"
 import { Meter } from "@/components/meter"
 import { AnimatedNumber } from "@/components/animated-number"
 import { Sparkline } from "@/components/sparkline"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { useAccess } from "@/features/access/use-access"
 import { onlineCapacityMb } from "@/features/nodes/api"
 import { assignedMemoryMb, runningCount } from "@/features/servers/api"
@@ -25,7 +25,7 @@ export function Figures({ title }: { title: string }) {
   const capacityMb = onlineCapacityMb(nodes)
   const seesServers = canSomewhere("servers.view")
   return (
-    <section aria-label={title} className="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
+    <StatStrip label={title} className="grid-cols-2 @4xl:grid-cols-4">
       <StatCard
         to={seesServers ? "/players" : undefined}
         icon={UsersThreeIcon}
@@ -82,6 +82,6 @@ export function Figures({ title }: { title: string }) {
           </div>
         )}
       </StatCard>
-    </section>
+    </StatStrip>
   )
 }

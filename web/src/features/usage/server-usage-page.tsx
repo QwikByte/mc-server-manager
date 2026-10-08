@@ -3,7 +3,7 @@ import { getRouteApi } from "@tanstack/react-router"
 import { t } from "i18next"
 import { ErrorCallout } from "@/components/callout"
 import { Meter } from "@/components/meter"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type Server, useServer } from "@/features/servers/api"
 import { isPaper } from "@/features/servers/server-types"
@@ -86,7 +86,7 @@ function LiveUsage({ server, usage }: { server: Server; usage?: ServerUsage }) {
   const running = usage?.running
   const idle = t("Not running")
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+    <StatStrip className="grid-cols-2 lg:grid-cols-3">
       <StatCard icon={CpuIcon} tone="warning" label={t("CPU")} value={running ? formatCores(usage.cpuMillis) : "–"}>
         {!running ? (
           idle
@@ -128,6 +128,6 @@ function LiveUsage({ server, usage }: { server: Server; usage?: ServerUsage }) {
       <StatCard icon={HardDriveIcon} tone="neutral" label={t("Data")} value={usage?.diskBytes ? formatBytes(usage.diskBytes) : "–"}>
         {usage?.diskBytes ? t("on the disk, measured every few minutes") : t("Not measured yet")}
       </StatCard>
-    </div>
+    </StatStrip>
   )
 }

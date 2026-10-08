@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query"
 import { useAccess } from "@/features/access/use-access"
+import { datastoresQuery } from "@/features/datastores/api"
 import { networksQuery } from "@/features/networks/api"
 import { useNetworkOf } from "@/features/networks/servers"
 import { playersOnline } from "@/features/networks/usage"
 import { nodesQuery } from "@/features/nodes/api"
+import { overlayQuery } from "@/features/overlay/api"
 import { allServersQuery, type NodeServer } from "@/features/servers/api"
 import { serverType } from "@/features/servers/server-types"
-import { useUsages } from "@/features/usage/api"
+import { useUsages, warningsQuery } from "@/features/usage/api"
+import { problemsOf } from "./attention"
+import { useAutomationTasks } from "./tasks"
 
 /** What the widgets of the overview show. Each widget loads it; the queries are shared. */
 export function useOverview() {
@@ -29,4 +33,15 @@ export function useOverview() {
   const cores = live.reduce((sum, u) => sum + u.cpuCount * 1000, 0)
   const load = cores ? live.reduce((sum, u) => sum + u.cpuMillis, 0) / cores : undefined
   return { servers, nodes, online, networks, usages, usage, ref, gameServers, players, load }
+}
+
+/** What needs an operator, the most urgent first. */
+export function useProblems() {
+  const access = useAccess()
+  const { nodes, servers = [], networks, usages } = useOverview()
+  const { data: overlay } = useQuery(overlayQuery)
+  const { data: datastores } = useQuery({ ...datastoresQuery, enabled: access.can("datastores.view") })
+  const tasks = useAutomationTasks()
+  const { data: warnings } = useQuery(warningsQuery)
+  return problemsOf(nodes, servers, networks, usages, overlay, datastores, tasks, warnings)
 }

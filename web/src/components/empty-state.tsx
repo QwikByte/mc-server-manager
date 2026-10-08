@@ -19,7 +19,7 @@ export function EmptyState({
   children?: ReactNode
 }) {
   return (
-    <Empty className="rounded-2xl border border-dashed bg-card/40 py-14">
+    <Empty className="rounded-xl border border-dashed bg-card/40 py-14">
       <EmptyHeader>
         <EmptyMedia>
           <IconTile icon={icon} tone={tone} size="lg" />

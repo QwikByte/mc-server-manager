@@ -104,8 +104,8 @@ export function TaskTargetsField({ value, onChange }: { value: TaskTarget[]; onC
             {groups.map((target) => {
               const { icon: Icon, label, count } = describe(target, data)
               return (
-                <li key={key(target)} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2.5 text-sm ring-1 ring-foreground/8">
-                  <Icon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+                <li key={key(target)} className="flex items-center gap-2 rounded-lg py-1 pr-1 pl-2.5 text-sm ring-1 ring-border">
+                  <Icon className="size-4 shrink-0 text-muted-foreground" />
                   <span className="font-medium">{label}</span>
                   {count !== undefined && (
                     <span className="text-xs text-muted-foreground">

@@ -38,6 +38,22 @@ export function usePageName(name: string | undefined) {
   }, [id, name])
 }
 
+/**
+ * The titles and names of the open page's routes from the outside in, each with the path that opens it, e.g.
+ * Servers, lobby and Files; a title that repeats the one before it is left out.
+ */
+export function usePageTrail() {
+  useSyncExternalStore(subscribe, () => version)
+  const matches = useMatches()
+  const trail: { label: string; to: string }[] = []
+  for (const match of matches) {
+    for (const label of [match.staticData.title && t(match.staticData.title), names.get(match.id)]) {
+      if (label && trail.at(-1)?.label !== label) trail.push({ label, to: match.pathname })
+    }
+  }
+  return trail
+}
+
 /** Titles the browser's tab after the open page, from the inside out, e.g. "Files · lobby · Servers · Noryx". */
 export function DocumentTitle() {
   useSyncExternalStore(subscribe, () => version)

@@ -120,7 +120,7 @@ export function ChannelDialog({ channel, trigger }: { channel?: Channel; trigger
                       )}
                     >
                       <RadioGroupItem value={kind} className="sr-only" />
-                      <Icon className="size-5" weight="duotone" />
+                      <Icon className="size-5" />
                       {t(label)}
                     </label>
                   )

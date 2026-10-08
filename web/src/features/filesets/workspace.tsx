@@ -378,10 +378,10 @@ function BinaryView({ file, editable, onReplace }: { file: SetFile; editable: bo
         <img
           src={`data:${type};base64,${file.data}`}
           alt={t("Preview of {{path}}", { path: file.path })}
-          className="max-h-64 min-h-16 max-w-full rounded-lg object-contain ring-1 ring-foreground/8 [image-rendering:pixelated]"
+          className="max-h-64 min-h-16 max-w-full rounded-lg object-contain ring-1 ring-border [image-rendering:pixelated]"
         />
       ) : (
-        <FileIcon className="size-12 text-muted-foreground" weight="duotone" />
+        <FileIcon className="size-12 text-muted-foreground" />
       )}
       <div className="space-y-1">
         <p className="text-sm font-medium">{t("Binary file, {{size}}", { size: formatBytes(sizeOf(file)) })}</p>

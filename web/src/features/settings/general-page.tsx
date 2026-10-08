@@ -18,7 +18,7 @@ import { toast } from "sonner"
 import { Callout, ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
-import { StatCard } from "@/components/stat-card"
+import { StatCard, StatStrip } from "@/components/stat-card"
 import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -52,7 +52,7 @@ import { RestartButton } from "./restart-button"
 /** The General tab: the running master and its settings. */
 export function GeneralSettingsPage() {
   const { data, isPending, error } = useQuery(settingsQuery)
-  if (isPending) return <Skeleton className="h-96 rounded-2xl" />
+  if (isPending) return <Skeleton className="h-96 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
   return (
     <>
@@ -104,7 +104,7 @@ function MasterFacts({ master, settings }: { master: Master; settings: MasterSet
   ]
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <StatStrip className="grid-cols-2 lg:grid-cols-4">
         <StatCard icon={CubeIcon} tone="info" label={t("Master")} value={master.version}>
           {/* i18next-instrument-ignore-next-line: the name of the program */}
           noryx-master
@@ -123,7 +123,7 @@ function MasterFacts({ master, settings }: { master: Master; settings: MasterSet
         >
           {t("Renewed automatically")}
         </StatCard>
-      </div>
+      </StatStrip>
       <div className="mt-4 surface flex flex-wrap items-center gap-x-6 gap-y-4 rounded-xl px-5 py-4">
         <dl className="grid min-w-0 flex-1 gap-x-6 gap-y-4 md:grid-cols-[auto_auto_1fr]">
           {details.map(([term, value]) => (
@@ -225,7 +225,7 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
   }
 
   return (
-    <form onSubmit={submit} className="mt-10 surface rounded-2xl px-5 sm:px-8">
+    <form onSubmit={submit} className="mt-10 surface rounded-xl px-5 sm:px-8">
       {/* Without the permission to change them, the settings are only shown. */}
       <fieldset disabled={!editable} className="contents">
         <FormSection title={t("Panel")}>
@@ -437,7 +437,7 @@ function PanelHTTPSFields({
           {Object.entries(certificates).map(([value, { label, description, icon: Icon }]) => (
             <FieldLabel key={value} htmlFor={`settings-panel-https-${value || "none"}`}>
               <Field orientation="horizontal" className="items-start">
-                <Icon className="mt-0.5 size-5 shrink-0 text-primary" weight="duotone" />
+                <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
                 <FieldContent>
                   <FieldTitle>{t(label)}</FieldTitle>
                   <FieldDescription>{t(description)}</FieldDescription>
@@ -533,7 +533,7 @@ function MfaRequirementFields({ value, onChange }: { value: MfaRequirement; onCh
         {Object.entries(mfaChoices).map(([key, { label, description, icon: Icon }]) => (
           <FieldLabel key={key} htmlFor={`settings-require-mfa-${key}`}>
             <Field orientation="horizontal" className="items-start">
-              <Icon className="mt-0.5 size-5 shrink-0 text-primary" weight="duotone" />
+              <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
               <FieldContent>
                 <FieldTitle>{t(label)}</FieldTitle>
                 <FieldDescription>{t(description)}</FieldDescription>

@@ -2,13 +2,27 @@ import type { Icon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
-import { IconTile } from "./icon-tile"
-import type { Tone } from "./tone"
+import { type Tone, toneText } from "./tone"
 
-/** A key figure, e.g. how many servers run, with an optional detail below it; with to, it opens their page. */
+/**
+ * Key figures side by side on one card, divided by hairlines; className sets its columns, e.g.
+ * grid-cols-2 lg:grid-cols-4.
+ */
+export function StatStrip({ className, children, label }: { className?: string; children: ReactNode; label?: string }) {
+  return (
+    <section aria-label={label} className={cn("surface grid overflow-hidden rounded-xl", className)}>
+      {children}
+    </section>
+  )
+}
+
+/**
+ * A key figure in a StatStrip, e.g. how many servers run, with an optional detail below it; with
+ * to, it opens their page.
+ */
 export function StatCard({
-  icon,
-  tone,
+  icon: Icon,
+  tone = "success",
   label,
   value,
   children,
@@ -24,19 +38,20 @@ export function StatCard({
   /** The search of the page it opens, e.g. the players of one network. */
   search?: { network: string }
 }) {
-  const className = "flex min-w-0 flex-col gap-3 rounded-xl bg-card p-4 shadow-xs ring-1 ring-foreground/8 dark:shadow-none"
+  // The hairlines to the right and below; those at the edges of the strip are cut off.
+  const className = "flex min-w-0 flex-col gap-2.5 bg-card p-3.5 shadow-[1px_0_0_0_var(--border),0_1px_0_0_var(--border)] sm:p-5"
   const content = (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
-        <IconTile icon={icon} tone={tone} size="sm" />
-      </div>
-      <div className="min-w-0 text-2xl font-bold tracking-tight break-words">{value}</div>
-      {children && <div className="text-xs text-muted-foreground">{children}</div>}
+      <p className="eyebrow flex items-center gap-2 text-muted-foreground">
+        <Icon aria-hidden className={cn("size-4 shrink-0", toneText[tone])} />
+        <span className="truncate">{label}</span>
+      </p>
+      <div className="figure min-w-0 text-[1.625rem] break-words">{value}</div>
+      {children && <div className="mt-auto text-xs wrap-break-word text-muted-foreground">{children}</div>}
     </>
   )
   return to ? (
-    <Link to={to} search={search} className={cn(className, "lift outline-none hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-ring")}>
+    <Link to={to} search={search} className={cn(className, "transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset")}>
       {content}
     </Link>
   ) : (

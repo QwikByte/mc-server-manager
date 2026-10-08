@@ -73,7 +73,7 @@ export function TemplateForm({
   }
 
   return (
-    <form onSubmit={submit} className="surface rounded-2xl px-5 sm:px-8">
+    <form onSubmit={submit} className="surface rounded-xl px-5 sm:px-8">
       <FormSection title={t("General")}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>

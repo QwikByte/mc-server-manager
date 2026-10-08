@@ -58,11 +58,11 @@ export function Topology({
 
   return (
     <div className="surface overflow-x-auto rounded-xl p-5" aria-label={t("Map of the network")} role="figure">
-      <div className="grid min-w-[44rem] items-center" style={{ gridTemplateColumns: `minmax(10rem, 15rem) ${gap}px 13rem ${gap}px minmax(14rem, 1fr)` }}>
+      <div className="grid min-w-[45rem] items-center" style={{ gridTemplateColumns: `minmax(10rem, 15rem) ${gap}px 13rem ${gap}px minmax(14rem, 1fr)` }}>
         <Column height={height} count={entries.length}>
           {entries.map(({ icon: Icon, label }, i) => (
             <Item key={i}>
-              <Icon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+              <Icon className="size-4 shrink-0 text-muted-foreground" />
               <span className="truncate font-mono text-xs">{label}</span>
             </Item>
           ))}
@@ -99,14 +99,14 @@ export function Topology({
                     {position + 1}
                   </span>
                 )}
-                {hosts > 0 && <GlobeIcon aria-label={t("Host names lead here")} className="size-4 text-violet" weight="duotone" />}
+                {hosts > 0 && <GlobeIcon aria-label={t("Host names lead here")} className="size-4 text-violet" />}
                 {route === "private" && (
-                  <ShieldCheckIcon aria-label={t("Over the private network")} className="size-4 text-success" weight="duotone">
+                  <ShieldCheckIcon aria-label={t("Over the private network")} className="size-4 text-success">
                     <title>{t("Over the private network")}</title>
                   </ShieldCheckIcon>
                 )}
                 {route === "public" && (
-                  <PlugIcon aria-label={t("At a public port")} className="size-4 text-muted-foreground" weight="duotone">
+                  <PlugIcon aria-label={t("At a public port")} className="size-4 text-muted-foreground">
                     <title>{t("At a public port")}</title>
                   </PlugIcon>
                 )}
@@ -127,7 +127,7 @@ export function Topology({
                 onClick={() => setExpanded(!expanded)}
                 className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
               >
-                <StackIcon className="size-4 shrink-0" weight="duotone" />
+                <StackIcon className="size-4 shrink-0" />
                 {expanded ? t("Show fewer") : t("{{count}} more servers", { count: rest.length, defaultValue_one: "{{count}} more server" })}
                 {!expanded && (
                   <span className="ml-auto flex items-center gap-2">

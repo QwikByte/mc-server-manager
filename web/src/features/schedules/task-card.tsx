@@ -77,7 +77,7 @@ export function TaskCard<S>({
       </div>
       <div className="grid gap-2.5">
         <p className="flex items-center gap-2 text-sm">
-          <ClockIcon className="size-4 shrink-0 text-muted-foreground" weight="duotone" />
+          <ClockIcon className="size-4 shrink-0 text-muted-foreground" />
           {describeSchedule(task.schedule)}
           <span className="truncate text-xs text-muted-foreground">{task.schedule.timeZone.replaceAll("_", " ")}</span>
         </p>
