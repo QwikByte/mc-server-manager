@@ -47,6 +47,18 @@ func (l *Limiter) Allow(key string) bool {
 	return lim.Allow()
 }
 
+// Blocked reports whether key has no attempt left, without taking one, e.g. to take attempts
+// only when they fail.
+func (l *Limiter) Blocked(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	lim, ok := l.keys[key]
+	if !ok && len(l.keys) >= maxKeys {
+		lim, ok = l.keys[""] // the shared budget
+	}
+	return ok && lim.Tokens() < 1
+}
+
 // sweep drops the keys whose budget is full again, at most once per attempt interval, so
 // that clients that don't fit anymore can't make every request scan all keys.
 func (l *Limiter) sweep() {

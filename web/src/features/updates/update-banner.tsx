@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Callout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { CopyField } from "@/components/copy-field"
+import { Markdown } from "@/components/markdown"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,7 +20,6 @@ import {
 } from "@/components/ui/dialog"
 import { formatDate } from "@/lib/format"
 import { type Release, type UpdateStatus, updateCommand, updateQuery, updating, useUpdateAction, waitsForUpdate } from "./api"
-import { Markdown } from "./markdown"
 import { UpdateAgentButton } from "./update-agent-button"
 
 const onError = { onError: (e: Error) => toast.error(e.message) }

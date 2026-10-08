@@ -1,4 +1,15 @@
-import { ArchiveIcon, ArrowCounterClockwiseIcon, ClockIcon, DownloadSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react"
+import {
+  ArchiveIcon,
+  ArrowCounterClockwiseIcon,
+  ClockIcon,
+  DotsThreeIcon,
+  DownloadSimpleIcon,
+  PlusIcon,
+  PushPinIcon,
+  PushPinSlashIcon,
+  TagIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -10,6 +21,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { IconTile } from "@/components/icon-tile"
 import { Section } from "@/components/section"
+import { Segmented } from "@/components/segmented"
 import { Pill } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,18 +34,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import { useAccess } from "@/features/access/use-access"
+import { PathPicker, type Picked } from "@/features/files/path-picker"
 import { nodeQuery } from "@/features/nodes/api"
 import { guard, useOperation } from "@/features/operations/use-operation"
-import { covers } from "@/features/schedules/api"
 import { describeSchedule } from "@/features/schedules/describe"
-import { type Server, useServer } from "@/features/servers/api"
+import { allServersQuery, type NodeServer, type Server, serverKey, useServer } from "@/features/servers/api"
+import { serverType } from "@/features/servers/server-types"
 import { formatBytes, formatDateTime } from "@/lib/format"
 import {
   type Backup,
+  backupFilesQuery,
   backupsQuery,
   defaultSelection,
   describeContent,
@@ -41,6 +58,7 @@ import {
   jobs,
   nothingSelected,
   pathsError,
+  type Restore,
   useBackups,
 } from "./api"
 import { LocationField, SelectionField } from "./backup-fields"
@@ -53,13 +71,21 @@ export function ServerBackupsPage() {
   const { nodeId, serverId } = route.useParams()
   const { server } = useServer(nodeId, serverId)
   const { data: backups, isPending, error } = useQuery(backupsQuery(nodeId, serverId))
-  const { data: jobList = [] } = useQuery({ ...jobs.tasksQuery, enabled: can("backupjobs.view") })
+  const { data: jobList = [] } = useQuery({ ...jobs.coveringQuery(nodeId, serverId), enabled: can("backupjobs.view") })
+  const { data: servers = [] } = useQuery(allServersQuery)
   const create = can("backups.create", nodeId, serverId)
-  const covering = jobList.filter((j) => j.enabled && covers(j.targets, nodeId, serverId))
+  const covering = jobList.filter((j) => j.enabled)
 
   if (!server || isPending) return <Skeleton className="h-64 rounded-xl" />
   if (error) return <ErrorCallout error={error} />
   const total = backups.reduce((sum, b) => sum + b.size, 0)
+  // Other servers of the same kind, proxies or game servers, that the backups may be restored into.
+  const others = servers.filter(
+    (s) =>
+      serverKey(s) !== serverKey({ nodeId, id: serverId }) &&
+      serverType(s.type).proxy === serverType(server.type).proxy &&
+      can("backups.restore", s.nodeId, s.id),
+  )
 
   return (
     <Section
@@ -112,7 +138,7 @@ export function ServerBackupsPage() {
       ) : (
         <ul className="surface divide-y rounded-xl">
           {backups.map((b) => (
-            <BackupRow key={b.id} nodeId={nodeId} server={server} backup={b} />
+            <BackupRow key={b.id} nodeId={nodeId} server={server} backup={b} others={others} />
           ))}
         </ul>
       )}
@@ -120,11 +146,38 @@ export function ServerBackupsPage() {
   )
 }
 
-function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server; backup: Backup }) {
+function BackupRow({ nodeId, server, backup, others }: { nodeId: string; server: Server; backup: Backup; others: NodeServer[] }) {
   const { can } = useAccess()
-  const { restore, remove } = useBackups(nodeId, server.id)
+  const { update, restore, remove } = useBackups(nodeId, server.id)
   const operation = useOperation()
+  const [dialog, setDialog] = useState<"restore" | "label" | "delete">()
+  const close = (open: boolean) => !open && setDialog(undefined)
   const created = formatDateTime(backup.createdAt)
+  const change = can("backups.create", nodeId, server.id)
+  // Letting its job delete it again is like deleting it.
+  const release = can("backups.delete", nodeId, server.id)
+  const restorable = can("backups.restore", nodeId, server.id) || others.length > 0
+
+  const keep = (kept: boolean) =>
+    update.mutate(
+      { id: backup.id, kept },
+      {
+        onSuccess: () => toast.success(kept ? t("Its job keeps the backup") : t("Its job may delete the backup again")),
+        onError: (e) => toast.error(e.message),
+      },
+    )
+
+  const run = ({ name, ...input }: Omit<Restore, "id" | "onStart"> & { name: string }) =>
+    operation.run((onStart) => restore.mutateAsync({ id: backup.id, ...input, onStart }), {
+      title: t("Restoring {{name}}…", { name }),
+      notify: true,
+      done: ({ warning, snapshot }) => ({
+        message: t("Restored the backup of {{time}}", { time: created }),
+        description: warning ?? (snapshot && t("What it replaced is kept in the backup {{label}}.", { label: snapshot.label })),
+        warning: !!warning,
+      }),
+    })
+
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3">
       <IconTile icon={ArchiveIcon} tone="info" size="sm" />
@@ -132,9 +185,15 @@ function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server;
         <p className="flex items-center gap-2 text-sm font-semibold">
           <span className="truncate">{backup.label || t("Backup")}</span>
           {backup.jobId && <Pill tone="info">{t("Scheduled")}</Pill>}
+          {backup.kept && (
+            <Pill tone="success">
+              <PushPinIcon className="size-3" />
+              {t("Kept")}
+            </Pill>
+          )}
         </p>
         <p className="truncate text-xs text-muted-foreground">
-          {created} · {formatBytes(backup.size)} · {describeContent(backup.paths)}
+          {created} · {formatBytes(backup.size)} · {describeContent(backup)}
           {backup.location !== "default" && ` · ${backup.location}`}
         </p>
       </div>
@@ -145,64 +204,269 @@ function BackupRow({ nodeId, server, backup }: { nodeId: string; server: Server;
             <span className="max-sm:sr-only">{t("Download")}</span>
           </a>
         </Button>
-        {can("backups.restore", nodeId, server.id) && (
-          <ConfirmDialog
-            trigger={
-              <Button size="sm" variant="outline" disabled={restore.isPending}>
-                <ArrowCounterClockwiseIcon />
-                <span className="max-sm:sr-only">{t("Restore")}</span>
-              </Button>
-            }
-            title={t("Restore the backup of {{time}}?", { time: created })}
-            description={[
-              t("This replaces {{content}} of {{name}} with the backed up state; what was added since is removed.", {
-                content: backup.paths.includes(".") ? t("everything") : describeContent(backup.paths),
-                name: server.name,
-              }),
-              server.state !== "stopped" && t("The server stops while this happens and starts again afterwards."),
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            action={t("Restore")}
-            destructive
-            onConfirm={() =>
-              operation.run((onStart) => restore.mutateAsync({ id: backup.id, onStart }), {
-                title: t("Restoring {{name}}…", { name: server.name }),
-                notify: true,
-                done: ({ warning }) => ({
-                  message: t("Restored the backup of {{time}}", { time: created }),
-                  description: warning,
-                  warning: !!warning,
-                }),
-              })
-            }
-          />
+        {restorable && (
+          <Button size="sm" variant="outline" disabled={restore.isPending} onClick={() => setDialog("restore")}>
+            <ArrowCounterClockwiseIcon />
+            <span className="max-sm:sr-only">{t("Restore")}</span>
+          </Button>
         )}
-        {can("backups.delete", nodeId, server.id) && (
-          <ConfirmDialog
-            trigger={
+        {(change || release) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={t("Delete the backup of {{time}}", { time: created })}
-                title={t("Delete")}
-                disabled={remove.isPending}
-                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                className="text-muted-foreground"
+                aria-label={t("More actions for the backup of {{time}}", { time: created })}
+                title={t("More actions")}
               >
-                <TrashIcon />
+                <DotsThreeIcon weight="bold" />
               </Button>
-            }
-            title={t("Delete the backup of {{time}}?", { time: created })}
-            description={t("The backup is deleted from the node. This can't be undone.")}
-            action={t("Delete backup")}
-            destructive
-            onConfirm={() =>
-              remove.mutate(backup.id, { onSuccess: () => toast.success(t("Deleted the backup")), onError: (e) => toast.error(e.message) })
-            }
-          />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {change && (
+                <DropdownMenuItem onSelect={() => setDialog("label")}>
+                  <TagIcon />
+                  {t("Change label…")}
+                </DropdownMenuItem>
+              )}
+              {/* Its job deletes it in time; backups made by hand are never deleted that way. */}
+              {backup.jobId && !backup.kept && change && (
+                <DropdownMenuItem disabled={update.isPending} onSelect={() => keep(true)}>
+                  <PushPinIcon />
+                  {t("Keep")}
+                </DropdownMenuItem>
+              )}
+              {backup.jobId && backup.kept && release && (
+                <DropdownMenuItem disabled={update.isPending} onSelect={() => keep(false)}>
+                  <PushPinSlashIcon />
+                  {t("Let its job delete it")}
+                </DropdownMenuItem>
+              )}
+              {release && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" disabled={remove.isPending} onSelect={() => setDialog("delete")}>
+                    <TrashIcon />
+                    {t("Delete…")}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
+      {dialog === "restore" && (
+        <RestoreDialog
+          nodeId={nodeId}
+          server={server}
+          backup={backup}
+          others={others}
+          onClose={() => setDialog(undefined)}
+          onRestore={run}
+        />
+      )}
+      {dialog === "label" && <LabelDialog nodeId={nodeId} server={server} backup={backup} onClose={() => setDialog(undefined)} />}
+      {dialog === "delete" && (
+        <ConfirmDialog
+          open
+          onOpenChange={close}
+          title={t("Delete the backup of {{time}}?", { time: created })}
+          description={t("The backup is deleted from the node. This can't be undone.")}
+          action={t("Delete backup")}
+          destructive
+          onConfirm={() =>
+            remove.mutate(backup.id, { onSuccess: () => toast.success(t("Deleted the backup")), onError: (e) => toast.error(e.message) })
+          }
+        />
+      )}
     </li>
+  )
+}
+
+const here = "here"
+
+/**
+ * Chooses what of a backup is restored, all of it or files and folders in a browser of it, and where: into its server,
+ * or into another one of the same kind, like a copy. What the restore replaces is backed up first unless turned off.
+ */
+function RestoreDialog({
+  nodeId,
+  server,
+  backup,
+  others,
+  onClose,
+  onRestore,
+}: {
+  nodeId: string
+  server: Server
+  backup: Backup
+  others: NodeServer[]
+  onClose: () => void
+  onRestore: (input: Omit<Restore, "id" | "onStart"> & { name: string }) => void
+}) {
+  const { can } = useAccess()
+  const own = can("backups.restore", nodeId, server.id)
+  const [into, setInto] = useState(own || !others[0] ? here : serverKey(others[0]))
+  const [part, setPart] = useState<"all" | "chosen">("all")
+  const [folder, setFolder] = useState("")
+  const [picked, setPicked] = useState<Picked[]>([])
+  const [snapshotFirst, setSnapshotFirst] = useState(true)
+  const target = others.find((s) => serverKey(s) === into)
+  const name = target?.name ?? server.name
+  const paths = part === "chosen" ? picked.map((p) => p.path) : []
+  const error = pathsError(paths)
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    onClose()
+    onRestore({ name, paths, snapshotFirst, into: target && { nodeId: target.nodeId, serverId: target.id } })
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <form onSubmit={submit} className="grid gap-6">
+          <DialogHeader>
+            <DialogTitle>{t("Restore the backup of {{time}}", { time: formatDateTime(backup.createdAt) })}</DialogTitle>
+            <DialogDescription>{describeContent(backup)}</DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            {others.length > 0 && (
+              <Field>
+                <FieldLabel htmlFor="restore-into">{t("Restore into")}</FieldLabel>
+                <Select value={into} onValueChange={setInto}>
+                  <SelectTrigger id="restore-into" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {own && <SelectItem value={here}>{t("{{name}}, its own server", { name: server.name })}</SelectItem>}
+                    {others.map((s) => (
+                      <SelectItem key={serverKey(s)} value={serverKey(s)}>
+                        {s.name} <span className="text-muted-foreground">· {s.nodeName}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {target && (
+                  <FieldDescription>
+                    {t(
+                      "Like a copy, {{name}} keeps its own secrets and those of its network, and gets no files with secrets of file sets.",
+                      { name },
+                    )}
+                  </FieldDescription>
+                )}
+              </Field>
+            )}
+            <FieldSet>
+              <FieldLegend variant="label">{t("What to restore")}</FieldLegend>
+              <Segmented
+                label={t("What to restore")}
+                className="w-fit"
+                value={part}
+                onChange={setPart}
+                options={[
+                  { value: "all", label: t("All of it") },
+                  { value: "chosen", label: t("Chosen files and folders") },
+                ]}
+              />
+              {part === "chosen" && (
+                <>
+                  <PathPicker
+                    server={{ nodeId, serverId: server.id }}
+                    list={(path) => backupFilesQuery({ nodeId, serverId: server.id }, backup.id, path)}
+                    folder={folder}
+                    onFolder={setFolder}
+                    picked={picked}
+                    onPick={setPicked}
+                  />
+                  {error ? (
+                    <FieldError>{error}</FieldError>
+                  ) : (
+                    <FieldDescription>{t("{{count}} chosen", { count: picked.length })}</FieldDescription>
+                  )}
+                </>
+              )}
+            </FieldSet>
+            <Field orientation="horizontal">
+              <Switch id="restore-snapshot" checked={snapshotFirst} onCheckedChange={setSnapshotFirst} />
+              <FieldContent>
+                <FieldLabel htmlFor="restore-snapshot">{t("Back up what is replaced first")}</FieldLabel>
+                <FieldDescription>{t("As a backup made by hand, which undoes the restore if it was the wrong backup.")}</FieldDescription>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <p className="text-sm text-muted-foreground">
+            {[
+              part === "chosen"
+                ? t("This replaces the chosen files and folders of {{name}} with their backed up state.", { name })
+                : t("This replaces {{content}} of {{name}} with the backed up state; what was added since is removed.", {
+                    content: backup.paths.includes(".") ? t("everything") : describeContent({ ...backup, exclude: [] }),
+                    name,
+                  }),
+              (target ?? server).state !== "stopped" && t("The server stops while this happens and starts again afterwards."),
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          </p>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">{t("Cancel")}</Button>
+            </DialogClose>
+            <Button type="submit" variant="destructive" disabled={(part === "chosen" && picked.length === 0) || !!error}>
+              <ArrowCounterClockwiseIcon />
+              {t("Restore")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Changes the label of a backup. */
+function LabelDialog({ nodeId, server, backup, onClose }: { nodeId: string; server: Server; backup: Backup; onClose: () => void }) {
+  const [label, setLabel] = useState(backup.label)
+  const { update } = useBackups(nodeId, server.id)
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    update.mutate({ id: backup.id, label: label.trim() }, { onSuccess: onClose })
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent {...guard(update.isPending)}>
+        <form onSubmit={submit} className="grid gap-6">
+          <DialogHeader>
+            <DialogTitle>{t("Change label")}</DialogTitle>
+            <DialogDescription>{t("The backup of {{time}}", { time: formatDateTime(backup.createdAt) })}</DialogDescription>
+          </DialogHeader>
+          <Field data-invalid={!!update.error}>
+            <FieldLabel htmlFor="backup-new-label">{t("Label")}</FieldLabel>
+            <Input
+              id="backup-new-label"
+              autoFocus
+              maxLength={64}
+              placeholder={t("Before the update")}
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+            />
+            {update.error && <FieldError>{update.error.message}</FieldError>}
+          </Field>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={update.isPending}>
+                {t("Cancel")}
+              </Button>
+            </DialogClose>
+            <Button type="submit" disabled={update.isPending}>
+              {t("Save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -292,7 +556,10 @@ function CreateBackupDialog({ nodeId, server }: { nodeId: string; server: Server
                 {t("Cancel")}
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={nothingSelected(selection) || !!pathsError(selection.paths) || create.isPending}>
+            <Button
+              type="submit"
+              disabled={nothingSelected(selection) || !!pathsError(selection.paths) || !!pathsError(selection.exclude ?? []) || create.isPending}
+            >
               {create.isPending ? t("Backing up…") : t("Back up")}
             </Button>
           </DialogFooter>

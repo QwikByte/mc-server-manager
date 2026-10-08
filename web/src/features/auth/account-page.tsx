@@ -5,7 +5,6 @@ import {
   DesktopIcon,
   DeviceMobileIcon,
   DeviceTabletIcon,
-  type Icon,
   KeyIcon,
   PaletteIcon,
   ShieldCheckIcon,
@@ -19,16 +18,13 @@ import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
-import { type ReactNode, useState } from "react"
+import { useState } from "react"
 import { toast } from "sonner"
 import { ErrorCallout } from "@/components/callout"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import { FormSection } from "@/components/form-section"
-import { IconTile } from "@/components/icon-tile"
 import { PageHeader } from "@/components/page-header"
 import { Segmented } from "@/components/segmented"
-import { StatusBadge } from "@/components/status"
-import type { Tone } from "@/components/tone"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -48,6 +44,8 @@ import {
   useSetLanguage,
   type User,
 } from "./api"
+import { AccountRow } from "./account-row"
+import { ApiTokens } from "./api-tokens"
 import { ConfirmPasswordDialog, MfaSetupDialog, RecoveryCodesDialog } from "./mfa-dialogs"
 import { PasswordDialog } from "./password-dialog"
 
@@ -74,6 +72,9 @@ export function AccountPage() {
         </FormSection>
         <FormSection title={t("Sessions")}>
           <Sessions />
+        </FormSection>
+        <FormSection title={t("API tokens")}>
+          <ApiTokens user={user} />
         </FormSection>
         <FormSection title={t("Panel")}>
           <PanelSettings user={user} />
@@ -289,7 +290,9 @@ function MfaSettings({ username }: { username: string }) {
               enable={enable}
               onEnabled={(codes) => {
                 setCodes(codes)
-                toast.success(t("Turned on two-factor authentication"), { description: t("You were signed out everywhere else.") })
+                toast.success(t("Turned on two-factor authentication"), {
+                  description: t("You were signed out everywhere else, and your API tokens were revoked."),
+                })
               }}
             />
           }
@@ -375,35 +378,4 @@ function deviceIcon(os?: string) {
   if (os === "iOS" || os === "Android") return DeviceMobileIcon
   if (os === "iPadOS") return DeviceTabletIcon
   return DesktopIcon
-}
-
-/** A way of signing in, with what it is and the actions that change it. */
-function AccountRow({
-  icon,
-  tone,
-  title,
-  status,
-  actions,
-  children,
-}: {
-  icon: Icon
-  tone: Tone
-  title: string
-  status?: { tone: Tone; label: string }
-  actions: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-4 rounded-xl border p-4">
-      <IconTile icon={icon} tone={tone} />
-      <div className="min-w-48 flex-1 space-y-0.5">
-        <p className="flex items-center gap-2 font-medium">
-          {title}
-          {status && <StatusBadge status={status} />}
-        </p>
-        <p className="text-sm text-muted-foreground">{children}</p>
-      </div>
-      <div className="flex flex-wrap gap-2">{actions}</div>
-    </div>
-  )
 }

@@ -35,12 +35,13 @@ import {
 import { nodeQuery, nodesQuery } from "@/features/nodes/api"
 import { OperationStatus } from "@/features/operations/operation-status"
 import { guard, useOperation } from "@/features/operations/use-operation"
-import { type Template, templatesQuery } from "@/features/templates/api"
+import { keptVersions, type Template, templatesQuery } from "@/features/templates/api"
 import { formatBytes, formatSeconds, formatTimeZone } from "@/lib/format"
 import { freeMemoryMb, type NewServer, serversQuery, useCreateServer } from "./api"
 import { defaults, modpack, serverType, suggestPort, usedPorts } from "./server-types"
 import { MemoryField, StopTimeoutField, TimeZoneField, VersionField } from "./settings-fields"
 import { EndOfLifeNotice, SoftwareOptions } from "./software"
+import { TagList } from "./tags"
 import { type World, worldChanges, worldOf } from "./world"
 import { WorldFields } from "./world-fields"
 
@@ -73,7 +74,7 @@ function templateSummary(template: Template) {
     template.java && t("Java {{version}}", { version: template.java }),
     template.aikarFlags && t("Aikar's flags"),
     count && t("{{count}} properties", { count, defaultValue_one: "{{count}} property" }),
-    ...template.plugins.map((p) => p.title),
+    ...template.plugins.map((p) => (p.versionNumber ? `${p.title} ${p.versionNumber}` : p.title)),
   ]
     .filter(Boolean)
     .join(" · ")
@@ -119,6 +120,9 @@ export function CreateServerDialog({
     form.port ??
     suggestPort(usedPorts(servers), defaults(form.type).port, node?.portMin ?? undefined, node?.portMax ?? undefined)
   const storage = form.storage ?? locations.find((l) => l.name === node?.defaultStorage)?.name ?? "default"
+  // Tags of a new server need the permission to change the settings of the node's servers.
+  const tags = template?.tags ?? []
+  const tagsAllowed = !!nodeId && can("servers.settings", nodeId)
 
   const title = t("Create {{name}}", { name: form.name })
 
@@ -152,7 +156,8 @@ export function CreateServerDialog({
     if (fromModpack) Object.assign(server, { type: "", version: "", modpack: form.modpack })
     if (template) {
       const { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties } = template
-      Object.assign(server, { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties })
+      Object.assign(server, { java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties, versions: keptVersions(template.plugins) })
+      if (tagsAllowed) server.tags = tags
     }
     if (!proxy) server.properties = { ...server.properties, ...worldChanges(form.world, template?.properties) }
     const open = (id: string) => navigate({ to: "/nodes/$nodeId/servers/$serverId", params: { nodeId, serverId: id } })
@@ -160,7 +165,7 @@ export function CreateServerDialog({
       title,
       done: (created) => ({
         message: created.pluginError
-          ? t("Created {{name}}, but its plugins couldn't be installed: {{error}}", { name: created.name, error: created.pluginError })
+          ? t("Created {{name}}, but not all of its plugins could be installed: {{error}}", { name: created.name, error: created.pluginError })
           : t("Created {{name}}", { name: created.name }),
         description: created.warning,
         warning: !!created.pluginError || !!created.warning,
@@ -231,6 +236,17 @@ export function CreateServerDialog({
               )}
               {template && templateSummary(template) && (
                 <FieldDescription>{t("From the template: {{summary}}", { summary: templateSummary(template) })}</FieldDescription>
+              )}
+              {tags.length > 0 && (
+                <Field>
+                  <FieldLabel>{t("Tags")}</FieldLabel>
+                  <TagList tags={tags} className={tagsAllowed ? undefined : "opacity-50"} />
+                  <FieldDescription>
+                    {tagsAllowed
+                      ? t("File sets of the tags still have to be applied to the server.")
+                      : t("The server gets no tags, as you may not change the settings of servers on this node.")}
+                  </FieldDescription>
+                </Field>
               )}
               {!fixedNode && (
                 <Field>

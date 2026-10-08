@@ -105,11 +105,12 @@ func (p project) toModrinth() modrinth.Project {
 }
 
 type version struct {
-	ID        int64     `json:"id"`
-	ProjectID int64     `json:"projectId"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
-	Channel   struct {
+	ID          int64     `json:"id"`
+	ProjectID   int64     `json:"projectId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"` // the changelog, as Markdown
+	CreatedAt   time.Time `json:"createdAt"`
+	Channel     struct {
 		Name string `json:"name"`
 	} `json:"channel"`
 	Downloads map[string]struct {
@@ -132,6 +133,7 @@ func (v version) toModrinth(platform, loader string) modrinth.Version {
 	out := modrinth.Version{
 		ID: Prefix + strconv.FormatInt(v.ID, 10), ProjectID: Prefix + strconv.FormatInt(v.ProjectID, 10), VersionNumber: v.Name,
 		VersionType: channel(v.Channel.Name), Published: v.CreatedAt, GameVersions: v.PlatformDependencies[platform], Loaders: []string{loader},
+		Changelog: v.Description,
 	}
 	if d := v.Downloads[platform]; d.FileInfo != nil {
 		f := modrinth.File{URL: d.DownloadURL, Filename: d.FileInfo.Name, Primary: true, Size: d.FileInfo.Size}

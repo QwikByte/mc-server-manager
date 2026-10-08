@@ -85,6 +85,24 @@ func (g *Grants) merge(o Grants) {
 	}
 }
 
+// Only returns the grants of g for the given permissions and those they require, in g's
+// scope, e.g. those that an API token may use of its user's. Administrators get them
+// everywhere, but nothing that only administrators may do.
+func (g Grants) Only(perms []Permission) Grants {
+	o := Grants{perms: map[Permission]*scope{}}
+	for _, p := range withRequired(perms) {
+		if _, known := lookup(p); !known {
+			continue
+		}
+		if g.admin {
+			o.add(p, true, nil)
+		} else if s := g.perms[p]; s != nil {
+			o.perms[p] = s
+		}
+	}
+	return o
+}
+
 // Has reports whether p applies everywhere.
 func (g Grants) Has(p Permission) bool {
 	return g.admin || g.perms[p] != nil && g.perms[p].all

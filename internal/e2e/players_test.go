@@ -233,4 +233,14 @@ func TestRollingRestart(t *testing.T) {
 	if got := a.runtime.commandsTo(proxy.ServerID)[commands:]; !slices.Equal(got, []string{"send Alex lobby"}) {
 		t.Fatalf("proxy commands = %q", got)
 	}
+
+	// A schedule for the network does so too, without the server outside of it.
+	api.do("POST", "/api/policies", map[string]any{
+		"name": "Main", "enabled": true, "settings": map[string]any{"action": "restart", "rolling": 1},
+		"schedule": map[string]any{"times": []string{"04:00"}, "timeZone": "UTC"}, "targets": []map[string]string{{"kind": "network", "value": n.ID}},
+	}, http.StatusCreated, &task)
+	run(t, api, "/api/policies/"+task.ID)
+	if got := a.runtime.restarted()[9:]; !slices.Equal(got, []string{games[0].ServerID, games[1].ServerID, lobby.ServerID, proxy.ServerID}) {
+		t.Fatalf("restarts = %q", got)
+	}
 }

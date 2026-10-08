@@ -54,14 +54,19 @@ func (s store) summaries(ctx context.Context) ([]Summary, error) {
 	return list, err
 }
 
-// get returns a set with its newest files, its targets, the names of its secrets and its versions.
+// get returns a set with its newest files, its targets and variables, the names of its
+// secrets and its versions.
 func (s store) get(ctx context.Context, id string) (Set, error) {
 	set := Set{ID: id, Targets: []Target{}, Secrets: []Secret{}, Versions: []Version{}}
 	var created int64
-	err := s.db.QueryRowContext(ctx, `SELECT name, description, version, created_at FROM file_sets WHERE id = ?`, id).
-		Scan(&set.Name, &set.Description, &set.Version, &created)
+	var variables string
+	err := s.db.QueryRowContext(ctx, `SELECT name, description, version, variables, created_at FROM file_sets WHERE id = ?`, id).
+		Scan(&set.Name, &set.Description, &set.Version, &variables, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return set, errNotFound
+	}
+	if err == nil {
+		err = json.Unmarshal([]byte(variables), &set.Variables)
 	}
 	if err != nil {
 		return set, err
@@ -166,9 +171,13 @@ func (s store) secrets(ctx context.Context, id string) (map[string]string, error
 }
 
 // save creates a set, if id is new, or changes it: a new version if its files changed,
-// and its targets. It fails if the set has a newer version than in.Version.
+// and its targets and variables. It fails if the set has a newer version than in.Version.
 func (s store) save(ctx context.Context, id string, in Input, user string, create bool) (bool, error) {
 	files, err := json.Marshal(in.Files)
+	if err != nil {
+		return false, err
+	}
+	variables, err := json.Marshal(in.Variables)
 	if err != nil {
 		return false, err
 	}
@@ -180,7 +189,8 @@ func (s store) save(ctx context.Context, id string, in Input, user string, creat
 	now := time.Now().Unix()
 	version, changed := int64(1), true
 	if create {
-		_, err = tx.ExecContext(ctx, `INSERT INTO file_sets (id, name, description, version, created_at) VALUES (?, ?, ?, 1, ?)`, id, in.Name, in.Description, now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO file_sets (id, name, description, version, variables, created_at) VALUES (?, ?, ?, 1, ?, ?)`,
+			id, in.Name, in.Description, variables, now)
 	} else {
 		var current []byte
 		err = tx.QueryRowContext(ctx, `
@@ -197,7 +207,8 @@ func (s store) save(ctx context.Context, id string, in Input, user string, creat
 		if changed = string(current) != string(files); changed {
 			version++
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE file_sets SET name = ?, description = ?, version = ? WHERE id = ?`, in.Name, in.Description, version, id)
+		_, err = tx.ExecContext(ctx, `UPDATE file_sets SET name = ?, description = ?, version = ?, variables = ? WHERE id = ?`,
+			in.Name, in.Description, version, variables, id)
 	}
 	if err != nil {
 		return false, unique(err, in.Name)

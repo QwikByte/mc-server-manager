@@ -72,6 +72,15 @@ func (c catalogue) Versions(ctx context.Context, project string, loaders []strin
 	return c.modrinth.Versions(ctx, project, loaders, gameVersion)
 }
 
+// Changelogs returns the versions of a project like Versions, with what changed in each, as
+// far as the catalogue tells: Hangar's versions have it always, GeyserMC's never.
+func (c catalogue) Changelogs(ctx context.Context, project string, loaders []string, gameVersion string) ([]modrinth.Version, error) {
+	if onHangar(project) || onGeyserMC(project) {
+		return c.Versions(ctx, project, loaders, gameVersion)
+	}
+	return c.modrinth.Changelogs(ctx, project, loaders, gameVersion)
+}
+
 // Download fetches a file of a version and checks its hash.
 func (c catalogue) Download(ctx context.Context, f modrinth.File) ([]byte, error) {
 	switch {

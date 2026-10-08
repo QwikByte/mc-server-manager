@@ -61,6 +61,28 @@ of Let's Encrypt or `--tls-cert`, the master tells browsers to use HTTPS only (H
 self-signed one, which would lock browsers out once it changes; behind a reverse proxy, set it there. The master may
 listen at ports below 1024 (`CAP_NET_BIND_SERVICE`), e.g. 443 and 80, and has no other privileges.
 
+## API tokens
+
+Scripts authenticate with personal API tokens: `noryx_` and 128 random bits, a prefix that lets secret scanners
+recognise them. A token only counts in the `Authorization: Bearer` header with this prefix, never in a URL or as a
+cookie, so other credentials of a reverse proxy there leave the session alone. The master stores only its SHA-256 hash
+and shows a token once, as it is created, which needs the password and, with two-factor authentication, a code; the
+panel and the log name it by a random ID of its own and its name, never by the token or its hash. Each request gets the
+permissions its user has at that moment, limited to those of the token and the ones they require, so a token never has
+more than its user, and one with fewer never what only administrators may do. Tokens of disabled users stop working,
+also if they are enabled again, and those of deleted users are deleted. Changing the password, setting one with a setup
+link and turning on two-factor authentication revoke the user's tokens, as they end the other sessions: whoever knew the
+old password may have created them. A requirement of two-factor authentication applies to the tokens of the users it
+covers until they set it up. Tokens only work on the routes that state their permissions to `access.Mux`; the routes of
+the user's own account (`/api/auth/` and `/api/preferences`) refuse them, so a token can't sign in to the panel, change
+the password or two-factor authentication, end sessions or create and revoke tokens. A wrong token takes an attempt from
+the client's budget of sign-ins, and a client without attempts left can't use tokens either. Pages of other sites can't
+use a token in a browser: the master allows no cross-origin requests, so browsers don't send the header, and the
+cross-origin request protection still refuses their changes; that of the session cookie stays as it is. Operations that
+a token started are the token's, so that a token with fewer permissions can't cancel those of its user or of other
+tokens without the permission they need. The log names the token besides the user in the entries of what it did, and a
+token notes the address and time of its last use at most once a minute.
+
 ## Networks
 
 Velocity's modern forwarding signs the forwarded player data with a random secret per network, which is stored in the
@@ -118,11 +140,24 @@ The master downloads only from Modrinth's CDN, up to 256 MB, and only uses a fil
 Modrinth's API lists; from Hangar, only from its CDN and with the SHA-256 hash its API lists, and versions that only
 link elsewhere can't be installed. Floodgate only comes from GeyserMC's download server, with the SHA-256 hash its API
 lists. A modpack is checked the same way, and each of its files against the SHA-512 hash in the pack; packs with files
-elsewhere than on Modrinth's CDN or with paths that leave the server's folder are refused before a server is created,
-and the agent confines the files like those of the file manager. The version of a mod loader ends up in a variable of
+elsewhere than on Modrinth's CDN or with paths that leave the server's folder are refused before a server is created or
+moves to another version of its pack, and the agent confines the files like those of the file manager. To tell which
+files of a pack changed on a server, the agent hashes them only if they are regular files without secrets, not through
+links, so a hash tells nothing about a secret, and an update never replaces or removes such files. A compromised server
+can only make its own files look changed or unchanged. Updating a pack needs the permissions to change the server's
+settings and to manage its plugins and mods, as it does both. The version of a mod loader ends up in a variable of
 the server image, so the agent only accepts letters, digits, `.`, `_`, `+` and `-`. The agent decides the folder from
-the server type and only accepts plain `.jar` file names in it. Project icons are fetched by the master, so the browser
-never contacts Modrinth or Hangar and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the
+the server type and only accepts plain `.jar` file names in it. Turned-off plugins stay in the server's data, in the
+folder `.disabled` of the plugin folder, which backups of the plugins include; the agent confines it like the plugin
+folder, never replaces a file when it moves one, and refuses a link in its place. To link a plugin to the folder of its
+settings, the agent reads the name from the plugin's jar, which the server could have written: at most 4 MiB of the jar
+and 64 KiB of its `plugin.yml` or the like, and only a name of letters, digits, spaces, `_`, `.` and `-` that doesn't
+start with a dot and is a folder of the plugin folder. What servers have installed only lists the servers a user may
+see. Installing, updating or removing plugins on many servers needs the permission to manage the plugins of each:
+installing refuses servers without it, updating and removing leave them out and tell so, and restarting servers
+afterwards needs the permission to restart each. Changelogs are Markdown of the projects' authors, which the panel
+renders without HTML and without loading images. Project icons are fetched by the master, so the browser never contacts
+Modrinth or Hangar and the Content Security Policy stays unchanged. To whitelist a Bedrock player, the
 master sends their gamertag to GeyserMC's global API, and the agent only accepts the IDs Floodgate gives Bedrock
 players.
 
@@ -144,6 +179,30 @@ copies of a server lose every file that the original marked. Master and agent bo
 itself or that hold secrets of the server, so a set can't change forwarding or RCON settings, and the agent writes no
 file through a link or into a file where a folder should be. A compromised server can change its own manifest, which
 only changes its own state or the hiding of secrets it can read anyway.
+
+Values of the variables of a set are a single line without quotes, backslashes and braces, so that they can't add lines
+to a file, end a quoted text or make up a placeholder, also one of a secret. Binary files are written as they are, and
+besides `.jar`, `.zip` and `.class` files, master and agent refuse archives, Java classes and Linux programs by their
+first bytes, so that a set can't add code under another name. The passwords of databases reach servers only through
+their placeholders, which the master fills in for the databases of a server's own network only. Saving a set that adds a
+password or changes a file with one, and applying a set that puts passwords on servers, need the permission to manage
+datastores, and the log records which passwords a set uses, so that nobody who may not see a password gets it onto a
+server they control and reads it there. The master sends them in the field of secrets, and the agent only accepts
+passwords of the form the master generates and hides the files like those with secrets. Agents tell the master that they
+write binary files and fill in passwords; older ones, which would write binary files empty, get neither.
+
+## Templates
+
+An imported template file is untrusted: the master reads at most 1 MiB, refuses other formats and unknown versions of
+its format as well as unknown fields, and then saves it exactly like a template from the panel. So neither can set the
+properties Noryx sets itself (port, address, RCON) or secret ones, plugins and kept versions are looked up again on
+Modrinth and Hangar rather than taken from the file, and the agent checks the settings again when a server is created
+from it. Exported files hold no IDs of the master, nodes or servers and no secrets, as templates have none. Creating a
+server with the tags of a template needs the permission to change the settings of the node's servers, like tags of an
+existing server; the tags make it a target of their file sets, which still have to be applied, so a template puts no
+secrets on a server by itself. A version a template keeps is installed only if it runs on the new server, from the same
+sources and with the same hash checks as any other; otherwise its plugin is left out rather than replaced by another
+version.
 
 ## Databases
 
@@ -170,7 +229,8 @@ tell where a value ends. It drops control characters, so that a line can't contr
 the master relays the log without logging it. The passwords are stored in the master's database like the forwarding
 secret, and are never logged. The API returns them
 only to those who may manage datastores, one at a time on request, without caching, and logs who asked; they can
-download all data in dumps anyway. A compromised master knows them, as it knows the forwarding secret, and could restore
+download all data in dumps anyway, and only they may put them into [file sets](#file-sets) and on servers.
+A compromised master knows them, as it knows the forwarding secret, and could restore
 or delete data, but can't learn the superuser's password or place data outside the allowed storage locations.
 
 ## Duplicates
@@ -185,10 +245,21 @@ server keeps FabricProxy-Lite, which turns players away until it is removed in t
 
 The agent keeps backups outside of the servers' folders, accessible to itself only (mode `0700`), so a compromised
 server can't read or tamper with them. The master can only choose among the storage locations the node's administrator
-allowed, and backup IDs and paths are validated by the agent. Restoring confines every entry to the server's folder, and
-backups never contain symbolic links. Downloads are attachments like those of the file manager and hide the secrets the
-same way; the backups on the node keep them, so restoring works. Restoring keeps the secrets of file sets and networks
-as they are, see [File sets](#file-sets) and [Networks](#networks).
+allowed, and backup IDs and paths are validated by the agent, also the paths a backup leaves out and those a restore
+chooses, which must be in the backup. Restoring confines every entry to the server's folder, and backups never contain
+symbolic links. Downloads are attachments like those of the file manager and hide the secrets the same way; the backups
+on the node keep them, so restoring works. Restoring keeps the files that only hold secrets, such as the server's
+console password, and the secrets of file sets and networks as they are, see [File sets](#file-sets) and
+[Networks](#networks); the manifest of file sets is never backed up or restored. Restoring into another server is a
+copy like a duplicate: the master relays the backup between the agents with the original's secrets hidden, as in a
+download, so the other server gets none of them, nor the original's files with secrets of file sets; the agent puts the
+other server's own secrets wherever the backup says `<hidden>`, and keeps its network's secret and forwarding settings.
+It needs the permission to see the backups of the original and to restore backups of the other server, and only goes
+between game servers or between proxies. Like moving a server, it brings whatever the backup holds, e.g. plugins, which
+a compromised node could have changed like the data of its servers. Marking a backup to keep needs the permission to
+back up the server, and letting its job delete it again the one to delete backups. The master refuses restoring chosen
+paths, into another server or with a backup first on nodes whose agent would ignore that, e.g. restore all of a backup
+instead.
 
 ## Permissions
 
@@ -201,7 +272,8 @@ permissions they have themselves, within their own scope, and only manage users 
 do, so no one can raise their own permissions.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
 change with the user who made it, also denied attempts. An operation in progress can only be cancelled by the user who
-started it, or by one who has the permissions it needed on what it is about, and only while it is at steps that stop
+started it, in the panel or with the same API token, or by one who has the permissions it needed on what it is about,
+and only while it is at steps that stop
 safely: restoring a backup, moving a server, stopping or restarting one once it no longer warns its players, and
 restarting servers one after the other always finish.
 A warning before a stop or restart by hand is the console command `say`, so a message of one's own needs the permission
@@ -209,7 +281,21 @@ to send console commands on each server; others get the default message and can'
 Restarting servers of a network one after the other, also a single one, needs the permission to restart the proxy, which
 sends their players elsewhere, and each server that restarts; sending the players of a server elsewhere needs the
 permission to manage the players of the proxy, like sending one player. Schedules, which may restart any server, also
-server by server, need the permission to manage schedules everywhere, checked when they are saved.
+server by server, need the permission to manage schedules everywhere, checked when they are saved; backup jobs likewise
+need the permission to manage backup jobs, which applies to all servers. Both run as the master, not as the user who
+saved them, and their targets of tags and networks resolve to the servers these have at each run, which needs no rights
+beyond those that apply everywhere anyway. There is one side effect: whoever may change the settings of a server, which
+include its tags, can put it under a backup job or schedule by giving it a tag that one targets, or take it out of one
+by removing the tag; the panel says so where tags are edited. Runs that a user started by hand keep the user's name in
+the history of the job or schedule, which those see who may see it.
+Schedules that back up servers first, update their images or their plugins and mods need the permissions to back up
+servers, change their settings or manage their plugins and mods too, as these would need by hand, and on all servers,
+like the permission to manage schedules: their targets of nodes, tags and networks get new servers at any time. The
+user who saves such a schedule or runs it right away needs them, checked with the permissions of the request, so an API
+token with fewer permissions can't save one. The master records who saved a schedule last, and each run checks that
+this user, unless deleted or disabled, still has them, with the user's current permissions; otherwise the run fails
+before it acts. This is the same check as on saving, repeated with the permissions of the moment, rather than one per
+server, which wouldn't allow more: no permission on some servers can let a schedule back up or update all of them.
 
 ## Terminal
 

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -68,25 +69,30 @@ func UserFrom(ctx context.Context) (User, bool) {
 
 // Register adds the routes for the signed-in user's own account. They need a session but
 // no permission, and work for users who have to set up two-factor authentication first, so
-// that they can. Those that check the password are rate limited per user.
+// that they can. API tokens can't use them. Those that check the password are rate limited
+// per user.
 func (h *Handler) Register(mux *http.ServeMux) {
 	perUser := limitedBy(h.users, func(r *http.Request) string {
 		user, _ := UserFrom(r.Context())
 		return strconv.FormatInt(user.ID, 10)
 	})
-	mux.HandleFunc("GET /api/auth/me", h.me)
-	mux.HandleFunc("POST /api/auth/logout", h.logout)
-	mux.HandleFunc("PUT /api/auth/password", perUser(h.changePassword))
-	mux.HandleFunc("PUT /api/auth/language", h.setLanguage)
-	mux.HandleFunc("GET /api/auth/mfa", h.mfa)
-	mux.HandleFunc("POST /api/auth/mfa/setup", h.setUpMFA)
-	mux.HandleFunc("POST /api/auth/mfa", perUser(h.enableMFA))
-	mux.HandleFunc("DELETE /api/auth/mfa", perUser(h.disableMFA))
-	mux.HandleFunc("POST /api/auth/mfa/recovery-codes", perUser(h.newRecoveryCodes))
-	// Ending sessions needs no password, as it only takes rights away.
-	mux.HandleFunc("GET /api/auth/sessions", h.sessions)
-	mux.HandleFunc("DELETE /api/auth/sessions", h.endOtherSessions)
-	mux.HandleFunc("DELETE /api/auth/sessions/{id}", h.endSession)
+	handle := func(pattern string, fn http.HandlerFunc) { mux.HandleFunc(pattern, SessionOnly(fn)) }
+	handle("GET /api/auth/me", h.me)
+	handle("POST /api/auth/logout", h.logout)
+	handle("PUT /api/auth/password", perUser(h.changePassword))
+	handle("PUT /api/auth/language", h.setLanguage)
+	handle("GET /api/auth/mfa", h.mfa)
+	handle("POST /api/auth/mfa/setup", h.setUpMFA)
+	handle("POST /api/auth/mfa", perUser(h.enableMFA))
+	handle("DELETE /api/auth/mfa", perUser(h.disableMFA))
+	handle("POST /api/auth/mfa/recovery-codes", perUser(h.newRecoveryCodes))
+	// Ending sessions and revoking tokens needs no password, as it only takes rights away.
+	handle("GET /api/auth/sessions", h.sessions)
+	handle("DELETE /api/auth/sessions", h.endOtherSessions)
+	handle("DELETE /api/auth/sessions/{id}", h.endSession)
+	handle("GET /api/auth/tokens", h.tokens)
+	handle("POST /api/auth/tokens", perUser(h.createToken))
+	handle("DELETE /api/auth/tokens/{id}", h.revokeToken)
 }
 
 // RegisterPublic adds the routes that work without a session: signing in and setting a
@@ -113,8 +119,13 @@ func limitedBy(l *ratelimit.Limiter, key func(*http.Request) string) func(http.H
 }
 
 func tooManyAttempts(w http.ResponseWriter, r *http.Request, attrs ...any) {
-	slog.Warn("Too many sign-in attempts", append([]any{logging.Auth, "ip", ClientIP(r), "route", r.Pattern}, attrs...)...)
-	httpapi.WriteError(w, r, errTooManyAttempts)
+	httpapi.WriteError(w, r, refuseAttempt(r, attrs...))
+}
+
+// refuseAttempt logs that a client or user made too many attempts, and returns the error.
+func refuseAttempt(r *http.Request, attrs ...any) error {
+	slog.Warn("Too many sign-in attempts", append([]any{logging.Auth, "ip", ClientIP(r), "route", r.Method + " " + r.URL.Path}, attrs...)...)
+	return errTooManyAttempts
 }
 
 // login signs a user in. With two-factor authentication, a request without a code only
@@ -275,6 +286,47 @@ type recoveryCodes struct {
 	Codes []string `json:"recoveryCodes"`
 }
 
+// tokens lists the API tokens of the signed-in user.
+func (h *Handler) tokens(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	tokens, err := h.svc.Tokens(r.Context(), user.ID)
+	reply(w, r, "", tokens, err)
+}
+
+// createToken creates an API token, which needs the password and, with two-factor
+// authentication, a code. The answer holds the token itself, which is shown only once.
+func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TokenInput
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if err := httpapi.ReadJSON(w, r, &req); err != nil {
+		httpapi.WriteError(w, r, err)
+		return
+	}
+	user, _ := UserFrom(r.Context())
+	if user.MustSetUpMFA {
+		httpapi.WriteError(w, r, ErrSetUpMFA)
+		return
+	}
+	token, secret, err := h.svc.CreateToken(r.Context(), user.ID, req.Password, req.Code, req.TokenInput)
+	created := struct {
+		Token
+		Secret string `json:"secret"`
+	}{token, secret}
+	w.Header().Set("Cache-Control", "no-store")
+	reply(w, r, "Create API token", created, err, "token", token.Name, "token_id", token.ID, "permissions", cmp.Or(strings.Join(token.Permissions, " "), "all"))
+}
+
+// revokeToken deletes an API token of the signed-in user.
+func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	id := r.PathValue("id")
+	name, err := h.svc.RevokeToken(r.Context(), user.ID, id)
+	reply(w, r, "Revoke API token", nil, err, "token", name, "token_id", id)
+}
+
 // sessions lists where the signed-in user is signed in.
 func (h *Handler) sessions(w http.ResponseWriter, r *http.Request) {
 	user, _ := UserFrom(r.Context())
@@ -307,14 +359,15 @@ func readPassword(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 // reply writes v, or no content if v is nil, or err. A change of the signed-in user's
-// account, named by action, is logged.
-func reply(w http.ResponseWriter, r *http.Request, action string, v any, err error) {
+// account, named by action, is logged with attrs.
+func reply(w http.ResponseWriter, r *http.Request, action string, v any, err error, attrs ...any) {
 	if action != "" {
 		user, _ := UserFrom(r.Context())
+		attrs = append([]any{logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r)}, attrs...)
 		if err != nil {
-			slog.Warn(action+" failed", logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r), "err", err)
+			slog.Warn(action+" failed", append(attrs, "err", err)...)
 		} else {
-			slog.Info(action, logging.Auth, logging.KeyUser, user.Username, "ip", ClientIP(r))
+			slog.Info(action, attrs...)
 		}
 	}
 	switch {
@@ -365,20 +418,12 @@ func (h *Handler) setLanguage(w http.ResponseWriter, r *http.Request) {
 // it changes, e.g. after an update.
 const VersionHeader = "Noryx-Version"
 
-// Require rejects requests without a valid session. Answers to the others tell the master's
-// version in VersionHeader. The user of the request tells whether two-factor authentication
-// has to be set up first, which access.Mux enforces.
+// Require rejects requests without a valid session or API token. Answers to the others tell
+// the master's version in VersionHeader. The user of the request tells whether two-factor
+// authentication has to be set up first, which access.Mux enforces, also for tokens.
 func (h *Handler) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(cookieName)
-		if err != nil {
-			httpapi.WriteError(w, r, httpapi.Errorf(http.StatusUnauthorized, "Sign in to continue."))
-			return
-		}
-		user, err := h.svc.Authenticate(r.Context(), c.Value, clientOf(r))
-		if errors.Is(err, ErrNoSession) {
-			err = httpapi.Errorf(http.StatusUnauthorized, "Your session has expired. Sign in again.")
-		}
+		user, err := h.authenticate(r)
 		if err == nil {
 			user, err = h.checkMFA(r.Context(), user)
 		}
@@ -389,6 +434,41 @@ func (h *Handler) Require(next http.Handler) http.Handler {
 		w.Header().Set(VersionHeader, buildinfo.Version)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, user)))
 	})
+}
+
+// authenticate returns the user of a request's API token, or else of its session. A token
+// only counts with its prefix in the Authorization header, so that other credentials there,
+// e.g. of a reverse proxy in front of the master, don't get in the way of the session.
+func (h *Handler) authenticate(r *http.Request) (User, error) {
+	scheme, secret, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+	if strings.EqualFold(scheme, "Bearer") && strings.HasPrefix(secret, TokenPrefix) {
+		return h.authenticateToken(r, secret)
+	}
+	c, err := r.Cookie(cookieName)
+	if err != nil {
+		return User{}, httpapi.Errorf(http.StatusUnauthorized, "Sign in to continue.")
+	}
+	user, err := h.svc.Authenticate(r.Context(), c.Value, clientOf(r))
+	if errors.Is(err, ErrNoSession) {
+		err = httpapi.Errorf(http.StatusUnauthorized, "Your session has expired. Sign in again.")
+	}
+	return user, err
+}
+
+// authenticateToken returns the user of an API token. Wrong tokens take attempts from the
+// client's budget of sign-ins like wrong passwords, and a client without attempts left can't
+// use tokens either, so that guessing can't go on.
+func (h *Handler) authenticateToken(r *http.Request, secret string) (User, error) {
+	key := clientNetwork(r)
+	if h.clients.Blocked(key) {
+		return User{}, refuseAttempt(r)
+	}
+	user, err := h.svc.AuthenticateToken(r.Context(), secret, cut(ClientIP(r), 64))
+	if errors.Is(err, errNoToken) {
+		h.clients.Allow(key)
+		slog.Warn("API token refused", logging.Auth, "ip", ClientIP(r), "route", r.Method+" "+r.URL.Path)
+	}
+	return user, err
 }
 
 // sessionToken is the token of the request's session, if any.

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useAccess } from "@/features/access/use-access"
+import { ServerModpackSection } from "@/features/modpacks/server-modpack"
 import { nodeQuery } from "@/features/nodes/api"
 import { useOperation } from "@/features/operations/use-operation"
 import { UsageWarnings } from "@/features/usage/thresholds"
@@ -39,6 +40,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <SettingsForm key={JSON.stringify(settingsOf(server))} nodeId={nodeId} server={server} />
+      <ServerModpackSection nodeId={nodeId} server={server} />
       <UsageWarnings nodeId={nodeId} serverId={server.id} editable={can("servers.settings", nodeId, server.id)} />
       <UpdateImage nodeId={nodeId} server={server} />
     </div>

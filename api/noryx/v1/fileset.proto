@@ -5,8 +5,8 @@ package noryx.v1;
 option go_package = "github.com/QwikByte/noryx/api/noryx/v1;noryxv1";
 
 // FileSetService is served by every agent and keeps the files of file sets on its servers:
-// text files that the master manages for groups of servers, e.g. the configuration of a
-// plugin. Each server records in its data which set wrote which file. Files that hold
+// files that the master manages for groups of servers, e.g. the configuration of a plugin or
+// an image. Each server records in its data which set wrote which file. Files that hold
 // secrets of a set are hidden like the RCON password, also after they left the set.
 service FileSetService {
   // ApplyFileSet writes the files of a set to a server, with its secrets filled in, and
@@ -24,11 +24,14 @@ service FileSetService {
 message FileSetFile {
   // Relative to the server's data directory, with forward slashes.
   string path = 1;
-  // UTF-8 text. {{secret:<name>}} and {{datastore:<name>.<field>}} are filled in from the
-  // secrets of the request.
+  // UTF-8 text. {{secret:<name>}} and {{datastore:<name>.<database>.password}} are filled
+  // in from the secrets of the request.
   string content = 2;
   // Writes the file only if the server has none, for files that plugins rewrite.
   bool only_if_missing = 3;
+  // The content of a binary file, e.g. an image, instead of content; nothing is filled in.
+  // Agents that don't report binary_files in ListFileSetsResponse ignore it.
+  bytes data = 4;
 }
 
 message ApplyFileSetRequest {
@@ -41,7 +44,8 @@ message ApplyFileSetRequest {
   // whether the server has the newest state of the set.
   string revision = 5;
   repeated FileSetFile files = 6;
-  // The values of the placeholders, by what is between the braces, e.g. secret:db-password.
+  // The values of the placeholders that only the agent fills in, by what is between the
+  // braces, e.g. secret:db-password or datastore:main.luckperms.password.
   map<string, string> secrets = 7;
   // Only tells what would change.
   bool dry_run = 8;
@@ -97,6 +101,11 @@ message ListFileSetsRequest {}
 message ListFileSetsResponse {
   // Only servers that have files of sets.
   repeated ServerFileSets servers = 1;
+  // The agent writes binary files (FileSetFile.data). Older agents would write them empty,
+  // so the master sends them none.
+  bool binary_files = 2;
+  // The agent fills in the passwords of databases. Older agents refuse them.
+  bool database_passwords = 3;
 }
 
 message ServerFileSets {

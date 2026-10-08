@@ -138,24 +138,28 @@ func serve(ctx context.Context, cfg config) error {
 	noryxv1.RegisterEnrollmentServiceServer(grpcServer, nodes)
 	modrinthClient := modrinth.New(modrinth.DefaultAPI, modrinth.DefaultCDN)
 	geyser := geysermc.New(geysermc.DownloadAPI, geysermc.GlobalAPI, geysermc.CacheTime)
-	plugins := plugin.NewService(nodes, modrinthClient, hangar.New(hangar.DefaultAPI, hangar.DefaultCDN), geyser)
+	plugins := plugin.NewService(db, nodes, modrinthClient, hangar.New(hangar.DefaultAPI, hangar.DefaultCDN), geyser)
 	moves := server.NewMoves()
 	// Requests whose operation takes longer are answered right away, and the operation goes on.
 	ops := operation.New(time.Second)
 	overlays := overlay.NewService(db, nodes)
 	datastores := datastore.NewStore(db, nodes, overlays)
 	networks := network.NewService(db, nodes, plugins, overlays, datastores)
-	tasks := schedule.NewService(db, nodes, map[string]schedule.Kind{backup.TaskKind: backup.NewJobs(nodes, datastores), policy.TaskKind: policy.New(nodes, networks)}, moves.Busy)
+	tags := tag.NewStore(db)
+	accessService := access.NewService(db)
+	usageStore := usage.NewStore(db, nodes, conf)
+	jobs := backup.NewJobs(nodes, datastores)
+	tasks := schedule.NewService(db, nodes, tags, networks, accessService, map[string]schedule.Kind{
+		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins),
+	}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
 	updates := update.New(nodes, conf, update.Options{DataDir: cfg.dataDir})
 	go updates.Run(ctx)
-	usageStore := usage.NewStore(db, nodes, conf)
 	go usageStore.Run(ctx)
 	go overlays.Run(ctx)
-	tags := tag.NewStore(db)
-	fileSets := fileset.NewService(db, nodes, networks, tags, moves)
+	fileSets := fileset.NewService(db, nodes, networks, tags, datastores, moves)
 	go fileSets.Run(ctx)
 	// restarted is closed when an administrator restarts the master. Moves would be cut off.
 	restarted, once := make(chan struct{}), sync.Once{}
@@ -176,8 +180,8 @@ func serve(ctx context.Context, cfg config) error {
 	httpServer := &http.Server{
 		BaseContext: func(net.Listener) context.Context { return requests },
 		Handler: proxies.Handler(Handler(Services{
-			Users: users, Access: access.NewService(db), Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
-			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
+			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
+			Plugins: plugins, GeyserMC: geyser, Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
 			Datastores: datastore.NewService(datastores, nodes, networks),
 			Tasks:      tasks, Logs: logStore, Updates: updates, Usage: usageStore, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
 			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
@@ -297,18 +301,18 @@ func API(s Services) *http.ServeMux {
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations, s.FileSets).Register(m)
 	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
-	plugin.NewHandler(s.Plugins, s.Operations).Register(m)
-	modpack.NewHandler(s.Modpacks).Register(m)
+	plugin.NewHandler(s.Plugins, s.Operations, s.Networks).Register(m)
+	modpack.NewHandler(s.Modpacks, s.Plugins, s.Operations).Register(m)
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
 	datastore.NewHandler(s.Datastores, s.Operations).Register(m)
-	backup.NewHandler(s.Nodes, s.Networks, s.Operations).Register(m)
+	backup.NewHandler(s.Nodes, s.Networks, s.Operations, s.Moves.Check).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")
 	update.NewHandler(s.Updates).Register(m)

@@ -22,6 +22,7 @@ const (
 	PluginService_ListPlugins_FullMethodName   = "/noryx.v1.PluginService/ListPlugins"
 	PluginService_InstallPlugin_FullMethodName = "/noryx.v1.PluginService/InstallPlugin"
 	PluginService_RemovePlugin_FullMethodName  = "/noryx.v1.PluginService/RemovePlugin"
+	PluginService_EnablePlugin_FullMethodName  = "/noryx.v1.PluginService/EnablePlugin"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -31,13 +32,17 @@ const (
 // PluginService is served by every agent and manages the plugins of a server, or the
 // mods of a modded one. The agent chooses the folder by the server type: plugins/ for
 // Paper, Purpur and proxies, mods/ for Fabric, Forge and NeoForge. Vanilla servers
-// load neither. Servers load plugins when they start.
+// load neither. Servers load plugins when they start. Turned-off plugins are kept in the
+// folder .disabled of the plugin folder, which no server loads.
 type PluginServiceClient interface {
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
 	// InstallPlugin writes a plugin file. The first message names it, the others carry
 	// its content. A file with the same name is replaced once the new one is complete.
 	InstallPlugin(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[InstallPluginRequest, InstallPluginResponse], error)
 	RemovePlugin(ctx context.Context, in *RemovePluginRequest, opts ...grpc.CallOption) (*RemovePluginResponse, error)
+	// EnablePlugin turns a plugin file off, by moving it into the folder of turned-off
+	// plugins, or on again. A file of the same name where it goes is never replaced.
+	EnablePlugin(ctx context.Context, in *EnablePluginRequest, opts ...grpc.CallOption) (*EnablePluginResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -81,6 +86,16 @@ func (c *pluginServiceClient) RemovePlugin(ctx context.Context, in *RemovePlugin
 	return out, nil
 }
 
+func (c *pluginServiceClient) EnablePlugin(ctx context.Context, in *EnablePluginRequest, opts ...grpc.CallOption) (*EnablePluginResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EnablePluginResponse)
+	err := c.cc.Invoke(ctx, PluginService_EnablePlugin_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -88,13 +103,17 @@ func (c *pluginServiceClient) RemovePlugin(ctx context.Context, in *RemovePlugin
 // PluginService is served by every agent and manages the plugins of a server, or the
 // mods of a modded one. The agent chooses the folder by the server type: plugins/ for
 // Paper, Purpur and proxies, mods/ for Fabric, Forge and NeoForge. Vanilla servers
-// load neither. Servers load plugins when they start.
+// load neither. Servers load plugins when they start. Turned-off plugins are kept in the
+// folder .disabled of the plugin folder, which no server loads.
 type PluginServiceServer interface {
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
 	// InstallPlugin writes a plugin file. The first message names it, the others carry
 	// its content. A file with the same name is replaced once the new one is complete.
 	InstallPlugin(grpc.ClientStreamingServer[InstallPluginRequest, InstallPluginResponse]) error
 	RemovePlugin(context.Context, *RemovePluginRequest) (*RemovePluginResponse, error)
+	// EnablePlugin turns a plugin file off, by moving it into the folder of turned-off
+	// plugins, or on again. A file of the same name where it goes is never replaced.
+	EnablePlugin(context.Context, *EnablePluginRequest) (*EnablePluginResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -113,6 +132,9 @@ func (UnimplementedPluginServiceServer) InstallPlugin(grpc.ClientStreamingServer
 }
 func (UnimplementedPluginServiceServer) RemovePlugin(context.Context, *RemovePluginRequest) (*RemovePluginResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemovePlugin not implemented")
+}
+func (UnimplementedPluginServiceServer) EnablePlugin(context.Context, *EnablePluginRequest) (*EnablePluginResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EnablePlugin not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -178,6 +200,24 @@ func _PluginService_RemovePlugin_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_EnablePlugin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnablePluginRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).EnablePlugin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_EnablePlugin_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).EnablePlugin(ctx, req.(*EnablePluginRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -192,6 +232,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemovePlugin",
 			Handler:    _PluginService_RemovePlugin_Handler,
+		},
+		{
+			MethodName: "EnablePlugin",
+			Handler:    _PluginService_EnablePlugin_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

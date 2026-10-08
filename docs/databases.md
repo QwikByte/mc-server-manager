@@ -24,13 +24,14 @@ tell why. Moving a server to a node that can't reach the datastores of its netwo
 
 ## Connection
 
-**Connection** on the tab shows what to enter into the configuration of a plugin, or of a file set: the host and port
-for the servers on the datastore's node (`noryx-db-<id>` and 3306 or 5432), those for the servers of other nodes once it
-is published (the node's address in the private network and the datastore's port, which it keeps), and the database and
-its user, which share their name. The master generates the password of each database: 32 characters from `a-z2-7`, which
-need no quoting in YAML, TOML, HOCON or properties files. Only those who may manage datastores see it, once they ask for
-it; in a file set, a [secret](library.md#placeholders) keeps it out of sight. **New password** gives a user another one,
-which the plugins that use the database need then.
+**Connection** on the tab shows what to enter into the configuration of a plugin: the host and port for the servers on
+the datastore's node (`noryx-db-<id>` and 3306 or 5432), those for the servers of other nodes once it is published (the
+node's address in the private network and the datastore's port, which it keeps), and the database and its user, which
+share their name. The master generates the password of each database: 32 characters from `a-z2-7`, which need no quoting
+in YAML, TOML, HOCON or properties files. Only those who may manage datastores see it, once they ask for it. A [file
+set](library.md#databases) fills in all of them for each server, e.g. `{{datastore:main.luckperms.host}}`, the password
+out of sight. **New password** gives a user another one, which the plugins that use the database need then; the file
+sets that use it show their servers as outdated until they are applied again.
 
 ## Browsing
 

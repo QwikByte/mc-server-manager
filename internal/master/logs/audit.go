@@ -84,8 +84,17 @@ var actions = map[string]action{
 	"POST /api/plugins/install":                                {logging.Plugins, "Install plugins"},
 	"PUT " + routeServer + "/plugins/{file}":                   {logging.Plugins, "Upload plugin"},
 	"DELETE " + routeServer + "/plugins/{file}":                {logging.Plugins, "Remove plugin"},
+	"POST " + routeServer + "/modpack":                         {logging.Plugins, "Update modpack"},
+	"POST /api/plugins/update":                                 {logging.Plugins, "Update plugins"},
+	"POST /api/plugins/remove":                                 {logging.Plugins, "Remove plugins"},
+	"POST " + routeServer + "/plugins/{file}/enable":           {logging.Plugins, "Turn plugin on"},
+	"POST " + routeServer + "/plugins/{file}/disable":          {logging.Plugins, "Turn plugin off"},
+	"PUT " + routeServer + "/plugins/pins/{project}":           {logging.Plugins, "Keep plugin version"},
+	"DELETE " + routeServer + "/plugins/pins/{project}":        {logging.Plugins, "Stop keeping plugin version"},
 	"POST " + routeBackups:                                     {logging.Backups, "Back up server"},
 	"POST " + routeBackups + "/{backup}/restore":               {logging.Backups, "Restore backup"},
+	"POST " + routeBackups + "/{backup}/restore-into":          {logging.Backups, "Restore backup into another server"},
+	"PATCH " + routeBackups + "/{backup}":                      {logging.Backups, "Change backup"},
 	"DELETE " + routeBackups + "/{backup}":                     {logging.Backups, "Delete backup"},
 	"GET " + routeBackups + "/{backup}/download":               {logging.Backups, "Download backup"},
 	"POST /api/backup-jobs":                                    {logging.Backups, "Create backup job"},
@@ -112,6 +121,8 @@ var actions = map[string]action{
 	"POST /api/networks/{id}/players/move":                     {logging.Players, "Send players to another server"},
 	"POST /api/players/actions":                                {logging.Players, "Change player"},
 	"POST /api/templates":                                      {logging.Templates, "Create template"},
+	"POST /api/templates/import":                               {logging.Templates, "Import template"},
+	"GET /api/templates/{id}/export":                           {logging.Templates, "Export template"},
 	"PUT /api/templates/{id}":                                  {logging.Templates, "Change template"},
 	"DELETE /api/templates/{id}":                               {logging.Templates, "Delete template"},
 	"POST /api/networks/{id}/datastores":                       {logging.Databases, "Create datastore"},
@@ -157,7 +168,7 @@ func (s *Store) Audit() access.Wrapper {
 			start := time.Now()
 			attrs := append(target(r, pattern, names), a.category, slog.String("ip", auth.ClientIP(r)))
 			if user, ok := auth.UserFrom(r.Context()); ok {
-				attrs = append(attrs, slog.String(logging.KeyUser, user.Username))
+				attrs = append(attrs, user.LogAttrs()...)
 			}
 			ctx, notes := logging.WithNotes(r.Context())
 			rec := &recorder{ResponseWriter: w}

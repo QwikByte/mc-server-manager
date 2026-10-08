@@ -29,7 +29,13 @@ type PluginFile struct {
 	// Hex-encoded SHA-512 of the file, which identifies it on Modrinth.
 	Sha512 string `protobuf:"bytes,3,opt,name=sha512,proto3" json:"sha512,omitempty"`
 	// Hex-encoded SHA-256 of the file, which identifies it on Hangar.
-	Sha256        string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Sha256 string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// The file is turned off: it is in the folder of turned-off plugins.
+	Disabled bool `protobuf:"varint,5,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	// Folder of the plugin's settings in the plugin folder, e.g. LuckPerms, if it has one:
+	// the name it gives itself in its plugin.yml, paper-plugin.yml, bungee.yml or
+	// velocity-plugin.json. See ValidPluginFolder.
+	Settings      string `protobuf:"bytes,6,opt,name=settings,proto3" json:"settings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -92,11 +98,27 @@ func (x *PluginFile) GetSha256() string {
 	return ""
 }
 
+func (x *PluginFile) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
+}
+
+func (x *PluginFile) GetSettings() string {
+	if x != nil {
+		return x.Settings
+	}
+	return ""
+}
+
 type ListPluginsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	// Lists the turned-off files too, which older masters don't know.
+	IncludeDisabled bool `protobuf:"varint,2,opt,name=include_disabled,json=includeDisabled,proto3" json:"include_disabled,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListPluginsRequest) Reset() {
@@ -134,6 +156,13 @@ func (x *ListPluginsRequest) GetServerId() string {
 		return x.ServerId
 	}
 	return ""
+}
+
+func (x *ListPluginsRequest) GetIncludeDisabled() bool {
+	if x != nil {
+		return x.IncludeDisabled
+	}
+	return false
 }
 
 type ListPluginsResponse struct {
@@ -276,7 +305,9 @@ type InstallPluginHeader struct {
 	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
 	FileName string                 `protobuf:"bytes,2,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
 	// File of another version of the plugin, which is removed once the new one is written.
-	Replaces      string `protobuf:"bytes,3,opt,name=replaces,proto3" json:"replaces,omitempty"`
+	Replaces string `protobuf:"bytes,3,opt,name=replaces,proto3" json:"replaces,omitempty"`
+	// Writes the file into the folder of turned-off plugins, where replaces is too.
+	Disabled      bool `protobuf:"varint,4,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,6 +363,13 @@ func (x *InstallPluginHeader) GetReplaces() string {
 	return ""
 }
 
+func (x *InstallPluginHeader) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
+}
+
 type InstallPluginResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Plugin        *PluginFile            `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
@@ -377,9 +415,11 @@ func (x *InstallPluginResponse) GetPlugin() *PluginFile {
 }
 
 type RemovePluginRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	FileName      string                 `protobuf:"bytes,2,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	FileName string                 `protobuf:"bytes,2,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	// Removes a turned-off file.
+	Disabled      bool `protobuf:"varint,3,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -428,6 +468,13 @@ func (x *RemovePluginRequest) GetFileName() string {
 	return ""
 }
 
+func (x *RemovePluginRequest) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
+}
+
 type RemovePluginResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -464,40 +511,148 @@ func (*RemovePluginResponse) Descriptor() ([]byte, []int) {
 	return file_noryx_v1_plugin_proto_rawDescGZIP(), []int{7}
 }
 
+type EnablePluginRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	FileName string                 `protobuf:"bytes,2,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	// Turns the file on; otherwise off.
+	Enabled       bool `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnablePluginRequest) Reset() {
+	*x = EnablePluginRequest{}
+	mi := &file_noryx_v1_plugin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnablePluginRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnablePluginRequest) ProtoMessage() {}
+
+func (x *EnablePluginRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_plugin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnablePluginRequest.ProtoReflect.Descriptor instead.
+func (*EnablePluginRequest) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_plugin_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *EnablePluginRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *EnablePluginRequest) GetFileName() string {
+	if x != nil {
+		return x.FileName
+	}
+	return ""
+}
+
+func (x *EnablePluginRequest) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type EnablePluginResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnablePluginResponse) Reset() {
+	*x = EnablePluginResponse{}
+	mi := &file_noryx_v1_plugin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnablePluginResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnablePluginResponse) ProtoMessage() {}
+
+func (x *EnablePluginResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_noryx_v1_plugin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnablePluginResponse.ProtoReflect.Descriptor instead.
+func (*EnablePluginResponse) Descriptor() ([]byte, []int) {
+	return file_noryx_v1_plugin_proto_rawDescGZIP(), []int{9}
+}
+
 var File_noryx_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_noryx_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x15noryx/v1/plugin.proto\x12\bnoryx.v1\"m\n" +
+	"\x15noryx/v1/plugin.proto\x12\bnoryx.v1\"\xa5\x01\n" +
 	"\n" +
 	"PluginFile\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x16\n" +
 	"\x06sha512\x18\x03 \x01(\tR\x06sha512\x12\x16\n" +
-	"\x06sha256\x18\x04 \x01(\tR\x06sha256\"1\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\x12\x1a\n" +
+	"\bdisabled\x18\x05 \x01(\bR\bdisabled\x12\x1a\n" +
+	"\bsettings\x18\x06 \x01(\tR\bsettings\"\\\n" +
 	"\x12ListPluginsRequest\x12\x1b\n" +
-	"\tserver_id\x18\x01 \x01(\tR\bserverId\"]\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12)\n" +
+	"\x10include_disabled\x18\x02 \x01(\bR\x0fincludeDisabled\"]\n" +
 	"\x13ListPluginsResponse\x12\x16\n" +
 	"\x06folder\x18\x01 \x01(\tR\x06folder\x12.\n" +
 	"\aplugins\x18\x02 \x03(\v2\x14.noryx.v1.PluginFileR\aplugins\"p\n" +
 	"\x14InstallPluginRequest\x127\n" +
 	"\x06header\x18\x01 \x01(\v2\x1d.noryx.v1.InstallPluginHeaderH\x00R\x06header\x12\x14\n" +
 	"\x04data\x18\x02 \x01(\fH\x00R\x04dataB\t\n" +
-	"\acontent\"k\n" +
+	"\acontent\"\x87\x01\n" +
 	"\x13InstallPluginHeader\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
 	"\tfile_name\x18\x02 \x01(\tR\bfileName\x12\x1a\n" +
-	"\breplaces\x18\x03 \x01(\tR\breplaces\"E\n" +
+	"\breplaces\x18\x03 \x01(\tR\breplaces\x12\x1a\n" +
+	"\bdisabled\x18\x04 \x01(\bR\bdisabled\"E\n" +
 	"\x15InstallPluginResponse\x12,\n" +
-	"\x06plugin\x18\x01 \x01(\v2\x14.noryx.v1.PluginFileR\x06plugin\"O\n" +
+	"\x06plugin\x18\x01 \x01(\v2\x14.noryx.v1.PluginFileR\x06plugin\"k\n" +
 	"\x13RemovePluginRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
-	"\tfile_name\x18\x02 \x01(\tR\bfileName\"\x16\n" +
-	"\x14RemovePluginResponse2\xfe\x01\n" +
+	"\tfile_name\x18\x02 \x01(\tR\bfileName\x12\x1a\n" +
+	"\bdisabled\x18\x03 \x01(\bR\bdisabled\"\x16\n" +
+	"\x14RemovePluginResponse\"i\n" +
+	"\x13EnablePluginRequest\x12\x1b\n" +
+	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1b\n" +
+	"\tfile_name\x18\x02 \x01(\tR\bfileName\x12\x18\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\"\x16\n" +
+	"\x14EnablePluginResponse2\xcd\x02\n" +
 	"\rPluginService\x12J\n" +
 	"\vListPlugins\x12\x1c.noryx.v1.ListPluginsRequest\x1a\x1d.noryx.v1.ListPluginsResponse\x12R\n" +
 	"\rInstallPlugin\x12\x1e.noryx.v1.InstallPluginRequest\x1a\x1f.noryx.v1.InstallPluginResponse(\x01\x12M\n" +
-	"\fRemovePlugin\x12\x1d.noryx.v1.RemovePluginRequest\x1a\x1e.noryx.v1.RemovePluginResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
+	"\fRemovePlugin\x12\x1d.noryx.v1.RemovePluginRequest\x1a\x1e.noryx.v1.RemovePluginResponse\x12M\n" +
+	"\fEnablePlugin\x12\x1d.noryx.v1.EnablePluginRequest\x1a\x1e.noryx.v1.EnablePluginResponseB0Z.github.com/QwikByte/noryx/api/noryx/v1;noryxv1b\x06proto3"
 
 var (
 	file_noryx_v1_plugin_proto_rawDescOnce sync.Once
@@ -511,7 +666,7 @@ func file_noryx_v1_plugin_proto_rawDescGZIP() []byte {
 	return file_noryx_v1_plugin_proto_rawDescData
 }
 
-var file_noryx_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_noryx_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_noryx_v1_plugin_proto_goTypes = []any{
 	(*PluginFile)(nil),            // 0: noryx.v1.PluginFile
 	(*ListPluginsRequest)(nil),    // 1: noryx.v1.ListPluginsRequest
@@ -521,6 +676,8 @@ var file_noryx_v1_plugin_proto_goTypes = []any{
 	(*InstallPluginResponse)(nil), // 5: noryx.v1.InstallPluginResponse
 	(*RemovePluginRequest)(nil),   // 6: noryx.v1.RemovePluginRequest
 	(*RemovePluginResponse)(nil),  // 7: noryx.v1.RemovePluginResponse
+	(*EnablePluginRequest)(nil),   // 8: noryx.v1.EnablePluginRequest
+	(*EnablePluginResponse)(nil),  // 9: noryx.v1.EnablePluginResponse
 }
 var file_noryx_v1_plugin_proto_depIdxs = []int32{
 	0, // 0: noryx.v1.ListPluginsResponse.plugins:type_name -> noryx.v1.PluginFile
@@ -529,11 +686,13 @@ var file_noryx_v1_plugin_proto_depIdxs = []int32{
 	1, // 3: noryx.v1.PluginService.ListPlugins:input_type -> noryx.v1.ListPluginsRequest
 	3, // 4: noryx.v1.PluginService.InstallPlugin:input_type -> noryx.v1.InstallPluginRequest
 	6, // 5: noryx.v1.PluginService.RemovePlugin:input_type -> noryx.v1.RemovePluginRequest
-	2, // 6: noryx.v1.PluginService.ListPlugins:output_type -> noryx.v1.ListPluginsResponse
-	5, // 7: noryx.v1.PluginService.InstallPlugin:output_type -> noryx.v1.InstallPluginResponse
-	7, // 8: noryx.v1.PluginService.RemovePlugin:output_type -> noryx.v1.RemovePluginResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
+	8, // 6: noryx.v1.PluginService.EnablePlugin:input_type -> noryx.v1.EnablePluginRequest
+	2, // 7: noryx.v1.PluginService.ListPlugins:output_type -> noryx.v1.ListPluginsResponse
+	5, // 8: noryx.v1.PluginService.InstallPlugin:output_type -> noryx.v1.InstallPluginResponse
+	7, // 9: noryx.v1.PluginService.RemovePlugin:output_type -> noryx.v1.RemovePluginResponse
+	9, // 10: noryx.v1.PluginService.EnablePlugin:output_type -> noryx.v1.EnablePluginResponse
+	7, // [7:11] is the sub-list for method output_type
+	3, // [3:7] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
 	3, // [3:3] is the sub-list for extension extendee
 	0, // [0:3] is the sub-list for field type_name
@@ -554,7 +713,7 @@ func file_noryx_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_noryx_v1_plugin_proto_rawDesc), len(file_noryx_v1_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

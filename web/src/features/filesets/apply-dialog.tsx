@@ -235,6 +235,7 @@ function FileChange({ file: f, contents }: { file: PreviewFile; contents: Record
             {t("holds secrets")}
           </span>
         )}
+        {f.binary && <span className="text-xs text-muted-foreground">{t("binary file")}</span>}
         {f.changedOnServer && <span className="text-xs text-warning">{t("changed on the server since it was written")}</span>}
         {f.unknown && <span className="text-xs text-muted-foreground">{t("what the server has can't be shown")}</span>}
       </button>

@@ -105,7 +105,7 @@ var Catalog = []Area{
 	}},
 	{"Servers", []Info{
 		scoped(ServersView, "See servers", "Servers with their state, settings and plugins."),
-		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins.", ServersView),
+		scoped(ServersCreate, "Create servers", "On whole nodes of the scope, also from templates; their plugins also need the permission to manage plugins, their tags the one to change server settings.", ServersView),
 		scoped(ServersStart, "Start servers", "", ServersView),
 		scoped(ServersStop, "Stop servers", "", ServersView),
 		scoped(ServersRestart, "Restart servers", "", ServersView),
@@ -127,19 +127,19 @@ var Catalog = []Area{
 	}},
 	{"Backups", []Info{
 		scoped(BackupsView, "See and download backups", "Downloads contain all backed up files, without secrets such as the RCON password.", ServersView),
-		scoped(BackupsCreate, "Back up servers", "", BackupsView),
-		scoped(BackupsRestore, "Restore backups", "Replaces the backed up data; a running server restarts.", BackupsView),
-		scoped(BackupsDelete, "Delete backups", "", BackupsView),
+		scoped(BackupsCreate, "Back up servers", "Also change the labels of backups, and keep backups of jobs from being deleted.", BackupsView),
+		scoped(BackupsRestore, "Restore backups", "Replaces the backed up data; a running server restarts. Also restore backups of other servers one may see into these.", BackupsView),
+		scoped(BackupsDelete, "Delete backups", "Also let jobs delete backups that were kept.", BackupsView),
 	}},
 	{"Networks, databases, templates and file sets", []Info{
 		global(NetworksView, "See networks", ""),
 		global(NetworksManage, "Manage networks", "Create, change and delete networks, which configures and restarts their servers.", NetworksView),
 		global(DatastoresView, "See databases", "The MariaDB and PostgreSQL datastores of networks with their databases, health, addresses and dumps. Never their passwords or data."),
-		global(DatastoresManage, "Manage databases", "Create, change, upgrade and delete datastores and their databases. See and rotate the passwords of the databases and look into their tables. Back up, restore and download dumps, which contain all data of the databases.", DatastoresView),
+		global(DatastoresManage, "Manage databases", "Create, change, upgrade and delete datastores and their databases. See and rotate the passwords of the databases, put them into file sets and look into their tables. Back up, restore and download dumps, which contain all data of the databases.", DatastoresView),
 		global(TemplatesView, "See templates", "Creating a server from a template also needs the permission to create servers."),
 		global(TemplatesManage, "Manage templates", "Create, change and delete templates.", TemplatesView),
-		global(FileSetsView, "See file sets", "Their files, targets and the names of their secrets, and which servers have them."),
-		global(FileSetsManage, "Manage file sets", "Create, change and delete file sets and set their secrets. File sets configure plugins, which run code and can read the secrets of the sets. Applying a set also needs the permission to change the files of each server it is for.", FileSetsView),
+		global(FileSetsView, "See file sets", "Their files, targets and variables, the names of their secrets, and which servers have them."),
+		global(FileSetsManage, "Manage file sets", "Create, change and delete file sets and set their secrets. File sets configure plugins, which run code and can read the secrets of the sets. Applying a set also needs the permission to change the files of each server it is for, and passwords of databases in a set need the permission to manage databases.", FileSetsView),
 	}},
 	{"Backup jobs and schedules", []Info{
 		global(BackupJobsView, "See backup jobs", ""),
@@ -160,6 +160,12 @@ var Catalog = []Area{
 		global(UsersManage, "Manage users", "Invite, disable and delete users, create setup links and choose their groups. Only for users without more permissions than oneself.", UsersView),
 		global(GroupsManage, "Manage groups", "Create, change and delete groups. Only with permissions one has oneself.", UsersView),
 	}},
+}
+
+// Label returns how the panel names a permission, e.g. "Back up servers".
+func Label(p Permission) string {
+	info, _ := lookup(p)
+	return info.Label
 }
 
 // lookup finds the description of a permission.

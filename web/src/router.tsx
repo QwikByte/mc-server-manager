@@ -365,12 +365,22 @@ const policyRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/policies/policy-page"), "PolicyPage"),
 })
 
+const agendaRoute = createRoute({
+  getParentRoute: () => automationRoute,
+  path: "/agenda",
+  staticData: { title: msg("Agenda") },
+  component: lazyRouteComponent(() => import("@/features/schedules/agenda-page"), "AgendaPage"),
+})
+
 const pluginsRoute = createRoute({
   getParentRoute: () => libraryRoute,
   path: "/plugins",
   staticData: { title: msg("Plugins & mods") },
-  // kind tells whether mods are searched; without it, plugins are.
-  validateSearch: (search: Record<string, unknown>): { kind?: Kind } => ({ kind: search.kind === "mods" ? "mods" : undefined }),
+  // kind tells whether mods are searched; without it, plugins are. view shows what servers have installed, rather than the search.
+  validateSearch: (search: Record<string, unknown>): { kind?: Kind; view?: "installed" } => ({
+    kind: search.kind === "mods" ? "mods" : undefined,
+    view: search.view === "installed" ? "installed" : undefined,
+  }),
   component: lazyRouteComponent(() => import("@/features/plugins/plugins-page"), "PluginsPage"),
 })
 
@@ -473,7 +483,7 @@ export const router = createRouter({
       newTemplateRoute,
       templateRoute,
       fileSetRoute,
-      automationRoute.addChildren([backupJobsRoute, policiesRoute]),
+      automationRoute.addChildren([backupJobsRoute, policiesRoute, agendaRoute]),
       newBackupJobRoute,
       backupJobRoute,
       newPolicyRoute,

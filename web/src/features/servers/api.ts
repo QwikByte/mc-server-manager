@@ -109,6 +109,10 @@ export interface NewServer
   properties?: Record<string, string>
   /** A modpack decides the type and the versions of the server. */
   modpack?: ModpackChoice
+  /** Given to the new server, e.g. those of its template. */
+  tags?: string[]
+  /** The IDs of the versions to install of plugins, by project ID, e.g. those a template keeps. */
+  versions?: Record<string, string>
 }
 
 /** How often lists of servers are checked: more often while servers start, to show them running soon. */

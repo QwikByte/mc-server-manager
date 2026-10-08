@@ -68,12 +68,20 @@ func copyFile(ctx context.Context, from, to *os.Root, name string) error {
 	return errors.Join(err, out.Close())
 }
 
-// Size returns the size of the regular files at paths of fsys and below them.
+// Size returns the size of the regular files at paths of fsys and below them, without the
+// temporary folders of the agent, e.g. a backup extracted to be restored. Missing paths
+// have none.
 func Size(fsys fs.FS, paths ...string) int64 {
 	var size int64
 	for _, p := range paths {
 		_ = fs.WalkDir(fsys, p, func(_ string, d fs.DirEntry, err error) error {
-			if info, ierr := d.Info(); err == nil && ierr == nil && d.Type().IsRegular() {
+			switch {
+			case err != nil:
+				return nil //nolint:nilerr // what can't be read, e.g. a missing path, counts as nothing
+			case d.IsDir() && IsTemp(d.Name()):
+				return fs.SkipDir
+			}
+			if info, err := d.Info(); err == nil && info.Mode().IsRegular() {
 				size += info.Size()
 			}
 			return nil

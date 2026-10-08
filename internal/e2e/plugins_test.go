@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"archive/zip"
+	"bytes"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -182,4 +184,115 @@ func TestPluginWithTheSameFileName(t *testing.T) {
 	if data, _ := os.ReadFile(filepath.Join(a.runtime.dir, lobby.ServerID, "plugins", "Same.jar")); string(data) != "same 2.0" {
 		t.Fatalf("Same.jar = %q", data)
 	}
+}
+
+// A plugin can be kept at its version and turned off, which updates of all plugins leave out,
+// and tells what changed in its versions, where its settings are and what requires it.
+func TestPluginsOfAServer(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	lobby := plugin.Ref(m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565))
+	api := apiClient{t: t, url: m.panel(t).URL}
+	base := "/api/nodes/" + lobby.NodeID + "/servers/" + lobby.ServerID + "/plugins"
+	folder := filepath.Join(a.runtime.dir, lobby.ServerID, "plugins")
+	plugins := func() map[string]plugin.Plugin {
+		t.Helper()
+		var l plugin.Listing
+		api.do("GET", base, nil, http.StatusOK, &l)
+		byFile := map[string]plugin.Plugin{}
+		for _, p := range l.Plugins {
+			byFile[p.FileName] = p
+		}
+		return byFile
+	}
+	update := func() plugin.Result {
+		t.Helper()
+		var updated struct{ Results []plugin.Result }
+		api.do("POST", "/api/plugins/update", map[string]any{"servers": []plugin.Ref{lobby}}, http.StatusOK, &updated)
+		return updated.Results[0]
+	}
+
+	// What changed: in the versions after the installed one up to the update, or in all.
+	var changes []plugin.Change
+	api.do("GET", "/api/plugins/projects/luckperms/changes?type=paper&version=LATEST&from=luckperms10&to=luckperms20", nil, http.StatusOK, &changes)
+	if len(changes) != 1 || changes[0].Number != "2.0" || changes[0].Changelog != "Changes in 2.0" {
+		t.Fatalf("changes = %+v", changes)
+	}
+	api.do("GET", "/api/plugins/projects/luckperms/changes?type=paper&version=LATEST", nil, http.StatusOK, &changes)
+	if len(changes) != 2 || changes[1].Changelog != "Changes in 1.0" {
+		t.Fatalf("all changes = %+v", changes)
+	}
+	api.do("GET", "/api/plugins/projects/luckperms/changes?type=paper&from=../x", nil, http.StatusBadRequest, nil)
+
+	// LuckPerms 2.0 requires Vault, until it is turned off.
+	api.do("POST", "/api/plugins/install", map[string]any{"projects": []string{"luckperms"}, "servers": []plugin.Ref{lobby}}, http.StatusOK, nil)
+	if p := plugins()["vault-1.7.jar"]; !slices.Equal(p.RequiredBy, []string{"LuckPerms"}) {
+		t.Fatalf("Vault = %+v", p)
+	}
+	api.do("POST", base+"/luckperms-2.0.jar/disable", nil, http.StatusNoContent, nil)
+	api.do("POST", base+"/luckperms-2.0.jar/disable", nil, http.StatusNotFound, nil)
+	if _, err := os.Stat(filepath.Join(folder, ".disabled", "luckperms-2.0.jar")); err != nil {
+		t.Fatal(err)
+	}
+	if listed := plugins(); !listed["luckperms-2.0.jar"].Disabled || len(listed["vault-1.7.jar"].RequiredBy) != 0 {
+		t.Fatalf("plugins = %+v", listed)
+	}
+	api.do("POST", base+"/luckperms-2.0.jar/enable", nil, http.StatusNoContent, nil)
+
+	// The folder of a plugin's settings, as its plugin.yml names it.
+	api.do("PUT", base+"/Example.jar", jarOf(t, map[string]string{"plugin.yml": "name: Example\nmain: me.Example\n"}), http.StatusCreated, nil)
+	check(t, os.MkdirAll(filepath.Join(folder, "Example"), 0o750))
+	if p := plugins()["Example.jar"]; p.Settings != "plugins/Example" || p.Project != nil {
+		t.Fatalf("Example = %+v", p)
+	}
+	api.do("POST", base+"/Example.jar/disable", nil, http.StatusNoContent, nil)
+	api.do("DELETE", base+"/Example.jar", nil, http.StatusNotFound, nil)
+	api.do("DELETE", base+"/Example.jar?disabled=true", nil, http.StatusNoContent, nil)
+
+	// A pinned project stays at its version when all plugins are updated, and so does a
+	// turned-off one.
+	api.do("POST", "/api/plugins/install", map[string]any{"projects": []string{"luckperms"}, "versions": map[string]string{"luckperms": "luckperms10"}, "servers": []plugin.Ref{lobby}},
+		http.StatusOK, nil)
+	api.do("PUT", base+"/pins/luckperms", nil, http.StatusNoContent, nil)
+	api.do("PUT", base+"/pins/bad.id", nil, http.StatusBadRequest, nil)
+	if p := plugins()["luckperms-1.0.jar"]; !p.Pinned || p.Update != "2.0" || p.UpdateID != "luckperms20" {
+		t.Fatalf("LuckPerms = %+v", p)
+	}
+	if r := update(); r.Error != "" || len(r.Installed) != 0 || !slices.Equal(r.Pinned, []string{"LuckPerms"}) {
+		t.Fatalf("update with a pin = %+v", r)
+	}
+	api.do("DELETE", base+"/pins/luckperms", nil, http.StatusNoContent, nil)
+	api.do("POST", base+"/luckperms-1.0.jar/disable", nil, http.StatusNoContent, nil)
+	if r := update(); r.Error != "" || len(r.Installed) != 0 || len(r.Pinned) != 0 {
+		t.Fatalf("update of a turned-off plugin = %+v", r)
+	}
+	api.do("POST", base+"/luckperms-1.0.jar/enable", nil, http.StatusNoContent, nil)
+	if r := update(); r.Error != "" || len(r.Installed) != 1 || r.Installed[0].Version != "2.0" || r.Restart {
+		t.Fatalf("update = %+v", r)
+	}
+	if _, ok := plugins()["luckperms-2.0.jar"]; !ok {
+		t.Fatal("LuckPerms wasn't updated")
+	}
+
+	// Pins go with their server.
+	api.do("PUT", base+"/pins/luckperms", nil, http.StatusNoContent, nil)
+	api.do("DELETE", "/api/nodes/"+lobby.NodeID+"/servers/"+lobby.ServerID, nil, http.StatusNoContent, nil)
+	var pins int
+	check(t, m.db.QueryRow(`SELECT COUNT(*) FROM plugin_pins`).Scan(&pins))
+	if pins != 0 {
+		t.Fatalf("%d pins left", pins)
+	}
+}
+
+func jarOf(t *testing.T, files map[string]string) []byte {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		w, err := zw.Create(name)
+		check(t, err)
+		_, err = w.Write([]byte(content))
+		check(t, err)
+	}
+	check(t, zw.Close())
+	return buf.Bytes()
 }

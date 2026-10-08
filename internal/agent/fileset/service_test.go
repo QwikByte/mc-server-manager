@@ -220,6 +220,62 @@ func TestApplyRefuses(t *testing.T) {
 	}
 }
 
+// Binary files are written as they are, and passwords of databases are filled in like secrets,
+// so that their files are hidden.
+func TestBinaryFilesAndPasswords(t *testing.T) {
+	s, dir := setup(t)
+	const password = "abcdefghijklmnopqrstuvwxyz234567"
+	icon := &noryxv1.FileSetFile{Path: "server-icon.png", Data: []byte("\x89PNG\r\n\x1a\n{{secret:db}}\x00")}
+	lp := &noryxv1.FileSetFile{Path: "plugins/LuckPerms/config.yml", Content: "password: {{datastore:main.luckperms.password}}\n"}
+	key := "datastore:main.luckperms.password"
+	req := &noryxv1.ApplyFileSetRequest{
+		ServerId: server, SetId: setA, SetName: "A", Version: 1, Files: []*noryxv1.FileSetFile{icon, lp}, Secrets: map[string]string{key: password},
+	}
+	_, err := s.ApplyFileSet(t.Context(), req)
+	check(t, err)
+	if got := content(t, dir, icon.Path); got != string(icon.Data) {
+		t.Errorf("icon = %q", got)
+	}
+	if got := content(t, dir, lp.Path); got != "password: "+password+"\n" {
+		t.Errorf("LuckPerms config = %q", got)
+	}
+	data, err := datadir.Open(dir)
+	check(t, err)
+	defer data.Close()
+	if hidden := Read(data).Secrets(); !hidden.Hidden(filepath.FromSlash(lp.Path)) || hidden.Hidden(icon.Path) {
+		t.Error("the file with the password isn't hidden, or the icon is")
+	}
+	res, err := s.ListFileSets(t.Context(), &noryxv1.ListFileSetsRequest{})
+	check(t, err)
+	if !res.GetBinaryFiles() || !res.GetDatabasePasswords() {
+		t.Error("the agent doesn't tell what it can do")
+	}
+
+	for name, bad := range map[string]*noryxv1.FileSetFile{
+		"text and binary": {Path: "a.png", Content: "x", Data: []byte("y")},
+		"archive":         {Path: "a.png", Data: []byte("PK\x03\x04rest")},
+		"class":           {Path: "a.dat", Data: []byte("\xca\xfe\xba\xbe")},
+		"program":         {Path: "run", Data: []byte("\x7fELF")},
+		"too large":       {Path: "a.png", Data: make([]byte, 1<<20+1)},
+		"variable":        {Path: "a.yml", Content: "{{var:role}}"},
+	} {
+		_, err := s.ApplyFileSet(t.Context(), &noryxv1.ApplyFileSetRequest{ServerId: server, SetId: setB, SetName: "B", Version: 1, Files: []*noryxv1.FileSetFile{bad}})
+		if status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, values := range map[string]map[string]string{
+		"invalid password":    {key: "two\nlines"},
+		"host as a secret":    {"datastore:main.luckperms.host": password},
+		"invalid placeholder": {"datastore:main.luckperms": password},
+	} {
+		_, err := s.ApplyFileSet(t.Context(), &noryxv1.ApplyFileSetRequest{ServerId: server, SetId: setB, SetName: "B", Version: 1, Secrets: values})
+		if status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestRemove(t *testing.T) {
 	s, dir := setup(t)
 	files := []*noryxv1.FileSetFile{

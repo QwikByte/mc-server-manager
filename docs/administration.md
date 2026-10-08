@@ -66,8 +66,8 @@ Users get their permissions from groups; a user can be in several groups and has
 There are permissions for every action, by area: nodes (see, change, renew certificates, remove, add, manage the private
 network, which applies to all nodes), servers (see, create, start, stop, restart, change settings, delete), console
 (read, send commands), players (kick, ban, whitelist and make operators), files and configuration (browse and download,
-change files, `server.properties`, plugins and mods), backups (see and download, back up, restore, delete), the log,
-networks, databases of networks, templates, file sets, backup jobs, schedules, the master's settings, the terminal,
+change files, `server.properties`, plugins and mods), backups (see and download, back up and keep, restore, delete), the
+log, networks, databases of networks, templates, file sets, backup jobs, schedules, the master's settings, the terminal,
 users and groups. Previewing and applying a file set also needs the permission to change the files of every server it
 touches, and restarting them the one to restart each. Choosing a permission also chooses what it needs, e.g. seeing the
 servers one may restart.
@@ -103,6 +103,12 @@ only take rights away. Users only see and end their own sessions. Behind a rever
 clients only if `--trusted-proxy` names the proxy (see [Installation](installation.md)). The API lists the sessions with
 `GET /api/auth/sessions`, ends one with `DELETE /api/auth/sessions/<id>` and all others with
 `DELETE /api/auth/sessions`.
+
+### API tokens
+
+Scripts use the API with personal API tokens instead of a password, which users create and revoke on their account
+page, with all of their permissions or fewer; see [REST API and API tokens](api.md). Changing the password, setting one
+with a setup link, turning on two-factor authentication and disabling a user revoke the user's tokens.
 
 ### Two-factor authentication
 

@@ -383,7 +383,9 @@ function Connection({ datastore: ds, database }: { datastore: Datastore; databas
         {manage && <PasswordField datastoreId={ds.id} database={database} />}
       </div>
       <p className="text-xs text-muted-foreground">
-        {t("In a file set, keep the password in a secret, e.g. {{example}}, so that the panel hides it.", { example: `{{secret:${database}-password}}` })}
+        {t("In a file set, {{example}} and the like fill in where each server reaches the database, and its password, which the panel hides.", {
+          example: `{{datastore:${ds.name}.${database}.host}}`,
+        })}
       </p>
     </div>
   )

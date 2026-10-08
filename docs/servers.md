@@ -86,7 +86,8 @@ agent creates the container again with the same data; the old container is only 
 server keeps the image it was created with; **Update image** in its settings pulls the newest one and, if it changed,
 creates the container again the same way. The old image is removed once no server uses it. New servers get the newest
 image too: creating one pulls it, which downloads its changes if it was updated since. Deleting servers keeps their
-images.
+images. Servers created from a modpack show it in their settings, where they move to [another version of
+it](library.md#modpacks).
 
 The **stop timeout** is how long a server may take to save its worlds when it stops or restarts before it is killed:
 from 30 seconds to 10 minutes, 1 minute unless changed, e.g. longer for a large modded world. The **time zone**, one of
@@ -128,7 +129,7 @@ unhealthy and healthy again. It still counts as running: its console, restarts, 
 
 A server can be duplicated on its node: the copy gets all files, worlds and settings under a new name and port, and
 starts stopped. A running game server first writes its worlds to disk and pauses saving while they are copied, so
-players stay connected. The copy doesn't take over the original's place in a network.
+players stay connected. The copy keeps the original's modpack, but doesn't take over its place in a network.
 
 ## Moving to another node
 
@@ -156,8 +157,10 @@ on which the user may do it, at most 8 at a time on each node, and the panel tel
 Restarting and stopping them can warn the players of the game servers first, like a single server.
 
 Servers have **tags** such as `lobby` or `bedwars`: up to 10, each of up to 24 letters, digits, `-` and `_`. The master
-keeps them; they follow a server that moves, copies get them, and they go with a deleted server. Changing them needs the
-permission to change the server's settings, though it doesn't restart the server.
+keeps them; they follow a server that moves, copies get them, servers created from a [template](library.md#tags) get
+its tags, and they go with a deleted server. Changing them needs the permission to change the server's settings, though
+it doesn't restart the server. [File sets](library.md#file-sets),
+[backup jobs and schedules](automation.md#targets-and-times) can target a tag, so a tag can put a server under them.
 
 Servers have **notes** too, e.g. what a test server is for or whom to ask about it: up to 500 characters of plain text,
 which the server's page shows and the search of the lists and **Ctrl+K** find. **Notes…** in the menu of a server

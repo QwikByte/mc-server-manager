@@ -1,5 +1,17 @@
-import { BracketsCurlyIcon, DotsThreeIcon, FileIcon, KeyIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react"
-import { useQueryClient } from "@tanstack/react-query"
+import {
+  BracketsCurlyIcon,
+  DatabaseIcon,
+  DotsThreeIcon,
+  DownloadSimpleIcon,
+  FileIcon,
+  KeyIcon,
+  PencilSimpleIcon,
+  PlusIcon,
+  SlidersHorizontalIcon,
+  TrashIcon,
+  UploadSimpleIcon,
+} from "@phosphor-icons/react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
 import { type FormEvent, type RefObject, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -15,20 +27,29 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useAccess } from "@/features/access/use-access"
+import { datastoresQuery } from "@/features/datastores/api"
 import type { ServerFiles } from "@/features/files/api"
 import { CodeEditor, type EditorHandle } from "@/features/files/code-editor"
 import { PathPicker, type Picked, PickDialog, ServerSelect } from "@/features/files/path-picker"
-import { type FileSet, type SetFile, type SetInput, usedSecrets } from "./api"
+import { formatBytes } from "@/lib/format"
+import { msg } from "@/lib/i18n"
+import { type FileSet, type SetFile, type SetInput, usedSecrets, usedVariables } from "./api"
+import { download, holdsCode, imageType, maxFileBytes, setFileOf, sizeOf } from "./binary"
 import { FileTree } from "./file-tree"
 import { importFiles, maxFiles } from "./import"
 import { variables } from "./labels"
 import { placeholders } from "./placeholders"
 import { SecretDialog } from "./secrets"
 import { SidePanel } from "./side-panel"
+import { VariableDialog } from "./variables"
 
 // An example in an empty field, which needs no translation.
 const examplePath = "plugins/LuckPerms/config.yml"
@@ -51,11 +72,12 @@ export function Workspace({
   onSelect: (path: string) => void
   onChange: (change: Partial<SetInput>) => void
 }) {
-  const [dialog, setDialog] = useState<"new" | "rename" | "import" | "secret">()
+  const [dialog, setDialog] = useState<"new" | "rename" | "import" | "secret" | "variable">()
   const editor = useRef<EditorHandle>(null)
   const queryClient = useQueryClient()
   const files = draft.files
   const file = files.find((f) => f.path === selected) ?? [...files].sort((a, b) => a.path.localeCompare(b.path))[0]
+  const binary = file?.data !== undefined
   const setFiles = (next: SetFile[]) => onChange({ files: next })
   const update = (path: string, change: Partial<SetFile>) => setFiles(files.map((f) => (f.path === path ? { ...f, ...change } : f)))
   const add = (added: SetFile[]) => {
@@ -66,14 +88,14 @@ export function Workspace({
   async function importFrom(server: ServerFiles, picked: Picked[]) {
     if (files.length >= maxFiles) throw new Error(t("A file set has up to {{count}} files.", { count: maxFiles }))
     const { files: read, skipped } = await importFiles(queryClient, server, picked, maxFiles - files.length)
-    if (read.length === 0) throw new Error(t("None of them is a text file of up to 1 MiB."))
+    if (read.length === 0) throw new Error(t("None of them is a file of up to 1 MiB without code."))
     add(read)
     toast.success(t("Imported {{count}} files", { count: read.length, defaultValue_one: "Imported {{count}} file" }), {
       description:
         skipped > 0
-          ? t("Skipped {{count}} that aren't text, are larger than 1 MiB or don't fit into the set.", {
+          ? t("Skipped {{count}} that are larger than 1 MiB, hold code or don't fit into the set.", {
               count: skipped,
-              defaultValue_one: "Skipped {{count}} that isn't text, is larger than 1 MiB or doesn't fit into the set.",
+              defaultValue_one: "Skipped {{count}} that is larger than 1 MiB, holds code or doesn't fit into the set.",
             })
           : undefined,
     })
@@ -98,7 +120,15 @@ export function Workspace({
             {file.onlyIfMissing && <Pill tone="info">{t("Only if missing")}</Pill>}
             {editable && (
               <>
-                <InsertMenu secrets={[...new Set([...set.secrets.map((s) => s.name), ...usedSecrets(files)])].sort()} onInsert={(text) => editor.current?.insert(text)} onNewSecret={() => setDialog("secret")} />
+                {!binary && (
+                  <InsertMenu
+                    variables={[...new Set([...draft.variables.map((v) => v.name), ...usedVariables(files)])].sort()}
+                    secrets={[...new Set([...set.secrets.map((s) => s.name), ...usedSecrets(files)])].sort()}
+                    onInsert={(text) => editor.current?.insert(text)}
+                    onNewVariable={() => setDialog("variable")}
+                    onNewSecret={() => setDialog("secret")}
+                  />
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon-sm" variant="outline" aria-label={t("More actions for {{path}}", { path: file.path })}>
@@ -126,14 +156,23 @@ export function Workspace({
           {file.onlyIfMissing && (
             <Callout>{t("Servers that have the file keep their own, e.g. as a plugin rewrites it. Changes here only reach servers without it.")}</Callout>
           )}
-          <FileEditor key={file.path} editor={editor} file={file} readOnly={!editable} onChange={(content) => update(file.path, { content })} />
+          {binary ? (
+            <BinaryView
+              key={file.path}
+              file={file}
+              editable={editable}
+              onReplace={(replaced) => setFiles(files.map((f) => (f.path === file.path ? { ...replaced, onlyIfMissing: f.onlyIfMissing } : f)))}
+            />
+          ) : (
+            <FileEditor key={file.path} editor={editor} file={file} readOnly={!editable} onChange={(content) => update(file.path, { content })} />
+          )}
         </div>
       ) : (
         <EmptyState
           icon={FileIcon}
           tone="info"
           title={t("Add the files of the set")}
-          description={t("Create them here, or import them from a server and replace what differs with variables and secrets.")}
+          description={t("Create or upload them here, or import them from a server and replace what differs with variables and secrets.")}
         />
       )}
       <div className="lg:col-span-2 2xl:col-span-1">
@@ -145,8 +184,9 @@ export function Workspace({
           title={t("New file")}
           initial={folderOf(file?.path) && `${folderOf(file?.path)}/`}
           files={files}
+          upload
           onClose={() => setDialog(undefined)}
-          onSubmit={(path) => add([{ path, content: "", onlyIfMissing: false }])}
+          onSubmit={(path, bytes) => add([bytes ? setFileOf(path, bytes) : { path, content: "", onlyIfMissing: false }])}
         />
       )}
       {dialog === "rename" && file && (
@@ -174,12 +214,47 @@ export function Workspace({
         />
       )}
       {dialog === "secret" && <SecretDialog setId={set.id} onClose={() => setDialog(undefined)} onSaved={(name) => editor.current?.insert(`{{secret:${name}}}`)} />}
+      {dialog === "variable" && (
+        <VariableDialog
+          taken={draft.variables.map((v) => v.name)}
+          onClose={() => setDialog(undefined)}
+          onSave={(variable) => {
+            onChange({ variables: [...draft.variables, variable] })
+            editor.current?.insert(`{{var:${variable.name}}}`)
+          }}
+        />
+      )}
     </div>
   )
 }
 
-/** Inserts the variables that the master fills in, or a secret, where the cursor is. */
-function InsertMenu({ secrets, onInsert, onNewSecret }: { secrets: string[]; onInsert: (text: string) => void; onNewSecret: () => void }) {
+// The fields of a database that files can use, with what they are.
+const databaseFields = [
+  ["host", msg("Host, as the server reaches it")],
+  ["port", msg("Port, as the server reaches it")],
+  ["database", msg("Database")],
+  ["user", msg("User")],
+  ["password", msg("Password, which only the agents fill in")],
+] as const
+
+/** Inserts the variables that the master fills in, a field of a database, or a secret, where the cursor is. */
+function InsertMenu({
+  variables: own,
+  secrets,
+  onInsert,
+  onNewVariable,
+  onNewSecret,
+}: {
+  variables: string[]
+  secrets: string[]
+  onInsert: (text: string) => void
+  onNewVariable: () => void
+  onNewSecret: () => void
+}) {
+  const { can } = useAccess()
+  const { data: datastores } = useQuery({ ...datastoresQuery, enabled: can("datastores.view") })
+  // Files name a database by its datastore, which servers find in their own network.
+  const databases = [...new Set(datastores?.flatMap((ds) => ds.databases.map((db) => `${ds.name}.${db.name}`)))].sort()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -196,6 +271,45 @@ function InsertMenu({ secrets, onInsert, onNewSecret }: { secrets: string[]; onI
             <span className="text-xs text-muted-foreground">{t(description)}</span>
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t("Variables of the set, with a value for each server")}</DropdownMenuLabel>
+        {own.map((name) => (
+          <DropdownMenuItem key={name} onSelect={() => onInsert(`{{var:${name}}}`)}>
+            <SlidersHorizontalIcon />
+            <span className="font-mono text-xs">{name}</span>
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem onSelect={onNewVariable}>
+          <PlusIcon />
+          {t("New variable…")}
+        </DropdownMenuItem>
+        {databases.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>{t("Databases of each server's network")}</DropdownMenuLabel>
+            {databases.map((database) => (
+              <DropdownMenuSub key={database}>
+                <DropdownMenuSubTrigger>
+                  <DatabaseIcon />
+                  <span className="font-mono text-xs">{database}</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-72">
+                  {databaseFields.map(([field, description]) => (
+                    <DropdownMenuItem
+                      key={field}
+                      disabled={field === "password" && !can("datastores.manage")}
+                      onSelect={() => onInsert(`{{datastore:${database}.${field}}}`)}
+                      className="flex-col items-start gap-0"
+                    >
+                      <span className="font-mono text-xs">{field}</span>
+                      <span className="text-xs text-muted-foreground">{t(description)}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            ))}
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel>{t("Secrets, which only the agents fill in")}</DropdownMenuLabel>
         {secrets.map((name) => (
@@ -238,6 +352,60 @@ function FileEditor({
   )
 }
 
+/** Reads a file of the computer that a set can have, or throws why it can't. */
+async function readUpload(picked: File) {
+  const bytes = new Uint8Array(await picked.arrayBuffer())
+  if (bytes.length > maxFileBytes) throw new Error(t("The file is larger than 1 MiB."))
+  if (holdsCode(picked.name, bytes)) throw new Error(t("A file set can't add code. Install plugins on the Plugins page."))
+  return bytes
+}
+
+/** A binary file of a set, which is never shown as text: images are previewed, others only named. */
+function BinaryView({ file, editable, onReplace }: { file: SetFile; editable: boolean; onReplace: (file: SetFile) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const type = imageType(file.path)
+  async function replace(picked?: File) {
+    if (!picked) return
+    try {
+      onReplace(setFileOf(file.path, await readUpload(picked)))
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
+  return (
+    <div className="surface grid justify-items-center gap-4 rounded-xl px-4 py-8 text-center">
+      {type ? (
+        <img
+          src={`data:${type};base64,${file.data}`}
+          alt={t("Preview of {{path}}", { path: file.path })}
+          className="max-h-64 min-h-16 max-w-full rounded-lg object-contain ring-1 ring-foreground/8 [image-rendering:pixelated]"
+        />
+      ) : (
+        <FileIcon className="size-12 text-muted-foreground" weight="duotone" />
+      )}
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{t("Binary file, {{size}}", { size: formatBytes(sizeOf(file)) })}</p>
+        <p className="text-sm text-muted-foreground">{t("Servers get it as it is: nothing is filled in.")}</p>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => download(file)}>
+          <DownloadSimpleIcon />
+          {t("Download")}
+        </Button>
+        {editable && (
+          <>
+            <Button variant="outline" size="sm" onClick={() => input.current?.click()}>
+              <UploadSimpleIcon />
+              {t("Replace…")}
+            </Button>
+            <input ref={input} type="file" className="hidden" onChange={(e) => void replace(e.target.files?.[0])} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /** Checks a path of a file of a set like the master, as far as the panel can, and returns it cleaned. */
 function cleanPath(input: string, files: SetFile[]): [string, string?] {
   const path = input.trim().replace(/^\/+/, "").replace(/\/+/g, "/")
@@ -247,32 +415,47 @@ function cleanPath(input: string, files: SetFile[]): [string, string?] {
   return [path]
 }
 
-/** Asks for the path of a file, whose folder can be chosen on a server. */
+/** Asks for the path of a file, whose folder can be chosen on a server, and with upload for a file of the computer. */
 function PathDialog({
   title,
   initial,
   files,
+  upload,
   onClose,
   onSubmit,
 }: {
   title: string
   initial: string
   files: SetFile[]
+  upload?: boolean
   onClose: () => void
-  onSubmit: (path: string) => void
+  onSubmit: (path: string, bytes?: Uint8Array) => void
 }) {
   const [path, setPath] = useState(initial)
   const [error, setError] = useState<string>()
   const [server, setServer] = useState<ServerFiles>()
   const [browsing, setBrowsing] = useState(false)
+  const [uploaded, setUploaded] = useState<{ name: string; bytes: Uint8Array }>()
   const name = path.split("/").pop() ?? ""
 
   function submit(event: FormEvent) {
     event.preventDefault()
     const [clean, problem] = cleanPath(path, files)
     if (problem) return setError(problem)
-    onSubmit(clean)
+    onSubmit(clean, uploaded?.bytes)
     onClose()
+  }
+
+  async function choose(picked?: File) {
+    if (!picked) return
+    try {
+      setUploaded({ name: picked.name, bytes: await readUpload(picked) })
+      setError(undefined)
+      if (!name) setPath(`${path}${picked.name}`)
+    } catch (e) {
+      setUploaded(undefined)
+      setError((e as Error).message)
+    }
   }
 
   return (
@@ -288,6 +471,17 @@ function PathDialog({
             <Input id="fileset-path" className="font-mono" autoFocus required placeholder={examplePath} value={path} onChange={(e) => setPath(e.target.value)} />
             {error && <FieldError>{error}</FieldError>}
           </Field>
+          {upload && (
+            <Field>
+              <FieldLabel htmlFor="fileset-upload">{t("Content")}</FieldLabel>
+              <Input id="fileset-upload" type="file" onChange={(e) => void choose(e.target.files?.[0])} />
+              <FieldDescription>
+                {uploaded
+                  ? t("{{name}}, {{size}}", { name: uploaded.name, size: formatBytes(uploaded.bytes.length) })
+                  : t("Empty, or a file of your computer of up to 1 MiB, e.g. an image, which servers get as it is.")}
+              </FieldDescription>
+            </Field>
+          )}
           {browsing ? (
             <div className="grid gap-3">
               <Field>

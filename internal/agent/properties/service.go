@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -29,19 +30,12 @@ const (
 var keyPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
 // Secret properties are never sent to the panel, nor changed through its editor.
-var Secret = map[string]bool{"rcon.password": true, "management-server-secret": true, "management-server-tls-keystore-password": true}
+var Secret = noryxv1.SecretProperties
 
 // locked returns the properties the manager sets itself, with the reason; changing
 // them would break the server or its console.
 func locked(spec runtime.Spec) map[string]string {
-	const rcon = "The console sends its commands through RCON."
-	l := map[string]string{
-		"server-port":   "Inside its container, the server always uses this port. Change the port in the server's settings.",
-		"server-ip":     "The server listens on all addresses of its container.",
-		"enable-rcon":   rcon,
-		"rcon.port":     rcon,
-		"rcon.password": rcon,
-	}
+	l := maps.Clone(noryxv1.ManagedProperties)
 	if spec.BehindProxy {
 		l["online-mode"] = "The proxy of the server's network authenticates players."
 	}

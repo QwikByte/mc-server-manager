@@ -1,6 +1,7 @@
 package noryxv1
 
 import (
+	"bytes"
 	"fmt"
 	"path"
 	"regexp"
@@ -26,13 +27,22 @@ const FileSetManifest = "noryx-filesets.json"
 
 var (
 	// Placeholder matches the placeholders in the files of sets: the variables the master
-	// fills in, {{server.name}}, {{server.id}}, {{server.port}} and {{network.server}}, and
-	// the secrets only the agent fills in, {{secret:<name>}}. Other text in double braces is
-	// left alone, as some plugins use it themselves.
-	Placeholder = regexp.MustCompile(`\{\{((?:server|network)\.[^{}\s]*|secret:[^{}\n]*)\}\}`)
+	// fills in, {{server.name}}, {{server.id}}, {{server.port}}, {{network.server}} and those
+	// of the set, {{var:<name>}}, the connections to databases, {{datastore:<name>.<database>.<field>}},
+	// and the secrets only the agent fills in, {{secret:<name>}} and the passwords of
+	// databases. Other text in double braces is left alone, as some plugins use it themselves.
+	Placeholder = regexp.MustCompile(`\{\{((?:server|network)\.[^{}\s]*|(?:secret|var|datastore):[^{}\n]*)\}\}`)
 	// SecretName matches the names of the secrets of a set.
 	SecretName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	// DatastorePlaceholder matches what is between the braces of a placeholder of a database:
+	// its datastore, itself and one of its fields. The master fills in all but the password,
+	// which only the agent fills in, e.g. datastore:main.luckperms.password.
+	DatastorePlaceholder = regexp.MustCompile(`^datastore:([a-z0-9][a-z0-9-]{0,31})\.([a-z][a-z0-9_]{0,31})\.(host|port|database|user|password)$`)
 )
+
+// fileSetCode are the starts of files that hold code under any name: ZIP archives, such as
+// .jar files, Java classes and Linux programs.
+var fileSetCode = []string{"PK\x03\x04", "PK\x05\x06", "PK\x07\x08", "\xca\xfe\xba\xbe", "\x7fELF"}
 
 // fileSetRefused are the files that Noryx writes itself, and those that hold secrets of the
 // server, which the agent hides; internal/agent/fileset tests that none is missing.
@@ -60,7 +70,7 @@ func CleanFileSetPath(p string) (string, string) {
 		slices.ContainsFunc(segments, func(s string) bool { return strings.HasPrefix(s, ".noryx-") }):
 		return clean, fmt.Sprintf("Noryx manages %s itself, or it holds secrets of the server.", clean)
 	case slices.Contains([]string{".jar", ".zip", ".class"}, strings.ToLower(path.Ext(clean))):
-		return clean, fmt.Sprintf("%s isn't a text file. Install plugins on the Plugins page.", clean)
+		return clean, fmt.Sprintf("%s holds code, which a set can't add. Install plugins on the Plugins page.", clean)
 	}
 	return clean, ""
 }
@@ -72,6 +82,19 @@ func FileSetContentProblem(name, content string) string {
 		return fmt.Sprintf("%s is larger than %d MiB.", name, MaxFileSetFileSize>>20)
 	case !utf8.ValidString(content) || strings.ContainsRune(content, 0):
 		return fmt.Sprintf("%s isn't a text file.", name)
+	}
+	return ""
+}
+
+// FileSetDataProblem returns why data can't be the content of a binary file of a set, e.g.
+// an image, or "": archives and programs are refused also under other names, so that a set
+// can't add code.
+func FileSetDataProblem(name string, data []byte) string {
+	switch {
+	case len(data) > MaxFileSetFileSize:
+		return fmt.Sprintf("%s is larger than %d MiB.", name, MaxFileSetFileSize>>20)
+	case slices.ContainsFunc(fileSetCode, func(start string) bool { return bytes.HasPrefix(data, []byte(start)) }):
+		return fmt.Sprintf("%s is an archive or a program. Install plugins on the Plugins page.", name)
 	}
 	return ""
 }

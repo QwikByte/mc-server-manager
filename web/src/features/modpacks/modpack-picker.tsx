@@ -13,17 +13,9 @@ import { type SearchHit, searchQuery } from "@/features/plugins/api"
 import { PluginIcon } from "@/features/plugins/plugin-icon"
 import { locale } from "@/lib/i18n"
 import { useDebounced } from "@/lib/use-debounced"
-import { type ModpackChoice, type ModpackVersion, modpackVersionsQuery } from "./api"
+import { describeVersion, type ModpackChoice, modpackVersionsQuery } from "./api"
 
 const compact = new Intl.NumberFormat(locale, { notation: "compact" })
-
-/** What a version of a modpack runs, e.g. "1.0.2 · Minecraft 1.21.1 · NeoForge". */
-function describe(v: ModpackVersion) {
-  const loaders = v.loaders.map((l) => l.charAt(0).toUpperCase() + l.slice(1)).join(", ")
-  return [v.number, v.gameVersions.length > 0 && t("Minecraft {{version}}", { version: v.gameVersions[0] }), loaders, v.channel !== "release" && v.channel]
-    .filter(Boolean)
-    .join(" · ")
-}
 
 /** Searches Modrinth for a modpack and picks one of its versions, the newest release unless chosen otherwise. */
 export function ModpackPicker({ onChange }: { onChange: (choice?: ModpackChoice) => void }) {
@@ -66,7 +58,7 @@ export function ModpackPicker({ onChange }: { onChange: (choice?: ModpackChoice)
               <SelectContent>
                 {versions.data?.map((v) => (
                   <SelectItem key={v.id} value={v.id}>
-                    {describe(v)}
+                    {describeVersion(v)}
                   </SelectItem>
                 ))}
               </SelectContent>

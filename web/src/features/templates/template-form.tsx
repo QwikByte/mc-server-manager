@@ -1,4 +1,4 @@
-import { PlusIcon, XIcon } from "@phosphor-icons/react"
+import { CaretDownIcon, PlusIcon, XIcon } from "@phosphor-icons/react"
 import { useBlocker } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type FormEvent, useState } from "react"
@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { Project } from "@/features/plugins/api"
 import { PluginIcon } from "@/features/plugins/plugin-icon"
 import { PluginSearch } from "@/features/plugins/plugin-search"
+import { VersionMenu } from "@/features/plugins/version-menu"
 import { defaults, serverType, splitOptions } from "@/features/servers/server-types"
 import {
   CpuLimitField,
@@ -26,12 +27,13 @@ import {
   VersionField,
 } from "@/features/servers/settings-fields"
 import { EndOfLifeNotice, SoftwareOptions } from "@/features/servers/software"
-import { parseProperties, propertiesText, type TemplateDraft, type TemplateInput } from "./api"
+import { TagsField } from "@/features/servers/tags"
+import { keptVersions, parseProperties, propertiesText, type TemplateDraft, type TemplateInput, type TemplatePlugin } from "./api"
 
 /** Compares drafts regardless of the order of their properties. */
 const snapshot = (d: TemplateDraft) => JSON.stringify({ ...d, name: d.name.trim(), properties: propertiesText(d.properties) })
 
-/** Edits the settings, server.properties and plugins of a template. */
+/** Edits the settings, server.properties, tags and plugins of a template. */
 export function TemplateForm({
   initial,
   submitLabel,
@@ -51,17 +53,19 @@ export function TemplateForm({
     properties: propertiesText(initial.properties),
   })
   const type = serverType(form.type)
-  const input: TemplateInput = {
+  const draft: TemplateDraft = {
     ...form,
     name: form.name.trim(),
     version: type.proxy ? "LATEST" : form.version,
     jvmOptions: splitOptions(form.jvmOptions),
     properties: type.proxy ? {} : parseProperties(form.properties),
-    plugins: type.addons ? form.plugins.map((p) => p.id) : [],
+    plugins: type.addons ? form.plugins : [],
   }
-  const dirty = snapshot({ ...input, plugins: form.plugins }) !== snapshot(initial)
+  const input: TemplateInput = { ...draft, plugins: draft.plugins.map((p) => p.id), versions: keptVersions(draft.plugins) }
+  const dirty = snapshot({ ...draft, plugins: form.plugins }) !== snapshot(initial)
   const blocker = useBlocker({ shouldBlockFn: () => dirty && !pending, enableBeforeUnload: () => dirty, withResolver: true })
   const set = (change: Partial<typeof form>) => setForm({ ...form, ...change })
+  const setPlugin = (plugin: TemplatePlugin) => set({ plugins: form.plugins.map((p) => (p.id === plugin.id ? plugin : p)) })
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -112,6 +116,13 @@ export function TemplateForm({
             onChange={(e) => set({ description: e.target.value })}
           />
         </Field>
+        <Field>
+          <FieldLabel htmlFor="template-tags">{t("Tags")}</FieldLabel>
+          <TagsField id="template-tags" value={form.tags} onChange={(tags) => set({ tags })} />
+          <FieldDescription>
+            {t("Servers created from the template get these tags. File sets of the tags still have to be applied to them.")}
+          </FieldDescription>
+        </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           {!type.proxy && (
             <VersionField
@@ -160,23 +171,48 @@ export function TemplateForm({
       {type.addons && (
         <FormSection title={type.addons.kind === "mods" ? t("Mods") : t("Plugins")}>
           {form.plugins.length > 0 && (
-            <ul className="flex flex-wrap gap-2">
-              {form.plugins.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 rounded-lg bg-muted/60 py-1 pr-1 pl-1.5 text-sm font-medium">
-                  <PluginIcon src={p.icon} className="size-6 rounded-md [&>svg]:size-3.5" />
-                  {p.title}
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    aria-label={t("Remove {{name}}", { name: p.title })}
-                    onClick={() => set({ plugins: form.plugins.filter((x) => x.id !== p.id) })}
-                  >
-                    <XIcon />
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <Field>
+              <ul className="divide-y rounded-lg bg-muted/60">
+                {form.plugins.map((p) => (
+                  <li key={p.id} className="flex items-center gap-2 py-1.5 pr-1.5 pl-2 text-sm font-medium">
+                    <PluginIcon src={p.icon} className="size-6 rounded-md [&>svg]:size-3.5" />
+                    <span className="min-w-0 flex-1 truncate">{p.title}</span>
+                    <VersionMenu
+                      project={p.id}
+                      title={p.title}
+                      type={form.type}
+                      version={form.version}
+                      current={p.version}
+                      onNewest={() => setPlugin({ id: p.id, slug: p.slug, title: p.title, icon: p.icon })}
+                      onPick={(v) => setPlugin({ ...p, version: v.id, versionNumber: v.number })}
+                    >
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        title={t("Version of {{name}}", { name: p.title })}
+                        className="max-w-32 bg-card"
+                      >
+                        <span className={p.versionNumber ? "truncate font-mono" : "truncate"}>{p.versionNumber ?? t("Newest")}</span>
+                        <CaretDownIcon />
+                      </Button>
+                    </VersionMenu>
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      aria-label={t("Remove {{name}}", { name: p.title })}
+                      onClick={() => set({ plugins: form.plugins.filter((x) => x.id !== p.id) })}
+                    >
+                      <XIcon />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <FieldDescription>
+                {t("New servers get the newest release that suits them, or the version chosen here. A chosen version that doesn't suit a server isn't installed on it.")}
+              </FieldDescription>
+            </Field>
           )}
           <AddPlugins
             type={form.type}

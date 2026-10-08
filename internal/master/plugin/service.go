@@ -1,12 +1,14 @@
 // Package plugin installs plugins and mods from Modrinth, and plugins from Hangar, on
-// servers, and lists, updates and removes the installed ones. The master downloads each
-// file once, checks its hash and streams it to the agents, which write it into the plugin
-// folder of the server.
+// servers, and lists, updates, turns off and removes the installed ones, also on many servers
+// at once. The master downloads each file once, checks its hash and streams it to the agents,
+// which write it into the plugin folder of the server.
 package plugin
 
 import (
 	"bytes"
+	"cmp"
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"net/http"
@@ -24,6 +26,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/hangar"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/modrinth"
+	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/operation"
 )
 
@@ -38,8 +41,9 @@ const (
 
 var errVanilla = httpapi.Errorf(http.StatusConflict, "Vanilla servers can't load plugins or mods.")
 
-// Nodes provides connections to node agents.
+// Nodes provides the nodes and connections to their agents.
 type Nodes interface {
+	List(ctx context.Context) ([]node.Node, error)
 	Conn(ctx context.Context, nodeID string) (grpc.ClientConnInterface, error)
 }
 
@@ -61,10 +65,11 @@ type Project struct {
 type Service struct {
 	nodes     Nodes
 	catalogue catalogue
+	pins      pins
 }
 
-func NewService(nodes Nodes, modrinthClient *modrinth.Client, hangarClient *hangar.Client, geysermcClient *geysermc.Client) *Service {
-	return &Service{nodes: nodes, catalogue: catalogue{modrinthClient, hangarClient, geysermcClient}}
+func NewService(db *sql.DB, nodes Nodes, modrinthClient *modrinth.Client, hangarClient *hangar.Client, geysermcClient *geysermc.Client) *Service {
+	return &Service{nodes: nodes, catalogue: catalogue{modrinthClient, hangarClient, geysermcClient}, pins: pins{db}}
 }
 
 // Projects looks up projects on Modrinth and Hangar; unknown ones are left out.
@@ -97,8 +102,18 @@ type Plugin struct {
 	VersionID string `json:"versionId,omitempty"`
 	// Channel is beta or alpha for a version that isn't a release.
 	Channel string `json:"channel,omitempty"`
-	// Update is a newer release of the project for the server.
-	Update string `json:"update,omitempty"`
+	// Update is a newer release of the project for the server, and UpdateID its ID.
+	Update   string `json:"update,omitempty"`
+	UpdateID string `json:"updateId,omitempty"`
+	// Pinned tells that the server keeps the project at its version: updates of all its
+	// plugins leave it out.
+	Pinned bool `json:"pinned,omitempty"`
+	// Disabled tells that the file is turned off, so that the server doesn't load it.
+	Disabled bool `json:"disabled,omitempty"`
+	// Settings is the folder of the plugin's settings in the server's data, e.g. plugins/LuckPerms.
+	Settings string `json:"settings,omitempty"`
+	// RequiredBy are the titles of the other turned-on projects of the server that require it.
+	RequiredBy []string `json:"requiredBy,omitempty"`
 }
 
 type Listing struct {
@@ -108,60 +123,105 @@ type Listing struct {
 	CatalogueError string `json:"catalogueError,omitempty"`
 }
 
-// List returns the plugins of a server. Files from Modrinth are identified by their hash.
+// List returns the plugins of a server, the turned-off ones too. Files from Modrinth and Hangar
+// are identified by their hash.
 func (s *Service) List(ctx context.Context, ref Ref) (Listing, error) {
 	conn, srv, err := s.server(ctx, ref)
 	if err != nil {
 		return Listing{}, err
 	}
-	res, err := noryxv1.NewPluginServiceClient(conn).ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: ref.ServerID})
+	res, err := noryxv1.NewPluginServiceClient(conn).ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: ref.ServerID, IncludeDisabled: true})
 	if err != nil {
 		return Listing{}, err
 	}
-	l := Listing{Folder: res.GetFolder(), Plugins: []Plugin{}}
-	for _, p := range res.GetPlugins() {
-		l.Plugins = append(l.Plugins, Plugin{FileName: p.GetFileName(), Size: p.GetSize()})
+	pinned, err := s.pins.of(ctx, ref)
+	if err != nil {
+		return Listing{}, err
 	}
-	if len(l.Plugins) > 0 {
-		if err := s.describe(ctx, srv, res.GetPlugins(), l.Plugins); err != nil {
+	l := Listing{Folder: res.GetFolder()}
+	var c catalogued
+	if len(res.GetPlugins()) > 0 {
+		t, err := s.target(ctx, srv.GetType(), srv.GetVersion())
+		if err == nil {
+			c, err = s.identify(ctx, t, res.GetPlugins())
+		}
+		if err != nil {
 			l.CatalogueError = httpapi.Message(err)
 		}
 	}
+	l.Plugins = c.describe(res.GetFolder(), res.GetPlugins(), pinned)
 	return l, nil
 }
 
-// describe adds the project, version and available update to each plugin from Modrinth or Hangar.
-func (s *Service) describe(ctx context.Context, srv *noryxv1.Server, files []*noryxv1.PluginFile, plugins []Plugin) error {
-	t, err := s.target(ctx, srv.GetType(), srv.GetVersion())
+// catalogued is what Modrinth and Hangar know of plugin files.
+type catalogued struct {
+	known, newer map[string]modrinth.Version // the version of each file, and a newer release, by SHA-512
+	projects     map[string]Project          // by ID
+}
+
+// identify looks up plugin files of servers with the same target on Modrinth and Hangar, with
+// their newest releases for the servers, and describes their projects.
+func (s *Service) identify(ctx context.Context, t target, files []*noryxv1.PluginFile) (catalogued, error) {
+	known, newer, err := s.catalogue.identify(ctx, files, t, true)
 	if err != nil {
-		return err
-	}
-	versions, updates, err := s.catalogue.identify(ctx, files, t, true)
-	if err != nil {
-		return err
+		return catalogued{}, err
 	}
 	var ids []string
-	for _, v := range versions {
+	for _, v := range known {
 		ids = append(ids, v.ProjectID)
 	}
-	projects, err := s.catalogue.Projects(ctx, slices.Compact(slices.Sorted(slices.Values(ids))))
+	found, err := s.catalogue.Projects(ctx, slices.Compact(slices.Sorted(slices.Values(ids))))
 	if err != nil {
-		return err
+		return catalogued{}, err
 	}
-	for i, f := range files {
-		hash := f.GetSha512()
-		v, known := versions[hash]
-		j := slices.IndexFunc(projects, func(p modrinth.Project) bool { return p.ID == v.ProjectID })
-		if !known || j < 0 {
+	c := catalogued{known: known, newer: newer, projects: map[string]Project{}}
+	for _, p := range found {
+		c.projects[p.ID] = s.Describe(p)
+	}
+	return c, nil
+}
+
+// describe returns the plugins of files in a plugin folder, with the project, version and update
+// of those that are known, whether the server keeps them at their version, and the other projects
+// that require them.
+func (c catalogued) describe(folder string, files []*noryxv1.PluginFile, pinned map[string]bool) []Plugin {
+	// needed are the titles of the turned-on projects that require each project or version.
+	needed := map[string][]string{}
+	for _, f := range files {
+		v, ok := c.known[f.GetSha512()]
+		if !ok || f.GetDisabled() {
 			continue
 		}
-		project := s.Describe(projects[j])
-		plugins[i].Project, plugins[i].Version, plugins[i].VersionID, plugins[i].Channel = &project, v.VersionNumber, v.ID, preRelease(v)
-		if u, ok := updates[hash]; ok && u.ID != v.ID && u.Published.After(v.Published) {
-			plugins[i].Update = u.VersionNumber
+		for _, d := range v.Dependencies {
+			for _, id := range []string{d.ProjectID, d.VersionID} {
+				if d.Type == "required" && id != "" && id != v.ProjectID {
+					needed[id] = append(needed[id], cmp.Or(c.projects[v.ProjectID].Title, f.GetFileName()))
+				}
+			}
 		}
 	}
-	return nil
+	plugins := make([]Plugin, len(files))
+	for i, f := range files {
+		p := Plugin{FileName: f.GetFileName(), Size: f.GetSize(), Disabled: f.GetDisabled()}
+		if noryxv1.ValidPluginFolder(f.GetSettings()) {
+			p.Settings = folder + "/" + f.GetSettings()
+		}
+		v, known := c.known[f.GetSha512()]
+		if project, ok := c.projects[v.ProjectID]; known && ok {
+			p.Project, p.Version, p.VersionID, p.Channel, p.Pinned = &project, v.VersionNumber, v.ID, preRelease(v), pinned[v.ProjectID]
+			if u := c.newer[f.GetSha512()]; isNewer(u, v) {
+				p.Update, p.UpdateID = u.VersionNumber, u.ID
+			}
+			p.RequiredBy = slices.Compact(slices.Sorted(slices.Values(slices.Concat(needed[v.ProjectID], needed[v.ID]))))
+		}
+		plugins[i] = p
+	}
+	return plugins
+}
+
+// isNewer reports whether update is a newer version than v.
+func isNewer(update, v modrinth.Version) bool {
+	return update.ID != "" && update.ID != v.ID && update.Published.After(v.Published)
 }
 
 // Installed is a plugin that was installed on a server.
@@ -170,15 +230,48 @@ type Installed struct {
 	FileName  string `json:"fileName"`
 	Version   string `json:"version"`
 	// Channel is beta or alpha for a version that isn't a release.
-	Channel string `json:"channel,omitempty"`
-	written bool   // rather than present already
+	Channel  string `json:"channel,omitempty"`
+	written  bool   // rather than present already
+	disabled bool   // into the folder of turned-off plugins
 }
 
-// Result tells what was installed on a server, and why the rest wasn't.
+// loads reports whether the server loads the file once it restarts, as it is new and turned on.
+func (i Installed) loads() bool { return i.written && !i.disabled }
+
+// Result tells what an action did on a server, installing, updating or removing plugins, and
+// why it failed.
 type Result struct {
 	Ref
+	// Installed are the files of the projects installed or updated, also those present already
+	// when installing; updates only tell the files they wrote.
 	Installed []Installed `json:"installed"`
-	Error     string      `json:"error,omitempty"`
+	// Removed are the files removed.
+	Removed []string `json:"removed,omitempty"`
+	// Pinned are the titles of the projects with a newer release that the server keeps at their version.
+	Pinned []string `json:"pinned,omitempty"`
+	Error  string   `json:"error,omitempty"`
+	// Restart tells that the server runs without what changed, and Restarted that it was restarted
+	// to load it.
+	Restart   bool `json:"restart,omitempty"`
+	Restarted bool `json:"restarted,omitempty"`
+}
+
+// each calls fn for each server, at most operation.PerNode of a node at a time, and returns their
+// results: what fn put there and the error it returned. Once the operation of ctx is cancelled,
+// the servers it didn't begin tell so.
+func each(ctx context.Context, servers []Ref, fn func(ctx context.Context, res *Result) error) []Result {
+	results := make([]Result, len(servers))
+	nodes := make([]string, len(servers))
+	for i, ref := range servers {
+		results[i], nodes[i] = Result{Ref: ref, Installed: []Installed{}}, ref.NodeID // a list also if nothing is installed
+	}
+	failed := func(i int, err error) { results[i].Error = httpapi.Message(err) }
+	operation.Each(ctx, nodes, func(ctx context.Context, i int) {
+		if err := fn(ctx, &results[i]); err != nil {
+			failed(i, err)
+		}
+	}, failed)
+	return results
 }
 
 // Install installs the newest suitable release of each project on the given servers,
@@ -187,103 +280,172 @@ type Result struct {
 // are. A server it began gets all of them, also if the operation is cancelled.
 func (s *Service) Install(ctx context.Context, projects []string, chosen map[string]string, servers []Ref) []Result {
 	run := &installation{Service: s, chosen: chosen}
-	results := make([]Result, len(servers))
-	nodes := make([]string, len(servers))
-	for i, ref := range servers {
-		results[i], nodes[i] = Result{Ref: ref, Installed: []Installed{}}, ref.NodeID // a list also if nothing is installed
-	}
-	failed := func(i int, err error) { results[i].Error = httpapi.Message(err) }
-	operation.Each(ctx, nodes, func(ctx context.Context, i int) {
-		installed, err := run.install(ctx, servers[i], projects)
-		results[i].Installed = append(results[i].Installed, installed...)
-		if err != nil {
-			failed(i, err)
-		}
-	}, failed)
-	return results
+	return each(ctx, servers, func(ctx context.Context, res *Result) error { return run.install(ctx, res, projects) })
 }
 
-// InstallOn installs projects on a server, e.g. those of a template on a new server.
-func (s *Service) InstallOn(ctx context.Context, projects []string, nodeID, serverID string) error {
+// InstallOn installs projects on a server, e.g. those of a template on a new server, each in
+// the version kept for it by project ID, if any. A project whose kept version doesn't run on
+// the server is left out rather than installed in another version, and the error says so.
+func (s *Service) InstallOn(ctx context.Context, projects []string, kept map[string]string, nodeID, serverID string) error {
 	if err := checkProjects(projects); err != nil {
 		return err
 	}
-	if r := s.Install(ctx, projects, nil, []Ref{{nodeID, serverID}})[0]; r.Error != "" {
-		return errors.New(r.Error)
+	ref, failed := Ref{nodeID, serverID}, []string{}
+	if len(kept) > 0 {
+		_, srv, err := s.server(ctx, ref)
+		var t target
+		if err == nil {
+			t, err = s.target(ctx, srv.GetType(), srv.GetVersion())
+		}
+		if err != nil {
+			return err
+		}
+		run := &installation{Service: s, chosen: kept}
+		projects = slices.DeleteFunc(slices.Clone(projects), func(project string) bool {
+			if kept[project] == "" {
+				return false
+			}
+			_, err := run.pick(ctx, project, t, false)
+			if err != nil {
+				failed = append(failed, httpapi.Message(err))
+			}
+			return err != nil
+		})
+	}
+	if len(projects) > 0 {
+		if r := s.Install(ctx, projects, kept, []Ref{ref})[0]; r.Error != "" {
+			failed = append(failed, r.Error)
+		}
+	}
+	if len(failed) > 0 {
+		return httpapi.Errorf(http.StatusConflict, "%s", strings.Join(failed, " "))
 	}
 	return nil
 }
 
-// installation shares lookups and downloads between the servers of one Install call.
+// installation shares lookups and downloads between the servers of one Install or Update call.
 type installation struct {
 	*Service
-	chosen    map[string]string // version IDs by project ID
+	chosen map[string]string // version IDs by project ID
+	// releases picks only releases of the projects it installs, never a beta or alpha, as updates do.
+	releases  bool
 	versions  memo[[]modrinth.Version]
 	downloads memo[[]byte]
 	titles    memo[string]
 }
 
-func (r *installation) install(ctx context.Context, ref Ref, projects []string) ([]Installed, error) {
+// onServer is a server whose plugins an installation changes, with its plugin files.
+type onServer struct {
+	ref     Ref
+	client  noryxv1.PluginServiceClient
+	target  target
+	running bool
+	files   []*noryxv1.PluginFile
+	// known and newer are the versions of the files and their newer releases, by SHA-512.
+	known, newer map[string]modrinth.Version
+	present      map[string]installedFile // see present
+}
+
+// open lists the plugin files of a server, the turned-off ones too, and identifies them, with
+// their newer releases if updates.
+func (r *installation) open(ctx context.Context, ref Ref, updates bool) (*onServer, error) {
 	conn, srv, err := r.server(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	t, err := r.target(ctx, srv.GetType(), srv.GetVersion())
-	if err != nil {
+	o := &onServer{ref: ref, client: noryxv1.NewPluginServiceClient(conn), running: srv.GetState() == noryxv1.ServerState_SERVER_STATE_RUNNING}
+	if o.target, err = r.target(ctx, srv.GetType(), srv.GetVersion()); err != nil {
 		return nil, err
 	}
-	plugins := noryxv1.NewPluginServiceClient(conn)
-	present, err := r.present(ctx, plugins, ref.ServerID, t, slices.ContainsFunc(projects, onHangar))
-	if err != nil {
-		return nil, err
+	o.files, o.known, o.newer, err = r.listed(ctx, o.client, ref.ServerID, o.target, updates)
+	return o, err
+}
+
+// listed lists the plugin files of a server and identifies them for a target, with their newer
+// releases if updates.
+func (r *installation) listed(ctx context.Context, c noryxv1.PluginServiceClient, serverID string, t target, updates bool) (
+	files []*noryxv1.PluginFile, known, newer map[string]modrinth.Version, err error,
+) {
+	res, err := c.ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: serverID, IncludeDisabled: true})
+	if err != nil || len(res.GetPlugins()) == 0 {
+		return nil, map[string]modrinth.Version{}, map[string]modrinth.Version{}, err
 	}
-	versions, err := r.resolve(ctx, t, projects, present)
+	known, newer, err = r.catalogue.identify(ctx, res.GetPlugins(), t, updates)
+	return res.GetPlugins(), known, newer, err
+}
+
+// install installs projects on the server of res, and tells what it installed.
+func (r *installation) install(ctx context.Context, res *Result, projects []string) error {
+	o, err := r.open(ctx, res.Ref, false)
+	if err == nil {
+		o.present, err = r.present(ctx, o.files, o.known, slices.ContainsFunc(projects, onHangar))
+	}
+	if err != nil {
+		return err
+	}
+	installed, err := r.put(ctx, o, projects)
+	res.Installed = append(res.Installed, installed...)
+	res.Restart = o.running && slices.ContainsFunc(installed, Installed.loads)
+	return err
+}
+
+// put installs projects on a server with the projects they require, and keeps the files of the
+// server's projects up to date. A project that is turned off stays off.
+func (r *installation) put(ctx context.Context, o *onServer, projects []string) ([]Installed, error) {
+	versions, err := r.resolve(ctx, o.target, projects, o.present)
 	if err != nil {
 		return nil, err
 	}
 	installed := []Installed{}
 	for _, v := range versions {
 		f, _ := v.File()
-		old := present[v.ProjectID]
+		old := o.present[v.ProjectID]
 		if !old.is(f) { // otherwise this version is installed already
 			data, err := r.downloads.get(f.URL, func() ([]byte, error) { return r.catalogue.Download(ctx, f) })
 			if err != nil {
 				return installed, err
 			}
-			header := &noryxv1.InstallPluginHeader{ServerId: ref.ServerID, FileName: f.Filename, Replaces: old.GetFileName()}
-			if _, err := send(ctx, plugins, header, bytes.NewReader(data)); err != nil {
+			header := &noryxv1.InstallPluginHeader{ServerId: o.ref.ServerID, FileName: f.Filename, Replaces: old.GetFileName(), Disabled: old.GetDisabled()}
+			file, err := send(ctx, o.client, header, bytes.NewReader(data))
+			if err != nil {
 				return installed, err
 			}
+			o.present[v.ProjectID] = installedFile{file}
 		}
-		installed = append(installed, Installed{ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, Channel: preRelease(v), written: !old.is(f)})
+		installed = append(installed, Installed{
+			ProjectID: v.ProjectID, FileName: f.Filename, Version: v.VersionNumber, Channel: preRelease(v), written: !old.is(f), disabled: old.GetDisabled(),
+		})
 	}
 	return installed, nil
 }
 
-// present returns the file of each project of Modrinth or Hangar installed on a server. A
-// file on both is Modrinth's, and also Hangar's with hangarToo, so that installing a project
-// of Hangar replaces the file rather than adding another.
-func (r *installation) present(ctx context.Context, c noryxv1.PluginServiceClient, serverID string, t target, hangarToo bool) (map[string]installedFile, error) {
-	res, err := c.ListPlugins(ctx, &noryxv1.ListPluginsRequest{ServerId: serverID})
-	if err != nil || len(res.GetPlugins()) == 0 {
-		return map[string]installedFile{}, err
-	}
-	versions, _, err := r.catalogue.identify(ctx, res.GetPlugins(), t, false)
+// present returns the file of each project of Modrinth or Hangar among files, a turned-on one
+// rather than a turned-off one. A file on both is Modrinth's, and also Hangar's with hangarToo,
+// so that installing a project of Hangar replaces the file rather than adding another.
+func (r *installation) present(ctx context.Context, files []*noryxv1.PluginFile, known map[string]modrinth.Version, hangarToo bool) (map[string]installedFile, error) {
 	present := map[string]installedFile{}
-	for _, p := range res.GetPlugins() {
-		v, ok := versions[p.GetSha512()]
-		if ok {
-			present[v.ProjectID] = installedFile{p}
+	add := func(project string, f *noryxv1.PluginFile) {
+		if old, ok := present[project]; !ok || old.GetDisabled() {
+			present[project] = installedFile{f}
 		}
-		if ok && hangarToo && err == nil && !onHangar(v.ProjectID) {
-			var project string
-			project, err = r.catalogue.hangar.ProjectByHash(ctx, p.GetSha256())
+	}
+	for _, f := range files {
+		v, ok := known[f.GetSha512()]
+		if !ok {
+			continue
+		}
+		add(v.ProjectID, f)
+		if hangarToo && !onHangar(v.ProjectID) {
+			project, err := r.catalogue.hangar.ProjectByHash(ctx, f.GetSha256())
+			if err != nil {
+				return present, err
+			}
 			if project != "" {
-				present[project] = installedFile{p}
+				add(project, f)
 			}
 		}
 	}
-	return present, err
+	return present, nil
 }
 
 // installedFile is the file of a project on a server; the zero value is none.
@@ -309,7 +471,7 @@ func (r *installation) resolve(ctx context.Context, t target, projects []string,
 		if len(seen) > maxProjects {
 			return nil, httpapi.Errorf(http.StatusBadRequest, "Choose fewer projects; they require more than %d projects together.", maxProjects)
 		}
-		v, err := r.pick(ctx, id, t)
+		v, err := r.pick(ctx, id, t, r.releases && slices.Contains(projects, id))
 		if err != nil {
 			return nil, err
 		}
@@ -323,14 +485,17 @@ func (r *installation) resolve(ctx context.Context, t target, projects []string,
 	return picked, nil
 }
 
-// pick returns the version chosen for a project if it suits the server, else the
-// newest release of the project for the server, or else its newest version.
-func (r *installation) pick(ctx context.Context, project string, t target) (modrinth.Version, error) {
+// pick returns the version chosen for a project if it suits the server, else the newest
+// release of the project for the server, or else, unless releaseOnly, its newest version.
+func (r *installation) pick(ctx context.Context, project string, t target, releaseOnly bool) (modrinth.Version, error) {
 	versions, err := r.compatible(ctx, project, t)
 	if err != nil {
 		return modrinth.Version{}, err
 	}
-	i := max(0, slices.IndexFunc(versions, func(v modrinth.Version) bool { return v.VersionType == "release" }))
+	i := slices.IndexFunc(versions, func(v modrinth.Version) bool { return v.VersionType == "release" })
+	if i < 0 && !releaseOnly {
+		i = 0
+	}
 	chosen := r.chosen[project]
 	if chosen != "" {
 		i = slices.IndexFunc(versions, func(v modrinth.Version) bool { return v.ID == chosen })
@@ -338,6 +503,18 @@ func (r *installation) pick(ctx context.Context, project string, t target) (modr
 	if i >= 0 && i < len(versions) && len(versions[i].Files) > 0 {
 		return versions[i], nil
 	}
+	switch title := r.title(ctx, project); {
+	case chosen != "":
+		return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "The chosen version of %s doesn't run on %s.", title, t)
+	case len(versions) > 0 && releaseOnly:
+		return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "%s has no release for %s.", title, t)
+	default:
+		return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "%s has no version for %s.", title, t)
+	}
+}
+
+// title returns the title of a project, or its ID if it can't be looked up.
+func (r *installation) title(ctx context.Context, project string) string {
 	title, _ := r.titles.get(project, func() (string, error) {
 		projects, err := r.catalogue.Projects(ctx, []string{project})
 		if err != nil || len(projects) == 0 {
@@ -345,10 +522,7 @@ func (r *installation) pick(ctx context.Context, project string, t target) (modr
 		}
 		return projects[0].Title, nil
 	})
-	if chosen != "" {
-		return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "The chosen version of %s doesn't run on %s.", title, t)
-	}
-	return modrinth.Version{}, httpapi.Errorf(http.StatusConflict, "%s has no version for %s.", title, t)
+	return title
 }
 
 // preRelease returns the channel of a version that isn't a release: beta or alpha.
@@ -377,6 +551,10 @@ type Version struct {
 	GameVersions []string `json:"gameVersions,omitempty"`
 }
 
+func toVersion(v modrinth.Version) Version {
+	return Version{ID: v.ID, Number: v.VersionNumber, Channel: v.VersionType, Published: v.Published, GameVersions: v.GameVersions}
+}
+
 // Versions returns the versions of a project that run on servers of a type and
 // Minecraft version, the newest first.
 func (s *Service) Versions(ctx context.Context, project string, typ noryxv1.ServerType, gameVersion string) ([]Version, error) {
@@ -388,7 +566,7 @@ func (s *Service) Versions(ctx context.Context, project string, typ noryxv1.Serv
 	versions := make([]Version, 0, len(found))
 	for _, v := range found {
 		if len(v.Files) > 0 {
-			versions = append(versions, Version{ID: v.ID, Number: v.VersionNumber, Channel: v.VersionType, Published: v.Published, GameVersions: v.GameVersions})
+			versions = append(versions, toVersion(v))
 		}
 	}
 	return versions, err
@@ -424,31 +602,44 @@ func (s *Service) target(ctx context.Context, typ noryxv1.ServerType, gameVersio
 }
 
 // Ensure installs the newest suitable release of a project of Modrinth on a server, together
-// with the projects it requires, unless the project is installed already.
+// with the projects it requires, unless the project is installed already, and turns it on if
+// it is turned off.
 func (s *Service) Ensure(ctx context.Context, ref Ref, project string) error {
-	conn, _, err := s.server(ctx, ref)
-	if err != nil {
-		return err
-	}
 	run := &installation{Service: s}
-	present, err := run.present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID, target{}, false) // no loaders, no Hangar
-	if _, ok := present[project]; ok || err != nil {
+	present, err := run.presentOn(ctx, ref)
+	if file, ok := present[project]; ok || err != nil {
+		if file.GetDisabled() {
+			return s.Enable(ctx, ref, file.GetFileName(), true)
+		}
 		return err
 	}
-	_, err = run.install(ctx, ref, []string{project})
-	return err
+	return run.install(ctx, &Result{Ref: ref}, []string{project})
+}
+
+// presentOn returns the file of each project of Modrinth on a server, without asking Hangar.
+func (r *installation) presentOn(ctx context.Context, ref Ref) (map[string]installedFile, error) {
+	conn, err := r.nodes.Conn(ctx, ref.NodeID)
+	if err != nil {
+		return nil, err
+	}
+	files, known, _, err := r.listed(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID, target{}, false) // no loaders, no Hangar
+	if err != nil {
+		return nil, err
+	}
+	return r.present(ctx, files, known, false)
 }
 
 // Provide installs the newest release of projects on a server, also those of GeyserMC,
 // unless it has it, and reports whether it changed a file. A server loads it when it starts.
 func (s *Service) Provide(ctx context.Context, ref Ref, projects []string) (bool, error) {
-	installed, err := (&installation{Service: s}).install(ctx, ref, projects)
-	return slices.ContainsFunc(installed, func(i Installed) bool { return i.written }), err
+	res := Result{Ref: ref}
+	err := (&installation{Service: s}).install(ctx, &res, projects)
+	return slices.ContainsFunc(res.Installed, func(i Installed) bool { return i.written }), err
 }
 
 // Uninstall removes the file of a project of Modrinth or GeyserMC from a server, if it has one.
 func (s *Service) Uninstall(ctx context.Context, ref Ref, project string) error {
-	conn, srv, err := s.server(ctx, ref)
+	_, srv, err := s.server(ctx, ref)
 	if err != nil {
 		return err
 	}
@@ -462,26 +653,49 @@ func (s *Service) Uninstall(ctx context.Context, ref Ref, project string) error 
 		if err != nil || len(latest) == 0 {
 			return err
 		}
-		if err := s.Remove(ctx, ref, latest[0].Files[0].Filename); status.Code(err) != codes.NotFound {
+		if err := s.Remove(ctx, ref, latest[0].Files[0].Filename, false); status.Code(err) != codes.NotFound {
 			return err
 		}
 		return nil
 	}
-	present, err := (&installation{Service: s}).present(ctx, noryxv1.NewPluginServiceClient(conn), ref.ServerID, target{}, false)
+	present, err := (&installation{Service: s}).presentOn(ctx, ref)
 	if file, ok := present[project]; ok && err == nil {
-		return s.Remove(ctx, ref, file.GetFileName())
+		return s.Remove(ctx, ref, file.GetFileName(), file.GetDisabled())
 	}
 	return err
 }
 
-// Remove deletes a plugin file from a server.
-func (s *Service) Remove(ctx context.Context, ref Ref, fileName string) error {
+// Remove deletes a plugin file from a server, a turned-off one with disabled.
+func (s *Service) Remove(ctx context.Context, ref Ref, fileName string, disabled bool) error {
 	conn, err := s.nodes.Conn(ctx, ref.NodeID)
 	if err != nil {
 		return err
 	}
-	_, err = noryxv1.NewPluginServiceClient(conn).RemovePlugin(ctx, &noryxv1.RemovePluginRequest{ServerId: ref.ServerID, FileName: fileName})
+	_, err = noryxv1.NewPluginServiceClient(conn).RemovePlugin(ctx, &noryxv1.RemovePluginRequest{ServerId: ref.ServerID, FileName: fileName, Disabled: disabled})
 	return err
+}
+
+// Enable turns a plugin file of a server on or off: a turned-off file is kept in a folder of
+// the plugin folder that the server doesn't load.
+func (s *Service) Enable(ctx context.Context, ref Ref, fileName string, enabled bool) error {
+	conn, err := s.nodes.Conn(ctx, ref.NodeID)
+	if err != nil {
+		return err
+	}
+	_, err = noryxv1.NewPluginServiceClient(conn).EnablePlugin(ctx, &noryxv1.EnablePluginRequest{ServerId: ref.ServerID, FileName: fileName, Enabled: enabled})
+	if status.Code(err) == codes.Unimplemented {
+		return httpapi.Errorf(http.StatusNotImplemented, "Update the agent of this node to turn plugins off.")
+	}
+	return err
+}
+
+// Pin keeps a project of a server at its version, so that updates of all its plugins leave it
+// out, or lets them update it again.
+func (s *Service) Pin(ctx context.Context, ref Ref, project string, pinned bool) error {
+	if _, _, err := s.server(ctx, ref); err != nil {
+		return err
+	}
+	return s.pins.set(ctx, ref, project, pinned)
 }
 
 // Upload installs a plugin file of the administrator on a server.

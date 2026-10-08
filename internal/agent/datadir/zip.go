@@ -25,12 +25,13 @@ const maxEdited = 1 << 20
 
 // A Censor decides about each file of an archive, by its name, whether to omit it and how
 // to edit its content, if at all. WriteZip asks it once the file is open, so that what marks
-// a file as secret before it is written always counts.
+// a file as secret before it is written always counts, and about each folder before it
+// walks it, to omit the folder with all in it.
 type Censor func(name string) (omit bool, edit func([]byte) []byte)
 
 // WriteZip writes files and folders of root as a ZIP archive; "." writes all of it.
 // Symbolic links, other special files and temporary files of the agent are left out, and
-// censor, if not nil, omits or edits files.
+// censor, if not nil, omits files and folders or edits files.
 func WriteZip(ctx context.Context, w io.Writer, root *os.Root, censor Censor, paths ...string) error {
 	zw := zip.NewWriter(w)
 	var err error
@@ -39,7 +40,7 @@ func WriteZip(ctx context.Context, w io.Writer, root *os.Root, censor Censor, pa
 			switch {
 			case err != nil || ctx.Err() != nil:
 				return cmp.Or(err, ctx.Err())
-			case IsTemp(d.Name()) && d.IsDir():
+			case d.IsDir() && (IsTemp(d.Name()) || name != "." && censor != nil && omitted(censor, name)):
 				return fs.SkipDir
 			case name == "." || IsTemp(d.Name()) || (!d.IsDir() && !d.Type().IsRegular()):
 				return nil
@@ -50,6 +51,11 @@ func WriteZip(ctx context.Context, w io.Writer, root *os.Root, censor Censor, pa
 		}
 	}
 	return errors.Join(err, zw.Close())
+}
+
+func omitted(censor Censor, name string) bool {
+	omit, _ := censor(name)
+	return omit
 }
 
 // CopyZip copies the archive zr to w, without compressing it again, as censor says.

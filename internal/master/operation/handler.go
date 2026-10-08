@@ -30,7 +30,7 @@ func (h *Handler) Register(mux access.Mux) {
 	})
 	mux.Handle("POST /api/operations/{id}/cancel", access.SignedIn, func(w http.ResponseWriter, r *http.Request) {
 		user, _ := auth.UserFrom(r.Context())
-		op, err := h.ops.Cancel(r.Context(), r.PathValue("id"), user.ID, access.From(r.Context()))
+		op, err := h.ops.Cancel(r.Context(), r.PathValue("id"), user, access.From(r.Context()))
 		if err != nil {
 			httpapi.WriteError(w, r, err)
 			return
@@ -41,5 +41,5 @@ func (h *Handler) Register(mux access.Mux) {
 
 func (h *Handler) visible(r *http.Request) []Operation {
 	user, _ := auth.UserFrom(r.Context())
-	return h.ops.List(user.ID, access.From(r.Context()))
+	return h.ops.List(user, access.From(r.Context()))
 }

@@ -1,4 +1,4 @@
-import { MemoryIcon, PencilSimpleIcon, PlusIcon, StackIcon, TrashIcon } from "@phosphor-icons/react"
+import { DownloadSimpleIcon, MemoryIcon, PencilSimpleIcon, PlusIcon, StackIcon, TrashIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -15,17 +15,22 @@ import { useAccess } from "@/features/access/use-access"
 import { PluginIcon } from "@/features/plugins/plugin-icon"
 import { CreateServerDialog } from "@/features/servers/create-server-dialog"
 import { displayVersion, serverLook, serverType } from "@/features/servers/server-types"
+import { TagList } from "@/features/servers/tags"
 import { formatMegabytes } from "@/lib/format"
-import { type Template, templatesQuery, useDeleteTemplate } from "./api"
+import { exportUrl, type Template, templatesQuery, useDeleteTemplate } from "./api"
+import { ImportTemplateDialog } from "./import-template-dialog"
 
 function NewTemplate() {
   return (
-    <Button asChild>
-      <Link to="/templates/new">
-        <PlusIcon />
-        {t("New template")}
-      </Link>
-    </Button>
+    <>
+      <ImportTemplateDialog />
+      <Button asChild>
+        <Link to="/templates/new">
+          <PlusIcon />
+          {t("New template")}
+        </Link>
+      </Button>
+    </>
   )
 }
 
@@ -50,7 +55,7 @@ export function TemplatesPage() {
           icon={StackIcon}
           tone="info"
           title={t("No templates yet")}
-          description={manage && t("Create a template from scratch, or save an existing server as a template from its page.")}
+          description={manage && t("Create a template from scratch, import one, or save an existing server as a template from its page.")}
         >
           {manage && <NewTemplate />}
         </EmptyState>
@@ -91,6 +96,7 @@ function TemplateCard({ template }: { template: Template }) {
         <Chip icon={MemoryIcon}>{formatMegabytes(template.memoryMb)}</Chip>
       </div>
       {template.description && <p className="line-clamp-2 text-sm text-muted-foreground">{template.description}</p>}
+      <TagList tags={template.tags} />
       {(extras.length > 0 || template.plugins.length > 0) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {template.plugins.map((p) => (
@@ -118,37 +124,42 @@ function TemplateCard({ template }: { template: Template }) {
           />
         )}
         {can("templates.manage") && (
-          <>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/templates/$templateId" params={{ templateId: template.id }}>
-                <PencilSimpleIcon />
-                {t("Edit")}
-              </Link>
-            </Button>
-            <ConfirmDialog
-              trigger={
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label={t("Delete {{name}}", { name: template.name })}
-                  title={t("Delete template")}
-                  className="ml-auto text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <TrashIcon />
-                </Button>
-              }
-              title={t("Delete {{name}}?", { name: template.name })}
-              description={t("Servers created from the template stay as they are.")}
-              action={t("Delete template")}
-              destructive
-              onConfirm={() =>
-                remove.mutate(template.id, {
-                  onSuccess: () => toast.success(t("Deleted {{name}}", { name: template.name })),
-                  onError: (e) => toast.error(e.message),
-                })
-              }
-            />
-          </>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/templates/$templateId" params={{ templateId: template.id }}>
+              <PencilSimpleIcon />
+              {t("Edit")}
+            </Link>
+          </Button>
+        )}
+        <Button asChild size="icon-sm" variant="ghost" className="ml-auto text-muted-foreground">
+          <a href={exportUrl(template.id)} download aria-label={t("Export {{name}}", { name: template.name })} title={t("Export")}>
+            <DownloadSimpleIcon />
+          </a>
+        </Button>
+        {can("templates.manage") && (
+          <ConfirmDialog
+            trigger={
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label={t("Delete {{name}}", { name: template.name })}
+                title={t("Delete template")}
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <TrashIcon />
+              </Button>
+            }
+            title={t("Delete {{name}}?", { name: template.name })}
+            description={t("Servers created from the template stay as they are.")}
+            action={t("Delete template")}
+            destructive
+            onConfirm={() =>
+              remove.mutate(template.id, {
+                onSuccess: () => toast.success(t("Deleted {{name}}", { name: template.name })),
+                onError: (e) => toast.error(e.message),
+              })
+            }
+          />
         )}
       </div>
     </li>

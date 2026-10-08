@@ -13,20 +13,31 @@ import (
 type Need func(r *http.Request, g Grants) (Permission, bool)
 
 // Mux registers the routes of the API. Every route states what it needs, so none can be
-// added without deciding who may use it.
+// added without deciding who may use it. The description of the API lists them.
 type Mux struct {
-	mux  *http.ServeMux
-	wrap []Wrapper
+	mux    *http.ServeMux
+	wrap   []Wrapper
+	routes *[]route
+}
+
+// route is a route registered with Handle and the permissions it needs.
+type route struct {
+	pattern string
+	needs   []Permission
 }
 
 // Wrapper wraps the handler of a route, including its permission check, e.g. to log requests.
 type Wrapper func(pattern string, h http.HandlerFunc) http.HandlerFunc
 
-func NewMux(mux *http.ServeMux, wrap ...Wrapper) Mux { return Mux{mux: mux, wrap: wrap} }
+func NewMux(mux *http.ServeMux, wrap ...Wrapper) Mux {
+	return Mux{mux: mux, wrap: wrap, routes: new([]route)}
+}
 
 // Handle registers a route that runs h only if need allows the request, and if the user
-// doesn't have to set up two-factor authentication first.
+// doesn't have to set up two-factor authentication first. API tokens may use it with the
+// permissions they have, which Service.Middleware loads.
 func (m Mux) Handle(pattern string, need Need, h http.HandlerFunc) {
+	*m.routes = append(*m.routes, route{pattern, needs(pattern, need)})
 	checked := func(w http.ResponseWriter, r *http.Request) {
 		if user, _ := auth.UserFrom(r.Context()); user.MustSetUpMFA {
 			httpapi.WriteError(w, r, auth.ErrSetUpMFA)
@@ -90,7 +101,7 @@ func AdminsOnly(_ *http.Request, g Grants) (Permission, bool) { return Administr
 func SignedIn(*http.Request, Grants) (Permission, bool) { return "", true }
 
 // Middleware loads the grants of the signed-in user for every request, so changes to
-// groups apply right away.
+// groups apply right away. An API token gets those of its permissions, never more.
 func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, ok := auth.UserFrom(r.Context())
@@ -102,6 +113,13 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		if err != nil {
 			httpapi.WriteError(w, r, fmt.Errorf("load the permissions of %s: %w", user.Username, err))
 			return
+		}
+		if t := user.Token; t != nil && t.Permissions != nil {
+			perms := make([]Permission, len(t.Permissions))
+			for i, p := range t.Permissions {
+				perms[i] = Permission(p)
+			}
+			g = g.Only(perms)
 		}
 		next.ServeHTTP(w, r.WithContext(WithGrants(r.Context(), g)))
 	})

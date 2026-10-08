@@ -23,24 +23,39 @@ export interface TemplateSettings {
   properties: Record<string, string>
 }
 
+/** A project of Modrinth or Hangar; new servers get the version the template keeps, or else the newest release that suits them. */
+export interface TemplatePlugin extends Project {
+  /** The ID of the version the template keeps. */
+  version?: string
+  versionNumber?: string
+}
+
 export interface Template extends TemplateSettings {
   id: string
   name: string
   description: string
-  /** Projects of Modrinth or Hangar; each new server gets the newest release that suits it. */
-  plugins: Project[]
+  /** Given to the servers created from the template. */
+  tags: string[]
+  plugins: TemplatePlugin[]
   createdAt: string
 }
 
 export interface TemplateInput extends TemplateSettings {
   name: string
   description: string
+  tags: string[]
   /** IDs of projects of Modrinth or Hangar. */
   plugins: string[]
+  /** The IDs of the versions the template keeps, by project ID. */
+  versions: Record<string, string>
 }
 
 /** A template being edited; plugins are kept with their details to show them. */
-export type TemplateDraft = Omit<TemplateInput, "plugins"> & { plugins: Project[] }
+export type TemplateDraft = Omit<TemplateInput, "plugins" | "versions"> & { plugins: TemplatePlugin[] }
+
+/** The versions that plugins keep, by project ID, as templates are saved and servers created. */
+export const keptVersions = (plugins: TemplatePlugin[]) =>
+  Object.fromEntries(plugins.flatMap((p) => (p.version ? [[p.id, p.version]] : [])))
 
 export const emptyTemplate: TemplateDraft = {
   name: "",
@@ -56,13 +71,14 @@ export const emptyTemplate: TemplateDraft = {
   stopTimeout: 60,
   timeZone: "",
   properties: {},
+  tags: [],
   plugins: [],
 }
 
 export function draftOf(t: Template): TemplateDraft {
-  const { name, description, type, version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties, plugins } = t
+  const { name, description, type, version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties, tags, plugins } = t
   const settings = { type, version, memoryMb, java, restartPolicy, aikarFlags, jvmOptions, cpuLimit, properties }
-  return { name, description, ...settings, stopTimeout: t.stopTimeout, timeZone: t.timeZone, plugins }
+  return { name, description, ...settings, stopTimeout: t.stopTimeout, timeZone: t.timeZone, tags, plugins }
 }
 
 export const templatesQuery = queryOptions({
@@ -86,6 +102,21 @@ export function useSaveTemplate(id?: string) {
       queryClient.setQueryData(templateQuery(template.id).queryKey, template)
       return queryClient.invalidateQueries({ queryKey: templatesQuery.queryKey, exact: true })
     },
+  })
+}
+
+/** Downloads a template as a file, e.g. to import it on another master. */
+export const exportUrl = (id: string) => `/api/templates/${id}/export`
+
+/** Template files have up to 1 MiB, like any template the panel saves. */
+export const maxFileBytes = 1 << 20
+
+/** Imports an exported template, which the master checks like any other. */
+export function useImportTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: unknown) => api<Template>("/templates/import", { body: file }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: templatesQuery.queryKey, exact: true }),
   })
 }
 

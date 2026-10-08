@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/auth"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
@@ -64,7 +65,7 @@ func TestBackground(t *testing.T) {
 		t.Fatal("an operation in progress allows restarting")
 	}
 	waitFor(t, ops, func(op Operation) bool { return op.ServerID == "s1" })
-	got := ops.List(0, access.Grants{})[0]
+	got := ops.List(auth.User{}, access.Grants{})[0]
 	if !slices.Equal(got.Steps, []string{"image", "container", "plugins"}) || got.Step != 2 || got.Done != 0 || got.Unit != "" {
 		t.Fatalf("operation = %+v", got)
 	}
@@ -79,13 +80,13 @@ func TestBackground(t *testing.T) {
 func TestList(t *testing.T) {
 	ops := New(time.Minute)
 	run(ops, func(context.Context) (any, error) { return nil, nil })
-	if len(ops.List(1, access.Grants{})) != 0 {
+	if len(ops.List(auth.User{ID: 1}, access.Grants{})) != 0 {
 		t.Fatal("another user sees the operation")
 	}
-	if len(ops.List(1, access.Admin())) != 0 {
+	if len(ops.List(auth.User{ID: 1}, access.Admin())) != 0 {
 		t.Fatal("the operation isn't visible to others, yet listed")
 	}
-	if len(ops.List(0, access.Grants{})) != 1 {
+	if len(ops.List(auth.User{}, access.Grants{})) != 1 {
 		t.Fatal("the user doesn't see the own operation")
 	}
 }
@@ -109,17 +110,17 @@ func TestCancel(t *testing.T) {
 		stopped <- context.Cause(ctx)
 		return nil, ctx.Err()
 	})
-	id := ops.List(0, access.Grants{})[0].ID
-	if !ops.List(0, access.Grants{})[0].Cancellable || ops.List(1, access.Grants{})[0].Cancellable || !ops.List(1, access.Admin())[0].Cancellable {
+	id := ops.List(auth.User{}, access.Grants{})[0].ID
+	if !ops.List(auth.User{}, access.Grants{})[0].Cancellable || ops.List(auth.User{ID: 1}, access.Grants{})[0].Cancellable || !ops.List(auth.User{ID: 1}, access.Admin())[0].Cancellable {
 		t.Fatal("cancellable for the wrong users")
 	}
-	if _, err := ops.Cancel(t.Context(), id, 1, access.Grants{}); status(err) != http.StatusForbidden {
+	if _, err := ops.Cancel(t.Context(), id, auth.User{ID: 1}, access.Grants{}); status(err) != http.StatusForbidden {
 		t.Fatalf("another user without the permission: %v", err)
 	}
-	if _, err := ops.Cancel(t.Context(), "unknown", 0, access.Grants{}); status(err) != http.StatusNotFound {
+	if _, err := ops.Cancel(t.Context(), "unknown", auth.User{}, access.Grants{}); status(err) != http.StatusNotFound {
 		t.Fatalf("unknown operation: %v", err)
 	}
-	op, err := ops.Cancel(t.Context(), id, 1, access.Admin())
+	op, err := ops.Cancel(t.Context(), id, auth.User{ID: 1}, access.Admin())
 	if err != nil || !op.Cancelled || op.Cancellable {
 		t.Fatalf("cancel = %+v, %v", op, err)
 	}
@@ -130,7 +131,7 @@ func TestCancel(t *testing.T) {
 	if !got.Cancelled || got.Error != "The operation was cancelled." || got.Cancellable {
 		t.Fatalf("operation = %+v", got)
 	}
-	if _, err := ops.Cancel(t.Context(), id, 0, access.Grants{}); status(err) != http.StatusConflict {
+	if _, err := ops.Cancel(t.Context(), id, auth.User{}, access.Grants{}); status(err) != http.StatusConflict {
 		t.Fatalf("cancelling an ended operation: %v", err)
 	}
 
@@ -139,11 +140,11 @@ func TestCancel(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
-	id = ops.List(0, access.Grants{})[0].ID
-	if _, err := ops.Cancel(t.Context(), id, 1, access.Admin()); status(err) != http.StatusNotFound {
+	id = ops.List(auth.User{}, access.Grants{})[0].ID
+	if _, err := ops.Cancel(t.Context(), id, auth.User{ID: 1}, access.Admin()); status(err) != http.StatusNotFound {
 		t.Fatalf("a user who doesn't see it: %v", err)
 	}
-	if _, err := ops.Cancel(t.Context(), id, 0, access.Grants{}); err != nil {
+	if _, err := ops.Cancel(t.Context(), id, auth.User{}, access.Grants{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := waitFor(t, ops, func(op Operation) bool { return op.ID == id && op.FinishedAt != nil }); !got.Cancelled {
@@ -160,8 +161,8 @@ func TestUncancellable(t *testing.T) {
 		<-proceed
 		return nil, nil
 	})
-	op := ops.List(0, access.Admin())[0]
-	if _, err := ops.Cancel(t.Context(), op.ID, 0, access.Admin()); op.Cancellable || status(err) != http.StatusConflict {
+	op := ops.List(auth.User{}, access.Admin())[0]
+	if _, err := ops.Cancel(t.Context(), op.ID, auth.User{}, access.Admin()); op.Cancellable || status(err) != http.StatusConflict {
 		t.Fatalf("cancellable = %v, cancel: %v", op.Cancellable, err)
 	}
 	close(proceed)
@@ -175,8 +176,8 @@ func TestUncancellable(t *testing.T) {
 		return "restarted", errors.Join(err, ctx.Err())
 	})
 	<-kept
-	op = ops.List(0, access.Grants{})[0]
-	if _, err := ops.Cancel(t.Context(), op.ID, 0, access.Grants{}); op.Cancellable || status(err) != http.StatusConflict {
+	op = ops.List(auth.User{}, access.Grants{})[0]
+	if _, err := ops.Cancel(t.Context(), op.ID, auth.User{}, access.Grants{}); op.Cancellable || status(err) != http.StatusConflict {
 		t.Fatalf("cancellable = %v, cancel: %v", op.Cancellable, err)
 	}
 	close(proceed)
@@ -190,8 +191,8 @@ func TestUncancellable(t *testing.T) {
 		<-cancelled
 		return nil, Keep(ctx)
 	})
-	op = ops.List(0, access.Grants{})[0]
-	if _, err := ops.Cancel(t.Context(), op.ID, 0, access.Grants{}); err != nil {
+	op = ops.List(auth.User{}, access.Grants{})[0]
+	if _, err := ops.Cancel(t.Context(), op.ID, auth.User{}, access.Grants{}); err != nil {
 		t.Fatal(err)
 	}
 	close(cancelled)
@@ -204,8 +205,8 @@ func TestUncancellable(t *testing.T) {
 		<-proceed
 		return "done", nil
 	})
-	op = ops.List(0, access.Grants{})[0]
-	if _, err := ops.Cancel(t.Context(), op.ID, 0, access.Grants{}); err != nil {
+	op = ops.List(auth.User{}, access.Grants{})[0]
+	if _, err := ops.Cancel(t.Context(), op.ID, auth.User{}, access.Grants{}); err != nil {
 		t.Fatal(err)
 	}
 	close(proceed)
@@ -233,7 +234,7 @@ func TestEachCancelled(t *testing.T) {
 	for range PerNode {
 		<-began
 	}
-	if _, err := ops.Cancel(t.Context(), ops.List(0, access.Grants{})[0].ID, 0, access.Grants{}); err != nil {
+	if _, err := ops.Cancel(t.Context(), ops.List(auth.User{}, access.Grants{})[0].ID, auth.User{}, access.Grants{}); err != nil {
 		t.Fatal(err)
 	}
 	close(finish)
@@ -256,7 +257,7 @@ func status(err error) int {
 func waitFor(t *testing.T, ops *Operations, ok func(Operation) bool) Operation {
 	t.Helper()
 	for range 500 {
-		if list := ops.List(0, access.Grants{}); len(list) > 0 && ok(list[0]) {
+		if list := ops.List(auth.User{}, access.Grants{}); len(list) > 0 && ok(list[0]) {
 			return list[0]
 		}
 		time.Sleep(10 * time.Millisecond)
