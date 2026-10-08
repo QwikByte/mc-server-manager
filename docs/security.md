@@ -535,8 +535,8 @@ published for it, and such a master can already run code in the servers, which r
 who may manage the private network test, and only towards nodes they may see. The agent finds its firewall rules by the
 comments it writes with them, as the nftables package can't read rules with these conntrack matches; only root on the
 node could change rules and keep their comments. A node's page names published ports with only the servers, datastores
-and nodes that the user may see, and `overlay status` in the panel's terminal needs the permissions to see the node and
-all its servers.
+and nodes that the user may see, and `overlay status` in the panel's terminal needs the permissions to see the node, all
+its servers and the datastores.
 
 ## Storage locations
 

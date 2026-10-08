@@ -127,8 +127,8 @@ func agentChecks(nodeID string, moving func(serverID string) error) map[string]c
 		"backup create":     change(access.BackupsCreate),
 		"backup restore":    change(access.BackupsRestore),
 		"logs":              node(access.LogsView),
-		// It names the servers whose ports the node publishes in the private network.
-		"overlay status": both(node(access.NodesView), node(access.ServersView)),
+		// It names the servers and datastores whose ports the node publishes in the private network.
+		"overlay status": both(node(access.NodesView), both(node(access.ServersView), global(access.DatastoresView))),
 	}
 }
 
