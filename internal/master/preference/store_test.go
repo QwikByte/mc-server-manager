@@ -85,6 +85,14 @@ func TestValidation(t *testing.T) {
 		"no columns":    {{ID: "servers"}},
 		"four columns":  {{ID: "servers", Columns: 4}},
 		"too many":      widgets(maxWidgets + 1),
+		"no options":    {{ID: "figures", Columns: 1, Options: map[string]string{"count": "5"}}},
+		"unknown":       {{ID: "top-servers", Columns: 1, Options: map[string]string{"level": "info"}}},
+		"other value":   {{ID: "top-servers", Columns: 1, Options: map[string]string{"count": "8"}}},
+		"no value":      {{ID: "activity", Columns: 1, Options: map[string]string{"level": ""}}},
+		"node":          {{ID: "nodes", Columns: 1, Options: map[string]string{"nodes": node + ",../" + node[3:]}}},
+		"no node":       {{ID: "nodes", Columns: 1, Options: map[string]string{"nodes": ""}}},
+		"trailing":      {{ID: "nodes", Columns: 1, Options: map[string]string{"nodes": node + ","}}},
+		"many nodes":    {{ID: "resources", Columns: 1, Options: map[string]string{"nodes": strings.Repeat(node+",", maxChosen) + node}}},
 	} {
 		if err := s.SetDashboard(ctx, user, w); !badRequest(err) {
 			t.Errorf("%s: SetDashboard = %v, want a bad request", name, err)
@@ -112,6 +120,7 @@ func TestValidation(t *testing.T) {
 	// The limits themselves are fine.
 	most := widgets(maxWidgets)
 	most[0] = Widget{ID: "s" + strings.Repeat("x", 31), Columns: maxColumns, Hidden: true}
+	most[1] = Widget{ID: "resources", Columns: 2, Options: map[string]string{"nodes": strings.Repeat(node+",", maxChosen-1) + node, "range": "week"}}
 	if err := s.SetDashboard(ctx, user, most); err != nil {
 		t.Fatal(err)
 	}
@@ -134,12 +143,15 @@ func TestStore(t *testing.T) {
 		if want.Alerts.Level == "" {
 			want.Alerts = noAlerts
 		}
+		if want.Hidden == nil {
+			want.Hidden = []HiddenItem{}
+		}
 		got, err := s.Get(ctx, user)
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("Get(%d) = %+v, %v, want %+v", user, got, err, want)
 		}
 	}
-	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: noAlerts, Settings: Settings{}}
+	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: noAlerts, Settings: Settings{}, Hidden: []HiddenItem{}}
 	// Users start with the default layout and no pins, as empty lists rather than nil.
 	check(alice, none)
 
@@ -203,10 +215,13 @@ func TestStore(t *testing.T) {
 	if err := s.SetAlerts(ctx, alice, Alerts{Level: "error"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetHidden(ctx, alice, []HiddenItem{{Key: "offline/" + n1, Until: time.Now().Add(time.Hour)}}); err != nil {
+		t.Fatal(err)
+	}
 	exec(t, db, `DELETE FROM users WHERE id = ?`, alice)
 	var left int
 	if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM dashboards) + (SELECT COUNT(*) FROM pinned_servers) +
-		(SELECT COUNT(*) FROM user_settings) + (SELECT COUNT(*) FROM alert_filters)`).Scan(&left); err != nil || left != 0 {
+		(SELECT COUNT(*) FROM user_settings) + (SELECT COUNT(*) FROM alert_filters) + (SELECT COUNT(*) FROM hidden_items)`).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("%d preferences left of a deleted user, %v", left, err)
 	}
 }
@@ -337,5 +352,111 @@ func TestAlerts(t *testing.T) {
 	}
 	if p, err := s.Get(ctx, alice); err != nil || !reflect.DeepEqual(p.Alerts, noAlerts) {
 		t.Fatalf("alerts = %+v, %v, want %+v", p.Alerts, err, noAlerts)
+	}
+}
+
+func TestWidgetOptions(t *testing.T) {
+	db := open(t)
+	s, ctx, alice := NewStore(db), t.Context(), addUser(t, db, "alice")
+	node := id()
+	dashboard := []Widget{
+		{ID: "activity", Columns: 2, Options: map[string]string{"count": "20", "level": "warn"}},
+		{ID: "resources", Columns: 2, Options: map[string]string{"measure": "memory", "range": "week", "nodes": node + "," + id()}},
+		{ID: "networks", Columns: 1, Options: map[string]string{"networks": id()}},
+		{ID: "figures", Columns: 3},
+	}
+	if err := s.SetDashboard(ctx, alice, dashboard); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := s.Get(ctx, alice); err != nil || !reflect.DeepEqual(p.Dashboard, dashboard) {
+		t.Fatalf("dashboard = %+v, %v, want %+v", p.Dashboard, err, dashboard)
+	}
+
+	// Options and values that a newer version stored, or an older one knew, aren't shown.
+	exec(t, db, `UPDATE dashboards SET widgets = ? WHERE user_id = ?`, `[{"id":"activity","columns":2,"options":{"count":"50","level":"error","color":"red"}},`+
+		`{"id":"nodes","columns":1,"options":{"nodes":"`+node+`,x"}},{"id":"chart","columns":1,"options":{"count":"5"}}]`, alice)
+	want := []Widget{
+		{ID: "activity", Columns: 2, Options: map[string]string{"level": "error"}},
+		{ID: "nodes", Columns: 1, Options: map[string]string{}},
+		{ID: "chart", Columns: 1, Options: map[string]string{}},
+	}
+	if p, err := s.Get(ctx, alice); err != nil || !reflect.DeepEqual(p.Dashboard, want) {
+		t.Fatalf("dashboard = %+v, %v, want %+v", p.Dashboard, err, want)
+	}
+}
+
+func TestHidden(t *testing.T) {
+	db := open(t)
+	s, ctx, alice := NewStore(db), t.Context(), addUser(t, db, "alice")
+	node, srv := id(), id()
+	soon := time.Now().Add(time.Hour).UTC().Round(time.Second)
+	hidden := func(keys ...string) []HiddenItem {
+		items := make([]HiddenItem, len(keys))
+		for i, key := range keys {
+			items[i] = HiddenItem{Key: key, Until: soon}
+		}
+		return items
+	}
+	many := make([]string, maxHidden+1)
+	for i := range many {
+		many[i] = "crash/" + id()
+	}
+	for name, items := range map[string][]HiddenItem{
+		"no key":     hidden(""),
+		"kind only":  hidden("offline"),
+		"capitals":   hidden("offline/" + strings.ToUpper(node)),
+		"path":       hidden("offline/../" + node),
+		"long":       hidden("offline/" + strings.Repeat("x", 33)),
+		"deep":       hidden("usage/" + node + "/" + srv + "/storage/default/x"),
+		"twice":      hidden("offline/"+node, "offline/"+node),
+		"state":      {{Key: "offline/" + node, State: "AB", Until: soon}},
+		"long state": {{Key: "offline/" + node, State: strings.Repeat("a", 17), Until: soon}},
+		"too many":   hidden(many...),
+	} {
+		var apiErr *httpapi.Error
+		if err := s.SetHidden(ctx, alice, items); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+			t.Errorf("%s: SetHidden = %v, want a bad request", name, err)
+		}
+	}
+	check := func(want ...HiddenItem) {
+		t.Helper()
+		p, err := s.Get(ctx, alice)
+		if err != nil || len(p.Hidden) != len(want) {
+			t.Fatalf("hidden = %+v, %v, want %+v", p.Hidden, err, want)
+		}
+		for i, h := range p.Hidden {
+			if h.Key != want[i].Key || h.State != want[i].State || !h.Until.Equal(want[i].Until) {
+				t.Fatalf("hidden = %+v, want %+v", p.Hidden, want)
+			}
+		}
+	}
+
+	// Items whose time passed are left out, and none is hidden for longer than a week.
+	items := []HiddenItem{
+		{Key: "offline/" + node, State: "1k2j3h", Until: time.Now().Add(30 * 24 * time.Hour)},
+		{Key: "usage/" + node + "//storage/default", Until: soon},
+		{Key: "crash/" + srv, Until: time.Now().Add(-time.Minute)},
+		{Key: "task/" + id(), Until: soon},
+	}
+	before := time.Now()
+	if err := s.SetHidden(ctx, alice, items); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.Get(ctx, alice)
+	if err != nil || len(p.Hidden) != 3 || p.Hidden[0].Until.Before(before.Add(maxHiding)) || p.Hidden[0].Until.After(time.Now().Add(maxHiding)) {
+		t.Fatalf("hidden = %+v, %v", p.Hidden, err)
+	}
+	check(p.Hidden[0], items[1], items[3])
+
+	// Those that show again by now aren't returned; none at all leaves no row.
+	exec(t, db, `UPDATE hidden_items SET items = json_set(items, '$[1].until', ?) WHERE user_id = ?`, time.Now().Add(-time.Second).Format(time.RFC3339), alice)
+	check(p.Hidden[0], items[3])
+	if err := s.SetHidden(ctx, alice, nil); err != nil {
+		t.Fatal(err)
+	}
+	check()
+	var left int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hidden_items`).Scan(&left); err != nil || left != 0 {
+		t.Fatalf("%d rows left, %v", left, err)
 	}
 }

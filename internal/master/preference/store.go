@@ -1,6 +1,6 @@
 // Package preference keeps each user's preferences of the panel: the layout of their
-// overview, the servers they pinned, which warnings and errors pop up, and settings such as
-// the colour theme. They follow the user into every browser.
+// overview, the servers they pinned, which warnings and errors pop up, settings such as the
+// colour theme, and what they hid of Needs attention. They follow the user into every browser.
 package preference
 
 import (
@@ -26,6 +26,9 @@ const (
 	maxPinned     = 20
 	maxChosen     = 100
 	maxCategories = 32
+	maxHidden     = 100
+	// maxHiding is the longest an item of Needs attention stays hidden, also until it changes.
+	maxHiding = 7 * 24 * time.Hour
 )
 
 var (
@@ -34,6 +37,11 @@ var (
 	idPattern = regexp.MustCompile(`^[a-z2-7]{26}$`)
 	// categoryPattern matches the categories of the log, as the notifications do.
 	categoryPattern = regexp.MustCompile(`^[a-z][a-z-]{0,31}$`)
+	// itemPattern matches the keys of the items of Needs attention: their kind and what they are
+	// about, e.g. offline/<node ID> or usage/<node ID>/<server ID>/storage/<storage location>.
+	itemPattern = regexp.MustCompile(`^[a-z][a-z-]{0,31}(/[a-z0-9-]{0,32}){1,4}$`)
+	// statePattern matches the fingerprints the panel takes of how an item is.
+	statePattern = regexp.MustCompile(`^[0-9a-z]{1,16}$`)
 )
 
 // settings are the keys of Settings and the values each takes, which the panel knows too
@@ -101,6 +109,29 @@ var settings = map[string][]string{
 	"powerWhen": {"always", "players"},
 }
 
+// widgetOptions are the options of the widgets that have some and the values each takes, which
+// the panel knows too (web/src/features/dashboard/widgets.ts). Nil takes the IDs of nodes or
+// networks, separated by commas.
+var widgetOptions = map[string]map[string][]string{
+	"server-map":  {"nodes": nil},
+	"nodes":       {"nodes": nil},
+	"resources":   {"measure": {"cpu", "memory"}, "range": {"day", "week"}, "nodes": nil},
+	"networks":    {"networks": nil},
+	"top-servers": {"count": {"5", "10", "20"}},
+	"activity":    {"count": {"5", "8", "10", "20"}, "level": {"info", "warn", "error"}},
+	"schedules":   {"count": {"5", "8", "10", "20"}},
+}
+
+// validOption tells whether an option of a widget takes a value.
+func validOption(widget, key, value string) bool {
+	values, known := widgetOptions[widget][key]
+	if known && values == nil {
+		ids := strings.Split(value, ",")
+		return len(ids) <= maxChosen && !slices.ContainsFunc(ids, invalidID)
+	}
+	return slices.Contains(values, value)
+}
+
 // valid tells whether a setting takes a value.
 func valid(key, value string) bool {
 	if key == "timeZone" {
@@ -125,6 +156,8 @@ type Preferences struct {
 	Alerts Alerts `json:"alerts"`
 	// Settings are the user's other choices, e.g. the colour theme.
 	Settings Settings `json:"settings"`
+	// Hidden are the items of Needs attention the user hid for a while.
+	Hidden []HiddenItem `json:"hidden"`
 }
 
 // Alerts choose which new warnings and errors of the log the panel shows the user as they
@@ -152,6 +185,19 @@ type Widget struct {
 	ID      string `json:"id"`
 	Columns int    `json:"columns"`
 	Hidden  bool   `json:"hidden,omitempty"`
+	// Options are what the user chose for the widget, e.g. {"count": "10"}; the widget has its
+	// default for the others.
+	Options map[string]string `json:"options,omitempty"`
+}
+
+// HiddenItem is an item of Needs attention on the overview that a user hid.
+type HiddenItem struct {
+	// Key is what the item is about, e.g. "offline/<node ID>".
+	Key string `json:"key"`
+	// State is a fingerprint of how the item was, if it is hidden until that changes.
+	State string `json:"state,omitempty"`
+	// Until is when it shows again at the latest.
+	Until time.Time `json:"until"`
 }
 
 // Server is a server on a node.
@@ -166,9 +212,13 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 // Get returns the preferences of a user. Those the user never set are empty, not nil.
 func (s *Store) Get(ctx context.Context, userID int64) (Preferences, error) {
-	p := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: Alerts{Level: "warn"}, Settings: Settings{}}
+	p := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: Alerts{Level: "warn"}, Settings: Settings{}, Hidden: []HiddenItem{}}
 	if err := s.readJSON(ctx, `SELECT widgets FROM dashboards WHERE user_id = ?`, userID, &p.Dashboard); err != nil {
 		return p, err
+	}
+	for _, w := range p.Dashboard {
+		// Options that only an older version knew are left out, as are such settings below.
+		maps.DeleteFunc(w.Options, func(key, value string) bool { return !validOption(w.ID, key, value) })
 	}
 	if err := s.readJSON(ctx, `SELECT filter FROM alert_filters WHERE user_id = ?`, userID, &p.Alerts); err != nil {
 		return p, err
@@ -179,6 +229,10 @@ func (s *Store) Get(ctx context.Context, userID int64) (Preferences, error) {
 	}
 	// Values that only an older version knew are left out.
 	maps.DeleteFunc(p.Settings, func(key, value string) bool { return !valid(key, value) })
+	if err := s.readJSON(ctx, `SELECT items FROM hidden_items WHERE user_id = ?`, userID, &p.Hidden); err != nil {
+		return p, err
+	}
+	p.Hidden = slices.DeleteFunc(p.Hidden, passed(time.Now()))
 	rows, err := s.db.QueryContext(ctx, `SELECT node_id, server_id FROM pinned_servers WHERE user_id = ? ORDER BY position`, userID)
 	if err != nil {
 		return p, err
@@ -263,6 +317,26 @@ func (s *Store) ChangeSettings(ctx context.Context, userID int64, change map[str
 	// json_patch merges as RFC 7396 describes, in a single statement.
 	_, err = s.db.ExecContext(ctx, `INSERT INTO user_settings (user_id, settings) VALUES (?1, json_patch('{}', ?2))
 		ON CONFLICT (user_id) DO UPDATE SET settings = json_patch(settings, ?2)`, userID, string(data))
+	return err
+}
+
+// SetHidden stores the items of Needs attention that a user hid, without those that show again
+// by now.
+func (s *Store) SetHidden(ctx context.Context, userID int64, items []HiddenItem) error {
+	items, err := checkHidden(items, time.Now())
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		_, err := s.db.ExecContext(ctx, `DELETE FROM hidden_items WHERE user_id = ?`, userID)
+		return err
+	}
+	data, err := json.Marshal(items)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO hidden_items (user_id, items) VALUES (?, ?)
+		ON CONFLICT (user_id) DO UPDATE SET items = excluded.items`, userID, string(data))
 	return err
 }
 
@@ -365,8 +439,60 @@ func checkDashboard(widgets []Widget) error {
 			return httpapi.Errorf(http.StatusBadRequest, "Widgets span 1 to %d columns.", maxColumns)
 		}
 		seen[w.ID] = true
+		if err := checkOptions(w); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func checkOptions(w Widget) error {
+	for _, key := range slices.Sorted(maps.Keys(w.Options)) {
+		values, known := widgetOptions[w.ID][key]
+		switch {
+		case !known:
+			return httpapi.Errorf(http.StatusBadRequest, "The widget %q has no option %q.", w.ID, key)
+		case validOption(w.ID, key, w.Options[key]):
+		case values == nil:
+			return httpapi.Errorf(http.StatusBadRequest, "The option %q of the widget %q takes up to %d IDs, separated by commas.", key, w.ID, maxChosen)
+		default:
+			return httpapi.Errorf(http.StatusBadRequest, "The option %q of the widget %q is one of %s.", key, w.ID, strings.Join(values, ", "))
+		}
+	}
+	return nil
+}
+
+// checkHidden checks hidden items, and returns them without those that show again by now and
+// hidden for maxHiding at most.
+func checkHidden(items []HiddenItem, now time.Time) ([]HiddenItem, error) {
+	if len(items) > maxHidden {
+		return nil, httpapi.Errorf(http.StatusBadRequest, "Hide up to %d items.", maxHidden)
+	}
+	seen := make(map[string]bool, len(items))
+	for _, h := range items {
+		switch {
+		case !itemPattern.MatchString(h.Key):
+			return nil, httpapi.Errorf(http.StatusBadRequest, "Hidden items have keys such as offline/<node ID>.")
+		case h.State != "" && !statePattern.MatchString(h.State):
+			return nil, httpapi.Errorf(http.StatusBadRequest, "The state of a hidden item has up to 16 lowercase letters and digits.")
+		case seen[h.Key]:
+			return nil, httpapi.Errorf(http.StatusBadRequest, "An item is hidden twice.")
+		}
+		seen[h.Key] = true
+	}
+	items = slices.DeleteFunc(slices.Clone(items), passed(now))
+	for i := range items {
+		// Later times, e.g. of a browser whose clock is ahead, are cut.
+		if latest := now.Add(maxHiding); items[i].Until.After(latest) {
+			items[i].Until = latest
+		}
+	}
+	return items, nil
+}
+
+// passed tells whether a hidden item shows again by now.
+func passed(now time.Time) func(HiddenItem) bool {
+	return func(h HiddenItem) bool { return !h.Until.After(now) }
 }
 
 func checkPinned(servers []Server) error {

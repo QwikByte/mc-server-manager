@@ -18,6 +18,18 @@ export interface Widget {
   id: string
   columns: 1 | 2 | 3
   hidden?: boolean
+  /**
+   * What the user chose for it, e.g. { count: "10" }, with IDs of nodes and networks separated by commas; the widget has
+   * its defaults for the others.
+   */
+  options?: Record<string, string>
+}
+
+/** An item of Needs attention that the user hid until a time, or before that until it changes from the state it had. */
+export interface HiddenItem {
+  key: string
+  state?: string
+  until: string
 }
 
 export interface ServerRef {
@@ -106,6 +118,7 @@ export interface Preferences {
   pinned: ServerRef[]
   alerts: Alerts
   settings: Settings
+  hidden: HiddenItem[]
 }
 
 export const preferencesQuery = queryOptions({
@@ -139,6 +152,13 @@ function useChange<K extends keyof Preferences>(part: K, field?: string) {
 }
 
 export const useSetDashboard = () => useChange("dashboard", "widgets")
+
+/** The items of Needs attention the user hid, and a change of them. */
+export function useHidden() {
+  const { data } = useQuery(preferencesQuery)
+  const set = useChange("hidden", "items")
+  return { hidden: data?.hidden ?? [], set: set.mutate }
+}
 
 export const defaultAlerts: Alerts = { level: "warn", only: false, pinned: false, nodes: [], servers: [], categories: [] }
 

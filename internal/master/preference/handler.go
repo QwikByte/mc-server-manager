@@ -21,6 +21,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/preferences/pinned", auth.SessionOnly(h.setPinned))
 	mux.HandleFunc("PUT /api/preferences/alerts", auth.SessionOnly(h.setAlerts))
 	mux.HandleFunc("PATCH /api/preferences/settings", auth.SessionOnly(h.changeSettings))
+	mux.HandleFunc("PUT /api/preferences/hidden", auth.SessionOnly(h.setHidden))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) { h.reply(w, r, nil) }
@@ -69,6 +70,19 @@ func (h *Handler) changeSettings(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		user, _ := auth.UserFrom(r.Context())
 		err = h.store.ChangeSettings(r.Context(), user.ID, change)
+	}
+	h.reply(w, r, err)
+}
+
+// setHidden stores the items of Needs attention the user hid.
+func (h *Handler) setHidden(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Items []HiddenItem `json:"items"`
+	}
+	err := httpapi.ReadJSON(w, r, &req)
+	if err == nil {
+		user, _ := auth.UserFrom(r.Context())
+		err = h.store.SetHidden(r.Context(), user.ID, req.Items)
 	}
 	h.reply(w, r, err)
 }

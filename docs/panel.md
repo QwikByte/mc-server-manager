@@ -29,6 +29,23 @@ browsers. The players online and the CPU load of the key figures show how they w
 server map shows each node in a row with its servers as blocks in the colour of their state, solid while they run and
 hollow while they are stopped; a block names its server when pointed at and opens it.
 
+While customizing, the gear of a widget holds its options, which apply right away: how many servers **Most players**
+lists, how many entries **Recent activity** shows and from which level, and how many next runs **Schedules** lists (5,
+10 or 20, the latter two also 8 as they do unless chosen), the measure and range of **Node load** (24 hours or 7 days),
+and the nodes that the server map, **Nodes** and **Node load** show and the networks that **Networks** shows, all unless
+some are chosen. **Node load** also keeps the measure chosen in its header. A widget whose chosen nodes or networks are
+all gone shows all of them again. The master keeps the options with the layout and refuses options and values a widget
+doesn't have; **Reset** takes them back too.
+
+An item of **Needs attention** is hidden with the eye at its end, for the user only but in all their browsers: for an
+hour, for a day, or until it changes, e.g. a node in maintenance. One hidden until it changes shows again once it
+differs, e.g. a crashing server with another exit code, or once it is gone and comes back, e.g. a node that is offline
+again after it was online; the panel notices that it is gone while the overview is open in one of the user's browsers,
+and it shows again after a week in any case. The widget and the line below the title count what isn't hidden; **2
+hidden** lists the hidden items with how long they stay hidden, and shows each or all of them again. The master keeps
+up to 100 hidden items for each user, as what they are about, e.g. `offline/<node ID>`, until when, and a fingerprint of
+how they were rather than their texts, and drops those whose time has passed; `PUT /api/preferences/hidden` sets them.
+
 ## Navigation and pinned servers
 
 Servers are pinned with the pin on their card, in the table or on their page. Pinned servers are listed with their state

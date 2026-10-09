@@ -10,6 +10,7 @@ import type { NodeServer } from "@/features/servers/api"
 import { serverLook, serverStates, statusOf } from "@/features/servers/server-types"
 import { locale } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { chosen, type WidgetProps } from "./options"
 import { useOverview } from "./overview"
 import { Calm, Panel } from "./panel"
 
@@ -29,10 +30,12 @@ const nodeTone = (n: Node): Tone => (n.status === "online" ? "success" : n.statu
 
 /**
  * Every server as a block in the row of its node, in the colour of its state, which opens it: what
- * runs where, and what doesn't, at a glance.
+ * runs where, and what doesn't, at a glance. It shows all nodes or those chosen.
  */
-export function ServerMap({ title }: { title: string }) {
-  const { nodes, servers = [] } = useOverview()
+export function ServerMap({ title, options }: WidgetProps) {
+  const overview = useOverview()
+  const nodes = chosen(overview.nodes, options.nodes)
+  const servers = (overview.servers ?? []).filter((s) => nodes.some((n) => n.id === s.nodeId))
   const running = servers.filter((s) => s.state === "running").length
   return (
     <Panel title={title} more={{ to: "/servers", label: t("All servers") }}>
