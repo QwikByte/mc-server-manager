@@ -482,6 +482,11 @@ without control characters, so data can't add commands or headers, and the steps
 so data can't name others there, such as `@a`. In a console command, data can still be any argument that its template
 takes, so a workflow should check what a webhook sends before using it there, e.g. with a condition.
 
+When servers, nodes, networks, notification channels or workflows are deleted, workflows only lose what referred to
+them: a trigger whose servers are all gone is removed rather than left without targets, which would watch all servers,
+and a step without servers or without its network, channel or workflow is turned off, so that a deletion never lets a
+workflow act on more than before.
+
 HTTP requests of workflows go through the same connections as [notifications](#notifications): HTTPS to public addresses
 only, checked right before each connection, without redirects or proxies, with a timeout, and answers up to 64 KB. The
 values of secret headers are stored like the URLs of webhooks: the API never returns them, runs never record them and

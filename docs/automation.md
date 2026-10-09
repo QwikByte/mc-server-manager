@@ -309,6 +309,15 @@ they ran with its outcome, what it decided or why it failed and what it told lat
 and the inputs. A run in progress shows its steps as they go, and can be cancelled. Runs that the master stopped, e.g.
 as it restarted, count as failed.
 
+### What workflows refer to
+
+Workflows follow what they refer to. A server that moves to another node stays a target at its new place, and a deleted
+server, node or network leaves the targets of triggers and steps. That never widens a workflow: a trigger whose servers
+are all gone is removed, as one without servers would watch all of them, and a step that has no servers left is turned
+off. Steps whose network, notification channel or workflow to run was deleted are turned off too. The log names each
+workflow that changed and what changed. A step that is turned off may be incomplete, e.g. without servers; it is checked
+once it is turned on again. Running a workflow that doesn't exist can't be saved.
+
 ### Webhooks
 
 A workflow with a webhook trigger gets its URL on its page once it is saved: `https://<panel>/api/hooks/<token>`. The

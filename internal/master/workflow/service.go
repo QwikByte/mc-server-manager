@@ -151,6 +151,8 @@ type Service struct {
 	limited map[string]time.Time // when it was logged that triggers fired too often
 
 	watch watch
+
+	changes sync.Mutex // one change of the stored workflows at a time
 }
 
 // active is a workflow as its triggers and runs need it.
@@ -190,8 +192,12 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.reload(ctx); err != nil {
 		return err
 	}
+	if err := s.prune(ctx); err != nil { // e.g. a node that was removed with an older version
+		return err
+	}
 	go s.schedule(ctx)
 	go s.follow(ctx)
+	go s.tidy(ctx)
 	return nil
 }
 
@@ -387,16 +393,22 @@ func (s *Service) needs(d *Draft) ([]access.Permission, error) {
 	defer s.mu.Unlock()
 	walk(d.Steps, func(st *Step) {
 		var c callSettings
-		if st.Kind == "call" && json.Unmarshal(st.With, &c) == nil && s.active[c.Workflow] != nil {
+		switch {
+		case st.Kind != "call" || st.Disabled || json.Unmarshal(st.With, &c) != nil:
+		case s.active[c.Workflow] == nil:
+			err = cmp.Or(err, bad("Step %s: Choose a workflow that exists.", st.label()))
+		default:
 			needs = append(needs, s.active[c.Workflow].needs...)
 		}
 	})
 	slices.Sort(needs)
-	return slices.Compact(needs), nil
+	return slices.Compact(needs), err
 }
 
 // Create stores a new workflow, which its author saved last.
 func (s *Service) Create(ctx context.Context, d Draft, by Author) (Workflow, error) {
+	s.changes.Lock()
+	defer s.changes.Unlock()
 	needs, err := s.needs(&d)
 	if err == nil {
 		err = by.allowed(needs)
@@ -433,6 +445,8 @@ func (s *Service) Create(ctx context.Context, d Draft, by Author) (Workflow, err
 // Update changes a workflow, which its author saved last then. Secret headers left empty keep
 // their values.
 func (s *Service) Update(ctx context.Context, id string, d Draft, by Author) (Workflow, error) {
+	s.changes.Lock()
+	defer s.changes.Unlock()
 	old, err := s.get(ctx, id)
 	if err != nil {
 		return old, err
@@ -496,9 +510,12 @@ func taken(err error, name string) error {
 	return err
 }
 
-// Delete removes a workflow and cancels its runs.
+// Delete removes a workflow and cancels its runs. The steps of others that run it are turned
+// off.
 func (s *Service) Delete(ctx context.Context, id string) error {
+	s.changes.Lock()
 	res, err := s.db.ExecContext(ctx, `DELETE FROM workflows WHERE id = ?`, id)
+	s.changes.Unlock()
 	if err != nil {
 		return err
 	}
@@ -512,7 +529,10 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 	s.mu.Unlock()
-	return s.reload(ctx)
+	if err := s.reload(ctx); err != nil {
+		return err
+	}
+	return s.prune(ctx)
 }
 
 // NewHook gives a workflow a new URL, which replaces the one before, and returns its token.

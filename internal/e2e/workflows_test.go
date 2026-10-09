@@ -13,6 +13,7 @@ import (
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/access"
 	masterapp "github.com/QwikByte/noryx/internal/master/app"
+	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/workflow"
 )
 
@@ -198,4 +199,32 @@ func runWorkflow(t *testing.T, api apiClient, id string, inputs map[string]any) 
 		api.do("GET", "/api/workflows/"+id+"/runs/"+strconv.FormatInt(run.ID, 10), nil, http.StatusOK, &run)
 	}
 	return run
+}
+
+// Deleting a server takes it out of workflows: a trigger that only watched it goes, a step that
+// only acted on it is turned off, and the others keep their other servers.
+func TestWorkflowsForgetDeletedServers(t *testing.T) {
+	m := startMaster(t)
+	a := m.startAgent(t, "node-1")
+	lobby := m.createServer(t, a, "Lobby", noryxv1.ServerType_SERVER_TYPE_PAPER, 25565)
+	survival := m.createServer(t, a, "Survival", noryxv1.ServerType_SERVER_TYPE_PAPER, 25566)
+	api := apiClient{t: t, url: m.panel(t).URL}
+	server := func(ref network.Ref) map[string]string {
+		return map[string]string{"kind": "server", "nodeId": ref.NodeID, "serverId": ref.ServerID}
+	}
+	var wf workflow.Workflow
+	api.do("POST", "/api/workflows", map[string]any{
+		"name": "Watched", "enabled": true,
+		"triggers": []any{map[string]any{"kind": "server", "on": "started", "targets": []any{server(lobby)}}},
+		"steps": []any{
+			map[string]any{"id": "only", "kind": "restart", "with": map[string]any{"targets": []any{server(lobby)}}},
+			map[string]any{"id": "both", "kind": "restart", "with": map[string]any{"targets": []any{server(lobby), server(survival)}}},
+		},
+	}, http.StatusCreated, &wf)
+	api.do("DELETE", "/api/nodes/"+lobby.NodeID+"/servers/"+lobby.ServerID, nil, http.StatusNoContent, nil)
+	api.do("GET", "/api/workflows/"+wf.ID, nil, http.StatusOK, &wf)
+	if len(wf.Triggers) != 0 || !wf.Steps[0].Disabled || wf.Steps[1].Disabled || strings.Contains(string(wf.Steps[1].With), lobby.ServerID) ||
+		!strings.Contains(string(wf.Steps[1].With), survival.ServerID) {
+		t.Fatalf("after deleting the lobby: %+v", wf)
+	}
 }
