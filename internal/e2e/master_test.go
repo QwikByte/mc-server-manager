@@ -137,6 +137,37 @@ func TestPanelAddrAndRestart(t *testing.T) {
 	apiClient{t: t, url: m.panel(t).URL}.do("POST", "/api/master/restart", nil, http.StatusConflict, nil)
 }
 
+// The sign-in page reads the panel's name and notice without a session, and authenticator
+// apps get the name with new secrets.
+func TestPanelName(t *testing.T) {
+	m := startMaster(t)
+	svc := m.services(t)
+	srv := httptest.NewTLSServer(masterapp.Handler(svc))
+	t.Cleanup(srv.Close)
+	admin, err := svc.Users.CreateUser(t.Context(), "admin", "the-admins-password")
+	check(t, err)
+	check(t, svc.Access.MakeAdmin(t.Context(), admin.ID))
+	visitor, root := browser(t, srv), browser(t, srv)
+	var public struct{ Name, Notice string }
+	visitor.do("GET", "/api/panel", nil, http.StatusOK, &public)
+	if public.Name != "Noryx" || public.Notice != "" {
+		t.Fatalf("public = %+v", public)
+	}
+
+	root.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "the-admins-password"}, http.StatusOK, nil)
+	root.do("PUT", "/api/settings", map[string]any{"panelName": "Noryx\r\nTest"}, http.StatusBadRequest, nil)
+	root.do("PUT", "/api/settings", map[string]any{"panelName": "Noryx · Test", "signInNotice": "Ask Alex for access."}, http.StatusOK, nil)
+	visitor.do("GET", "/api/panel", nil, http.StatusOK, &public)
+	if public.Name != "Noryx · Test" || public.Notice != "Ask Alex for access." {
+		t.Fatalf("public = %+v", public)
+	}
+	var setup auth.MFASetup
+	root.do("POST", "/api/auth/mfa/setup", nil, http.StatusOK, &setup)
+	if !strings.HasPrefix(setup.URI, "otpauth://totp/Noryx%20%C2%B7%20Test:admin?issuer=Noryx%20%C2%B7%20Test&") {
+		t.Fatalf("uri = %s", setup.URI)
+	}
+}
+
 // Each user keeps the language they chose, and the session tells it to every browser.
 func TestLanguage(t *testing.T) {
 	m := startMaster(t)

@@ -44,6 +44,9 @@ address, browser and time of its last use at most once a minute; the browser and
 fixed lists that the master recognises in the User-Agent, which are shown but never trusted. The CSV
 files of servers, nodes and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
 reasons as the export of the log does, and quote cells that hold the separator the user chose, comma or semicolon. Notes of servers are plain text, which the panel shows as text only.
+So are the name of the panel and the notice of its sign-in page: of limited length, without control characters but the
+line breaks of the notice, and public, as the sign-in page reads them without a session. The settings take no HTML, CSS
+or images for them, so the Content Security Policy stays as strict.
 
 ## Two-factor authentication
 
@@ -458,8 +461,9 @@ certificate that the system trusts, redirects aren't followed and proxies of the
 connect elsewhere; mails go over TLS from the start or after STARTTLS, and the master refuses to sign in or send without
 it. Every request and mail has a timeout, and only the status of an answer is shown, not its body. Discord and Slack get
 the texts of entries, which agents and servers write, as text that can't mention anyone or be formatted: escaped for
-Discord, which also gets no mentions allowed, and as Slack's plain text with `&`, `<` and `>` escaped. The subjects of
-mails are a single line without control characters and encoded, so that an entry can't add headers. A compromised agent
+Discord, which also gets no mentions allowed, and as Slack's plain text with `&`, `<` and `>` escaped, like the name of
+the panel in its notifications. The subjects of mails, and the name of the panel in them and as their sender, are a
+single line without control characters and encoded, so that neither an entry nor the name can add headers. A compromised agent
 can only add warnings about its own node and servers, at the limited rate of the log, and each channel sends 5 messages
 at once, then one a minute at most, which counts what it leaves out. **Send test** works three times at once, then once
 every 20 seconds per channel.

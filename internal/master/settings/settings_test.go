@@ -249,3 +249,48 @@ func TestRequireMFA(t *testing.T) {
 		t.Fatalf("requirement for all = %+v", r)
 	}
 }
+
+// The name of the panel and the notice of the sign-in page are plain text, which the sign-in
+// page reads without a session.
+func TestPanelNameAndNotice(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s, err := Load(t.Context(), db, Master{PanelDefaultAddr: "127.0.0.1:0"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := func(name, notice string) error {
+		next := s.Get()
+		next.PanelName, next.SignInNotice = name, notice
+		_, err := s.Update(t.Context(), next)
+		return err
+	}
+	for _, bad := range [][2]string{
+		{"Noryx\nTest", ""}, {"Noryx\x1b[31m", ""}, {"Noryx Test", ""}, {strings.Repeat("n", maxPanelName+1), ""},
+		{"", "Ask\x00Alex"}, {"", "Ask\tAlex"}, {"", "Ask Alex"}, {"", strings.Repeat("n", maxSignInNotice+1)},
+	} {
+		if err := set(bad[0], bad[1]); err == nil {
+			t.Errorf("name %q and notice %q accepted", bad[0], bad[1])
+		}
+	}
+	if s.PanelName() != "Noryx" {
+		t.Fatalf("name = %q", s.PanelName())
+	}
+	if err := set(strings.Repeat("·", maxPanelName), ""); err != nil {
+		t.Errorf("%d characters: %v", maxPanelName, err)
+	}
+	if err := set(" Noryx · Test ", " Ask Alex\r\nfor access. "); err != nil || s.PanelName() != "Noryx · Test" || s.Get().SignInNotice != "Ask Alex\nfor access." {
+		t.Fatalf("set: %v, settings = %+v", err, s.Get())
+	}
+
+	mux := http.NewServeMux()
+	NewHandler(s, nil).RegisterPublic(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/panel", nil))
+	if body := strings.TrimSpace(rec.Body.String()); rec.Code != http.StatusOK || body != `{"name":"Noryx · Test","notice":"Ask Alex\nfor access."}` {
+		t.Fatalf("status %d: %s", rec.Code, body)
+	}
+}

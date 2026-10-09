@@ -20,6 +20,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/https"
@@ -36,6 +38,8 @@ const (
 	minLogSizeMB        = 100
 	maxLogSizeMB        = 100 << 10 // 100 GiB
 	maxMFAGroups        = 100
+	maxPanelName        = 64
+	maxSignInNotice     = 500
 )
 
 var (
@@ -75,6 +79,13 @@ type Settings struct {
 	RequireMFA MFARequirement `json:"requireMfa"`
 	// Thresholds tell when the usage of nodes and servers warns, unless they have their own.
 	Thresholds usage.Defaults `json:"thresholds"`
+
+	// PanelName names the panel in the browser's tab, the sidebar and notifications, and
+	// authenticator apps show it for the secrets set up from now on; empty means Noryx.
+	// SignInNotice shows on the sign-in page, e.g. whom to ask for access. Both are plain text
+	// and public, as the sign-in page shows them before anyone signs in.
+	PanelName    string `json:"panelName"`
+	SignInNotice string `json:"signInNotice"`
 }
 
 // MFARequirement tells who has to use two-factor authentication: all users, or the members
@@ -167,6 +178,7 @@ func clone[T any](p *T) *T {
 func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
 	next.EnrollAddr, next.PanelAddr = strings.TrimSpace(next.EnrollAddr), strings.TrimSpace(next.PanelAddr)
 	next.PanelDomain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(next.PanelDomain), "."))
+	next.PanelName, next.SignInNotice = strings.TrimSpace(next.PanelName), strings.TrimSpace(strings.ReplaceAll(next.SignInNotice, "\r\n", "\n"))
 	if next.RequireMFA.All || next.RequireMFA.Groups == nil {
 		next.RequireMFA.Groups = []string{}
 	}
@@ -278,8 +290,11 @@ func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
 // Thresholds implements usage.Config.
 func (s *Service) Thresholds() usage.Defaults { return s.Get().Thresholds }
 
-// SessionTTL is how long new sign-ins to the panel last.
+// SessionTTL implements auth.Config.
 func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().SessionHours) * time.Hour }
+
+// PanelName implements auth.Config and notify.Config.
+func (s *Service) PanelName() string { return cmp.Or(s.Get().PanelName, "Noryx") }
 
 // validate checks the settings; panelAddr is where the panel listens with them.
 func validate(s Settings, panelAddr string) error {
@@ -309,8 +324,20 @@ func validate(s Settings, panelAddr string) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter how large the log may grow, from %d to %d MiB.", minLogSizeMB, maxLogSizeMB)
 	case len(s.RequireMFA.Groups) > maxMFAGroups || slices.ContainsFunc(s.RequireMFA.Groups, func(id string) bool { return !groupID.MatchString(id) }):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d groups that have to use two-factor authentication.", maxMFAGroups)
+	case !plainText(s.PanelName, maxPanelName, false):
+		return httpapi.Errorf(http.StatusBadRequest, "Enter a name of the panel of up to %d characters in one line, or leave it empty for Noryx.", maxPanelName)
+	case !plainText(s.SignInNotice, maxSignInNotice, true):
+		return httpapi.Errorf(http.StatusBadRequest, "Enter a notice of up to %d characters of plain text for the sign-in page, or leave it empty.", maxSignInNotice)
 	}
 	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate())
+}
+
+// plainText tells whether s has at most n characters and no control characters but, if lines
+// is set, line breaks; nor the separators of lines and paragraphs, which start lines too.
+func plainText(s string, n int, lines bool) bool {
+	return utf8.RuneCountInString(s) <= n && !strings.ContainsFunc(s, func(r rune) bool {
+		return unicode.IsControl(r) && (r != '\n' || !lines) || r == '\u2028' || r == '\u2029'
+	})
 }
 
 // validAddr accepts host:port with a port from 1 to 65535 and a host that validHost accepts.

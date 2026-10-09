@@ -30,6 +30,23 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("POST /api/master/restart", access.AdminsOnly, h.restartMaster)
 }
 
+// RegisterPublic adds the route that works without a session: what the panel shows before
+// anyone signs in, which the settings say is public.
+func (h *Handler) RegisterPublic(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/panel", h.public)
+}
+
+// public is what the panel shows before anyone signs in: its name and the notice of the
+// sign-in page.
+type public struct {
+	Name   string `json:"name"`
+	Notice string `json:"notice"`
+}
+
+func (h *Handler) public(w http.ResponseWriter, _ *http.Request) {
+	httpapi.WriteJSON(w, http.StatusOK, public{h.svc.PanelName(), h.svc.Get().SignInNotice})
+}
+
 type view struct {
 	Settings Settings `json:"settings"`
 	Master   Master   `json:"master"`

@@ -3,6 +3,7 @@ import { t } from "i18next"
 import type { NodeLimits } from "@/features/nodes/api"
 import type { ThresholdDefaults } from "@/features/usage/api"
 import { api } from "@/lib/api"
+import { publicSettingsQuery } from "./public"
 
 /** The certificate the panel serves: self-signed, of Let's Encrypt, or none for plain HTTP, e.g. behind a reverse proxy. */
 export type PanelHTTPS = "" | "self-signed" | "letsencrypt"
@@ -30,6 +31,10 @@ export interface MasterSettings {
   requireMfa: { all: boolean; groups: string[] }
   /** When the usage of servers and nodes warns, unless they have their own thresholds. */
   thresholds: ThresholdDefaults
+
+  /** The name of the panel, empty for Noryx, and the notice of the sign-in page; both are plain text and public. */
+  panelName: string
+  signInNotice: string
 }
 
 /** The certificate the panel serves. */
@@ -81,7 +86,10 @@ export function useUpdateSettings() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (settings: MasterSettings) => api<SettingsView>("/settings", { method: "PUT", body: settings }),
-    onSuccess: (view) => queryClient.setQueryData(settingsQuery.queryKey, view),
+    onSuccess: (view) => {
+      queryClient.setQueryData(settingsQuery.queryKey, view)
+      void queryClient.invalidateQueries({ queryKey: publicSettingsQuery.queryKey })
+    },
   })
 }
 

@@ -30,6 +30,14 @@ warns ([Warnings](monitoring.md#warnings)), the port range and memory reserve th
 looks for updates. Administrators can also look for an update right
 away.
 
+**Name and notice** names the panel, e.g. `Noryx · Test` or a community's name, so that two panels don't look the same:
+in the title of the browser's tab, the sidebar and the sign-in page, as the sender and at the start of the subjects of
+mails and in the notifications of Slack, and in authenticator apps for
+[two-factor authentication](#two-factor-authentication) set up from then on; entries in the apps already keep the name
+they have. Empty means Noryx. The notice, e.g. whom to ask for access, shows below the form of the sign-in page. Both
+are plain text, a name of up to 64 characters in one line and a notice of up to 500 with line breaks, and public: the
+sign-in page reads them without a session, also from `GET /api/panel`.
+
 ### Agents
 
 The **Agents** tab lists all nodes with their agent version, certificate and settings, which can be changed there too.
@@ -125,8 +133,8 @@ with a setup link, turning on two-factor authentication and disabling a user rev
 ### Two-factor authentication
 
 Two-factor authentication is off until users set it up on their account page: they scan a QR code with an authenticator
-app (TOTP, e.g. Google Authenticator, Aegis or a password manager), confirm with a code of it and their password, and
-get 10 recovery codes that each replace a code once. Then signing in asks for a code after the password, and other
+app (TOTP, e.g. Google Authenticator, Aegis or a password manager), which names the entry after the panel's name of the
+settings, confirm with a code of it and their password, and get 10 recovery codes that each replace a code once. Then signing in asks for a code after the password, and other
 sessions end. A setup link then only sets the password; signing in still needs a code. Turning it off and new recovery
 codes need the password. Users who may manage a user turn it off for them, e.g. after they lost their phone and recovery
 codes, but not for themselves; without any administrator who can still sign in, `noryx-master user add` creates a new

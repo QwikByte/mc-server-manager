@@ -185,7 +185,9 @@ a restart, it starts with the entries added from then on. Entries that come with
 most 10 entries, which counts the others. Each channel sends 5 messages at once, then one a minute at most, which
 bundles what came meanwhile. So a server in a crash loop or many agents that warn at once can't flood a channel, and an
 entry, e.g. of a node that went offline, reaches it within a minute. Messages name each entry's level, message, server
-and node, category, user, error and time.
+and node, category, user, error and time. Mails come from the name the settings give the panel and start their subjects
+with it, e.g. `Noryx · Test: A server crashed …`, as do the notifications of Slack, so that those of two panels can be
+told apart.
 
 ### Payload of webhooks
 

@@ -186,7 +186,8 @@ English.
 
 ## Keyboard and screen readers
 
-Each page names itself in the title of the browser's tab, e.g. `Files · lobby · Servers · Noryx`. The first press of
+Each page names itself in the title of the browser's tab, e.g. `Files · lobby · Servers · Noryx`, which ends with the
+name the settings give the panel ([Settings](administration.md#general)). The first press of
 Tab shows **Skip to content**, which jumps past the navigation. Opening another page moves the focus to its heading, so
 that screen readers announce it; switching the tabs of a page or changing its search leaves the focus where it is.
 Choices in a row, such as the time range of charts, the view and state filter of servers or the colour theme, are one

@@ -47,6 +47,7 @@ import {
   settingsQuery,
   useUpdateSettings,
 } from "./api"
+import { NameFields } from "./name-fields"
 import { RestartButton } from "./restart-button"
 
 /** The General tab: the running master and its settings. */
@@ -202,6 +203,8 @@ function formOf(s: MasterSettings) {
     requireMfa,
     thresholds: s.thresholds,
     nodeDefaults: limitsForm(s.nodeDefaults),
+    panelName: s.panelName,
+    signInNotice: s.signInNotice,
   }
 }
 
@@ -253,6 +256,10 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
           </Field>
           <PanelHTTPSFields form={form} master={master} disabled={!access.admin} onChange={set} />
           <PanelRestartNotice settings={settings} master={master} />
+        </FormSection>
+
+        <FormSection title={t("Name and notice")}>
+          <NameFields value={form} onChange={set} />
         </FormSection>
 
         <FormSection title={t("Enrollment")}>

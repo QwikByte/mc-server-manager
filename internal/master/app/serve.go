@@ -161,7 +161,7 @@ func serve(ctx context.Context, cfg config) error {
 	if err := tasks.Start(ctx); err != nil {
 		return err
 	}
-	notifications := notify.New(db, logStore, notify.Options{})
+	notifications := notify.New(db, logStore, conf, notify.Options{})
 	go notifications.Run(ctx)
 	workflows := workflow.NewService(db, workflow.Deps{
 		Nodes: nodes, Targets: tasks, Networks: networks, Players: player.NewService(nodes, networks, geyser), Usage: usageStore,
@@ -296,7 +296,7 @@ type Services struct {
 // Handler returns everything the master serves over HTTP: the panel, the sign-in and the
 // API, which needs a session and loads the user's permissions for every request.
 func Handler(s Services) http.Handler {
-	authHandler := auth.NewHandler(s.Users, s.Settings.SessionTTL, func(ctx context.Context, userID int64) (bool, error) {
+	authHandler := auth.NewHandler(s.Users, s.Settings, func(ctx context.Context, userID int64) (bool, error) {
 		required := s.Settings.Get().RequireMFA
 		if required.All || len(required.Groups) == 0 {
 			return required.All, nil
@@ -311,6 +311,7 @@ func Handler(s Services) http.Handler {
 	mux := http.NewServeMux()
 	authHandler.RegisterPublic(mux)
 	workflow.NewHandler(s.Workflows).RegisterPublic(mux)
+	settings.NewHandler(s.Settings, s.Restart).RegisterPublic(mux)
 	mux.Handle("/api/", authHandler.Require(s.Access.Middleware(api)))
 	mux.Handle("/", web.Handler())
 	// Webhooks are called with a token of their own, not with a session, from anywhere.
