@@ -446,7 +446,8 @@ servers are stored in the master's database like the forwarding secret; the API 
 them, also not in errors, and an empty field keeps them, so that nobody who may manage notifications learns them. A mail
 channel keeps its password only while its server, port and user stay the same, so that it can't be sent to another
 server. Messages carry the texts of entries, never secrets, which aren't logged; entries can hold IP addresses and the
-names of players, which the panel says where channels are set up.
+names of players, which the panel says where channels are set up. A rule of a server that is deleted, or of a node that
+is removed, is deleted with it rather than left to send the entries of its node or of all nodes.
 
 Channels connect to public addresses only, so that the master can't be used to reach its own network: the address of
 every connection is checked right before it is made, after DNS answered, so that a name can't resolve to another address

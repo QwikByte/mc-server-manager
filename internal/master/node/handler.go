@@ -50,10 +50,12 @@ type Handler struct {
 	overlay  Overlay
 	ops      *operation.Operations
 	sets     FileSets
+	// tidy removes the references to what was deleted, e.g. a backup job's copies to a node.
+	tidy func(context.Context)
 }
 
-func NewHandler(svc *Service, networks Networks, overlay Overlay, ops *operation.Operations, sets FileSets) *Handler {
-	return &Handler{svc: svc, networks: networks, overlay: overlay, ops: ops, sets: sets}
+func NewHandler(svc *Service, networks Networks, overlay Overlay, ops *operation.Operations, sets FileSets, tidy func(context.Context)) *Handler {
+	return &Handler{svc: svc, networks: networks, overlay: overlay, ops: ops, sets: sets, tidy: tidy}
 }
 
 // Register adds the routes. Users see the nodes on which they may see the node or servers,
@@ -275,6 +277,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 			// The other members of the private network drop it right away.
 			go h.overlay.Reconcile(context.WithoutCancel(ctx))
 		}
+		h.tidy(ctx)
 		return nil, err
 	})
 }

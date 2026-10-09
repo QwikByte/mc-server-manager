@@ -197,3 +197,44 @@ func (s *Service) DeleteRule(ctx context.Context, id string) error {
 	}
 	return s.reload(ctx)
 }
+
+// Forget deletes the rules of a deleted server, which would send nothing anymore; a rule without
+// its server would send the entries of the whole node instead.
+func (s *Service) Forget(ctx context.Context, nodeID, serverID string) error {
+	return s.prune(ctx, `DELETE FROM notification_rules WHERE node_id = ? AND server_id = ?`, nodeID, serverID)
+}
+
+// Move keeps the rules of a server that moved to another node at its new place.
+func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
+	s.changes.Lock()
+	defer s.changes.Unlock()
+	res, err := s.db.ExecContext(ctx, `UPDATE notification_rules SET node_id = ? WHERE node_id = ? AND server_id = ?`, to, from, serverID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil
+	}
+	return s.reload(ctx)
+}
+
+// Prune deletes the rules of nodes that were removed, with their servers.
+func (s *Service) Prune(ctx context.Context) error {
+	return s.prune(ctx, `DELETE FROM notification_rules WHERE node_id != '' AND node_id NOT IN (SELECT id FROM nodes)`)
+}
+
+// prune deletes the rules that a statement chooses, and logs how many.
+func (s *Service) prune(ctx context.Context, query string, args ...any) error {
+	s.changes.Lock()
+	defer s.changes.Unlock()
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return nil
+	}
+	slog.Info("Deleted notification rules of servers or nodes that are gone", logging.Notifications, "rules", n)
+	return s.reload(ctx)
+}

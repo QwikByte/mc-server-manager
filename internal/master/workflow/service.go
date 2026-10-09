@@ -192,12 +192,8 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.reload(ctx); err != nil {
 		return err
 	}
-	if err := s.prune(ctx); err != nil { // e.g. a node that was removed with an older version
-		return err
-	}
 	go s.schedule(ctx)
 	go s.follow(ctx)
-	go s.tidy(ctx)
 	return nil
 }
 
@@ -532,7 +528,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.reload(ctx); err != nil {
 		return err
 	}
-	return s.prune(ctx)
+	return s.Prune(ctx)
 }
 
 // NewHook gives a workflow a new URL, which replaces the one before, and returns its token.

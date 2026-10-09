@@ -16,6 +16,7 @@ import (
 	"time"
 	_ "time/tzdata" // the time zone of the panel is an IANA time zone, which minimal systems don't have
 
+	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 )
 
@@ -251,9 +252,63 @@ func (s *Store) readJSON(ctx context.Context, query string, userID int64, v any)
 	return json.Unmarshal([]byte(data), v)
 }
 
-// Forget unpins a deleted server for every user.
+// Forget unpins a deleted server for every user, and takes it out of the users' alerts.
 func (s *Store) Forget(ctx context.Context, nodeID, serverID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM pinned_servers WHERE node_id = ? AND server_id = ?`, nodeID, serverID)
+	if err != nil {
+		return err
+	}
+	return s.changeAlerts(ctx, func(a *Alerts) bool {
+		n := len(a.Servers)
+		a.Servers = slices.DeleteFunc(a.Servers, func(id string) bool { return id == serverID })
+		return len(a.Servers) != n
+	})
+}
+
+// Prune takes nodes that were removed out of the users' alerts; their pins went with them.
+func (s *Store) Prune(ctx context.Context) error {
+	nodes, err := database.IDs(ctx, s.db, `SELECT id FROM nodes`)
+	if err != nil {
+		return err
+	}
+	return s.changeAlerts(ctx, func(a *Alerts) bool {
+		n := len(a.Nodes)
+		a.Nodes = slices.DeleteFunc(a.Nodes, func(id string) bool { return !nodes[id] })
+		return len(a.Nodes) != n
+	})
+}
+
+// changeAlerts changes the alerts of the users with change, which tells whether it changed them.
+func (s *Store) changeAlerts(ctx context.Context, change func(*Alerts) bool) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id, filter FROM alert_filters`)
+	if err != nil {
+		return err
+	}
+	type filter struct {
+		user int64
+		data string
+	}
+	changed := map[filter]Alerts{}
+	for rows.Next() {
+		var f filter
+		var a Alerts
+		if err := rows.Scan(&f.user, &f.data); err != nil {
+			rows.Close()
+			return err
+		}
+		if json.Unmarshal([]byte(f.data), &a) == nil && change(&a) {
+			changed[f] = a
+		}
+	}
+	err = errors.Join(rows.Err(), rows.Close())
+	for f, a := range changed {
+		data, merr := json.Marshal(a)
+		if merr == nil {
+			// Alerts that the user changed in the meantime keep what the user chose.
+			_, merr = s.db.ExecContext(ctx, `UPDATE alert_filters SET filter = ? WHERE user_id = ? AND CAST(filter AS TEXT) = ?`, string(data), f.user, f.data)
+		}
+		err = errors.Join(err, merr)
+	}
 	return err
 }
 

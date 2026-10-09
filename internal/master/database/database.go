@@ -2,6 +2,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
@@ -59,4 +60,22 @@ func migrate(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// IDs returns the IDs that a query selects, e.g. to find references to what was deleted.
+func IDs(ctx context.Context, db *sql.DB, query string) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids[id] = true
+	}
+	return ids, rows.Err()
 }

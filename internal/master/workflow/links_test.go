@@ -110,7 +110,7 @@ func TestPrune(t *testing.T) {
 	if _, err := s.Create(t.Context(), Draft{Name: "Broken", Definition: Definition{Steps: []Step{step("call", "call", callSettings{Workflow: missing})}}}, admin); err == nil {
 		t.Fatal("saved a call of a workflow that doesn't exist")
 	}
-	if err := s.prune(t.Context()); err != nil {
+	if err := s.Prune(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := s.get(t.Context(), caller.ID)

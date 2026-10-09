@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QwikByte/noryx/internal/logging"
+	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/schedule"
 )
 
@@ -19,10 +19,6 @@ import (
 // targets. Following never widens what a workflow does: a trigger whose servers are all gone is
 // removed, as one without targets watches all servers, and a step that has nothing left to act
 // on is turned off.
-
-// tidyEvery is how often references to deleted nodes, networks, channels and workflows are
-// removed, besides when a workflow is deleted.
-const tidyEvery = time.Minute
 
 // links change the references of workflows.
 type links struct {
@@ -144,33 +140,16 @@ func (s *Service) Move(ctx context.Context, serverID, from, to string) error {
 	}})
 }
 
-// tidy removes the references to deleted nodes, networks, notification channels and workflows
-// every tidyEvery until ctx is done, whatever deleted them, e.g. the removal of a node, which
-// takes its servers and networks with it.
-func (s *Service) tidy(ctx context.Context) {
-	t := time.NewTicker(tidyEvery)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := s.prune(ctx); err != nil && ctx.Err() == nil {
-				slog.Warn("Can't remove references of workflows to what was deleted", logging.Workflows, "err", err)
-			}
-		}
-	}
-}
-
-// prune removes the references to nodes, networks, notification channels and workflows that no
-// longer exist.
-func (s *Service) prune(ctx context.Context) error {
+// Prune removes the references to nodes, networks, notification channels and workflows that no
+// longer exist, whatever deleted them, e.g. the removal of a node, which takes its servers and
+// networks with it.
+func (s *Service) Prune(ctx context.Context) error {
 	exist := map[string]map[string]bool{}
 	for table, query := range map[string]string{
 		"nodes": `SELECT id FROM nodes`, "networks": `SELECT id FROM networks`,
 		"channels": `SELECT id FROM notification_channels`, "workflows": `SELECT id FROM workflows`,
 	} {
-		ids, err := s.ids(ctx, query)
+		ids, err := database.IDs(ctx, s.db, query)
 		if err != nil {
 			return err
 		}
@@ -199,21 +178,4 @@ func (s *Service) prune(ctx context.Context) error {
 			return ""
 		},
 	})
-}
-
-func (s *Service) ids(ctx context.Context, query string) (map[string]bool, error) {
-	rows, err := s.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	ids := map[string]bool{}
-	for rows.Next() {
-		var id sql.NullString
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids[id.String] = true
-	}
-	return ids, rows.Err()
 }

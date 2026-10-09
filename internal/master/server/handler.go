@@ -425,10 +425,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			err = operation.Keep(ctx)
 		}
 		if err != nil {
-			return nil, errors.Join(err, h.agent(context.WithoutCancel(ctx), nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
+			deleted := h.agent(context.WithoutCancel(ctx), nodeID, func(ctx context.Context, c noryxv1.ServerServiceClient) error {
 				_, err := c.DeleteServer(ctx, &noryxv1.DeleteServerRequest{Id: id})
 				return err
-			}))
+			})
+			if deleted == nil {
+				h.forget(ctx, nodeID, id) // e.g. its modpack
+			}
+			return nil, errors.Join(err, deleted)
 		}
 		created := struct {
 			view
@@ -700,16 +704,20 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, err)
 		return
 	}
-	// The server is gone: what refers to it is cleaned up as far as possible, even if the
-	// request is cancelled.
-	ctx, cancel = context.WithTimeout(context.WithoutCancel(r.Context()), queryTimeout)
+	h.forget(r.Context(), nodeID, id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// forget removes what refers to a server that was deleted, as far as possible, even if ctx is
+// cancelled.
+func (h *Handler) forget(ctx context.Context, nodeID, id string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), queryTimeout)
 	defer cancel()
 	for _, ref := range h.refs {
 		if err := ref.Forget(ctx, nodeID, id); err != nil {
 			slog.Warn("Some references to a deleted server were not removed", logging.Servers, logging.KeyNode, nodeID, logging.KeyServer, id, "err", err)
 		}
 	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // startServer starts a server, which only takes a moment, so it answers once the server starts.

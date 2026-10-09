@@ -19,6 +19,8 @@ type Handler struct {
 	svc  *Service
 	ops  *operation.Operations
 	sets FileSets
+	// tidy removes the references to what was deleted, e.g. the network a workflow acts on.
+	tidy func(context.Context)
 }
 
 // FileSets put shared files on the servers of networks. Servers that leave a network lose the
@@ -27,8 +29,8 @@ type FileSets interface {
 	Left(ctx context.Context, servers []tag.Server)
 }
 
-func NewHandler(svc *Service, ops *operation.Operations, sets FileSets) *Handler {
-	return &Handler{svc: svc, ops: ops, sets: sets}
+func NewHandler(svc *Service, ops *operation.Operations, sets FileSets, tidy func(context.Context)) *Handler {
+	return &Handler{svc: svc, ops: ops, sets: sets, tidy: tidy}
 }
 
 // networkTimeout covers configuring all servers of a large network one after the other. The
@@ -75,6 +77,7 @@ func (h *Handler) Register(mux access.Mux) {
 		}
 	})
 	mux.Handle("DELETE /api/networks/{id}", manage, h.onNetwork("network.delete", http.StatusOK, func(ctx context.Context, n Network) (any, error) {
+		defer h.tidy(ctx)
 		return h.leaving(ctx, n.ID, func() (any, error) {
 			warning, err := h.svc.Delete(ctx, n.ID)
 			return deleted{warning}, err

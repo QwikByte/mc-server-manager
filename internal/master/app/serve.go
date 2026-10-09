@@ -193,15 +193,17 @@ func serve(ctx context.Context, cfg config) error {
 	// the panel follows don't hold it up until the timeout.
 	requests, endRequests := context.WithCancel(context.Background())
 	defer endRequests()
+	services := Services{
+		Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
+		Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(mojang.API, mojang.SessionServer, mojang.Textures), Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
+		Datastores: datastore.NewService(datastores, nodes, networks),
+		Tasks:      tasks, Workflows: workflows, Copies: copies, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
+		HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
+	}
+	go keepTidy(ctx, services.Tidy)
 	httpServer := &http.Server{
-		BaseContext: func(net.Listener) context.Context { return requests },
-		Handler: proxies.Handler(Handler(Services{
-			Users: users, Access: accessService, Settings: conf, Nodes: nodes, Networks: networks, Overlay: overlays,
-			Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(mojang.API, mojang.SessionServer, mojang.Textures), Modpacks: modpack.NewService(db, nodes, modrinthClient), Templates: template.NewService(db, plugins), FileSets: fileSets,
-			Datastores: datastore.NewService(datastores, nodes, networks),
-			Tasks:      tasks, Workflows: workflows, Copies: copies, Logs: logStore, Notify: notifications, Updates: updates, Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(db), Operations: ops, Moves: moves, Restart: restart,
-			HSTS: cfg.tlsCert != "" || panelCert != nil && panelCert.Trusted(),
-		})),
+		BaseContext:       func(net.Listener) context.Context { return requests },
+		Handler:           proxies.Handler(Handler(services)),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests themselves have no time limit, as uploads and streams last long.
 		IdleTimeout: 2 * time.Minute,
@@ -325,13 +327,13 @@ func API(s Services) *http.ServeMux {
 	access.NewHandler(s.Access, s.Users).Register(m)
 	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
-	notify.NewHandler(s.Notify).Register(m)
+	notify.NewHandler(s.Notify, s.Tidy).Register(m)
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
-	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets).Register(m)
+	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets, s.Tidy).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins, s.Sightings, s.Copies, s.Workflows).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins, s.Sightings, s.Copies, s.Workflows, s.Notify, s.FileSets).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
-	network.NewHandler(s.Networks, s.Operations, s.FileSets).Register(m)
+	network.NewHandler(s.Networks, s.Operations, s.FileSets, s.Tidy).Register(m)
 	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Sightings, player.NewFaces(s.Mojang, s.GeyserMC), s.Operations).Register(m)
 	files.NewHandler(s.Nodes, s.Operations).Register(m)
 	properties.NewHandler(s.Nodes).Register(m)
@@ -339,7 +341,7 @@ func API(s Services) *http.ServeMux {
 	modpack.NewHandler(s.Modpacks, s.Plugins, s.Operations).Register(m)
 	template.NewHandler(s.Templates).Register(m)
 	fileset.NewHandler(s.FileSets, s.Operations).Register(m)
-	datastore.NewHandler(s.Datastores, s.Operations).Register(m)
+	datastore.NewHandler(s.Datastores, s.Operations, s.Tidy).Register(m)
 	backup.NewHandler(s.Nodes, s.Networks, s.Operations, s.Moves.Check, s.Copies).Register(m)
 	schedule.NewHandler(s.Tasks, backup.TaskKind, access.BackupJobsView, access.BackupJobsManage).Register(m, "/api/backup-jobs")
 	schedule.NewHandler(s.Tasks, policy.TaskKind, access.PoliciesView, access.PoliciesManage).Register(m, "/api/policies")

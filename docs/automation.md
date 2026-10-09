@@ -101,7 +101,8 @@ and configuration, which can hold passwords that weren't set through file sets.
   another node.
 - **Deleting.** Deleting a server or a job keeps its copies, so that a lost server can still be restored; the lists of
   copies delete them. Copies to a place that the job no longer copies to stay too. Removing a node forgets the copies
-  it keeps. A storage can only be deleted once no job copies to it; the master forgets its copies then, which stay in
+  it keeps, and the jobs that copied to it no longer copy; a deleted datastore leaves the jobs that dump it. The log
+  names each job that changed. A storage can only be deleted once no job copies to it; the master forgets its copies then, which stay in
   the bucket.
 - **Permissions.** Adding, changing and deleting storages, and saving a job that copies, need the permissions to manage
   backup jobs and to see and download the backups of all servers, as copies take the backups away from their nodes. Each
