@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # 0.6.1 hands response hooks a copy of the response, so the agent can't refuse the wrong runtime.
+      - dependency-name: github.com/moby/moby/client
+        versions: ["0.6.1"]
   - package-ecosystem: npm
     directory: /web
     schedule:
