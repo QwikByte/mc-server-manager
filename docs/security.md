@@ -463,6 +463,38 @@ can only add warnings about its own node and servers, at the limited rate of the
 at once, then one a minute at most, which counts what it leaves out. **Send test** works three times at once, then once
 every 20 seconds per channel.
 
+## Workflows
+
+Workflows act like the user who saved them last, never with more: each step needs the permission its action needs by
+hand on all servers, an entry of the log as a trigger the permission to see the log, servers and measures the one to see
+servers, and notifications and HTTP requests, which take data out of the master, the one to manage notifications. A step
+that runs another workflow needs what that one needs, as the other one acts on its behalf. Saving a workflow checks
+these with the permissions of the request, so an API token with fewer permissions can't save one, and so does running
+one by hand; each run checks again that the user who saved it last, unless deleted or disabled, still has them, as does
+each step that runs another workflow. Whoever may see workflows sees their runs with the data of their triggers and what
+their steps told, e.g. entries of the log about any server, the names of players and the answers of requests.
+
+A workflow can't keep itself running: entries of the log that it wrote don't start it, triggers start it up to 30 times
+at once and then once every 10 seconds, a run takes at most 72 hours and 10,000 steps, loops at most 1,000 items or
+times, and workflows run each other up to 5 deep. Templates only read data, never run code; a regular expression of a
+condition runs in linear time. Text that a template puts into a console command, a message or a header is a single line
+without control characters, so data can't add commands or headers, and the steps for players check the names they get,
+so data can't name others there, such as `@a`. In a console command, data can still be any argument that its template
+takes, so a workflow should check what a webhook sends before using it there, e.g. with a condition.
+
+HTTP requests of workflows go through the same connections as [notifications](#notifications): HTTPS to public addresses
+only, checked right before each connection, without redirects or proxies, with a timeout, and answers up to 64 KB. The
+values of secret headers are stored like the URLs of webhooks: the API never returns them, runs never record them and
+they aren't templates. A secret header keeps its value only while its step sends it to the same URL, so that nobody can
+send it elsewhere without knowing it.
+
+The URL of a webhook holds a random token of 260 bits, of which the master keeps only the SHA-256, so that its database
+and backups don't hold it; the panel shows the token once. Calls need no session, only the token, so the protection of
+the panel against cross-site requests doesn't apply to them; they start nothing else. A call starts only an active
+workflow with a webhook trigger, with up to 64 KB, which the run treats as data. Clients that call with unknown tokens
+are slowed down: after 10 such calls, to one a minute. Reverse proxies may log the paths of requests, and so the token;
+a new URL makes the old one useless.
+
 ## Usage
 
 Agents report what their node and its servers use, so a compromised agent can make up or hide the usage and the warnings

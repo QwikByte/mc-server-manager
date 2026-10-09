@@ -1,4 +1,4 @@
-import { CalendarDotsIcon, SpinnerGapIcon } from "@phosphor-icons/react"
+import { CalendarDotsIcon, FlowArrowIcon, type Icon, SpinnerGapIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
@@ -7,25 +7,56 @@ import { EmptyState } from "@/components/empty-state"
 import { TabIntro } from "@/components/hub-layout"
 import { IconTile } from "@/components/icon-tile"
 import { Section } from "@/components/section"
+import type { Tone } from "@/components/tone"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAccess } from "@/features/access/use-access"
 import { jobs } from "@/features/backups/api"
 import { type AutomationTask, useAutomationTasks } from "@/features/dashboard/tasks"
 import { policies } from "@/features/policies/api"
+import { upcomingQuery, type Workflow, workflowsQuery } from "@/features/workflows/api"
 import { dayOf, formatTime } from "@/lib/format"
 import { locale } from "@/lib/i18n"
 import { today } from "./describe"
 
-/** A task with the times it runs on one day. */
-interface Entry extends AutomationTask {
+/** A backup job, schedule or workflow, with its page and how it looks. */
+interface Item {
+  id: string
+  name: string
+  running: boolean
+  kind: string
+  link: AutomationTask["link"] | { to: "/workflows/$workflowId"; params: { workflowId: string } }
+  icon: Icon
+  tone: Tone
+}
+
+/** An item with the times it runs on one day. */
+interface Entry extends Item {
   times: string[]
 }
 
-/** The days of the next week that tasks run on, in the panel's time zone, with the tasks of each in order. */
-function byDay(tasks: AutomationTask[], upcoming: { id: string; at: string }[]) {
+const fromTask = (a: AutomationTask): Item => ({
+  ...a,
+  id: a.task.id,
+  name: a.task.name,
+  running: a.task.running,
+  kind: a.link.to === "/backups/$jobId" ? t("Backup job") : t("Schedule"),
+})
+
+const fromWorkflow = (w: Workflow): Item => ({
+  id: w.id,
+  name: w.name,
+  running: w.running > 0,
+  kind: t("Workflow"),
+  link: { to: "/workflows/$workflowId", params: { workflowId: w.id } },
+  icon: FlowArrowIcon,
+  tone: "warning",
+})
+
+/** The days of the next week that items run on, in the panel's time zone, with the items of each in order. */
+function byDay(items: Item[], upcoming: { id: string; at: string }[]) {
   const days = new Map<string, Map<string, Entry>>()
   for (const { id, at } of upcoming.toSorted((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
-    const task = tasks.find((a) => a.task.id === id)
+    const task = items.find((a) => a.id === id)
     if (!task) continue
     const day = dayOf(at)
     if (!days.has(day)) days.set(day, new Map())
@@ -55,24 +86,31 @@ const describeTimes = (times: string[]) =>
 /** The Agenda tab of the automation: what runs now and what runs in the next 7 days. */
 export function AgendaPage() {
   const access = useAccess()
-  const [canJobs, canPolicies] = [access.can("backupjobs.view"), access.can("policies.view")]
+  const [canJobs, canPolicies, canWorkflows] = [access.can("backupjobs.view"), access.can("policies.view"), access.can("workflows.view")]
   const tasks = useAutomationTasks()
-  const upcoming = [useQuery({ ...jobs.upcomingQuery, enabled: canJobs }), useQuery({ ...policies.upcomingQuery, enabled: canPolicies })]
+  const flows = useQuery({ ...workflowsQuery, enabled: canWorkflows })
+  const upcoming = [
+    useQuery({ ...jobs.upcomingQuery, enabled: canJobs }),
+    useQuery({ ...policies.upcomingQuery, enabled: canPolicies }),
+    useQuery({ ...upcomingQuery, enabled: canWorkflows }),
+  ]
   // The tasks name the runs, so the agenda waits for them too.
   const queries = [
     ...upcoming,
+    flows,
     useQuery({ ...jobs.tasksQuery, enabled: canJobs }),
     useQuery({ ...policies.tasksQuery, enabled: canPolicies }),
   ]
   const error = queries.find((q) => q.error)?.error
-  const running = tasks.filter((a) => a.task.running)
+  const items = [...tasks.map(fromTask), ...(flows.data ?? []).map(fromWorkflow)]
+  const running = items.filter((a) => a.running)
   const days = byDay(
-    tasks,
+    items,
     upcoming.flatMap((q) => q.data ?? []),
   )
   return (
     <>
-      <TabIntro>{t("What backup jobs and schedules do in the next 7 days, in your time zone. Paused ones are left out.")}</TabIntro>
+      <TabIntro>{t("What backup jobs, schedules and workflows do in the next 7 days, in your time zone. Paused ones are left out.")}</TabIntro>
       {error ? (
         <ErrorCallout error={error} />
       ) : queries.some((q) => q.isLoading) ? (
@@ -95,16 +133,14 @@ function Day({ title, entries }: { title: string; entries: Entry[] }) {
   return (
     <Section title={title} className="mt-0">
       <ul className="surface divide-y rounded-xl">
-        {entries.map(({ task, link, icon, tone, times }) => (
-          <li key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+        {entries.map(({ id, name, kind, link, icon, tone, times }) => (
+          <li key={id} className="flex items-center gap-3 px-4 py-2.5">
             <IconTile icon={icon} tone={tone} size="sm" />
             <div className="min-w-0 flex-1">
               <Link {...link} className="block truncate text-sm font-medium hover:underline">
-                {task.name}
+                {name}
               </Link>
-              <span className="block truncate text-xs text-muted-foreground">
-                {link.to === "/backups/$jobId" ? t("Backup job") : t("Schedule")}
-              </span>
+              <span className="block truncate text-xs text-muted-foreground">{kind}</span>
             </div>
             <span className="max-w-36 text-right font-mono text-xs tabular-nums sm:max-w-none sm:text-sm">
               {times.length > 0 ? (

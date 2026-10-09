@@ -30,6 +30,7 @@ export const categories: Record<string, string> = {
   players: msg("Players"),
   templates: msg("Templates"),
   policies: msg("Schedules"),
+  workflows: msg("Workflows"),
   terminal: msg("Terminal"),
   notifications: msg("Notifications"),
   system: msg("System"),

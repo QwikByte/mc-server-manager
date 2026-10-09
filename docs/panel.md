@@ -35,8 +35,8 @@ Servers are pinned with the pin on their card, in the table or on their page. Pi
 in the sidebar and in their widget, which also starts and stops them. The master keeps them for each user too, up to 20;
 they follow a server that moves and go with a deleted server or a removed node. The sidebar lists the overview, servers,
 networks, players and nodes, the **Library** (templates, file sets, plugins and mods) and the **Automation** (backup
-jobs and schedules), each with its parts as tabs, the log and settings at its foot, and the user's name below them,
-whose menu holds their account, the colour theme, the language and signing out. The sidebar is dark in both colour
+jobs, schedules and workflows), each with its parts as tabs, the log and settings at its foot, and the user's name below
+them, whose menu holds their account, the colour theme, the language and signing out. The sidebar is dark in both colour
 themes and folds to its icons, which each browser remembers. The bar above each page shows where it is, e.g.
 **Servers › lobby › Files**, with links to the parts above it, and holds the search, the operations and the bell of
 warnings and errors. On small screens, the bar's menu holds the sidebar. Lists, figures, charts, tabs and pages are animated, unless the operating system asks for less motion.

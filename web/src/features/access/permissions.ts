@@ -36,6 +36,8 @@ const permissionIds = [
   "backupjobs.manage",
   "policies.view",
   "policies.manage",
+  "workflows.view",
+  "workflows.manage",
   "logs.view",
   "notifications.manage",
   "settings.view",

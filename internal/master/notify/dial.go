@@ -59,11 +59,11 @@ func public(ip netip.Addr) bool {
 	return global6.Contains(ip) && !within(ip, refused6)
 }
 
-// refusedError tells that a channel would connect to an address that isn't public.
+// refusedError tells that a channel or a request would connect to an address that isn't public.
 type refusedError struct{ ip netip.Addr }
 
 func (e *refusedError) Error() string {
-	return fmt.Sprintf("%s isn't a public address. Notifications only go to public addresses.", e.ip)
+	return fmt.Sprintf("%s isn't a public address. Notifications and workflows only connect to public addresses.", e.ip)
 }
 
 // failed is the error of a channel that couldn't send, which the panel shows.

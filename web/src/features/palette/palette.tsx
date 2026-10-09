@@ -3,6 +3,7 @@ import {
   ArrowClockwiseIcon,
   CalendarCheckIcon,
   FilesIcon,
+  FlowArrowIcon,
   GraphIcon,
   HardDrivesIcon,
   KeyboardIcon,
@@ -42,6 +43,8 @@ import { nodesQuery } from "@/features/nodes/api"
 import { seenPlayersQuery } from "@/features/players/api"
 import { useOnlinePlayers } from "@/features/players/online"
 import { actions as policyActions, policies } from "@/features/policies/api"
+import { workflowsQuery } from "@/features/workflows/api"
+import { describeTrigger } from "@/features/workflows/catalog"
 import { describeSchedule } from "@/features/schedules/describe"
 import { allServersQuery, type NodeServer, serverKey, useBulkAction } from "@/features/servers/api"
 import { serverLook, serverType, statusOf } from "@/features/servers/server-types"
@@ -109,6 +112,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
   const { data: fileSets = [] } = useQuery({ ...fileSetsQuery, enabled: access.can("filesets.view") })
   const { data: backupJobs = [] } = useQuery({ ...jobs.tasksQuery, enabled: access.can("backupjobs.view") })
   const { data: schedules = [] } = useQuery({ ...policies.tasksQuery, enabled: access.can("policies.view") })
+  const { data: workflows = [] } = useQuery({ ...workflowsQuery, enabled: access.can("workflows.view") })
   const { data: users = [] } = useQuery({ ...usersQuery, enabled: access.can("users.view") })
   const { players } = useOnlinePlayers(access.canSomewhere("servers.view"))
   const needle = query.trim().toLowerCase()
@@ -234,6 +238,18 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         keywords: [t(policyActions[policy.settings.action].label)],
         icon: <CalendarCheckIcon className="text-warning" />,
         detail: describeSchedule(policy.schedule),
+      })),
+    },
+    {
+      heading: t("Workflows"),
+      searched: true,
+      entries: workflows.map((w) => ({
+        value: `workflow/${w.id}`,
+        path: at("workflows", w.id),
+        label: w.name,
+        keywords: [w.description],
+        icon: <FlowArrowIcon className="text-warning" />,
+        detail: w.triggers[0] ? describeTrigger(w.triggers[0]) : t("Started by hand"),
       })),
     },
     {

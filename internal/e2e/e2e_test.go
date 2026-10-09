@@ -69,6 +69,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/template"
 	"github.com/QwikByte/noryx/internal/master/update"
 	"github.com/QwikByte/noryx/internal/master/usage"
+	"github.com/QwikByte/noryx/internal/master/workflow"
 	"github.com/QwikByte/noryx/internal/pki"
 )
 
@@ -283,12 +284,18 @@ func (m *master) services(t *testing.T) masterapp.Services {
 	}, moves.Busy)
 	check(t, tasks.Start(t.Context()))
 	fileSets := fileset.NewService(m.db, nodes, networks, tags, datastores, moves)
+	notifications := notify.New(m.db, m.logs, notify.Options{})
+	workflows := workflow.NewService(m.db, workflow.Deps{
+		Nodes: nodes, Targets: tasks, Networks: networks, Players: player.NewService(nodes, networks, geyser), Usage: usageStore,
+		Backups: jobs, Plugins: plugins, Notify: notifications, Logs: m.logs, Names: logs.NewNames(nodes), Access: accessService,
+	})
+	check(t, workflows.Start(t.Context()))
 	return masterapp.Services{
 		Users: auth.NewService(m.db), Access: accessService, Settings: m.settings, Nodes: nodes, Overlay: overlays,
 		Networks: networks, Plugins: plugins, GeyserMC: geyser, Mojang: mojang.New(m.mojang.URL, m.mojang.URL, m.mojang.URL+"/texture/"), Modpacks: modpack.NewService(m.db, nodes, modrinthClient), Templates: template.NewService(m.db, plugins), Tasks: tasks, Copies: copies,
 		FileSets: fileSets, Datastores: datastore.NewService(datastores, nodes, networks), Logs: m.logs, Updates: update.New(nodes, m.settings, m.update),
 		Usage: usageStore, Sightings: sightings, Tags: tags, Preferences: preference.NewStore(m.db), Operations: operation.New(m.quick), Moves: moves,
-		Notify: notify.New(m.db, m.logs, notify.Options{}),
+		Notify: notifications, Workflows: workflows,
 	}
 }
 

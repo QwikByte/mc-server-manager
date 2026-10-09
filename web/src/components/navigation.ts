@@ -5,6 +5,7 @@ import {
   CalendarDotsIcon,
   CubeIcon,
   FilesIcon,
+  FlowArrowIcon,
   GearSixIcon,
   GraphIcon,
   HardDrivesIcon,
@@ -56,11 +57,12 @@ export const automation = {
   tabs: [
     { to: "/backups", label: msg("Backups"), icon: ArchiveIcon, visible: (a: Access) => a.can("backupjobs.view") },
     { to: "/policies", label: msg("Schedules"), icon: CalendarCheckIcon, visible: (a: Access) => a.can("policies.view") },
+    { to: "/workflows", label: msg("Workflows"), icon: FlowArrowIcon, visible: (a: Access) => a.can("workflows.view") },
     {
       to: "/agenda",
       label: msg("Agenda"),
       icon: CalendarDotsIcon,
-      visible: (a: Access) => a.can("backupjobs.view") || a.can("policies.view"),
+      visible: (a: Access) => a.can("backupjobs.view") || a.can("policies.view") || a.can("workflows.view"),
     },
   ],
 } as const

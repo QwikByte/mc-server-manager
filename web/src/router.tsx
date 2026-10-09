@@ -380,6 +380,29 @@ const policyRoute = createRoute({
   component: lazyRouteComponent(() => import("@/features/policies/policy-page"), "PolicyPage"),
 })
 
+const workflowsRoute = createRoute({
+  getParentRoute: () => automationRoute,
+  path: "/workflows",
+  staticData: { title: msg("Workflows") },
+  component: lazyRouteComponent(() => import("@/features/workflows/workflows-page"), "WorkflowsPage"),
+})
+// example starts the new workflow from one of the examples.
+const newWorkflowRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/workflows/new",
+  staticData: { title: msg("Workflows") },
+  validateSearch: (search: Record<string, unknown>): { example?: number } => ({
+    example: Number.isSafeInteger(search.example) && Number(search.example) >= 0 ? Number(search.example) : undefined,
+  }),
+  component: lazyRouteComponent(() => import("@/features/workflows/workflow-page"), "NewWorkflowPage"),
+})
+const workflowRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/workflows/$workflowId",
+  staticData: { title: msg("Workflows") },
+  component: lazyRouteComponent(() => import("@/features/workflows/workflow-page"), "WorkflowPage"),
+})
+
 const agendaRoute = createRoute({
   getParentRoute: () => automationRoute,
   path: "/agenda",
@@ -505,11 +528,13 @@ export const router = createRouter({
       newTemplateRoute,
       templateRoute,
       fileSetRoute,
-      automationRoute.addChildren([backupJobsRoute, policiesRoute, agendaRoute]),
+      automationRoute.addChildren([backupJobsRoute, policiesRoute, workflowsRoute, agendaRoute]),
       newBackupJobRoute,
       backupJobRoute,
       newPolicyRoute,
       policyRoute,
+      newWorkflowRoute,
+      workflowRoute,
       logsRoute,
       accountRoute,
       settingsRoute.addChildren([

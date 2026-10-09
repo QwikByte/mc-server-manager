@@ -259,6 +259,36 @@ func (s *Service) Test(ctx context.Context, id string) (Channel, error) {
 	return ch, s.send(ctx, &ch, message{test: true})
 }
 
+// Post sends an entry through a channel, as if a rule chose it from the log, e.g. a message
+// of a workflow: with the entries that come at once, and only as often as the channel sends.
+func (s *Service) Post(channelID string, e logs.Entry) error {
+	s.state.Lock()
+	q := s.senders[channelID]
+	s.state.Unlock()
+	if q == nil {
+		return errChannelNotFound
+	}
+	q.add(e)
+	return nil
+}
+
+// Fetch sends a request, e.g. of a workflow, as channels send theirs: over HTTPS to a public
+// address, without a proxy and without following redirects. Its error tells why it failed in
+// words for the panel.
+func (s *Service) Fetch(req *http.Request) (*http.Response, error) {
+	if req.URL.Scheme != "https" || req.URL.Host == "" {
+		return nil, failed("Enter a URL starting with https://.")
+	}
+	if ip, err := netip.ParseAddr(req.URL.Hostname()); err == nil && !public(ip) {
+		return nil, failed("%s", (&refusedError{ip}).Error())
+	}
+	res, err := s.client.Do(req) //nolint:gosec // G704: its dialer only connects to public addresses
+	if err != nil {
+		return nil, reason(err, "")
+	}
+	return res, nil
+}
+
 func sleep(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
 	defer t.Stop()

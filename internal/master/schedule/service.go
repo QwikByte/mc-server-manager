@@ -396,6 +396,31 @@ func (s *Service) servers(targets []Target, run *journal) Servers {
 	}
 }
 
+// Resolve returns the servers that targets name now, in their current state, e.g. for the
+// steps of workflows. Its error names the targets that couldn't be reached; the others are
+// returned anyway.
+func (s *Service) Resolve(ctx context.Context, targets []Target) ([]Server, error) {
+	return s.servers(targets, nil)(ctx)
+}
+
+// Matcher returns a function that tells whether targets name a server now, also through its
+// tags and networks, without asking the agents. For an empty server ID, it tells whether they
+// name all servers of the node, as only such targets name the node itself.
+func (s *Service) Matcher(ctx context.Context, targets []Target) (func(nodeID, serverID string) bool, error) {
+	g, err := s.groups(ctx, targets)
+	if err != nil {
+		return nil, err
+	}
+	sel := g.resolve(targets, nil)
+	return func(nodeID, serverID string) bool {
+		if serverID == "" {
+			_, all := sel[nodeID][""]
+			return all
+		}
+		return sel.covers(tag.Server{NodeID: nodeID, ServerID: serverID})
+	}, nil
+}
+
 // nodeServers returns the servers of a node with the given IDs; an empty ID stands for all.
 // A server that is named on its own must exist.
 func (s *Service) nodeServers(ctx context.Context, nodeID string, ids map[string]bool) ([]Server, error) {

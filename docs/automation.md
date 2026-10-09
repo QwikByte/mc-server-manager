@@ -1,4 +1,4 @@
-# Backups and schedules
+# Backups, schedules and workflows
 
 The **Automation** of the panel, and how to back up the master itself.
 
@@ -209,3 +209,121 @@ by hand, what failed and what they left out, and each of their steps on a server
 it, with what it changed, e.g. the plugins it updated. A run whose steps all left their servers out, e.g. as players
 were online, counts as skipped, not failed. The card of each job and schedule lists what its last run changed. The
 **Agenda** tab of the **Automation** lists what runs now and in the next 7 days, day by day in your time zone.
+Workflows with a schedule or an interval are listed there too.
+
+## Workflows
+
+Workflows chain steps that triggers start, like Microsoft Power Automate: e.g. when a player joins, greet them; every
+night, find the running servers and restart those without players; when a server crashes, send a notification and start
+it again; when another system calls a URL, run a console command with what it sent. The **Workflows** tab of the
+**Automation** lists them, and starts new ones empty or from an example.
+
+The editor shows a workflow from top to bottom: its triggers, then its steps, with a **+** between them to add a step
+there. A condition splits into **Yes** and **No** side by side, a switch into its cases, parallel branches into their
+branches, and a loop or a try holds its own steps. Clicking a step or trigger edits it beside the flow; its menu moves,
+duplicates, turns off or deletes it. A step that misses something, e.g. its servers, shows a warning, and the master
+checks the whole workflow when it is saved.
+
+### Triggers
+
+A workflow has up to 10 triggers, any of which starts it, and runs by hand and from other workflows too, also while it
+is paused. Without a trigger, it only runs that way.
+
+- **Schedule**: at times on weekdays, days of the month or single days in a time zone, like
+  [schedules](#targets-and-times).
+- **Interval**: every 1 minute to 7 days, at whole multiples, e.g. every 15 minutes at :00, :15, :30 and :45.
+- **Entry of the log**: a new entry of at least a level, of chosen categories and with a text in its message, regardless
+  of case, e.g. *crashed* among the warnings about servers. Ready choices cover crashes, nodes that went offline, usage
+  beyond a threshold, failed backups and any error. Messages of the log are English. Entries that a workflow wrote
+  itself don't start it again.
+- **Servers and players**: a server started or stopped, or a player joined or left, also only for chosen players. The
+  master notices it at the next measurement of the node, once a minute; a server that stops counts as its players
+  leaving.
+- **Measure**: players, CPU (in percent of the server's limit, or of all cores of its node), memory (in percent of its
+  limit), ticks per second or data (in GB) of a server above or below a value, for at least 0 to 60 minutes. It fires
+  once per server, and again only once the measure was back.
+- **Webhook**: a call of the workflow's secret URL, see [Webhooks](#webhooks).
+
+Entries, servers and measures can be limited to nodes, servers, tags and networks, like the
+[targets](#targets-and-times) of schedules; none watches all.
+
+**Inputs** are values that a run gets: text, a number, yes or no, or data such as a list given as JSON, with a default,
+optionally required. Running a workflow by hand asks for them, and a workflow that runs another one passes them.
+
+### Steps
+
+- **Control**: a **condition** with rules that all or any must hold, also in groups, comparing values with *is*, *is
+  greater than*, *contains*, *starts with*, *matches the pattern* (a regular expression), *is empty* and more; a
+  **switch** that runs the case whose value equals a value, or its default; **apply to each** item of a list, 1 to 10 at
+  a time; **do until** a condition holds after the steps, at most 1,000 times with a delay between; **parallel
+  branches**, 2 to 10, which it waits for; **try and catch**, which runs the steps of the catch if one of the others
+  fails; a **delay** for a time or until a time of day, up to 24 hours; **run a workflow** with inputs, waiting for its
+  outcome and result or not; and **terminate**, which ends the run as succeeded or failed with a message and a result.
+- **Data and variables**: **set variable**, append to a list or add to a number; **find servers** of targets or from
+  data, running or stopped ones, with what they use and their players if wanted; **get players online**; **wait for
+  servers** to run, to be stopped or to have no players, at most a time.
+- **Servers**: start, stop and restart them, warning the players before stopping and restarting like
+  [schedules](#schedules); run console commands; show a message in the chat, as a title or above the hotbar, to everyone
+  or a player; update their images and their plugins and mods; and back them up as a backup job would, keeping the
+  newest backups of the step.
+- **Players**: kick, ban for a time or for ever, pardon, whitelist and make operators, also several players from a list,
+  on game servers, at once on those that run and on the others once they do; send a player to another server of a
+  network.
+- **Networks**: start or end maintenance of a network or of one of its servers; restart its game servers server by
+  server.
+- **Notifications and the web**: send a message through a [notification channel](monitoring.md#notifications), which
+  sends it like an entry of the log; send an **HTTP request** over HTTPS to a public address and read its status, text
+  and JSON; write an entry into the log, which notification rules can send on.
+
+Steps choose their servers among nodes, servers, tags and networks, or **from data**, e.g. the server of the trigger,
+the current item of a loop or the servers found by an earlier step.
+
+### Data
+
+Settings of steps can hold templates such as `{{trigger.server.name}}`, which the **{}** button beside a field inserts
+from what the step can name:
+
+- `trigger`: what the trigger told, e.g. `trigger.player`, `trigger.message`, `trigger.value` or `trigger.body` of a
+  webhook, and `trigger.kind`;
+- `inputs.name` and `vars.name`;
+- `steps.id`: what an earlier step told, by its ID, which the editor shows, e.g. `steps.servers_1.servers`, and its
+  `outcome` and `error`;
+- `item` and `index` within loops, `error.message` within a catch, and `server` in the commands and messages of a step,
+  for the server each goes to;
+- `now.time`, `now.date`, `now.weekday` and more in the time zone of the workflow, `workflow.name` and `run.id`.
+
+Filters change values: `{{steps.find.servers | map:name | join:", "}}` lists names, `{{vars.count | add:1}}` counts, and
+`upper`, `lower`, `trim`, `length`, `default`, `split`, `first`, `last`, `round`, `sub`, `mul`, `div`, `number`,
+`replace` and `json` do what they say. A template that is only `{{…}}` keeps its value, e.g. a list for a loop; others
+become text. Conditions compare values as numbers if both are, else as text regardless of case.
+
+### Runs
+
+A step that fails fails the run, unless it is set to **go on**: then its `outcome` and `error` tell later steps what
+happened. While a workflow runs, a trigger skips, queues its run (up to 20) or runs in parallel (up to 10), as the
+workflow chooses. Triggers start a workflow up to 30 times at once, then once every 10 seconds. A run takes at most 72
+hours and runs at most 10,000 steps, so that a loop can't run forever, and workflows run each other up to 5 deep.
+
+The page of a workflow keeps its latest 100 runs: what started them, how long they took and how they ended, each step
+they ran with its outcome, what it decided or why it failed and what it told later steps, and the data of the trigger
+and the inputs. A run in progress shows its steps as they go, and can be cancelled. Runs that the master stopped, e.g.
+as it restarted, count as failed.
+
+### Webhooks
+
+A workflow with a webhook trigger gets its URL on its page once it is saved: `https://<panel>/api/hooks/<token>`. The
+panel shows it only then, as the master keeps only a hash of the token; a new URL replaces the old one. A call sends
+`POST` with up to 64 KB, as JSON, which steps read as `trigger.body`, or as text, and the values of its query as
+`trigger.query`. It starts the workflow if it is active, and answers `202` with whether the run started, was queued or
+skipped. Anyone with the URL can start the workflow, with any data, so check what a call sends before using it, e.g. a
+player's name with a condition that matches `^[A-Za-z0-9_]{3,16}$`, as the example does.
+
+### Permissions
+
+Seeing workflows and their runs needs the permission to see workflows; creating, changing, running and cancelling them,
+and creating their URLs, needs the one to manage them. Each step needs the permission that its action needs by hand, on
+all servers, e.g. to restart servers or send console commands; entries of the log as triggers need the permission to see
+the log, servers and measures the one to see servers, and notifications and HTTP requests the one to manage
+notifications. A step that runs another workflow needs what that one needs. Like [schedules](#schedules), whoever saves
+a workflow or runs it by hand needs them, and so does each run the user who saved it last; once that user lost one, or
+was disabled or deleted, the runs fail until someone who has them saves the workflow again.
