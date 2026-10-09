@@ -146,12 +146,19 @@ func TestStore(t *testing.T) {
 		if want.Hidden == nil {
 			want.Hidden = []HiddenItem{}
 		}
+		if want.Folded == nil {
+			want.Folded = []string{}
+		}
+		if want.Views == nil {
+			want.Views = []View{}
+		}
 		got, err := s.Get(ctx, user)
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("Get(%d) = %+v, %v, want %+v", user, got, err, want)
 		}
 	}
-	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: noAlerts, Settings: Settings{}, Hidden: []HiddenItem{}}
+	none := Preferences{Dashboard: []Widget{}, Pinned: []Server{}, Alerts: noAlerts, Settings: Settings{}, Hidden: []HiddenItem{},
+		Folded: []string{}, Views: []View{}}
 	// Users start with the default layout and no pins, as empty lists rather than nil.
 	check(alice, none)
 
@@ -218,10 +225,17 @@ func TestStore(t *testing.T) {
 	if err := s.SetHidden(ctx, alice, []HiddenItem{{Key: "offline/" + n1, Until: time.Now().Add(time.Hour)}}); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetFolded(ctx, alice, []string{"tag/lobby"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetViews(ctx, alice, []View{{Name: "Lobbies", Search: map[string]string{"tag": "lobby"}}}); err != nil {
+		t.Fatal(err)
+	}
 	exec(t, db, `DELETE FROM users WHERE id = ?`, alice)
 	var left int
 	if err := db.QueryRow(`SELECT (SELECT COUNT(*) FROM dashboards) + (SELECT COUNT(*) FROM pinned_servers) +
-		(SELECT COUNT(*) FROM user_settings) + (SELECT COUNT(*) FROM alert_filters) + (SELECT COUNT(*) FROM hidden_items)`).Scan(&left); err != nil || left != 0 {
+		(SELECT COUNT(*) FROM user_settings) + (SELECT COUNT(*) FROM alert_filters) + (SELECT COUNT(*) FROM hidden_items) +
+		(SELECT COUNT(*) FROM folded_groups) + (SELECT COUNT(*) FROM server_views)`).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("%d preferences left of a deleted user, %v", left, err)
 	}
 }
@@ -268,8 +282,12 @@ func TestSettings(t *testing.T) {
 		"mods":          {"pluginType": ptr("fabric")},
 		"debug":         {"logLevel": ptr("debug")},
 		// The panel opens only at a page of its sidebar, never at another address.
-		"start page": {"startPage": ptr("https://example.com/")},
-		"account":    {"startPage": ptr("/account")},
+		"start page":   {"startPage": ptr("https://example.com/")},
+		"account":      {"startPage": ptr("/account")},
+		"column":       {"serverColumns": ptr("node,disk")},
+		"column twice": {"serverColumns": ptr("cpu,node,cpu")},
+		"no column":    {"serverColumns": ptr("node,")},
+		"spaces":       {"serverColumns": ptr("node, cpu")},
 	} {
 		var apiErr *httpapi.Error
 		if err := s.ChangeSettings(ctx, alice, c); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
@@ -297,6 +315,12 @@ func TestSettings(t *testing.T) {
 	// The choices of lists and the log's level are kept too, the software of plugins apart from that of mods.
 	change(alice, map[string]*string{"pluginType": ptr("purpur"), "modType": ptr("neoforge"), "playerTab": ptr("seen"), "logLevel": ptr("warn")})
 	check(alice, Settings{"density": "compact", "clock": "24h", "serverSort": "cpu", "pluginType": "purpur", "modType": "neoforge", "playerTab": "seen", "logLevel": "warn"})
+	// The columns of tables of servers are some of theirs in any order, or none.
+	change(bob, map[string]*string{"serverColumns": ptr("tps,node,version")})
+	check(bob, Settings{"theme": "light", "timeZone": "UTC", "serverColumns": "tps,node,version"})
+	change(bob, map[string]*string{"serverColumns": ptr("")})
+	check(bob, Settings{"theme": "light", "timeZone": "UTC", "serverColumns": ""})
+	change(bob, map[string]*string{"serverColumns": nil})
 
 	// Values that a newer version stored, or an older one knew, aren't shown.
 	exec(t, db, `UPDATE user_settings SET settings = '{"theme":"sepia","clock":"12h","font":"large","timeZone":"Local"}' WHERE user_id = ?`, bob)
@@ -458,5 +482,110 @@ func TestHidden(t *testing.T) {
 	var left int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM hidden_items`).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("%d rows left, %v", left, err)
+	}
+}
+
+func TestFolded(t *testing.T) {
+	db := open(t)
+	s, ctx, alice := NewStore(db), t.Context(), addUser(t, db, "alice")
+	many := make([]string, maxFolded+1)
+	for i := range many {
+		many[i] = fmt.Sprint("tag/t", i)
+	}
+	for name, groups := range map[string][]string{
+		"no grouping": {"lobby"},
+		"unknown":     {"state/running"},
+		"path":        {"tag/../lobby"},
+		"space":       {"tag/lobby 1"},
+		"long":        {"tag/" + strings.Repeat("x", 33)},
+		"twice":       {"tag/lobby", "tag/lobby"},
+		"too many":    many,
+	} {
+		var apiErr *httpapi.Error
+		if err := s.SetFolded(ctx, alice, groups); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+			t.Errorf("%s: SetFolded = %v, want a bad request", name, err)
+		}
+	}
+
+	// Groups are what servers are grouped by and a value, also none for those without network or tags.
+	groups := []string{"network/" + id(), "network/none", "node/" + id(), "type/paper", "tag/größe", "tag/"}
+	if err := s.SetFolded(ctx, alice, groups); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := s.Get(ctx, alice); err != nil || !reflect.DeepEqual(p.Folded, groups) {
+		t.Fatalf("folded = %v, %v, want %v", p.Folded, err, groups)
+	}
+	if err := s.SetFolded(ctx, alice, many[:maxFolded]); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFolded(ctx, alice, nil); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := s.Get(ctx, alice); err != nil || p.Folded == nil || len(p.Folded) != 0 {
+		t.Fatalf("folded = %v, %v, want none", p.Folded, err)
+	}
+}
+
+func TestViews(t *testing.T) {
+	db := open(t)
+	s, ctx, alice, bob := NewStore(db), t.Context(), addUser(t, db, "alice"), addUser(t, db, "bob")
+	view := func(name string, search map[string]string) []View { return []View{{Name: name, Search: search}} }
+	many := make([]View, maxViews+1)
+	for i := range many {
+		many[i] = View{Name: fmt.Sprint("View ", i)}
+	}
+	for name, views := range map[string][]View{
+		"no name":       view("", nil),
+		"spaces":        view(" Lobbies", nil),
+		"long name":     view(strings.Repeat("x", maxViewName+1), nil),
+		"line break":    view("Lobbies\nand more", nil),
+		"twice":         {{Name: "Lobbies"}, {Name: "Lobbies"}},
+		"too many":      many,
+		"unknown key":   view("Lobbies", map[string]string{"columns": "cpu"}),
+		"empty":         view("Lobbies", map[string]string{"q": ""}),
+		"long search":   view("Lobbies", map[string]string{"q": strings.Repeat("x", maxViewQuery+1)}),
+		"control":       view("Lobbies", map[string]string{"q": "lobby\x00"}),
+		"state":         view("Lobbies", map[string]string{"state": "paused"}),
+		"type":          view("Lobbies", map[string]string{"type": "Paper"}),
+		"node":          view("Lobbies", map[string]string{"node": "../" + id()[3:]}),
+		"network":       view("Lobbies", map[string]string{"network": "all"}),
+		"tag":           view("Lobbies", map[string]string{"tag": "lobby 1"}),
+		"sort":          view("Lobbies", map[string]string{"sort": "disk"}),
+		"order":         view("Lobbies", map[string]string{"order": "up"}),
+		"group":         view("Lobbies", map[string]string{"group": "state"}),
+		"view":          view("Lobbies", map[string]string{"view": "list"}),
+		"one of two ok": view("Lobbies", map[string]string{"tag": "lobby", "view": "list"}),
+	} {
+		var apiErr *httpapi.Error
+		if err := s.SetViews(ctx, alice, views); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+			t.Errorf("%s: SetViews = %v, want a bad request", name, err)
+		}
+	}
+
+	// Views keep their order, and those without a search get an empty one.
+	views := []View{
+		{Name: "Lobbies on node 2", Search: map[string]string{"q": "lobby  eu", "tag": "lobby", "node": id(), "state": "running",
+			"type": "paper", "network": "none", "sort": "network", "order": "desc", "group": "tag", "view": "table"}},
+		{Name: "Everything", Search: map[string]string{}},
+		{Name: strings.Repeat("ü", maxViewName)},
+	}
+	if err := s.SetViews(ctx, alice, views); err != nil {
+		t.Fatal(err)
+	}
+	views[2].Search = map[string]string{}
+	if p, err := s.Get(ctx, alice); err != nil || !reflect.DeepEqual(p.Views, views) {
+		t.Fatalf("views = %+v, %v, want %+v", p.Views, err, views)
+	}
+	if p, err := s.Get(ctx, bob); err != nil || p.Views == nil || len(p.Views) != 0 {
+		t.Fatalf("views of another user = %+v, %v", p.Views, err)
+	}
+	if err := s.SetViews(ctx, alice, many[:maxViews]); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetViews(ctx, alice, nil); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := s.Get(ctx, alice); err != nil || p.Views == nil || len(p.Views) != 0 {
+		t.Fatalf("views = %+v, %v, want none", p.Views, err)
 	}
 }

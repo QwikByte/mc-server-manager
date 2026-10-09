@@ -1,6 +1,7 @@
 import {
   ArchiveIcon,
   ArrowClockwiseIcon,
+  BookmarkSimpleIcon,
   CalendarCheckIcon,
   FilesIcon,
   FlowArrowIcon,
@@ -15,7 +16,7 @@ import {
   UserIcon,
 } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
-import { useLocation, useNavigate } from "@tanstack/react-router"
+import { useLocation, useNavigate, useRouter } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type ReactNode, useState } from "react"
 import { IconTile } from "@/components/icon-tile"
@@ -43,10 +44,12 @@ import { useOperation } from "@/features/operations/use-operation"
 import { seenPlayersQuery } from "@/features/players/api"
 import { useOnlinePlayers } from "@/features/players/online"
 import { actions as policyActions, policies } from "@/features/policies/api"
+import { preferencesQuery } from "@/features/preferences/api"
 import { workflowsQuery } from "@/features/workflows/api"
 import { describeTrigger } from "@/features/workflows/catalog"
 import { describeSchedule } from "@/features/schedules/describe"
 import { allServersQuery, type NodeServer, serverKey, useBulkAction, type Warning } from "@/features/servers/api"
+import { validateServerSearch } from "@/features/servers/browse"
 import { usePower } from "@/features/servers/power"
 import { serverLook, serverType, statusOf } from "@/features/servers/server-types"
 import { settings } from "@/features/settings/tabs"
@@ -92,7 +95,7 @@ const at = (...parts: string[]) => `/${parts.map(encodeURIComponent).join("/")}`
 const recentLimit = 5
 
 /**
- * Searches servers, players, networks, nodes, the library, the automation, users and pages, acts
+ * Searches servers, saved views of them, players, networks, nodes, the library, the automation, users and pages, acts
  * on servers, and creates servers, networks and nodes; onOpen opens the dialogs for these.
  */
 export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (what: Creation | "shortcuts") => void }) {
@@ -117,6 +120,8 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
   const { data: schedules = [] } = useQuery({ ...policies.tasksQuery, enabled: access.can("policies.view") })
   const { data: workflows = [] } = useQuery({ ...workflowsQuery, enabled: access.can("workflows.view") })
   const { data: users = [] } = useQuery({ ...usersQuery, enabled: access.can("users.view") })
+  const views = useQuery(preferencesQuery).data?.views ?? []
+  const router = useRouter()
   const { players } = useOnlinePlayers(access.canSomewhere("servers.view"))
   const needle = query.trim().toLowerCase()
   const searched = useDebounced(needle, 200)
@@ -153,6 +158,17 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
         icon: <IconTile {...serverLook(s.type)} size="sm" className="size-6 rounded-md [&>svg]:size-3.5" />,
         status: statusOf(s),
         detail: [...s.tags.map((tag) => `#${tag}`), s.nodeName].join(" · "),
+      })),
+    },
+    {
+      heading: t("Saved views"),
+      // Their searches are checked again, as on the servers page.
+      entries: views.map((v) => ({
+        value: `view/${v.name}`,
+        path: router.buildLocation({ to: "/servers", search: validateServerSearch(v.search) }).href,
+        label: v.name,
+        icon: <BookmarkSimpleIcon className="text-primary" />,
+        detail: t("Servers"),
       })),
     },
     {

@@ -91,6 +91,8 @@ export interface Settings extends Formats {
   /** Whether a single server stops or restarts right away, after asking or with a warning to its players, and whether only with players. */
   power?: "now" | "ask" | "warn"
   powerWhen?: "always" | "players"
+  /** The columns that tables of servers show besides the server and its state, separated by commas; empty for none. */
+  serverColumns?: string
 }
 
 /** A change of settings; null takes one back to the browser's. */
@@ -119,6 +121,16 @@ export interface Preferences {
   alerts: Alerts
   settings: Settings
   hidden: HiddenItem[]
+  /** The groups of server lists that the user folded away, e.g. "network/<id>", in all lists of servers. */
+  folded: string[]
+  /** The views of the servers page that the user saved, in their order. */
+  views: SavedView[]
+}
+
+/** A view of the servers page that the user saved by name, with the search of its address, which is checked again when it is shown. */
+export interface SavedView {
+  name: string
+  search: Record<string, string>
 }
 
 export const preferencesQuery = queryOptions({
@@ -299,3 +311,6 @@ export function useChoice<K extends keyof Settings>(key: K, fallback: NonNullabl
   const { settings, change } = useSettings()
   return [address ?? settings[key] ?? fallback, (value: NonNullable<Settings[K]>) => change({ [key]: value } as SettingsChange)] as const
 }
+/** Stores the groups of server lists that the user folded away, and the views of the servers page they saved. */
+export const useSetFolded = () => useChange("folded", "groups")
+export const useSetViews = () => useChange("views", "views")

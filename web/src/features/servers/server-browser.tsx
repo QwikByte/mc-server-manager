@@ -1,12 +1,15 @@
+import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { useState } from "react"
 import { useNetworkOf } from "@/features/networks/servers"
-import { useSettings } from "@/features/preferences/api"
+import { preferencesQuery, useSetFolded, useSettings } from "@/features/preferences/api"
 import { useUsages } from "@/features/usage/api"
 import { sortingOf } from "@/lib/sort"
 import { type NodeServer, serverKey } from "./api"
 import { BulkBar } from "./bulk-bar"
 import {
+  columnsOf,
+  columnsSetting,
   type Facts,
   filterServers,
   groupServers,
@@ -16,25 +19,33 @@ import {
   sortOrders,
   sortServers,
 } from "./browse"
+import { SavedViews } from "./saved-views"
 import { ServerToolbar } from "./server-toolbar"
 import { ServerGrid, ServerTable } from "./server-views"
+
+/** How many folded groups the master keeps; those folded first unfold once more are. */
+const maxFolded = 100
 
 /**
  * Lists servers as cards or a table, searched, filtered, sorted and grouped by the settings in
  * the address. Where it doesn't say, the view, sort and grouping chosen last apply, which the user
- * keeps in all lists and browsers. Selected servers can be started, stopped, restarted, sent a
- * command and tagged at once; the selection only counts the servers that are listed.
+ * keeps in all lists and browsers, as well as the columns of the table and the groups folded away.
+ * Selected servers can be started, stopped, restarted, sent a command and tagged at once; the
+ * selection only counts the servers that are listed. With views, the user saves the view shown by
+ * name and shows those saved.
  */
 export function ServerBrowser({
   servers,
   search,
   onSearch,
   hidden = [],
+  views = false,
 }: {
   servers: NodeServer[]
   search: ServerSearch
   onSearch: (change: Partial<ServerSearch>) => void
   hidden?: Property[]
+  views?: boolean
 }) {
   const usages = useUsages(servers.map((s) => s.nodeId))
   const networkOf = useNetworkOf()
@@ -57,8 +68,12 @@ export function ServerBrowser({
   })
   const groups = groupServers(sortServers(found, sorting.by, sorting.order, facts), shown.group, facts)
   const view = search.view ?? settings.serverView ?? (servers.length > 12 ? "table" : "grid")
+  const columns = columnsOf(settings.serverColumns)
   const [selection, setSelection] = useState(new Set<string>())
-  const [collapsed, setCollapsed] = useState(new Set<string>())
+  // Groups stay folded in all lists of servers, e.g. a network on the servers page and on a node's page.
+  const folded = useQuery(preferencesQuery).data?.folded ?? []
+  const fold = useSetFolded()
+  const foldKey = (g: { key: string }) => `${shown.group}/${g.key}`
   const selected = found.filter((s) => selection.has(serverKey(s)))
   const toggle = (set: Set<string>, keys: string[], on: boolean) => {
     const next = new Set(set)
@@ -80,10 +95,12 @@ export function ServerBrowser({
     facts,
     sorting,
     showNode: !hidden.includes("node"),
+    columns,
     selected: (s: NodeServer) => selection.has(serverKey(s)),
     onSelect: (list: NodeServer[], on: boolean) => setSelection((sel) => toggle(sel, list.map(serverKey), on)),
-    collapsed: (g: { key: string }) => collapsed.has(`${shown.group}/${g.key}`),
-    onCollapse: (g: { key: string }) => setCollapsed((c) => toggle(c, [`${shown.group}/${g.key}`], !c.has(`${shown.group}/${g.key}`))),
+    collapsed: (g: { key: string }) => folded.includes(foldKey(g)),
+    onCollapse: (g: { key: string }) =>
+      fold.mutate(folded.includes(foldKey(g)) ? folded.filter((k) => k !== foldKey(g)) : [...folded, foldKey(g)].slice(-maxFolded)),
   }
 
   return (
@@ -98,8 +115,16 @@ export function ServerBrowser({
         hidden={hidden}
         view={view}
         sorting={sorting}
+        columns={columns}
+        onColumns={(chosen) => changeSettings({ serverColumns: columnsSetting(chosen) ?? null })}
         // In the order shown, each server once, also when grouped by tags.
-        rows={() => serverRows([...new Set(groups.flatMap((g) => g.servers))], facts)}
+        rows={() => serverRows([...new Set(groups.flatMap((g) => g.servers))], facts, columns)}
+        views={
+          views && (
+            // What the list shows, also by the sort, grouping and layout chosen last, so that a saved view shows the same.
+            <SavedViews current={{ ...search, sort: sorting.by, order: sorting.order, group: shown.group ?? "none", view }} onShow={onSearch} />
+          )
+        }
       />
       {found.length === 0 ? (
         <p className="rounded-xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">{t("No server matches your search.")}</p>

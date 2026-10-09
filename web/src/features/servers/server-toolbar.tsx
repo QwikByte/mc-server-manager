@@ -1,4 +1,5 @@
 import {
+  ColumnsIcon,
   FunnelSimpleIcon,
   ListIcon,
   MagnifyingGlassIcon,
@@ -16,7 +17,9 @@ import { StatusDot } from "@/components/status"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -32,6 +35,8 @@ import type { Order, Sorting } from "@/lib/sort"
 import { cn } from "@/lib/utils"
 import type { NodeServer, ServerState } from "./api"
 import {
+  type Column,
+  columns as columnLabels,
   type Facts,
   type Grouping,
   groupings,
@@ -65,8 +70,8 @@ function optionsOf(property: Property, servers: NodeServer[], facts: Facts) {
 }
 
 /**
- * Searches, filters, sorts and groups the servers, and switches between cards and a table. The
- * states show how many servers of the search have each.
+ * Searches, filters, sorts and groups the servers, switches between cards and a table and chooses
+ * the columns of the table. The states show how many servers of the search have each.
  */
 export function ServerToolbar({
   servers,
@@ -78,7 +83,10 @@ export function ServerToolbar({
   hidden,
   view,
   sorting,
+  columns,
+  onColumns,
   rows,
+  views,
 }: {
   servers: NodeServer[]
   search: ServerSearch
@@ -90,8 +98,13 @@ export function ServerToolbar({
   hidden: Property[]
   view: View
   sorting: Sorting<Sort>
+  /** The columns chosen for the table, and a choice of others; undefined takes it back to the default ones. */
+  columns: Column[]
+  onColumns: (columns: Column[] | undefined) => void
   /** The servers listed, as CSV. */
   rows: () => Cell[][]
+  /** The views the user saved, next to the search. */
+  views?: ReactNode
 }) {
   const filters = properties
     .filter((p) => !hidden.includes(p))
@@ -153,6 +166,7 @@ export function ServerToolbar({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          {views}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Choice
@@ -195,6 +209,16 @@ export function ServerToolbar({
               </button>
             ))}
           </div>
+          {view === "table" && (
+            <ColumnsMenu
+              // The node only where servers of several nodes are listed, the network only once some server has one.
+              offered={(Object.keys(columnLabels) as Column[]).filter(
+                (c) => (c !== "node" || !hidden.includes("node")) && (c !== "network" || servers.some((s) => facts.network(s))),
+              )}
+              columns={columns}
+              onChange={onColumns}
+            />
+          )}
           <CsvButton name="servers" rows={rows} />
         </div>
       </div>
@@ -272,6 +296,42 @@ function Choice<T extends string>({
           ))}
         </DropdownMenuRadioGroup>
         {children}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** Chooses the columns of the table among those offered; it stays open for the next choice. */
+function ColumnsMenu({
+  offered,
+  columns,
+  onChange,
+}: {
+  offered: Column[]
+  columns: Column[]
+  onChange: (columns: Column[] | undefined) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon" aria-label={t("Columns")} title={t("Columns")}>
+          <ColumnsIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel>{t("Columns")}</DropdownMenuLabel>
+        {offered.map((c) => (
+          <DropdownMenuCheckboxItem
+            key={c}
+            checked={columns.includes(c)}
+            onSelect={(e) => e.preventDefault()}
+            onCheckedChange={(on) => onChange(on ? [...columns, c] : columns.filter((other) => other !== c))}
+          >
+            {t(columnLabels[c])}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => onChange(undefined)}>{t("Default columns")}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -102,6 +102,11 @@ settings with the layout of their overview, their pinned servers and what pops u
 takes one back to the browser's with `null`, and `PUT /api/preferences/alerts` sets what pops up. The master refuses
 settings and values it doesn't know.
 
+The master also keeps the columns of each user's tables of servers, the groups of server lists they folded away and
+the views of the **Servers** page they saved ([Lists, tags and bulk actions](servers.md#lists-tags-and-bulk-actions)).
+`PUT /api/preferences/folded` replaces the groups, up to 100, and `PUT /api/preferences/views` the views, up to 20 with
+names of up to 48 characters; the master checks every value of their searches as the panel checks the address.
+
 ## Search
 
 **Ctrl+K** (⌘K) or `/` searches servers, also by tag and notes, players online, networks, nodes and pages from anywhere
@@ -110,7 +115,8 @@ each only for those who may see them. Before anything is typed, it offers what w
 nodes, templates, file sets, backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user
 may still see are offered. A search that starts with an action, e.g. `restart lobby`, starts, restarts or stops a server,
 asking first or warning its players if the user chose so, or opens its console. **Create server**, **Create network** and
-**Add node** open their dialogs from the search too.
+**Add node** open their dialogs from the search too. The views of the **Servers** page that the user saved show there as
+well.
 
 ## Keyboard shortcuts
 

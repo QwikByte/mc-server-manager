@@ -194,11 +194,18 @@ on its old node, stopped.
 
 The **Servers** page and the page of each node list servers as cards or as a compact table, the table from 13 servers on
 until one is chosen. They are searched, filtered by state, type, node, network and tag, sorted by name, state, players,
-CPU, memory or node, either way round, and grouped by network, node, type or tag, in groups that fold away. A click on a
-header of the table sorts by its column, and another click turns the order around. The address keeps all of it, so that
+CPU, memory, node, network, type, version, port or ticks per second, either way round, and grouped by network, node, type
+or tag, in groups that fold away. A click on a header of the table sorts by its column, and another click turns the
+order around. **Columns** chooses what the table shows besides the server and its state: its node, network, type,
+version, port, tags, players, ticks per second, CPU and memory; the type, version, port and tags of a server show with
+its name unless they have columns of their own. The address keeps the search, filters, sort, grouping and view, so that
 a view can be shared or bookmarked; where it doesn't say, the view, sort and grouping a user chose last apply, in all
-lists and all their browsers. **Export CSV** downloads the servers as listed, with their node, network, type, version,
-port, state, tags and what running servers use, for spreadsheets. Selected servers start, restart or stop together, run
+lists and all their browsers, as do the columns and the folded groups, e.g. a network folded on the **Servers** page
+stays folded on the page of a node. **Views** next to the search saves what the **Servers** page shows by name, e.g.
+"Lobbies on node 2": its search, filters, sort, grouping and view, which the menu and **Ctrl+K** show again. The master
+keeps up to 20 views for each user, which only the user sees. **Export CSV** downloads the servers as listed, with their
+type, version, port, state and tags and the other columns of the table, e.g. their node or what running servers use,
+for spreadsheets. Selected servers start, restart or stop together, run
 a console command such as `save-all`, or get and lose tags; an action applies to the selected servers in a fitting state
 on which the user may do it, at most 8 at a time on each node, and the panel tells which failed and offers to try those again.
 Restarting and stopping them can warn the players of the game servers first, like a single server.
