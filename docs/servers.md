@@ -13,12 +13,18 @@ Container labels are the agent's only state, so servers keep running while an ag
 
 ## Creating and deleting
 
-**Create server** asks for the node, name, software, Minecraft version, memory, port and storage location. The field of
-the Minecraft version suggests the releases that Modrinth lists, as do the settings and templates; empty means the
-latest. A game server can get a seed, a game mode, a difficulty and a world type under **World**, which start as its
+**Create server** asks for the node, name, software, Minecraft version, memory, port and storage location. It starts
+with the template that the [settings](administration.md#general) choose for new servers, for those who may see
+templates, or else with the software, memory, Java version, stop timeout and time zone they set (Paper, 2 GiB, 512 MiB
+for proxies, at least 4 GiB for modpacks, the newest Java, 1 minute and UTC by default), on the node the user created a
+server on last in this browser, while it is online, or else on the first online node. Memory is one of the usual
+amounts, or any other from 512 MiB to 64 GiB that is entered, here as in the settings of servers and templates. The
+field of the Minecraft version suggests the releases that Modrinth lists, as do the settings and templates; empty means
+the latest. A game server can get a seed, a game mode, a difficulty and a world type under **World**, which start as its
 template has them, or as Minecraft's defaults. They are written to `server.properties` before the first start, and the
-agent checks them like other properties. The [stop timeout and the time zone](#settings-and-images) fold away the same
-way, as the template has them, or 1 minute and UTC. Deleting a server with all its worlds asks for its name first.
+agent checks them like other properties. The Java version of a game server, the [stop timeout and the time
+zone](#settings-and-images) fold away the same way, as the template or the settings have them. Deleting a server with
+all its worlds asks for its name first.
 
 A server that ran elsewhere, e.g. at a host or on another panel, can start from **An archive of a server**: a ZIP or
 `.tar.gz` archive of the contents of its folder, with `server.properties` at its top. Software, version, memory and port

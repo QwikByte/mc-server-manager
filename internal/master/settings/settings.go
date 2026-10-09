@@ -98,6 +98,8 @@ type Settings struct {
 	// exist (any more) are left out.
 	InviteGroups []string `json:"inviteGroups"`
 
+	// NewServers are what the panel creates servers with, unless a template is chosen.
+	NewServers server.NewServers `json:"newServers"`
 	// Warnings tell how the players are warned before their servers restart or stop.
 	Warnings server.Warnings `json:"warnings"`
 }
@@ -138,6 +140,7 @@ func defaults() Settings {
 		SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true,
 		RequireMFA: MFARequirement{Groups: []string{}}, Thresholds: usage.DefaultThresholds(),
 		InviteGroups: []string{},
+		NewServers:   server.DefaultNewServers(),
 		Warnings:     server.DefaultWarnings(),
 	}
 }
@@ -340,6 +343,9 @@ func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
 // Thresholds implements usage.Config.
 func (s *Service) Thresholds() usage.Defaults { return s.Get().Thresholds }
 
+// NewServers implements server.Config.
+func (s *Service) NewServers() server.NewServers { return s.Get().NewServers }
+
 // Warnings implements server.Config.
 func (s *Service) Warnings() server.Warnings { return s.Get().Warnings }
 
@@ -387,7 +393,7 @@ func validate(s Settings, panelAddr string) error {
 	case len(s.InviteGroups) > maxInviteGroups || slices.ContainsFunc(s.InviteGroups, func(id string) bool { return !groupID.MatchString(id) }):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d groups that inviting a user preselects.", maxInviteGroups)
 	}
-	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate(), s.UserDefaults.validate(), s.Warnings.Validate())
+	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate(), s.UserDefaults.validate(), s.NewServers.Validate(), s.Warnings.Validate())
 }
 
 // plainText tells whether s has at most n characters and no control characters but, if lines

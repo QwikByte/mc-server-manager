@@ -68,6 +68,26 @@ export type ServerSettings = Pick<
   | "timeZone"
 >
 
+/** What the panel creates servers with, as the settings of the master say, unless a template is chosen. */
+export interface NewServerSettings {
+  type: string
+  memoryMb: number
+  /** The memory of proxies, which need far less than game servers. */
+  proxyMemoryMb: number
+  /** The Java version of game servers; empty is the newest. */
+  java: string
+  stopTimeout: number
+  timeZone: string
+  /** The ID of the template chosen instead, for those who may see templates; empty for none. */
+  template: string
+}
+
+/** What to create servers with, also for those who may create servers but not see the settings. */
+export const newServersQuery = queryOptions({
+  queryKey: ["new-servers"],
+  queryFn: () => api<NewServerSettings>("/servers/defaults"),
+})
+
 /** A server together with the node it runs on. */
 export interface NodeServer extends Server {
   nodeId: string
@@ -159,7 +179,7 @@ export function useCreateServer() {
 }
 
 /** The settings of a server created from an archive, which brings its own server.properties. */
-export type ImportedSettings = Pick<NewServer, "name" | "type" | "version" | "memoryMb" | "port" | "acceptEula" | "storage" | "stopTimeout" | "timeZone">
+export type ImportedSettings = Pick<NewServer, "name" | "type" | "version" | "memoryMb" | "port" | "acceptEula" | "storage" | "java" | "stopTimeout" | "timeZone">
 
 /**
  * Creates a server whose data is a ZIP or .tar.gz archive of a server from elsewhere, with upload progress. leftOut

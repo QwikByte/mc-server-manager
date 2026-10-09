@@ -31,6 +31,7 @@ import { useAccess } from "@/features/access/use-access"
 import { mfaQuery } from "@/features/auth/api"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
+import { NewServerFields } from "@/features/servers/new-server-fields"
 import { WarningFields } from "@/features/servers/warning-fields"
 import { UpdateCheck } from "@/features/updates/update-check"
 import { ThresholdFields, ThresholdsHelp } from "@/features/usage/thresholds"
@@ -209,6 +210,7 @@ function formOf(s: MasterSettings) {
     signInNotice: s.signInNotice,
     userDefaults: s.userDefaults,
     inviteGroups: s.inviteGroups,
+    newServers: s.newServers,
     warnings: s.warnings,
   }
 }
@@ -395,6 +397,10 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
             form={form.nodeDefaults}
             onChange={(change) => set({ nodeDefaults: { ...form.nodeDefaults, ...change } })}
           />
+        </FormSection>
+
+        <FormSection title={t("New servers")}>
+          <NewServerFields value={form.newServers} onChange={(newServers) => set({ newServers })} />
         </FormSection>
 
         <FormSection title={t("Warnings to players")}>

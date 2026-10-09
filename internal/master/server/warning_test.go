@@ -105,7 +105,8 @@ func TestWarning(t *testing.T) {
 // config is the Config of tests, whose warnings they change.
 type config struct{ warnings Warnings }
 
-func (c *config) Warnings() Warnings { return c.warnings }
+func (c *config) NewServers() NewServers { return DefaultNewServers() }
+func (c *config) Warnings() Warnings     { return c.warnings }
 
 // The settings of warnings have texts like a warning of one's own, a few steps below the
 // longest lead time of up to an hour, and show in the chat, as a title or above the hotbar.

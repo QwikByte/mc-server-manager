@@ -82,6 +82,7 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 		{"GET", "/api/users"},
 		{"PUT", "/api/nodes/" + a.node.ID},
 		{"POST", "/api/nodes/" + a.node.ID + "/servers"},
+		{"GET", "/api/servers/defaults"},
 	} {
 		mod.do(denied.method, denied.path, map[string]any{}, http.StatusForbidden, nil)
 	}

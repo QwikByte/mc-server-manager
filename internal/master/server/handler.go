@@ -101,6 +101,7 @@ type References interface {
 
 // Config holds the settings of the master that concern servers. They can change at any time.
 type Config interface {
+	NewServers() NewServers
 	Warnings() Warnings
 }
 
@@ -136,6 +137,7 @@ func (h *Handler) Register(mux access.Mux) {
 	// Bulk requests check the permission for each server they name.
 	mux.Handle("POST /api/servers/actions", access.SignedIn, h.bulk)
 	mux.Handle("POST /api/servers/tags", access.SignedIn, h.changeTags)
+	mux.Handle("GET /api/servers/defaults", creates, h.newServers)
 	mux.Handle("GET /api/servers/warnings", warns, h.warnings)
 	mux.Handle("POST /api/nodes/{node}/servers", createNeed, h.create)
 	mux.Handle("POST /api/nodes/{node}/servers/import", createNeed, h.importServer)

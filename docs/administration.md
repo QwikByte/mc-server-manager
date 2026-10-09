@@ -45,6 +45,12 @@ nobody chose them yet, e.g. a default accent for a test panel, so they are publi
 the browser's language, it then offers **Default of the panel** with the default language. **Groups of invited users**
 are the groups that **Invite user** preselects (see [Invitations](#invitations)).
 
+**New servers** sets what [Create server](servers.md#creating-and-deleting) starts with: a template, which the dialog
+chooses for those who may see templates, and else the software, the memory of game servers and of proxies (any amount
+from 512 MiB to 64 GiB), the Java version of game servers, the stop timeout and the time zone. The master checks them
+like the settings of a server. A template that is deleted later is ignored, and the other settings apply again. Those
+who may create servers get these settings without seeing the others.
+
 **Warnings to players** sets how the players of game servers are warned before their servers restart or stop: the
 texts of restarts and of stops, with `{minutes}` for the minutes left, e.g. in the language of the players; where the
 warnings show, in the chat (`say`), as a title or above the hotbar; the longest lead time of restarts and stops by hand

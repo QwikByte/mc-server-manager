@@ -13,6 +13,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/access"
 	masterapp "github.com/QwikByte/noryx/internal/master/app"
 	"github.com/QwikByte/noryx/internal/master/auth"
+	masterserver "github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/settings"
 )
 
@@ -89,6 +90,15 @@ func TestMasterSettings(t *testing.T) {
 	api.do("PUT", "/api/settings", valid(func(s map[string]any) { s["enrollAddr"] = " " }), http.StatusOK, nil)
 	if addr := m.settings.EnrollAddr(); addr != m.enrollAddr {
 		t.Fatalf("enrollment address = %s, want %s", addr, m.enrollAddr)
+	}
+
+	// The panel creates servers with the settings of new servers, also for those who may not
+	// see the settings.
+	n := masterserver.NewServers{Type: "velocity", MemoryMB: 3000, ProxyMemoryMB: 768, StopTimeout: 120, TimeZone: "Europe/Berlin"}
+	api.do("PUT", "/api/settings", map[string]any{"newServers": n}, http.StatusOK, nil)
+	var newServers masterserver.NewServers
+	if api.do("GET", "/api/servers/defaults", nil, http.StatusOK, &newServers); newServers != n {
+		t.Fatalf("settings of new servers = %+v, want %+v", newServers, n)
 	}
 }
 

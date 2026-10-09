@@ -41,6 +41,42 @@ func loadWithCert(t *testing.T) *Service {
 	return s
 }
 
+// New servers get settings within the bounds of a server's own, also memory between the usual
+// steps, and a template that is only checked to be an ID.
+func TestNewServers(t *testing.T) {
+	s := loadWithCert(t)
+	set := func(n server.NewServers) error {
+		next := s.Get()
+		next.NewServers = n
+		_, err := s.Update(t.Context(), next)
+		return err
+	}
+	if n := s.NewServers(); n != server.DefaultNewServers() || n.Validate() != nil {
+		t.Fatalf("default = %+v", n)
+	}
+	for name, change := range map[string]func(*server.NewServers){
+		"unknown software":        func(n *server.NewServers) { n.Type = "spigot" },
+		"software in capitals":    func(n *server.NewServers) { n.Type = "PAPER" },
+		"too little memory":       func(n *server.NewServers) { n.MemoryMB = 511 },
+		"too much for proxies":    func(n *server.NewServers) { n.ProxyMemoryMB = 65537 },
+		"an unknown Java version": func(n *server.NewServers) { n.Java = "16" },
+		"no stop timeout":         func(n *server.NewServers) { n.StopTimeout = 0 },
+		"a stop timeout too long": func(n *server.NewServers) { n.StopTimeout = 601 },
+		"an unknown time zone":    func(n *server.NewServers) { n.TimeZone = "Mars/Olympus" },
+		"a path as template":      func(n *server.NewServers) { n.Template = "../templates" },
+	} {
+		n := server.DefaultNewServers()
+		change(&n)
+		if err := set(n); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	n := server.NewServers{Type: "fabric", MemoryMB: 3000, ProxyMemoryMB: 768, Java: "21", StopTimeout: 120, TimeZone: "Europe/Berlin", Template: "abc123"}
+	if err := set(n); err != nil || s.NewServers() != n {
+		t.Fatalf("new servers: %v, %+v", err, s.NewServers())
+	}
+}
+
 // The texts of warnings are checked like a warning of one's own, and changing them also needs
 // the permission to send console commands to all servers. The steps count down.
 func TestWarnings(t *testing.T) {
