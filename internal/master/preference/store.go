@@ -123,6 +123,14 @@ var settings = map[string][]string{
 	// The columns that tables of servers show besides the server and its state: some of these,
 	// separated by commas (see valid).
 	"serverColumns": {"node", "network", "type", "version", "port", "tags", "players", "tps", "cpu", "memory"},
+	// How the lists of nodes, networks and users are shown and sorted where their address doesn't say.
+	"nodeView":     {"grid", "table"},
+	"nodeSort":     {"name", "state", "cpu", "memory", "servers"},
+	"nodeOrder":    {"asc", "desc"},
+	"networkSort":  {"name", "players", "servers"},
+	"networkOrder": {"asc", "desc"},
+	"userSort":     {"name", "added"},
+	"userOrder":    {"asc", "desc"},
 }
 
 // widgetOptions are the options of the widgets that have some and the values each takes, which

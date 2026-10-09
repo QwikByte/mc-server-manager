@@ -1,8 +1,10 @@
 import { t } from "i18next"
+import type { View } from "@/components/list-toolbar"
 import type { Network } from "@/features/networks/api"
 import type { ServerUsage } from "@/features/usage/api"
 import type { Cell } from "@/lib/csv"
 import { msg } from "@/lib/i18n"
+import { matches } from "@/lib/search"
 import { type Order, orders, sortBy } from "@/lib/sort"
 import type { NodeServer, ServerState } from "./api"
 import { serverType, states } from "./server-types"
@@ -79,7 +81,7 @@ export type Grouping = keyof typeof groupings
 /** What servers are filtered and grouped by. */
 export type Property = Exclude<Grouping, "none">
 export const properties: Property[] = ["network", "node", "type", "tag"]
-export type View = "grid" | "table"
+export type { View }
 
 /** How the list of servers is filtered, sorted and shown, kept in the address to share and bookmark it. */
 export interface ServerSearch {
@@ -144,16 +146,15 @@ const isNone = (value: string) => value === "" || value === "none"
 
 /** The servers matching the search, and how many of those match each state regardless of the state filter. */
 export function filterServers(servers: NodeServer[], search: ServerSearch, facts: Facts) {
-  const words = search.q?.toLowerCase().split(/\s+/).filter(Boolean) ?? []
   const matching = servers.filter((s) => {
     const labels = properties.flatMap((p) =>
       valuesOf(p, s, facts)
         .filter(([v]) => !isNone(v))
         .map(([, label]) => label),
     )
-    const text = [s.name, s.version, s.port, ...labels, s.notes].join(" ").toLowerCase()
     return (
-      words.every((w) => text.includes(w)) && properties.every((p) => !search[p] || valuesOf(p, s, facts).some(([v]) => v === search[p]))
+      matches(search.q, s.name, s.version, s.port, ...labels, s.notes) &&
+      properties.every((p) => !search[p] || valuesOf(p, s, facts).some(([v]) => v === search[p]))
     )
   })
   const counts = Object.fromEntries(states.map((state) => [state, matching.filter((s) => s.state === state).length])) as Record<

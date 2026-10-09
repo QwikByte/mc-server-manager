@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query"
 import { t } from "i18next"
 import { useState } from "react"
+import { NoMatch } from "@/components/list-toolbar"
 import { useNetworkOf } from "@/features/networks/servers"
 import { preferencesQuery, useSetFolded, useSettings } from "@/features/preferences/api"
+import { useSorting } from "@/features/preferences/sorting"
 import { useUsages } from "@/features/usage/api"
-import { sortingOf } from "@/lib/sort"
 import { type NodeServer, serverKey } from "./api"
 import { BulkBar } from "./bulk-bar"
 import {
@@ -52,20 +53,12 @@ export function ServerBrowser({
   const facts: Facts = { usage: (s) => usages.server(s.nodeId, s.id), network: (s) => networkOf({ nodeId: s.nodeId, serverId: s.id }) }
   const { settings, change: changeSettings } = useSettings()
   // A list that doesn't offer the grouping chosen last, e.g. by node on a node's page, doesn't group.
-  // The sort chosen last applies while the address names neither a column nor an order.
-  const saved = search.sort === undefined && search.order === undefined
   const shown: ServerSearch = {
     ...search,
-    sort: saved ? settings.serverSort : search.sort,
-    order: saved ? settings.serverOrder : search.order,
     group: search.group ?? (hidden.includes(settings.serverGroup as Property) ? undefined : settings.serverGroup),
   }
   const { found, counts, total } = filterServers(servers, search, facts)
-  const sorting = sortingOf(shown, sortOrders, (c) => {
-    const by = c.sort ?? "name"
-    changeSettings({ serverSort: by, serverOrder: c.order ?? sortOrders[by] })
-    onSearch(c)
-  })
+  const sorting = useSorting(search, sortOrders, { sort: "serverSort", order: "serverOrder" }, onSearch)
   const groups = groupServers(sortServers(found, sorting.by, sorting.order, facts), shown.group, facts)
   const view = search.view ?? settings.serverView ?? (servers.length > 12 ? "table" : "grid")
   const columns = columnsOf(settings.serverColumns)
@@ -127,7 +120,7 @@ export function ServerBrowser({
         }
       />
       {found.length === 0 ? (
-        <p className="rounded-xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">{t("No server matches your search.")}</p>
+        <NoMatch>{t("No server matches your search.")}</NoMatch>
       ) : view === "table" ? (
         <ServerTable {...props} />
       ) : (

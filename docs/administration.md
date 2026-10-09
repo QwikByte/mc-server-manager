@@ -65,7 +65,8 @@ notifications and see the log for all servers.
 ### Users and groups
 
 The **Users** tab invites users, chooses their groups, disables and deletes them, creates setup links and turns off
-two-factor authentication for users who lost their phone. The **Groups** tab defines what their members may do, see
+two-factor authentication for users who lost their phone; it searches them, filters them by group and state and sorts
+them ([Lists](panel.md#lists)). The **Groups** tab defines what their members may do, see
 [Users and permissions](#users-and-permissions).
 
 ## Users and permissions

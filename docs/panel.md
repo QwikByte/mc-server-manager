@@ -118,6 +118,18 @@ asking first or warning its players if the user chose so, or opens its console. 
 **Add node** open their dialogs from the search too. The views of the **Servers** page that the user saved show there as
 well.
 
+## Lists
+
+Other lists are searched and sorted like those of [servers](servers.md#lists-tags-and-bulk-actions). The **Nodes** page
+shows nodes as cards or as a table, the table from 13 nodes on until one is chosen, searches them by name, address, host
+name, system and version of the agent, and sorts them by name, state, servers, or the share of their CPU and memory in
+use, either way round; **Export CSV** downloads them as listed. **Networks** are searched by their names and those of
+their proxies and servers, and sorted by name, players or servers. The **Users** tab searches users by name and group,
+filters them by group and state, active, invited, disabled or without two-factor authentication, and sorts them by name
+or by when they were added. Templates, file sets, backup jobs, schedules and workflows have a search. The address keeps
+the search, filters, sort and view of each list, so that it can be shared or bookmarked; where it doesn't say, the view
+and sort a user chose last apply, in all their browsers.
+
 ## Keyboard shortcuts
 
 Shortcuts are keys typed one after the other, e.g. `g` and then `s` for the servers. `?` lists those the user may use.

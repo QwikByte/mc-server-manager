@@ -288,6 +288,9 @@ func TestSettings(t *testing.T) {
 		"column twice": {"serverColumns": ptr("cpu,node,cpu")},
 		"no column":    {"serverColumns": ptr("node,")},
 		"spaces":       {"serverColumns": ptr("node, cpu")},
+		"node sort":    {"nodeSort": ptr("players")},
+		"network sort": {"networkSort": ptr("cpu")},
+		"user sort":    {"userSort": ptr("groups")},
 	} {
 		var apiErr *httpapi.Error
 		if err := s.ChangeSettings(ctx, alice, c); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
@@ -321,6 +324,13 @@ func TestSettings(t *testing.T) {
 	change(bob, map[string]*string{"serverColumns": ptr("")})
 	check(bob, Settings{"theme": "light", "timeZone": "UTC", "serverColumns": ""})
 	change(bob, map[string]*string{"serverColumns": nil})
+
+	// Lists of nodes, networks and users keep their views and sorts like those of servers.
+	change(bob, map[string]*string{"nodeView": ptr("table"), "nodeSort": ptr("memory"), "networkSort": ptr("players"), "userSort": ptr("added"),
+		"userOrder": ptr("desc")})
+	check(bob, Settings{"theme": "light", "timeZone": "UTC", "nodeView": "table", "nodeSort": "memory", "networkSort": "players",
+		"userSort": "added", "userOrder": "desc"})
+	change(bob, map[string]*string{"nodeView": nil, "nodeSort": nil, "networkSort": nil, "userSort": nil, "userOrder": nil})
 
 	// Values that a newer version stored, or an older one knew, aren't shown.
 	exec(t, db, `UPDATE user_settings SET settings = '{"theme":"sepia","clock":"12h","font":"large","timeZone":"Local"}' WHERE user_id = ?`, bob)

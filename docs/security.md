@@ -42,7 +42,7 @@ that sessions show. The panel names a session by a random ID of its own, never b
 users only see and end their own sessions, which needs no password, as it only takes rights away. A session notes the
 address, browser and time of its last use at most once a minute; the browser and operating system are only names from
 fixed lists that the master recognises in the User-Agent, which are shown but never trusted. The CSV
-files of servers and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
+files of servers, nodes and players, which the browser writes, protect spreadsheets from formulas in names, tags and ban
 reasons as the export of the log does, and quote cells that hold the separator the user chose, comma or semicolon. Notes of servers are plain text, which the panel shows as text only.
 
 ## Two-factor authentication

@@ -1,7 +1,10 @@
 import { queryOptions, useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 import { toast } from "sonner"
+import type { UserSort } from "@/features/access/browse"
 import type { Level, LogEntry } from "@/features/logs/api"
+import type { NetworkSort } from "@/features/networks/browse"
+import type { NodeSort } from "@/features/nodes/browse"
 import type { PlayerSearch } from "@/features/players/search"
 import type { Sort as PluginSort, Source as PluginSource } from "@/features/plugins/api"
 import type { Grouping, Sort, View } from "@/features/servers/browse"
@@ -93,6 +96,14 @@ export interface Settings extends Formats {
   powerWhen?: "always" | "players"
   /** The columns that tables of servers show besides the server and its state, separated by commas; empty for none. */
   serverColumns?: string
+  /** How the lists of nodes, networks and users are shown and sorted where their address doesn't say. */
+  nodeView?: View
+  nodeSort?: NodeSort
+  nodeOrder?: Order
+  networkSort?: NetworkSort
+  networkOrder?: Order
+  userSort?: UserSort
+  userOrder?: Order
 }
 
 /** A change of settings; null takes one back to the browser's. */

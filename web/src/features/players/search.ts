@@ -1,5 +1,5 @@
-import { useSettings } from "@/features/preferences/api"
-import { type Order, orders, sortingOf } from "@/lib/sort"
+import { useSortings } from "@/features/preferences/sorting"
+import { type Order, orders } from "@/lib/sort"
 
 export type OnlineSort = "name" | "server" | "network"
 export type SeenSort = "seen" | "name" | "playtime"
@@ -32,17 +32,6 @@ export function validatePlayerSearch(search: Record<string, unknown>): PlayerSea
   }
 }
 
-/**
- * Sorts the tables of players as the address says, otherwise as the user sorted them last, on the players page and
- * those of servers alike. Sorting keeps the sort for the user.
- */
-export function usePlayerSorting(search: PlayerSearch, set: (change: Partial<PlayerSearch>) => void) {
-  const { settings, change } = useSettings()
-  const saved = search.sort === undefined && search.order === undefined
-  const shown = saved ? { sort: settings.playerSort, order: settings.playerOrder } : search
-  return <K extends NonNullable<PlayerSearch["sort"]>>(columns: Record<K, Order>) =>
-    sortingOf(shown, columns, (c) => {
-      change({ playerSort: c.sort ?? null, playerOrder: c.order ?? null })
-      set(c)
-    })
-}
+/** Sorts the tables of players as the address says, otherwise as the user sorted them last, on the players page and those of servers alike. */
+export const usePlayerSorting = (search: PlayerSearch, set: (change: Partial<PlayerSearch>) => void) =>
+  useSortings(search, { sort: "playerSort", order: "playerOrder" }, set)
