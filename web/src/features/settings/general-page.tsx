@@ -47,6 +47,7 @@ import {
   settingsQuery,
   useUpdateSettings,
 } from "./api"
+import { InviteGroupsField, UserDefaultsFields } from "./defaults-fields"
 import { NameFields } from "./name-fields"
 import { RestartButton } from "./restart-button"
 
@@ -205,6 +206,8 @@ function formOf(s: MasterSettings) {
     nodeDefaults: limitsForm(s.nodeDefaults),
     panelName: s.panelName,
     signInNotice: s.signInNotice,
+    userDefaults: s.userDefaults,
+    inviteGroups: s.inviteGroups,
   }
 }
 
@@ -308,6 +311,11 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
             <FieldDescription>{t("Up to a week. Applies from the next sign-in; shorter sessions are safer.")}</FieldDescription>
           </Field>
           <MfaRequirementFields value={form.requireMfa} onChange={(requireMfa) => set({ requireMfa })} />
+        </FormSection>
+
+        <FormSection title={t("Defaults for users")}>
+          <UserDefaultsFields value={form.userDefaults} onChange={(userDefaults) => set({ userDefaults })} />
+          <InviteGroupsField value={form.inviteGroups} onChange={(inviteGroups) => set({ inviteGroups })} />
         </FormSection>
 
         <FormSection title={t("Log")}>

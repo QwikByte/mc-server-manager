@@ -6,15 +6,16 @@ import { Callout } from "@/components/callout"
 import { LanguageMenu } from "@/components/language-menu"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { usePanelName } from "@/features/settings/public"
+import { useApplyDefaults, usePanelName } from "@/features/settings/public"
 import { chosenLanguage } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 /**
  * The frame of the pages before signing in: on large screens a dark panel with the logo beside
- * the form, which has a title.
+ * the form, which has a title. They follow the panel's defaults where this browser has no choice.
  */
 export function AuthLayout({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+  useApplyDefaults()
   return (
     <div className="grid min-h-svh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <BrandPanel />

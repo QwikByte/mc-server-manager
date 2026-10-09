@@ -74,16 +74,27 @@ export function setLook(change: { [K in keyof Look]?: Look[K] | null }) {
   if (JSON.stringify(next) === JSON.stringify(current)) return
   current = next
   for (const part of Object.keys(parts) as (keyof Look)[]) {
-    const { key, values } = parts[part]
     try {
-      if (current[part] === values[0]) localStorage.removeItem(key)
-      else localStorage.setItem(key, current[part])
+      // Also the first value, so that the panel's defaults don't replace it (setLookDefaults).
+      localStorage.setItem(parts[part].key, current[part])
     } catch {
       // The choice then only lasts until the page is reloaded.
     }
   }
   apply()
   for (const listener of listeners) listener()
+}
+
+/** Applies the panel's defaults to the parts of the look that this browser hasn't kept yet, e.g. before anyone signed in here. */
+export function setLookDefaults(defaults: Partial<Look>) {
+  const unkept = <K extends keyof Look>(part: K) => {
+    try {
+      return localStorage.getItem(parts[part].key) === null ? defaults[part] : undefined
+    } catch {
+      return undefined // without storage, the look stays as it is
+    }
+  }
+  setLook({ theme: unkept("theme"), accent: unkept("accent"), density: unkept("density") })
 }
 
 export const setTheme = (theme: Theme) => setLook({ theme })

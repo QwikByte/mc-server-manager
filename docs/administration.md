@@ -38,6 +38,13 @@ they have. Empty means Noryx. The notice, e.g. whom to ask for access, shows bel
 are plain text, a name of up to 64 characters in one line and a notice of up to 500 with line breaks, and public: the
 sign-in page reads them without a session, also from `GET /api/panel`.
 
+**Defaults for users** chooses the language, colour theme, accent colour, density and time format of users who haven't
+chosen them on their account page, instead of what their browser has; each can stay **From the browser**. They also
+apply to users who are signed in, as soon as their panel loads them again, and on the sign-in page of browsers where
+nobody chose them yet, e.g. a default accent for a test panel, so they are public like the name. Where the panel offers
+the browser's language, it then offers **Default of the panel** with the default language. **Groups of invited users**
+are the groups that **Invite user** preselects (see [Invitations](#invitations)).
+
 ### Agents
 
 The **Agents** tab lists all nodes with their agent version, certificate and settings, which can be changed there too.
@@ -109,7 +116,8 @@ first one or after losing access.
 ### Invitations
 
 New users get a setup link (valid for three days, usable once) to choose their password; the same link resets a
-forgotten password. The token is in the link's fragment, which browsers don't send to servers, and the panel removes it
+forgotten password. **Invite user** preselects the groups that **Settings → General** names, of those the inviter may
+give; groups deleted since are left out, and the inviter can still change them, within their own permissions as always. The token is in the link's fragment, which browsers don't send to servers, and the panel removes it
 from the address bar once it was read. Users change their own password on their account page (in the menu of their name
 in the sidebar), which signs them out everywhere else.
 

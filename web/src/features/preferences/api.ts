@@ -8,11 +8,12 @@ import type { NodeSort } from "@/features/nodes/browse"
 import type { PlayerSearch } from "@/features/players/search"
 import type { Sort as PluginSort, Source as PluginSource } from "@/features/plugins/api"
 import type { Grouping, Sort, View } from "@/features/servers/browse"
-import type { UsageRange } from "@/features/usage/api"
 import type { ServerTab } from "@/features/servers/tabs"
+import { defaultsQuery } from "@/features/settings/public"
+import type { UsageRange } from "@/features/usage/api"
 import { api } from "@/lib/api"
 import { type CsvFormat, languageSeparator } from "@/lib/csv"
-import { chooseFormats, type Formats, msg } from "@/lib/i18n"
+import { chooseFormats, type Formats, msg, setDefaultLanguage } from "@/lib/i18n"
 import type { Order } from "@/lib/sort"
 import { type Accent, type Density, type Motion, setLook, type Theme, useDark, type Width } from "@/lib/theme"
 
@@ -275,12 +276,16 @@ export function useCsvFormat(): CsvFormat {
   return { separator: settings.csvSeparator ?? languageSeparator, bom: settings.csvBom === "on" }
 }
 
-/** Applies the signed-in user's settings in this browser, which keeps them for the next visit. */
+/**
+ * Applies the signed-in user's settings in this browser, which keeps them for the next visit, and the panel's
+ * defaults where the user chose none.
+ */
 export function useApplySettings() {
   const { data } = useQuery(preferencesQuery)
+  const { data: defaults } = useQuery(defaultsQuery)
   // Other formats of times reload the panel, so it waits until the changes are stored.
   const storing = useIsMutating({ mutationKey: settingsKey }) > 0
-  const { theme, accent, density, width, motion, clock, timeZone, times, weekStart, codeSize, codeTheme } = data?.settings ?? {}
+  const { theme, accent, density, width, motion, clock, timeZone, times, weekStart, codeSize, codeTheme } = { ...defaults, ...data?.settings }
   useEffect(() => setLook({ theme, accent, density, width, motion }), [theme, accent, density, width, motion])
   // The console, the terminal and the editor take their size and colours from <html>, see index.css.
   useEffect(() => {
@@ -288,10 +293,15 @@ export function useApplySettings() {
     root.codeSize = codeSize ?? "small"
     root.codeTheme = codeTheme ?? "dark"
   }, [codeSize, codeTheme])
-  const loaded = data !== undefined
+  // The defaults are waited for too, so that a reload for the default language takes the formats along, and
+  // the formats this browser shows stay while the defaults can't be loaded.
+  const loaded = data !== undefined && defaults !== undefined
+  const language = defaults?.language ?? ""
   useEffect(() => {
-    if (loaded && !storing) chooseFormats({ clock, timeZone, times, weekStart })
-  }, [loaded, storing, clock, timeZone, times, weekStart])
+    if (!loaded || storing) return
+    setDefaultLanguage(language)
+    chooseFormats({ clock, timeZone, times, weekStart })
+  }, [loaded, storing, language, clock, timeZone, times, weekStart])
 }
 
 /** The sizes of the text of the console, the terminal and the editor. */

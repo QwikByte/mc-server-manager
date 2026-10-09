@@ -95,8 +95,9 @@ which Excel needs to read umlauts.
 The master keeps these choices for each user, as well as what they chose last of lists where the address doesn't say,
 e.g. the view, sort and grouping of server lists, the tab of [players](players.md), the sort of plugins and the range of
 [usage](monitoring.md#history), and the default level of the [log](monitoring.md#logs-page), so that they apply in all
-their browsers. Each browser remembers the look and the formats of times it showed last and uses
-them until someone signs in; what a user never chose follows the browser. `GET /api/preferences` returns a user's
+their browsers. Each browser remembers the look and the formats of times it showed last and uses them until someone
+signs in; what a user never chose follows the browser, or the language, colour theme, accent colour, density and time
+format that the settings give users as defaults ([Settings](administration.md#general)). `GET /api/preferences` returns a user's
 settings with the layout of their overview, their pinned servers and what pops up for them; `PATCH
 /api/preferences/settings` changes some of the settings, e.g. `{"theme": "dark"}` or `{"timeZone": "Europe/Berlin"}`, or
 takes one back to the browser's with `null`, and `PUT /api/preferences/alerts` sets what pops up. The master refuses
@@ -178,9 +179,10 @@ and on many servers at once. **Retry the failed ones** tries the same again on t
 
 ## Languages
 
-The panel speaks English and German. It follows the browser until someone chooses a language in the menu of their name
-or on their account page, which the panel stores for the signed-in user, so that it applies in all their browsers; on
-the sign-in page, the button next to the colour theme chooses it for the browser. Dates, times and numbers follow the
+The panel speaks English and German. It follows the browser, or the default language of the settings, until someone
+chooses a language in the menu of their name or on their account page, which the panel stores for the signed-in user, so
+that it applies in all their browsers; on the sign-in page, the button next to the colour theme chooses it for the
+browser. Dates, times and numbers follow the
 language too. What the master and the agents send, such as errors, the log and the descriptions of permissions, stays
 English.
 

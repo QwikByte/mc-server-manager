@@ -3,7 +3,7 @@ import { t } from "i18next"
 import type { NodeLimits } from "@/features/nodes/api"
 import type { ThresholdDefaults } from "@/features/usage/api"
 import { api } from "@/lib/api"
-import { publicSettingsQuery } from "./public"
+import { publicSettingsQuery, type UserDefaults } from "./public"
 
 /** The certificate the panel serves: self-signed, of Let's Encrypt, or none for plain HTTP, e.g. behind a reverse proxy. */
 export type PanelHTTPS = "" | "self-signed" | "letsencrypt"
@@ -35,6 +35,10 @@ export interface MasterSettings {
   /** The name of the panel, empty for Noryx, and the notice of the sign-in page; both are plain text and public. */
   panelName: string
   signInNotice: string
+  /** The language and look of users who haven't chosen them, which are public too. */
+  userDefaults: UserDefaults
+  /** The IDs of the groups that inviting a user preselects; deleted ones are left out. */
+  inviteGroups: string[]
 }
 
 /** The certificate the panel serves. */

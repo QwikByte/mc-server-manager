@@ -26,8 +26,10 @@ import (
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/https"
 	"github.com/QwikByte/noryx/internal/master/node"
+	"github.com/QwikByte/noryx/internal/master/preference"
 	"github.com/QwikByte/noryx/internal/master/usage"
 	"github.com/QwikByte/noryx/internal/pki"
+	"github.com/QwikByte/noryx/web"
 )
 
 const (
@@ -40,6 +42,7 @@ const (
 	maxMFAGroups        = 100
 	maxPanelName        = 64
 	maxSignInNotice     = 500
+	maxInviteGroups     = 100
 )
 
 var (
@@ -86,6 +89,36 @@ type Settings struct {
 	// and public, as the sign-in page shows them before anyone signs in.
 	PanelName    string `json:"panelName"`
 	SignInNotice string `json:"signInNotice"`
+
+	// UserDefaults apply to users who haven't chosen otherwise, instead of what their browser
+	// tells. They are public too, as the sign-in page shows them.
+	UserDefaults UserDefaults `json:"userDefaults"`
+	// InviteGroups are the IDs of the groups that inviting a user preselects. Groups that don't
+	// exist (any more) are left out.
+	InviteGroups []string `json:"inviteGroups"`
+}
+
+// UserDefaults are the language and the look of the panel for users who haven't chosen them,
+// by the keys of their settings (see preference.Settings); empty ones follow the browser.
+type UserDefaults struct {
+	Language string `json:"language"`
+	Theme    string `json:"theme"`
+	Accent   string `json:"accent"`
+	Density  string `json:"density"`
+	Clock    string `json:"clock"`
+}
+
+// validate checks that each default is one that users can choose themselves.
+func (d UserDefaults) validate() error {
+	if d.Language != "" && !slices.Contains(web.Languages, d.Language) {
+		return httpapi.Errorf(http.StatusBadRequest, "Choose one of the panel's languages as the default, e.g. de, or none to follow the browser.")
+	}
+	for _, kv := range [][2]string{{"theme", d.Theme}, {"accent", d.Accent}, {"density", d.Density}, {"clock", d.Clock}} {
+		if kv[1] != "" && !preference.Valid(kv[0], kv[1]) {
+			return httpapi.Errorf(http.StatusBadRequest, "Choose a default %s that users can choose themselves, or none to follow the browser.", kv[0])
+		}
+	}
+	return nil
 }
 
 // MFARequirement tells who has to use two-factor authentication: all users, or the members
@@ -100,6 +133,7 @@ func defaults() Settings {
 	return Settings{
 		SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true,
 		RequireMFA: MFARequirement{Groups: []string{}}, Thresholds: usage.DefaultThresholds(),
+		InviteGroups: []string{},
 	}
 }
 
@@ -163,6 +197,7 @@ func (s *Service) Get() Settings {
 	l.PortMin, l.PortMax, l.MemoryReserveMB = clone(l.PortMin), clone(l.PortMax), clone(l.MemoryReserveMB)
 	st.RequireMFA.Groups = slices.Clone(st.RequireMFA.Groups)
 	st.Thresholds = st.Thresholds.Clone()
+	st.InviteGroups = slices.Clone(st.InviteGroups)
 	return st
 }
 
@@ -179,6 +214,11 @@ func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
 	next.EnrollAddr, next.PanelAddr = strings.TrimSpace(next.EnrollAddr), strings.TrimSpace(next.PanelAddr)
 	next.PanelDomain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(next.PanelDomain), "."))
 	next.PanelName, next.SignInNotice = strings.TrimSpace(next.PanelName), strings.TrimSpace(strings.ReplaceAll(next.SignInNotice, "\r\n", "\n"))
+	if next.InviteGroups == nil {
+		next.InviteGroups = []string{}
+	}
+	slices.Sort(next.InviteGroups)
+	next.InviteGroups = slices.Compact(next.InviteGroups)
 	if next.RequireMFA.All || next.RequireMFA.Groups == nil {
 		next.RequireMFA.Groups = []string{}
 	}
@@ -296,6 +336,9 @@ func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().Sess
 // PanelName implements auth.Config and notify.Config.
 func (s *Service) PanelName() string { return cmp.Or(s.Get().PanelName, "Noryx") }
 
+// InviteGroups implements access.Config.
+func (s *Service) InviteGroups() []string { return s.Get().InviteGroups }
+
 // validate checks the settings; panelAddr is where the panel listens with them.
 func validate(s Settings, panelAddr string) error {
 	panelIP, panelPort, _ := net.SplitHostPort(panelAddr)
@@ -328,8 +371,10 @@ func validate(s Settings, panelAddr string) error {
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a name of the panel of up to %d characters in one line, or leave it empty for Noryx.", maxPanelName)
 	case !plainText(s.SignInNotice, maxSignInNotice, true):
 		return httpapi.Errorf(http.StatusBadRequest, "Enter a notice of up to %d characters of plain text for the sign-in page, or leave it empty.", maxSignInNotice)
+	case len(s.InviteGroups) > maxInviteGroups || slices.ContainsFunc(s.InviteGroups, func(id string) bool { return !groupID.MatchString(id) }):
+		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d groups that inviting a user preselects.", maxInviteGroups)
 	}
-	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate())
+	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate(), s.UserDefaults.validate())
 }
 
 // plainText tells whether s has at most n characters and no control characters but, if lines

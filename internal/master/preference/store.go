@@ -181,6 +181,10 @@ func valid(key, value string) bool {
 	return slices.Contains(settings[key], value)
 }
 
+// Valid tells whether a setting takes a value, e.g. one that the settings of the master give
+// users as a default.
+func Valid(key, value string) bool { return valid(key, value) }
+
 // Preferences are what a user chose for the panel.
 type Preferences struct {
 	// Dashboard is the order of the widgets of the overview; empty shows the panel's default layout.
@@ -225,7 +229,8 @@ type Alerts struct {
 }
 
 // Settings are values of the panel's settings by their keys, e.g. {"theme": "dark"}. Keys a
-// user never set follow the browser.
+// user never set follow the browser, or the defaults of the master's settings where these
+// give one.
 type Settings map[string]string
 
 // Widget is a widget of the overview, which spans 1 to 3 columns of its grid.

@@ -166,6 +166,16 @@ func TestPanelName(t *testing.T) {
 	if !strings.HasPrefix(setup.URI, "otpauth://totp/Noryx%20%C2%B7%20Test:admin?issuer=Noryx%20%C2%B7%20Test&") {
 		t.Fatalf("uri = %s", setup.URI)
 	}
+
+	// It reads the language and look for users who haven't chosen them too.
+	root.do("PUT", "/api/settings", map[string]any{"userDefaults": map[string]string{"language": "fr"}}, http.StatusBadRequest, nil)
+	root.do("PUT", "/api/settings", map[string]any{"userDefaults": map[string]string{"accent": "pink"}}, http.StatusBadRequest, nil)
+	root.do("PUT", "/api/settings", map[string]any{"userDefaults": map[string]string{"language": "de", "accent": "violet"}}, http.StatusOK, nil)
+	var defaults struct{ Defaults settings.UserDefaults }
+	visitor.do("GET", "/api/panel", nil, http.StatusOK, &defaults)
+	if defaults.Defaults != (settings.UserDefaults{Language: "de", Accent: "violet"}) {
+		t.Fatalf("defaults = %+v", defaults.Defaults)
+	}
 }
 
 // Each user keeps the language they chose, and the session tells it to every browser.

@@ -325,7 +325,7 @@ func Handler(s Services) http.Handler {
 func API(s Services) *http.ServeMux {
 	api := http.NewServeMux()
 	m := access.NewMux(api, s.Moves.Guard, s.Logs.Audit())
-	access.NewHandler(s.Access, s.Users).Register(m)
+	access.NewHandler(s.Access, s.Users, s.Settings).Register(m)
 	settings.NewHandler(s.Settings, s.Restart).Register(m)
 	logs.NewHandler(s.Logs).Register(m)
 	notify.NewHandler(s.Notify, s.Tidy).Register(m)

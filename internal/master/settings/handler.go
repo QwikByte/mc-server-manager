@@ -36,15 +36,17 @@ func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/panel", h.public)
 }
 
-// public is what the panel shows before anyone signs in: its name and the notice of the
-// sign-in page.
+// public is what the panel shows before anyone signs in: its name, the notice of the sign-in
+// page, and the language and look it has for users who haven't chosen them.
 type public struct {
-	Name   string `json:"name"`
-	Notice string `json:"notice"`
+	Name     string       `json:"name"`
+	Notice   string       `json:"notice"`
+	Defaults UserDefaults `json:"defaults"`
 }
 
 func (h *Handler) public(w http.ResponseWriter, _ *http.Request) {
-	httpapi.WriteJSON(w, http.StatusOK, public{h.svc.PanelName(), h.svc.Get().SignInNotice})
+	s := h.svc.Get()
+	httpapi.WriteJSON(w, http.StatusOK, public{h.svc.PanelName(), s.SignInNotice, s.UserDefaults})
 }
 
 type view struct {

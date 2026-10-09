@@ -46,7 +46,8 @@ files of servers, nodes and players, which the browser writes, protect spreadshe
 reasons as the export of the log does, and quote cells that hold the separator the user chose, comma or semicolon. Notes of servers are plain text, which the panel shows as text only.
 So are the name of the panel and the notice of its sign-in page: of limited length, without control characters but the
 line breaks of the notice, and public, as the sign-in page reads them without a session. The settings take no HTML, CSS
-or images for them, so the Content Security Policy stays as strict.
+or images for them, so the Content Security Policy stays as strict. The defaults of users' language and look are public
+too, and only values that users can choose themselves.
 
 ## Two-factor authentication
 
@@ -391,7 +392,8 @@ disabling and deleting apply right away; disabled users are signed out. Streams 
 log of a datastore and terminal commands such as `server logs`, end every 5 minutes, so the panel checks the session and
 the permissions again; the console and the log connect again on their own and continue. Users can only grant
 permissions they have themselves, within their own scope, and only manage users who have no more permissions than they
-do, so no one can raise their own permissions.
+do, so no one can raise their own permissions. The groups that the settings preselect for invitations are only shown
+checked, of those the inviter may give: the invitation checks the groups it gets like any other.
 The last enabled administrator can't be disabled, deleted or removed from the Administrators. The master logs every
 change with the user who made it, also denied attempts. An operation in progress can only be cancelled by the user who
 started it, in the panel or with the same API token, or by one who has the permissions it needed on what it is about,

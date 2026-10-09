@@ -290,7 +290,55 @@ func TestPanelNameAndNotice(t *testing.T) {
 	NewHandler(s, nil).RegisterPublic(mux)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/panel", nil))
-	if body := strings.TrimSpace(rec.Body.String()); rec.Code != http.StatusOK || body != `{"name":"Noryx · Test","notice":"Ask Alex\nfor access."}` {
+	if body := strings.TrimSpace(rec.Body.String()); rec.Code != http.StatusOK ||
+		body != `{"name":"Noryx · Test","notice":"Ask Alex\nfor access.","defaults":{"language":"","theme":"","accent":"","density":"","clock":""}}` {
 		t.Fatalf("status %d: %s", rec.Code, body)
+	}
+}
+
+// The defaults of users are values that users can choose themselves, and the groups of
+// invitations are named once.
+func TestUserDefaults(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s, err := Load(t.Context(), db, Master{PanelDefaultAddr: "127.0.0.1:0"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Get(); got.UserDefaults != (UserDefaults{}) || got.InviteGroups == nil || len(got.InviteGroups) != 0 {
+		t.Fatalf("defaults = %+v, invite groups %v", got.UserDefaults, got.InviteGroups)
+	}
+	set := func(d UserDefaults, groups []string) error {
+		next := s.Get()
+		next.UserDefaults, next.InviteGroups = d, groups
+		_, err := s.Update(t.Context(), next)
+		return err
+	}
+	for _, bad := range []UserDefaults{{Language: "fr"}, {Language: "../de"}, {Theme: "pink"}, {Accent: "red"}, {Density: "tight"}, {Clock: "13h"}} {
+		if err := set(bad, nil); err == nil {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+	many := make([]string, maxInviteGroups+1)
+	for i := range many {
+		many[i] = "group" + strconv.Itoa(i)
+	}
+	for _, bad := range [][]string{{"../admins"}, {""}, many} {
+		if err := set(UserDefaults{}, bad); err == nil {
+			t.Errorf("invite groups %v accepted", bad)
+		}
+	}
+	want := UserDefaults{Language: "de", Theme: "dark", Accent: "blue", Density: "compact", Clock: "24h"}
+	if err := set(want, []string{"mods", "administrators", "mods"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Get(); got.UserDefaults != want || !slices.Equal(got.InviteGroups, []string{"administrators", "mods"}) {
+		t.Fatalf("defaults = %+v, invite groups %v", got.UserDefaults, got.InviteGroups)
+	}
+	if groups := s.InviteGroups(); !slices.Equal(groups, []string{"administrators", "mods"}) {
+		t.Fatalf("invite groups = %v", groups)
 	}
 }
