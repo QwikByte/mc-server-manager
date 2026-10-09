@@ -9,6 +9,7 @@ import {
   HouseIcon,
   KeyboardIcon,
   PaletteIcon,
+  PowerIcon,
   SparkleIcon,
   TabsIcon,
   TerminalIcon,
@@ -410,5 +411,46 @@ export function NavigationSettings() {
         })}
       </AccountRow>
     </>
+  )
+}
+
+/** Whether a single server stops or restarts right away, after asking or with a warning to its players, and when. */
+export function PowerSettings() {
+  const { settings } = useSettings()
+  return (
+    <AccountRow
+      icon={PowerIcon}
+      tone="warning"
+      title={t("Stops and restarts")}
+      actions={
+        <>
+          <Choice
+            setting="power"
+            label={t("Stops and restarts")}
+            fallback="now"
+            options={[
+              { value: "now", label: t("Right away") },
+              { value: "ask", label: t("Ask first") },
+              { value: "warn", label: t("Warn the players first") },
+            ]}
+          />
+          {settings.power && settings.power !== "now" && (
+            <Choice
+              setting="powerWhen"
+              label={t("Which servers")}
+              fallback="always"
+              options={[
+                { value: "always", label: t("For all servers") },
+                { value: "players", label: t("For servers with players") },
+              ]}
+            />
+          )}
+        </>
+      }
+    >
+      {t(
+        "Of a single server, from its buttons and the search; selected servers always ask. Only running game servers can warn their players, so the others ask. Players count as their node measured them last; servers without a measurement count as having some.",
+      )}
+    </AccountRow>
   )
 }

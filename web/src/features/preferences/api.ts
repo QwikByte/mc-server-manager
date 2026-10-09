@@ -76,6 +76,9 @@ export interface Settings extends Formats {
   motion?: Motion
   /** Whether shortcuts of single keys work; Ctrl+K always does. */
   shortcuts?: "on" | "off"
+  /** Whether a single server stops or restarts right away, after asking or with a warning to its players, and whether only with players. */
+  power?: "now" | "ask" | "warn"
+  powerWhen?: "always" | "players"
 }
 
 /** A change of settings; null takes one back to the browser's. */

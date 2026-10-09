@@ -18,7 +18,6 @@ import { useQuery } from "@tanstack/react-query"
 import { useLocation, useNavigate } from "@tanstack/react-router"
 import { t } from "i18next"
 import { type ReactNode, useState } from "react"
-import { toast } from "sonner"
 import { IconTile } from "@/components/icon-tile"
 import { pages as visiblePages } from "@/components/navigation"
 import { type Status, StatusDot } from "@/components/status"
@@ -40,13 +39,15 @@ import { jobs } from "@/features/backups/api"
 import { fileSetsQuery } from "@/features/filesets/api"
 import { networksQuery } from "@/features/networks/api"
 import { nodesQuery } from "@/features/nodes/api"
+import { useOperation } from "@/features/operations/use-operation"
 import { seenPlayersQuery } from "@/features/players/api"
 import { useOnlinePlayers } from "@/features/players/online"
 import { actions as policyActions, policies } from "@/features/policies/api"
 import { workflowsQuery } from "@/features/workflows/api"
 import { describeTrigger } from "@/features/workflows/catalog"
 import { describeSchedule } from "@/features/schedules/describe"
-import { allServersQuery, type NodeServer, serverKey, useBulkAction } from "@/features/servers/api"
+import { allServersQuery, type NodeServer, serverKey, useBulkAction, type Warning } from "@/features/servers/api"
+import { usePower } from "@/features/servers/power"
 import { serverLook, serverType, statusOf } from "@/features/servers/server-types"
 import { settings } from "@/features/settings/tabs"
 import { templatesQuery } from "@/features/templates/api"
@@ -98,6 +99,8 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
   const access = useAccess()
   const navigate = useNavigate()
   const bulk = useBulkAction()
+  const operation = useOperation()
+  const power = usePower({ onClose })
   const [query, setQuery] = useState("")
   const { data: me } = useQuery(meQuery)
   const [recent] = useState(() => (me ? readRecent(me.id) : []))
@@ -297,18 +300,26 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
   function act(kind: (typeof actions)[number]["kind"], server: NodeServer) {
     const params = { nodeId: server.nodeId, serverId: server.id }
     if (kind === "console") return go(() => navigate({ to: "/nodes/$nodeId/servers/$serverId", params, state: { console: true } }))
+    // A notification follows the action, also while the server warns its players.
+    const run = (warning?: Warning) =>
+      operation.run(
+        (onStart) =>
+          bulk.mutateAsync({ action: kind, warning, servers: [server], onStart }).then(([r]) => {
+            if (r?.error) throw new Error(r.error)
+          }),
+        {
+          title: t("{{action}}: {{name}}…", { action: actions.find((a) => a.kind === kind)!.label(), name: server.name }),
+          notify: true,
+          done: () => ({ message: t("Done: {{name}}", { name: server.name }) }),
+        },
+      )
+    if (kind !== "start") return power.request({ nodeId: server.nodeId, server, action: kind, run })
     onClose()
-    toast.promise(
-      bulk.mutateAsync({ action: kind, servers: [server] }).then(([r]) => {
-        if (r?.error) throw new Error(r.error)
-      }),
-      {
-        loading: t("{{action}}: {{name}}…", { action: actions.find((a) => a.kind === kind)!.label(), name: server.name }),
-        success: t("Done: {{name}}", { name: server.name }),
-        error: (e: Error) => e.message,
-      },
-    )
+    run()
   }
+
+  // Asking before a stop or restart takes the place of the search.
+  if (power.dialog) return power.dialog
 
   return (
     <CommandDialog

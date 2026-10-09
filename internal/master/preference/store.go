@@ -95,6 +95,10 @@ var settings = map[string][]string{
 	"width":     {"limited", "full"},
 	"motion":    {"system", "less"},
 	"shortcuts": {"on", "off"},
+	// Whether stopping or restarting a single server acts right away, asks first or opens the warning of its players,
+	// and whether only for servers with players by the latest count of their node.
+	"power":     {"now", "ask", "warn"},
+	"powerWhen": {"always", "players"},
 }
 
 // valid tells whether a setting takes a value.

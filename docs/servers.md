@@ -140,6 +140,12 @@ chat first, 1, 2, 5 or 10 minutes before, and again 5 minutes and 1 minute befor
 leaves the server running. The warning has the default message of schedules; one's own message needs the permission to
 send console commands, as the warning is the console command `say`. Proxies get no warning.
 
+**Stop** and **Restart** of a server, on its page, its card, its row of the table and the widget of pinned servers, act
+right away, unless a user chooses on their account page that they ask first or open the dialog with the warning on,
+which only running game servers have, so that the others ask. They can do so only for servers with players, by the
+latest count of their node; a server it didn't count, e.g. as its console didn't answer, asks too. `restart lobby` and
+`stop lobby` in the [search](panel.md#search) follow the same choice, and selected servers always ask.
+
 When a node shuts down or reboots, systemd gives Docker 90 seconds to stop (its `DefaultTimeoutStopSec`), which cuts
 longer stop timeouts short: servers that haven't saved their worlds by then are killed. To give them their full stop
 timeout, raise `TimeoutStopSec` of `docker.service` beyond the longest one, e.g. to 11 minutes:

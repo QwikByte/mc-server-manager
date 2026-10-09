@@ -56,6 +56,9 @@ first tab the user may see; the **Console** tab and `console lobby` in the searc
 width that reads well unless they fill wide screens, and move less if the user asks for it, whatever the operating
 system says. Shortcuts of single keys can be turned off, see [Keyboard shortcuts](#keyboard-shortcuts).
 
+**Servers** chooses whether **Stop** and **Restart** of a single server act right away, ask first or warn its players,
+also only for servers with players; see [Settings and images](servers.md#settings-and-images).
+
 **Times and dates** chooses whether times have 24 or 12 hours, their time zone (the browser's, or one chosen for all
 browsers, e.g. UTC), whether times that tell how long ago something was, e.g. "5 minutes ago", show that or the date and
 time, with the other one in their tooltip, and whether weeks start on Monday or Sunday, or as the language has it, e.g.
@@ -88,8 +91,9 @@ settings and values it doesn't know.
 in the panel, and, once something is typed, players seen before, templates, file sets, backup jobs, schedules and users;
 each only for those who may see them. Before anything is typed, it offers what was opened last: servers, networks,
 nodes, templates, file sets, backup jobs and schedules, wherever they were opened. Each browser remembers them for each user, and only those the user
-may still see are offered. A search that starts with an action, e.g. `restart lobby`, starts, restarts or stops a server
-or opens its console. **Create server**, **Create network** and **Add node** open their dialogs from the search too.
+may still see are offered. A search that starts with an action, e.g. `restart lobby`, starts, restarts or stops a server,
+asking first or warning its players if the user chose so, or opens its console. **Create server**, **Create network** and
+**Add node** open their dialogs from the search too.
 
 ## Keyboard shortcuts
 
