@@ -31,7 +31,7 @@ import { useAccess } from "@/features/access/use-access"
 import { AlertsSettings } from "@/features/notify/alerts-setting"
 import { DesktopNotificationsSetting } from "@/features/notify/desktop-setting"
 import { useSettings } from "@/features/preferences/api"
-import { CodeSettings, ExportSettings, TimesSettings } from "@/features/preferences/settings"
+import { CodeSettings, ExportSettings, NavigationSettings, TimesSettings } from "@/features/preferences/settings"
 import { formatAgo, formatDateTime } from "@/lib/format"
 import { languageName, languages, msg } from "@/lib/i18n"
 import { type Accent, accents, type Density, type Theme, useLook } from "@/lib/theme"
@@ -82,6 +82,9 @@ export function AccountPage() {
         </FormSection>
         <FormSection title={t("Panel")}>
           <PanelSettings user={user} />
+        </FormSection>
+        <FormSection id="navigation" title={t("Navigation and layout")}>
+          <NavigationSettings />
         </FormSection>
         <FormSection title={t("Times and dates")}>
           <TimesSettings />

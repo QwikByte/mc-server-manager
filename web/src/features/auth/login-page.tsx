@@ -21,7 +21,8 @@ export function LoginPage() {
     event.preventDefault()
     login.mutate(
       { ...credentials, code },
-      { onSuccess: (result) => ("mfaRequired" in result ? setCode("") : navigate({ to: redirect ?? "/" })) },
+      // The panel opens where the user was going, or at "/" on their start page.
+      { onSuccess: (result) => ("mfaRequired" in result ? setCode("") : navigate({ to: redirect ?? "/", state: { open: true } })) },
     )
   }
 

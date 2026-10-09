@@ -54,7 +54,7 @@ import { formatAgo } from "@/lib/format"
 import { useDebounced } from "@/lib/use-debounced"
 import { cn } from "@/lib/utils"
 import { openedPath, readRecent } from "./recent"
-import { account, type Creation, creations, pageKeys } from "./shortcuts"
+import { account, type Creation, creations, pageKeys, useSingleKeys } from "./shortcuts"
 import { Keys } from "./shortcuts-dialog"
 
 /** Actions on a server that the palette offers once a search starts with their name, e.g. "restart lobby". */
@@ -134,6 +134,8 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
   // The tabs of the settings are found by name too, e.g. "users".
   const pages = [...visiblePages(access), ...settings.tabs.filter((tab) => tab.to !== "/settings" && tab.visible(access)), account]
   const creatable = creations.filter((c) => c.allowed(access))
+  // The keys of shortcuts only show while they work.
+  const singleKeys = useSingleKeys()
 
   // The library, the automation and the users only show once something is searched.
   const groups: { heading: string; entries: Entry[]; searched?: boolean }[] = [
@@ -294,7 +296,7 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
 
   function act(kind: (typeof actions)[number]["kind"], server: NodeServer) {
     const params = { nodeId: server.nodeId, serverId: server.id }
-    if (kind === "console") return go(() => navigate({ to: "/nodes/$nodeId/servers/$serverId", params }))
+    if (kind === "console") return go(() => navigate({ to: "/nodes/$nodeId/servers/$serverId", params, state: { console: true } }))
     onClose()
     toast.promise(
       bulk.mutateAsync({ action: kind, servers: [server] }).then(([r]) => {
@@ -358,16 +360,18 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
                 <CommandItem key={c.opens} value={`create/${c.opens}`} keywords={[t(c.label)]} onSelect={() => onOpen(c.opens)}>
                   <c.icon />
                   {t(c.label)}
-                  <CommandShortcut>
-                    <Keys keys={["c", c.key]} />
-                  </CommandShortcut>
+                  {singleKeys && (
+                    <CommandShortcut>
+                      <Keys keys={["c", c.key]} />
+                    </CommandShortcut>
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>
           )}
           <CommandGroup heading={t("Pages")}>
             {pages.map(({ to, label, icon: Icon }) => {
-              const key = pageKeys[to]
+              const key = singleKeys && pageKeys[to]
               return (
                 <CommandItem key={to} value={`page${to}`} keywords={[t(label)]} onSelect={() => go(() => navigate({ to }))}>
                   <Icon />
@@ -383,9 +387,11 @@ export function Palette({ onClose, onOpen }: { onClose: () => void; onOpen: (wha
             <CommandItem value="shortcuts" keywords={[t("Keyboard shortcuts")]} onSelect={() => onOpen("shortcuts")}>
               <KeyboardIcon />
               {t("Keyboard shortcuts")}
-              <CommandShortcut>
-                <Keys keys={["?"]} />
-              </CommandShortcut>
+              {singleKeys && (
+                <CommandShortcut>
+                  <Keys keys={["?"]} />
+                </CommandShortcut>
+              )}
             </CommandItem>
           </CommandGroup>
         </CommandList>

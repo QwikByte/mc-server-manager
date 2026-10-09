@@ -128,7 +128,8 @@ export function AppShell() {
           <AccountMenu folded className="md:hidden" />
         </header>
         <main id={contentId} tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8">
-          <div className="mx-auto max-w-7xl">
+          {/* Pages keep a width that reads well, unless the user lets them fill wide screens (data-width on <html>). */}
+          <div className="mx-auto max-w-7xl in-data-[width=full]:max-w-none">
             <ConnectionBanner />
             {access.admin && <UpdateBanner />}
             <Page />

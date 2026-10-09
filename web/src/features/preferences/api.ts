@@ -6,11 +6,12 @@ import type { PlayerSearch } from "@/features/players/search"
 import type { Sort as PluginSort, Source as PluginSource } from "@/features/plugins/api"
 import type { Grouping, Sort, View } from "@/features/servers/browse"
 import type { UsageRange } from "@/features/usage/api"
+import type { ServerTab } from "@/features/servers/tabs"
 import { api } from "@/lib/api"
 import { type CsvFormat, languageSeparator } from "@/lib/csv"
 import { chooseFormats, type Formats, msg } from "@/lib/i18n"
 import type { Order } from "@/lib/sort"
-import { type Accent, type Density, setLook, type Theme, useDark } from "@/lib/theme"
+import { type Accent, type Density, type Motion, setLook, type Theme, useDark, type Width } from "@/lib/theme"
 
 /** A widget of the overview and how many of its three columns it spans on large screens. */
 export interface Widget {
@@ -67,6 +68,14 @@ export interface Settings extends Formats {
   usageView?: "charts" | "table"
   /** The least level the log shows where its address names none; without, it shows all. */
   logLevel?: Exclude<Level, "debug">
+  /** Where the panel opens, the address of a page of the sidebar, and the tab a server opens on; both only if the user may see them. */
+  startPage?: string
+  serverTab?: ServerTab
+  /** Whether pages fill wide screens and move less whatever the operating system asks; the browser keeps them like the theme. */
+  width?: Width
+  motion?: Motion
+  /** Whether shortcuts of single keys work; Ctrl+K always does. */
+  shortcuts?: "on" | "off"
 }
 
 /** A change of settings; null takes one back to the browser's. */
@@ -204,7 +213,7 @@ export function useSettings() {
   return {
     settings: data?.settings ?? {},
     change: (change: SettingsChange) => {
-      setLook({ theme: change.theme ?? undefined, accent: change.accent ?? undefined, density: change.density ?? undefined })
+      setLook(change)
       mutate(change)
     },
   }
@@ -225,8 +234,8 @@ export function useApplySettings() {
   const { data } = useQuery(preferencesQuery)
   // Other formats of times reload the panel, so it waits until the changes are stored.
   const storing = useIsMutating({ mutationKey: settingsKey }) > 0
-  const { theme, accent, density, clock, timeZone, times, weekStart, codeSize, codeTheme } = data?.settings ?? {}
-  useEffect(() => setLook({ theme, accent, density }), [theme, accent, density])
+  const { theme, accent, density, width, motion, clock, timeZone, times, weekStart, codeSize, codeTheme } = data?.settings ?? {}
+  useEffect(() => setLook({ theme, accent, density, width, motion }), [theme, accent, density, width, motion])
   // The console, the terminal and the editor take their size and colours from <html>, see index.css.
   useEffect(() => {
     const root = document.documentElement.dataset

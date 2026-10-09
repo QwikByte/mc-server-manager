@@ -86,6 +86,15 @@ var settings = map[string][]string{
 	"usageView":        {"charts", "table"},
 	// The least level the log shows where its address names none; without, it shows all.
 	"logLevel": {"info", "warn", "error"},
+	// Where the panel opens, the address of a page of its sidebar, and the tab a server opens on, both only if the
+	// user may see them; whether pages fill wide screens, move less whatever the operating system asks, and follow
+	// shortcuts of single keys.
+	"startPage": {"/", "/servers", "/networks", "/players", "/nodes", "/templates", "/filesets", "/plugins", "/backups", "/policies",
+		"/workflows", "/agenda", "/logs", "/settings"},
+	"serverTab": {"console", "usage", "files", "settings"},
+	"width":     {"limited", "full"},
+	"motion":    {"system", "less"},
+	"shortcuts": {"on", "off"},
 }
 
 // valid tells whether a setting takes a value.

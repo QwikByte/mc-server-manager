@@ -252,6 +252,9 @@ func TestSettings(t *testing.T) {
 		"long":          {"timeZone": ptr("Europe/" + strings.Repeat("x", 64))},
 		"mods":          {"pluginType": ptr("fabric")},
 		"debug":         {"logLevel": ptr("debug")},
+		// The panel opens only at a page of its sidebar, never at another address.
+		"start page": {"startPage": ptr("https://example.com/")},
+		"account":    {"startPage": ptr("/account")},
 	} {
 		var apiErr *httpapi.Error
 		if err := s.ChangeSettings(ctx, alice, c); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {

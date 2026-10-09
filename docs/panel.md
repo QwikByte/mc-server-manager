@@ -4,7 +4,7 @@ How the admin panel is organised, and what works the same on all of its pages.
 
 ## Overview
 
-The **Overview** is the panel's start page. Below its title it says whether everything runs or how many things need
+The **Overview** is the panel's start page, unless a user chooses another one. Below its title it says whether everything runs or how many things need
 attention, and then shows the players online, the servers by state, the nodes with what they use, the networks, the
 servers with the most players, and what needs attention: crashing and unhealthy servers, offline nodes,
 nodes with more memory assigned than they can give, servers and nodes beyond a threshold of their usage, e.g. almost
@@ -39,7 +39,7 @@ jobs, schedules and workflows), each with its parts as tabs, the log and setting
 them, whose menu holds their account, the colour theme, the language and signing out. The sidebar is dark in both colour
 themes and folds to its icons, which each browser remembers. The bar above each page shows where it is, e.g.
 **Servers › lobby › Files**, with links to the parts above it, and holds the search, the operations and the bell of
-warnings and errors. On small screens, the bar's menu holds the sidebar. Lists, figures, charts, tabs and pages are animated, unless the operating system asks for less motion.
+warnings and errors. On small screens, the bar's menu holds the sidebar. Lists, figures, charts, tabs and pages are animated, unless the operating system or the user asks for less motion.
 
 ## Settings of each user
 
@@ -48,6 +48,13 @@ the language of the panel; the menu itself offers the colour theme and the langu
 and highlights their colour: emerald, blue, violet or graphite, each readable in both themes (WCAG AA), while the colours
 of states, such as running or failed, stay. The compact density tightens all spacing, e.g. for long lists of servers, on
 screens used with a mouse or touchpad; touch screens keep the comfortable one.
+
+**Navigation and layout** chooses the start page, one of the pages of the sidebar the user may see, where the panel opens
+when it is loaded at its address and after signing in, while the sidebar's **Overview** stays the overview. It chooses
+the tab a server opens on from lists, the search and other pages: its console, usage, files or settings, or else the
+first tab the user may see; the **Console** tab and `console lobby` in the search still open the console. Pages keep a
+width that reads well unless they fill wide screens, and move less if the user asks for it, whatever the operating
+system says. Shortcuts of single keys can be turned off, see [Keyboard shortcuts](#keyboard-shortcuts).
 
 **Times and dates** chooses whether times have 24 or 12 hours, their time zone (the browser's, or one chosen for all
 browsers, e.g. UTC), whether times that tell how long ago something was, e.g. "5 minutes ago", show that or the date and
@@ -88,6 +95,8 @@ or opens its console. **Create server**, **Create network** and **Add node** ope
 
 Shortcuts are keys typed one after the other, e.g. `g` and then `s` for the servers. `?` lists those the user may use.
 They do nothing while the focus is in a field or the editor, or while a dialog is open; only **Ctrl+K** works there too.
+Users who don't want shortcuts of single keys, e.g. as they get in the way of speech input (WCAG 2.1.4), turn them off on
+their account page; **Ctrl+K** still searches then, and the list of shortcuts in the search says how to turn them on.
 
 | Keys                              | Opens                                                  |
 | --------------------------------- | ------------------------------------------------------ |

@@ -1,7 +1,7 @@
 import { HardDrivesIcon } from "@phosphor-icons/react"
 import { Link } from "@tanstack/react-router"
 import { t } from "i18next"
-import { motion, useReducedMotion } from "motion/react"
+import { motion, useReducedMotionConfig } from "motion/react"
 import { StatusDot, type Status } from "@/components/status"
 import type { Tone } from "@/components/tone"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -105,7 +105,7 @@ function NodeRow({ node, servers, index }: { node: Node; servers: NodeServer[]; 
 }
 
 function Block({ server, delay }: { server: NodeServer; delay: number }) {
-  const reduced = useReducedMotion()
+  const reduced = useReducedMotionConfig()
   const status = statusOf(server)
   const { icon: Icon } = serverLook(server.type)
   const label = `${server.name} · ${t(status.label)}`
