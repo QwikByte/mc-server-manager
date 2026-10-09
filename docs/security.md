@@ -400,8 +400,12 @@ started it, in the panel or with the same API token, or by one who has the permi
 and only while it is at steps that stop
 safely: restoring a backup, moving a server, stopping or restarting one once it no longer warns its players, and
 restarting servers one after the other always finish.
-A warning before a stop or restart by hand is the console command `say`, so a message of one's own needs the permission
-to send console commands on each server; others get the default message and can't put text of their own in the chat.
+A warning before a stop or restart by hand is a console command, `say` or `title`, so a message of one's own needs the
+permission to send console commands on each server; others get the text of the settings and can't put text of their own
+in the chat. Changing these texts needs the permissions to change the master's settings and to send console commands to
+all servers, as they go to the console of every server that is warned, also by schedules and workflows; the master
+checks them like a message of one's own, a single line of up to 200 characters without control characters, and makes a
+title or the text above the hotbar JSON with an encoder, never by hand.
 Restarting servers of a network one after the other, also a single one, needs the permission to restart the proxy, which
 sends their players elsewhere, and each server that restarts; sending the players of a server elsewhere needs the
 permission to manage the players of the proxy, like sending one player. Schedules, which may restart any server, also

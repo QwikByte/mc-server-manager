@@ -69,6 +69,8 @@ func TestUsersGroupsAndPermissions(t *testing.T) {
 	}
 	mod.do("POST", path(lobby)+"/restart", nil, http.StatusNoContent, nil)
 	mod.do("POST", path(lobby)+"/command", map[string]string{"command": "say hi"}, http.StatusOK, nil)
+	// Who restarts servers learns how their players are warned, without seeing the settings.
+	mod.do("GET", "/api/servers/warnings", nil, http.StatusOK, nil)
 	for _, denied := range []struct{ method, path string }{
 		{"POST", path(survival) + "/restart"},
 		{"POST", path(lobby) + "/stop"},

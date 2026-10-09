@@ -2,6 +2,7 @@ import { type QueryClient, queryOptions, useMutation, useMutationState, useQuery
 import type { ModpackChoice } from "@/features/modpacks/api"
 import { memoryLimitMb, type Node } from "@/features/nodes/api"
 import { type Operation, operate } from "@/features/operations/api"
+import type { MessageKind } from "@/features/players/api"
 import { api, send } from "@/lib/api"
 
 export type ServerState = "stopped" | "starting" | "running" | "crashing"
@@ -251,13 +252,31 @@ export function useMoveServer(nodeId: string, serverId: string) {
 
 export type ServerAction = "start" | "stop" | "restart" | "delete"
 
-/** Warns the players in the chat before servers stop or restart, and again 5 minutes and 1 minute before. */
+/** Warns the players before servers stop or restart, and again at the steps of the settings. */
 export interface Warning {
-  /** 1 to 10. */
+  /** 1 to the longest lead time of the settings. */
   minutes: number
-  /** {minutes} becomes the minutes left; empty is the default. A message of one's own needs the permission to send console commands. */
+  /** {minutes} becomes the minutes left; empty is the text of the settings. A message of one's own needs the permission to send console commands. */
   message?: string
 }
+
+/** How the players are warned before restarts and stops, as the settings of the master say. */
+export interface WarningSettings {
+  /** The texts of restarts and stops without a warning of their own; {minutes} becomes the minutes left. */
+  restart: string
+  stop: string
+  /** The minutes before at which a warning by hand repeats, the most first. */
+  steps: number[]
+  /** How long before at most a warning by hand starts, up to 60 minutes. */
+  maxMinutes: number
+  kind: MessageKind
+}
+
+/** How the players are warned, also for those who warn them but may not see the settings. */
+export const warningsQuery = queryOptions({
+  queryKey: ["warnings"],
+  queryFn: () => api<WarningSettings>("/servers/warnings"),
+})
 
 export type BulkAction =
   | { action: "start" }

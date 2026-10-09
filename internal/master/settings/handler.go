@@ -23,7 +23,9 @@ func NewHandler(svc *Service, restart func() error) *Handler {
 }
 
 // Register adds the routes. Only administrators may change the panel's address and HTTPS,
-// which can expose the panel to other networks, and restart the master.
+// which can expose the panel to other networks, and restart the master. The texts that warn
+// the players go to the console of every server they warn, so changing them also needs the
+// permission to send console commands to all servers.
 func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("GET /api/settings", access.Everywhere(access.SettingsView), h.get)
 	mux.Handle("PUT /api/settings", access.Everywhere(access.SettingsEdit), h.update)
@@ -70,6 +72,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, r, access.Denied(p))
 		return
 	}
+	texts := strings.TrimSpace(req.Warnings.Restart) != cur.Warnings.Restart || strings.TrimSpace(req.Warnings.Stop) != cur.Warnings.Stop
+	if texts && !access.From(r.Context()).Has(access.ConsoleCommands) {
+		httpapi.WriteError(w, r, access.Denied(access.ConsoleCommands))
+		return
+	}
 	updated, err := h.svc.Update(r.Context(), req)
 	if err != nil {
 		httpapi.WriteError(w, r, err)
@@ -77,6 +84,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if m := updated.RequireMFA; m.All != cur.RequireMFA.All || !slices.Equal(m.Groups, cur.RequireMFA.Groups) {
 		logging.Note(r.Context(), slog.Bool("mfa_required_all", m.All), slog.Any("mfa_required_groups", m.Groups))
+	}
+	if texts {
+		logging.Note(r.Context(), slog.String("warning_restart", updated.Warnings.Restart), slog.String("warning_stop", updated.Warnings.Stop))
 	}
 	httpapi.WriteJSON(w, http.StatusOK, view{updated, h.svc.Master()})
 }

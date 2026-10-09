@@ -156,7 +156,7 @@ func serve(ctx context.Context, cfg config) error {
 	copies := backup.NewCopies(db, nodes, nil)
 	jobs := backup.NewJobs(nodes, datastores, copies)
 	tasks := schedule.NewService(db, nodes, tags, networks, accessService, map[string]schedule.Kind{
-		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins),
+		backup.TaskKind: jobs, policy.TaskKind: policy.New(nodes, networks, usageStore, jobs, plugins, conf),
 	}, moves.Busy)
 	if err := tasks.Start(ctx); err != nil {
 		return err
@@ -165,7 +165,7 @@ func serve(ctx context.Context, cfg config) error {
 	go notifications.Run(ctx)
 	workflows := workflow.NewService(db, workflow.Deps{
 		Nodes: nodes, Targets: tasks, Networks: networks, Players: player.NewService(nodes, networks, geyser), Usage: usageStore,
-		Backups: jobs, Plugins: plugins, Notify: notifications, Logs: logStore, Names: names, Access: accessService,
+		Backups: jobs, Plugins: plugins, Notify: notifications, Logs: logStore, Names: names, Access: accessService, Config: conf,
 	})
 	usageStore.Watch(workflows)
 	if err := workflows.Start(ctx); err != nil {
@@ -332,7 +332,7 @@ func API(s Services) *http.ServeMux {
 	terminal.NewHandler(s.Nodes, s.Settings, s.Logs, s.Moves.Check).Register(m)
 	node.NewHandler(s.Nodes, s.Networks, s.Overlay, s.Operations, s.FileSets, s.Tidy).Register(m)
 	overlay.NewHandler(s.Overlay, s.Networks, s.Operations).Register(m)
-	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins, s.Sightings, s.Copies, s.Workflows, s.Notify, s.FileSets).Register(m)
+	server.NewHandler(s.Nodes, s.Networks, s.Tags, s.Plugins, s.Modpacks, s.Operations, s.Moves, s.FileSets, s.Settings, s.Tasks, s.Access, s.Usage, s.Tags, s.Preferences, s.Modpacks, s.Plugins, s.Sightings, s.Copies, s.Workflows, s.Notify, s.FileSets).Register(m)
 	operation.NewHandler(s.Operations).Register(m)
 	network.NewHandler(s.Networks, s.Operations, s.FileSets, s.Tidy).Register(m)
 	player.NewHandler(player.NewService(s.Nodes, s.Networks, s.GeyserMC), s.Sightings, player.NewFaces(s.Mojang, s.GeyserMC), s.Operations).Register(m)

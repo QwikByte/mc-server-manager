@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query"
 import { t } from "i18next"
 import type { NodeLimits } from "@/features/nodes/api"
+import type { WarningSettings } from "@/features/servers/api"
 import type { ThresholdDefaults } from "@/features/usage/api"
 import { api } from "@/lib/api"
 import { publicSettingsQuery, type UserDefaults } from "./public"
@@ -39,6 +40,8 @@ export interface MasterSettings {
   userDefaults: UserDefaults
   /** The IDs of the groups that inviting a user preselects; deleted ones are left out. */
   inviteGroups: string[]
+  /** How the players are warned before restarts and stops. */
+  warnings: WarningSettings
 }
 
 /** The certificate the panel serves. */

@@ -27,6 +27,7 @@ import (
 	"github.com/QwikByte/noryx/internal/master/https"
 	"github.com/QwikByte/noryx/internal/master/node"
 	"github.com/QwikByte/noryx/internal/master/preference"
+	"github.com/QwikByte/noryx/internal/master/server"
 	"github.com/QwikByte/noryx/internal/master/usage"
 	"github.com/QwikByte/noryx/internal/pki"
 	"github.com/QwikByte/noryx/web"
@@ -96,6 +97,9 @@ type Settings struct {
 	// InviteGroups are the IDs of the groups that inviting a user preselects. Groups that don't
 	// exist (any more) are left out.
 	InviteGroups []string `json:"inviteGroups"`
+
+	// Warnings tell how the players are warned before their servers restart or stop.
+	Warnings server.Warnings `json:"warnings"`
 }
 
 // UserDefaults are the language and the look of the panel for users who haven't chosen them,
@@ -134,6 +138,7 @@ func defaults() Settings {
 		SessionHours: 12, JoinTokenMinutes: 60, NodeDefaults: node.Limits{MemoryReserveMB: new(uint32(1024))}, LogDays: 30, LogSizeMB: 2048, CheckUpdates: true,
 		RequireMFA: MFARequirement{Groups: []string{}}, Thresholds: usage.DefaultThresholds(),
 		InviteGroups: []string{},
+		Warnings:     server.DefaultWarnings(),
 	}
 }
 
@@ -198,6 +203,7 @@ func (s *Service) Get() Settings {
 	st.RequireMFA.Groups = slices.Clone(st.RequireMFA.Groups)
 	st.Thresholds = st.Thresholds.Clone()
 	st.InviteGroups = slices.Clone(st.InviteGroups)
+	st.Warnings = st.Warnings.Clone()
 	return st
 }
 
@@ -224,6 +230,10 @@ func (s *Service) Update(ctx context.Context, next Settings) (Settings, error) {
 	}
 	slices.Sort(next.RequireMFA.Groups)
 	next.RequireMFA.Groups = slices.Compact(next.RequireMFA.Groups)
+	w := &next.Warnings
+	w.Restart, w.Stop = strings.TrimSpace(w.Restart), strings.TrimSpace(w.Stop)
+	// The warnings count down, the most minutes first.
+	w.Steps = slices.Compact(slices.SortedFunc(slices.Values(w.Steps), func(a, b uint32) int { return cmp.Compare(b, a) }))
 	err := validate(next, cmp.Or(next.PanelAddr, s.master.PanelDefaultAddr))
 	if err == nil && next.PanelAddr != "" && next.PanelAddr != s.Get().PanelAddr {
 		err = s.checkPanelAddr(next.PanelAddr)
@@ -330,6 +340,9 @@ func (s *Service) CheckUpdates() bool { return s.Get().CheckUpdates }
 // Thresholds implements usage.Config.
 func (s *Service) Thresholds() usage.Defaults { return s.Get().Thresholds }
 
+// Warnings implements server.Config.
+func (s *Service) Warnings() server.Warnings { return s.Get().Warnings }
+
 // SessionTTL implements auth.Config.
 func (s *Service) SessionTTL() time.Duration { return time.Duration(s.Get().SessionHours) * time.Hour }
 
@@ -374,7 +387,7 @@ func validate(s Settings, panelAddr string) error {
 	case len(s.InviteGroups) > maxInviteGroups || slices.ContainsFunc(s.InviteGroups, func(id string) bool { return !groupID.MatchString(id) }):
 		return httpapi.Errorf(http.StatusBadRequest, "Choose up to %d groups that inviting a user preselects.", maxInviteGroups)
 	}
-	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate(), s.UserDefaults.validate())
+	return cmp.Or(s.NodeDefaults.Validate(), s.Thresholds.Validate(), s.UserDefaults.validate(), s.Warnings.Validate())
 }
 
 // plainText tells whether s has at most n characters and no control characters but, if lines

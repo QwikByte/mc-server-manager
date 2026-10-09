@@ -31,6 +31,7 @@ import { useAccess } from "@/features/access/use-access"
 import { mfaQuery } from "@/features/auth/api"
 import { limitsForm, limitsOf } from "@/features/nodes/limits"
 import { LimitsFields } from "@/features/nodes/limits-fields"
+import { WarningFields } from "@/features/servers/warning-fields"
 import { UpdateCheck } from "@/features/updates/update-check"
 import { ThresholdFields, ThresholdsHelp } from "@/features/usage/thresholds"
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format"
@@ -208,6 +209,7 @@ function formOf(s: MasterSettings) {
     signInNotice: s.signInNotice,
     userDefaults: s.userDefaults,
     inviteGroups: s.inviteGroups,
+    warnings: s.warnings,
   }
 }
 
@@ -393,6 +395,10 @@ function SettingsForm({ view: { settings, master } }: { view: SettingsView }) {
             form={form.nodeDefaults}
             onChange={(change) => set({ nodeDefaults: { ...form.nodeDefaults, ...change } })}
           />
+        </FormSection>
+
+        <FormSection title={t("Warnings to players")}>
+          <WarningFields value={form.warnings} onChange={(warnings) => set({ warnings })} />
         </FormSection>
       </fieldset>
       <div

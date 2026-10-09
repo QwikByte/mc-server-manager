@@ -45,6 +45,17 @@ nobody chose them yet, e.g. a default accent for a test panel, so they are publi
 the browser's language, it then offers **Default of the panel** with the default language. **Groups of invited users**
 are the groups that **Invite user** preselects (see [Invitations](#invitations)).
 
+**Warnings to players** sets how the players of game servers are warned before their servers restart or stop: the
+texts of restarts and of stops, with `{minutes}` for the minutes left, e.g. in the language of the players; where the
+warnings show, in the chat (`say`), as a title or above the hotbar; the longest lead time of restarts and stops by hand
+(1 minute to an hour, 10 minutes by default); and the minutes before at which those warn again (up to 5, 5 and 1 by
+default). Restarts and stops by hand, also of many servers, use all of it, and
+[schedules and workflows](automation.md) the texts unless they have their own, and where they show. The texts go to the
+console of every server they warn, so changing them also needs the permission to send console commands to all
+servers; the master checks them like a warning of one's own: one line of up to 200 characters, which fits the console
+as the warnings show. Users who may restart or stop servers, or see schedules or workflows, see them as the
+placeholders of warnings without seeing the settings.
+
 ### Agents
 
 The **Agents** tab lists all nodes with their agent version, certificate and settings, which can be changed there too.

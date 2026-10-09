@@ -134,11 +134,13 @@ Stopping and restarting a server run as [operations](panel.md#operations), as th
 timeout: the panel follows them in a notification, and a reverse proxy in front of the master, e.g. nginx, which gives
 up after 60 seconds by default, doesn't cut them off. Starting a server only takes a moment and answers right away.
 
-**Restart with a warning…** and **Stop with a warning…** in the menu of a running game server warn its players in the
-chat first, 1, 2, 5 or 10 minutes before, and again 5 minutes and 1 minute before, like
-[schedules](automation.md#schedules) do. Until then, the operation shows the time left and can be cancelled, which
-leaves the server running. The warning has the default message of schedules; one's own message needs the permission to
-send console commands, as the warning is the console command `say`. Proxies get no warning.
+**Restart with a warning…** and **Stop with a warning…** in the menu of a running game server warn its players first,
+1, 2, 5 or 10 minutes before, and again 5 minutes and 1 minute before, like [schedules](automation.md#schedules) do.
+The [settings](administration.md#general) can change the texts, the steps, the longest lead time (up to an hour, which
+offers 15, 30 and 60 minutes too) and where the warning shows: in the chat (`say`), as a title or above the hotbar.
+Until then, the operation shows the time left and can be cancelled, which leaves the server running. The warning has
+the text of the settings; one's own message needs the permission to send console commands, as the warning is a console
+command. Proxies get no warning.
 
 **Stop** and **Restart** of a server, on its page, its card, its row of the table and the widget of pinned servers, act
 right away, unless a user chooses on their account page that they ask first or open the dialog with the warning on,
