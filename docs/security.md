@@ -446,7 +446,8 @@ servers are stored in the master's database like the forwarding secret; the API 
 them, also not in errors, and an empty field keeps them, so that nobody who may manage notifications learns them. A mail
 channel keeps its password only while its server, port and user stay the same, so that it can't be sent to another
 server. Messages carry the texts of entries, never secrets, which aren't logged; entries can hold IP addresses and the
-names of players, which the panel says where channels are set up.
+names of players, which the panel says where channels are set up. A rule of a server that is deleted, or of a node that
+is removed, is deleted with it rather than left to send the entries of its node or of all nodes.
 
 Channels connect to public addresses only, so that the master can't be used to reach its own network: the address of
 every connection is checked right before it is made, after DNS answered, so that a name can't resolve to another address
@@ -481,6 +482,11 @@ condition runs in linear time. Text that a template puts into a console command,
 without control characters, so data can't add commands or headers, and the steps for players check the names they get,
 so data can't name others there, such as `@a`. In a console command, data can still be any argument that its template
 takes, so a workflow should check what a webhook sends before using it there, e.g. with a condition.
+
+When servers, nodes, networks, notification channels or workflows are deleted, workflows only lose what referred to
+them: a trigger whose servers are all gone is removed rather than left without targets, which would watch all servers,
+and a step without servers or without its network, channel or workflow is turned off, so that a deletion never lets a
+workflow act on more than before.
 
 HTTP requests of workflows go through the same connections as [notifications](#notifications): HTTPS to public addresses
 only, checked right before each connection, without redirects or proxies, with a timeout, and answers up to 64 KB. The

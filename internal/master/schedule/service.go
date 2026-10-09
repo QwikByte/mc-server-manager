@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 
 	noryxv1 "github.com/QwikByte/noryx/api/noryx/v1"
 	"github.com/QwikByte/noryx/internal/master/access"
+	"github.com/QwikByte/noryx/internal/master/database"
 	"github.com/QwikByte/noryx/internal/master/httpapi"
 	"github.com/QwikByte/noryx/internal/master/network"
 	"github.com/QwikByte/noryx/internal/master/node"
@@ -55,6 +57,18 @@ type OptionalTargets interface {
 // who saved it last.
 type Needing interface {
 	Needs(settings json.RawMessage) []access.Permission
+}
+
+// Pruning is implemented by the kinds of tasks whose settings refer to nodes or datastores,
+// e.g. backup jobs that copy to a node. Prune returns the settings without what no longer
+// exists, and what it removed, for the log.
+type Pruning interface {
+	Prune(settings json.RawMessage, exists Exists) (json.RawMessage, []string)
+}
+
+// Exists tells which nodes and datastores exist, by their IDs.
+type Exists struct {
+	Nodes, Datastores map[string]bool
 }
 
 // needs returns the permissions that a task of a kind with the settings needs everywhere.
@@ -530,4 +544,46 @@ func (g groups) resolve(targets []Target, run *journal) selection {
 		}
 	}
 	return sel
+}
+
+// Prune removes what no longer exists from the settings of tasks, e.g. a removed node that a
+// backup job copies to, or a deleted datastore it dumps. Targets need nothing, as their nodes
+// and networks take them along.
+func (s *Service) Prune(ctx context.Context) error {
+	exists := Exists{}
+	for _, ids := range []struct {
+		set   *map[string]bool
+		query string
+	}{{&exists.Nodes, `SELECT id FROM nodes`}, {&exists.Datastores, `SELECT id FROM datastores`}} {
+		var err error
+		if *ids.set, err = database.IDs(ctx, s.db, ids.query); err != nil {
+			return err
+		}
+	}
+	tasks, err := s.load(ctx, "", "")
+	if err != nil {
+		return err
+	}
+	for _, t := range tasks {
+		k, ok := s.kinds[t.kind].(Pruning)
+		if !ok {
+			continue
+		}
+		settings, removed := k.Prune(t.Settings, exists)
+		if len(removed) == 0 {
+			continue
+		}
+		// A task saved in the meantime keeps what it was saved with.
+		res, err := s.db.ExecContext(ctx, `UPDATE tasks SET settings = ? WHERE id = ? AND CAST(settings AS TEXT) = ?`, settings, t.ID, string(t.Settings))
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			continue
+		}
+		slog.Info("Removed what no longer exists from a task", s.kinds[t.kind].Category(), "task", t.Name, "removed", strings.Join(removed, "; "))
+		t.Settings = settings
+		s.plan(t)
+	}
+	return nil
 }

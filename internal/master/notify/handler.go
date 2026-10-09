@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -10,9 +11,15 @@ import (
 )
 
 // Handler serves the channels and rules of notifications to the panel.
-type Handler struct{ svc *Service }
+type Handler struct {
+	svc *Service
+	// tidy removes the references to what was deleted, e.g. the channel a workflow notifies.
+	tidy func(context.Context)
+}
 
-func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
+func NewHandler(svc *Service, tidy func(context.Context)) *Handler {
+	return &Handler{svc: svc, tidy: tidy}
+}
 
 // Register adds the routes. Rules send entries about every node and server, so managing them
 // also needs the permission to see the log everywhere.
@@ -46,6 +53,9 @@ func (h *Handler) Register(mux access.Mux) {
 	mux.Handle("DELETE /api/notifications/channels/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
 		ch, err := h.svc.DeleteChannel(r.Context(), r.PathValue("id"))
 		logging.Note(r.Context(), slog.String("channel", ch.Name), slog.String("channel_id", r.PathValue("id")))
+		if err == nil {
+			h.tidy(r.Context())
+		}
 		write(w, r, http.StatusNoContent, nil, err)
 	})
 	mux.Handle("POST /api/notifications/channels/{id}/test", manage, func(w http.ResponseWriter, r *http.Request) {

@@ -236,7 +236,7 @@ func (d *Draft) check() ([]access.Permission, error) {
 	if d.Steps == nil {
 		d.Steps = []Step{}
 	}
-	if err := c.steps(d.Steps, 1); err != nil {
+	if err := c.steps(d.Steps, 1, false); err != nil {
 		return nil, err
 	}
 	if len(d.Steps) == 0 {
@@ -396,16 +396,18 @@ func targets(in []schedule.Target) ([]schedule.Target, error) {
 	return schedule.CheckTargets(in)
 }
 
-func (c *checker) steps(list []Step, depth int) error {
+// steps checks steps, of which those that are off, or within one that is, may be incomplete, e.g.
+// once what they act on was deleted: they don't run, and are checked once they are turned on.
+func (c *checker) steps(list []Step, depth int, off bool) error {
 	for i := range list {
-		if err := c.step(&list[i], depth); err != nil {
+		if err := c.step(&list[i], depth, off || list[i].Disabled); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *checker) step(s *Step, depth int) error {
+func (c *checker) step(s *Step, depth int, off bool) error {
 	c.count++
 	s.Name = strings.TrimSpace(s.Name)
 	k, ok := kinds[s.Kind]
@@ -428,13 +430,17 @@ func (c *checker) step(s *Step, depth int) error {
 	if err == nil {
 		err = checkTemplates(settings)
 	}
-	if err != nil {
+	switch {
+	case err != nil && !off:
 		return bad("Step %s: %s", s.label(), message(err))
+	case err == nil:
+		if s.With, err = json.Marshal(settings); err != nil {
+			return err
+		}
+		if !off {
+			c.need(k.needs(settings)...)
+		}
 	}
-	if s.With, err = json.Marshal(settings); err != nil {
-		return err
-	}
-	c.need(k.needs(settings)...)
 	if !k.steps {
 		s.Steps = nil
 	}
@@ -454,7 +460,7 @@ func (c *checker) step(s *Step, depth int) error {
 		return bad("Step %s: Run 2 to %d branches in parallel.", s.label(), maxBranches)
 	}
 	for _, list := range [][]Step{s.Steps, s.Else} {
-		if err := c.steps(list, depth+1); err != nil {
+		if err := c.steps(list, depth+1, off); err != nil {
 			return err
 		}
 	}
@@ -462,12 +468,12 @@ func (c *checker) step(s *Step, depth int) error {
 		if _, err := parse(s.Cases[i].Value); err != nil {
 			return bad("Step %s: The value of case %d: %s.", s.label(), i+1, err)
 		}
-		if err := c.steps(s.Cases[i].Steps, depth+1); err != nil {
+		if err := c.steps(s.Cases[i].Steps, depth+1, off); err != nil {
 			return err
 		}
 	}
 	for _, b := range s.Branches {
-		if err := c.steps(b, depth+1); err != nil {
+		if err := c.steps(b, depth+1, off); err != nil {
 			return err
 		}
 	}

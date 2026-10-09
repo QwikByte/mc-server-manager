@@ -22,10 +22,12 @@ const operationTimeout = 2 * time.Hour
 type Handler struct {
 	svc *Service
 	ops *operation.Operations
+	// tidy removes the references to what was deleted, e.g. the datastores that a backup job dumps.
+	tidy func(context.Context)
 }
 
-func NewHandler(svc *Service, ops *operation.Operations) *Handler {
-	return &Handler{svc: svc, ops: ops}
+func NewHandler(svc *Service, ops *operation.Operations, tidy func(context.Context)) *Handler {
+	return &Handler{svc: svc, ops: ops, tidy: tidy}
 }
 
 // Register adds the routes. Passwords, tables, dumps and the log, which shows the statements
@@ -76,7 +78,11 @@ func (h *Handler) Register(mux access.Mux) {
 		})
 	}
 	mux.Handle("DELETE /api/datastores/{id}", manage, func(w http.ResponseWriter, r *http.Request) {
-		write(w, r, http.StatusNoContent, nil, h.svc.Delete(r.Context(), r.PathValue("id")))
+		err := h.svc.Delete(r.Context(), r.PathValue("id"))
+		if err == nil {
+			h.tidy(r.Context())
+		}
+		write(w, r, http.StatusNoContent, nil, err)
 	})
 	mux.Handle("GET /api/datastores/{id}/logs", manage, func(w http.ResponseWriter, r *http.Request) {
 		h.svc.Log(w, r, r.PathValue("id"))

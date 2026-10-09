@@ -120,7 +120,7 @@ browsers, e.g. Chrome on Android, only show notifications of sites with a servic
 or errors only, about everything the user may see, or only about their pinned servers and chosen servers, nodes (with
 all their servers) and categories, the latter also for entries about no server, e.g. of sign-ins. **Pause pop-ups** in
 the menu of the bell, or **Pause** on the account page, keeps all of them from popping up for an hour, 8 hours or a day,
-and **Pop up again** ends it sooner. The bell lists and counts all warnings and errors either way. The master keeps these choices for each
+and **Pop up again** ends it sooner. Deleted servers and removed nodes leave these choices. The bell lists and counts all warnings and errors either way. The master keeps these choices for each
 user, so that they apply in all their browsers.
 
 ### Command line
@@ -171,7 +171,8 @@ so where channels are set up. Secrets aren't logged, so they are never sent.
 
 A rule sends the new entries of the log of at least a level (errors; warnings and errors; or information, warnings and
 errors) to a channel: of the categories it chooses, or of all, and of a node or a server if it names one. Rules can be
-turned off. An entry that several rules send to the same channel goes there once.
+turned off. An entry that several rules send to the same channel goes there once. The rules of a server follow it to
+another node; deleting the server deletes its rules, and removing a node those of the node and its servers.
 
 The master follows the log as entries are added, also those it collects from the agents, and sends only new ones: after
 a restart, it starts with the entries added from then on. Entries that come within 5 seconds go in one message of at

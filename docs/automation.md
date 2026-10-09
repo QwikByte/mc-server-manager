@@ -101,7 +101,8 @@ and configuration, which can hold passwords that weren't set through file sets.
   another node.
 - **Deleting.** Deleting a server or a job keeps its copies, so that a lost server can still be restored; the lists of
   copies delete them. Copies to a place that the job no longer copies to stay too. Removing a node forgets the copies
-  it keeps. A storage can only be deleted once no job copies to it; the master forgets its copies then, which stay in
+  it keeps, and the jobs that copied to it no longer copy; a deleted datastore leaves the jobs that dump it. The log
+  names each job that changed. A storage can only be deleted once no job copies to it; the master forgets its copies then, which stay in
   the bucket.
 - **Permissions.** Adding, changing and deleting storages, and saving a job that copies, need the permissions to manage
   backup jobs and to see and download the backups of all servers, as copies take the backups away from their nodes. Each
@@ -308,6 +309,15 @@ The page of a workflow keeps its latest 100 runs: what started them, how long th
 they ran with its outcome, what it decided or why it failed and what it told later steps, and the data of the trigger
 and the inputs. A run in progress shows its steps as they go, and can be cancelled. Runs that the master stopped, e.g.
 as it restarted, count as failed.
+
+### What workflows refer to
+
+Workflows follow what they refer to. A server that moves to another node stays a target at its new place, and a deleted
+server, node or network leaves the targets of triggers and steps. That never widens a workflow: a trigger whose servers
+are all gone is removed, as one without servers would watch all of them, and a step that has no servers left is turned
+off. Steps whose network, notification channel or workflow to run was deleted are turned off too. The log names each
+workflow that changed and what changed. A step that is turned off may be incomplete, e.g. without servers; it is checked
+once it is turned on again. Running a workflow that doesn't exist can't be saved.
 
 ### Webhooks
 

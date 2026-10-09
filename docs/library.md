@@ -82,6 +82,7 @@ those with tags, and all servers. A server gets its own value, else its network'
 in alphabetical order, else the one for all servers. A value is a single line of up to 128 characters without quotes,
 backslashes and braces, so it can't add lines to a file, end a quoted text or make up another placeholder. A set has up
 to 50 variables with up to 200 values each; they are saved with the set, like its targets, but not in its versions.
+Values for servers and networks that are deleted are removed, and a deleted network leaves the targets of sets.
 
 ### Databases
 

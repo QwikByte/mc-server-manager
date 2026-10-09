@@ -141,6 +141,33 @@ func (Jobs) TargetsOptional(raw json.RawMessage) bool {
 
 func (Jobs) Category() slog.Attr { return logging.Backups }
 
+// Prune takes the copies away from a node that was removed, whose copies went with it, and the
+// datastores that were deleted out of a job.
+func (Jobs) Prune(raw json.RawMessage, exists schedule.Exists) (json.RawMessage, []string) {
+	var s JobSettings
+	if json.Unmarshal(raw, &s) != nil {
+		return raw, nil
+	}
+	var removed []string
+	if s.Copy != nil && s.Copy.Node != "" && !exists.Nodes[s.Copy.Node] {
+		s.Copy = nil
+		removed = append(removed, "the copies to a node that was removed")
+	}
+	kept := slices.DeleteFunc(slices.Clone(s.Datastores), func(id string) bool { return !exists.Datastores[id] })
+	if n := len(s.Datastores) - len(kept); n > 0 {
+		s.Datastores = kept
+		removed = append(removed, fmt.Sprintf("%d datastores that were deleted", n))
+	}
+	if len(removed) == 0 {
+		return raw, nil
+	}
+	pruned, err := json.Marshal(s)
+	if err != nil {
+		return raw, nil
+	}
+	return pruned, removed
+}
+
 // Run backs up the servers of a job and dumps its datastores. Each node backs up one at a
 // time, to spare its disks; nodes work in parallel.
 func (j Jobs) Run(ctx context.Context, t schedule.Task, servers schedule.Servers, _ time.Time) error {

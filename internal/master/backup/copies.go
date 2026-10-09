@@ -128,7 +128,8 @@ type filter struct {
 // list returns the copies that a filter selects, newest first.
 func (c *Copies) list(ctx context.Context, f filter) ([]Copy, error) {
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT c.id, coalesce(c.task_id, ''), c.server_id, c.server_name, c.node_id, c.node_name, c.proxy, c.backup_id, c.label,
+		SELECT c.id, coalesce(c.task_id, ''), c.server_id, c.server_name, c.node_id,
+			coalesce((SELECT name FROM nodes WHERE id = c.node_id), c.node_name), c.proxy, c.backup_id, c.label,
 			c.created_at, c.size, c.paths, c.exclude, c.kept, c.copied_at, coalesce(c.storage_id, ''), coalesce(c.copy_node, ''),
 			c.location, coalesce(s.name, n.name, '')
 		FROM backup_copies c

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -240,5 +241,44 @@ func TestSecretsStayHidden(t *testing.T) {
 		if _, err := s.CreateRule(ctx, in); err == nil {
 			t.Errorf("rule %+v was created", in)
 		}
+	}
+}
+
+// Rules follow a server that moves, and leave with a server or node that is gone, rather than
+// sending the entries of its node or of all nodes.
+func TestRulesFollowServers(t *testing.T) {
+	s, _, _, ch := setup(t, &hook{})
+	for _, in := range []RuleInput{{NodeID: "n1", ServerID: "s1"}, {NodeID: "n1"}, {}} {
+		in.ChannelID, in.Enabled, in.Level = ch.ID, true, "warn"
+		if _, err := s.CreateRule(t.Context(), in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	where := func() []string {
+		rules, err := s.Rules(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, r := range rules {
+			got = append(got, r.NodeID+"/"+r.ServerID)
+		}
+		slices.Sort(got)
+		return got
+	}
+	if err := s.Move(t.Context(), "s1", "n1", "n2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := where(); !slices.Equal(got, []string{"/", "n1/", "n2/s1"}) {
+		t.Fatalf("after the move = %q", got)
+	}
+	if err := s.Forget(t.Context(), "n2", "s1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Prune(t.Context()); err != nil { // n1 doesn't exist
+		t.Fatal(err)
+	}
+	if got := where(); !slices.Equal(got, []string{"/"}) {
+		t.Fatalf("after deleting the server and node = %q", got)
 	}
 }
