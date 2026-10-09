@@ -1,4 +1,5 @@
-import { type Order, orders } from "@/lib/sort"
+import { useSettings } from "@/features/preferences/api"
+import { type Order, orders, sortingOf } from "@/lib/sort"
 
 export type OnlineSort = "name" | "server" | "network"
 export type SeenSort = "seen" | "name" | "playtime"
@@ -9,7 +10,7 @@ export const onlineSorts: Record<OnlineSort, Order> = { name: "asc", server: "as
 export const seenSorts: Record<SeenSort, Order> = { seen: "desc", name: "asc", playtime: "desc" }
 export const listSorts: Record<ListSort, Order> = { name: "asc", servers: "desc" }
 const sorts = Object.keys({ ...onlineSorts, ...seenSorts, ...listSorts }) as (OnlineSort | SeenSort | ListSort)[]
-const tabs = ["seen", "banned", "whitelisted", "operators"] as const
+const tabs = ["online", "seen", "banned", "whitelisted", "operators"] as const
 
 /** The search of the players page, in the address so that it can be shared and bookmarked. */
 export interface PlayerSearch {
@@ -29,4 +30,19 @@ export function validatePlayerSearch(search: Record<string, unknown>): PlayerSea
     sort: sorts.find((s) => s === search.sort),
     order: orders.find((o) => o === search.order),
   }
+}
+
+/**
+ * Sorts the tables of players as the address says, otherwise as the user sorted them last, on the players page and
+ * those of servers alike. Sorting keeps the sort for the user.
+ */
+export function usePlayerSorting(search: PlayerSearch, set: (change: Partial<PlayerSearch>) => void) {
+  const { settings, change } = useSettings()
+  const saved = search.sort === undefined && search.order === undefined
+  const shown = saved ? { sort: settings.playerSort, order: settings.playerOrder } : search
+  return <K extends NonNullable<PlayerSearch["sort"]>>(columns: Record<K, Order>) =>
+    sortingOf(shown, columns, (c) => {
+      change({ playerSort: c.sort ?? null, playerOrder: c.order ?? null })
+      set(c)
+    })
 }

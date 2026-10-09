@@ -71,6 +71,21 @@ var settings = map[string][]string{
 	// The separator of the cells of CSV files, and whether they start with a byte order mark.
 	"csvSeparator": {"comma", "semicolon"},
 	"csvBom":       {"off", "on"},
+	// What the user chose last where the address doesn't say: the tab and sort of the players,
+	// the source, sort and software of the plugin search, whose software is all or one with
+	// plugins or with mods, the sort of a server's plugins, and the range and view of usage.
+	"playerTab":        {"online", "seen", "banned", "whitelisted", "operators"},
+	"playerSort":       {"name", "server", "network", "seen", "playtime", "servers"},
+	"playerOrder":      {"asc", "desc"},
+	"pluginSource":     {"modrinth", "hangar"},
+	"pluginSort":       {"relevance", "downloads", "follows", "newest", "updated"},
+	"pluginType":       {"all", "paper", "purpur", "folia", "leaf", "velocity", "bungeecord", "waterfall"},
+	"modType":          {"all", "fabric", "quilt", "forge", "neoforge"},
+	"serverPluginSort": {"name", "size"},
+	"usageRange":       {"day", "week"},
+	"usageView":        {"charts", "table"},
+	// The least level the log shows where its address names none; without, it shows all.
+	"logLevel": {"info", "warn", "error"},
 }
 
 // valid tells whether a setting takes a value.

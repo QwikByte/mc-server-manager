@@ -1,8 +1,11 @@
 import { queryOptions, useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 import { toast } from "sonner"
-import type { LogEntry } from "@/features/logs/api"
+import type { Level, LogEntry } from "@/features/logs/api"
+import type { PlayerSearch } from "@/features/players/search"
+import type { Sort as PluginSort, Source as PluginSource } from "@/features/plugins/api"
 import type { Grouping, Sort, View } from "@/features/servers/browse"
+import type { UsageRange } from "@/features/usage/api"
 import { api } from "@/lib/api"
 import { type CsvFormat, languageSeparator } from "@/lib/csv"
 import { chooseFormats, type Formats, msg } from "@/lib/i18n"
@@ -50,6 +53,20 @@ export interface Settings extends Formats {
   editorKeys?: "standard" | "vim"
   csvSeparator?: CsvFormat["separator"]
   csvBom?: "off" | "on"
+  /** What the user chose last in lists, which applies where the address doesn't say, see useChoice. */
+  playerTab?: NonNullable<PlayerSearch["tab"]>
+  playerSort?: PlayerSearch["sort"]
+  playerOrder?: Order
+  pluginSource?: PluginSource
+  pluginSort?: PluginSort
+  /** The software whose plugins and whose mods the plugin search finds, or "all". */
+  pluginType?: string
+  modType?: string
+  serverPluginSort?: "name" | "size"
+  usageRange?: UsageRange
+  usageView?: "charts" | "table"
+  /** The least level the log shows where its address names none; without, it shows all. */
+  logLevel?: Exclude<Level, "debug">
 }
 
 /** A change of settings; null takes one back to the browser's. */
@@ -240,4 +257,13 @@ export const wraps = {
 export function useCodeDark() {
   const dark = useDark()
   return useSettings().settings.codeTheme !== "panel" || dark
+}
+
+/**
+ * A choice of a list, e.g. its sort: the address's wins, otherwise the one the user chose last applies, in all their
+ * browsers, else fallback. choose keeps another one.
+ */
+export function useChoice<K extends keyof Settings>(key: K, fallback: NonNullable<Settings[K]>, address?: Settings[K]) {
+  const { settings, change } = useSettings()
+  return [address ?? settings[key] ?? fallback, (value: NonNullable<Settings[K]>) => change({ [key]: value } as SettingsChange)] as const
 }

@@ -65,8 +65,10 @@ the log separate their cells with commas or semicolons, which spreadsheets in la
 German, expect and which the language chooses unless the user does, and whether they start with a byte order mark,
 which Excel needs to read umlauts.
 
-The master keeps these choices for each user, as well as the view, sort and grouping of server lists chosen last, so
-that they apply in all their browsers. Each browser remembers the look and the formats of times it showed last and uses
+The master keeps these choices for each user, as well as what they chose last of lists where the address doesn't say,
+e.g. the view, sort and grouping of server lists, the tab of [players](players.md), the sort of plugins and the range of
+[usage](monitoring.md#history), and the default level of the [log](monitoring.md#logs-page), so that they apply in all
+their browsers. Each browser remembers the look and the formats of times it showed last and uses
 them until someone signs in; what a user never chose follows the browser. `GET /api/preferences` returns a user's
 settings with the layout of their overview, their pinned servers and what pops up for them; `PATCH
 /api/preferences/settings` changes some of the settings, e.g. `{"theme": "dark"}` or `{"timeZone": "Europe/Berlin"}`, or

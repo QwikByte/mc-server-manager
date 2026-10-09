@@ -250,6 +250,8 @@ func TestSettings(t *testing.T) {
 		"local":         {"timeZone": ptr("Local")},
 		"path":          {"timeZone": ptr("../../etc/passwd")},
 		"long":          {"timeZone": ptr("Europe/" + strings.Repeat("x", 64))},
+		"mods":          {"pluginType": ptr("fabric")},
+		"debug":         {"logLevel": ptr("debug")},
 	} {
 		var apiErr *httpapi.Error
 		if err := s.ChangeSettings(ctx, alice, c); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
@@ -273,6 +275,10 @@ func TestSettings(t *testing.T) {
 	check(bob, Settings{"theme": "light", "timeZone": "America/Argentina/Buenos_Aires", "codeSize": "large", "csvSeparator": "semicolon"})
 	change(bob, map[string]*string{"timeZone": ptr("UTC"), "codeSize": nil, "csvSeparator": nil})
 	check(bob, Settings{"theme": "light", "timeZone": "UTC"})
+
+	// The choices of lists and the log's level are kept too, the software of plugins apart from that of mods.
+	change(alice, map[string]*string{"pluginType": ptr("purpur"), "modType": ptr("neoforge"), "playerTab": ptr("seen"), "logLevel": ptr("warn")})
+	check(alice, Settings{"density": "compact", "clock": "24h", "serverSort": "cpu", "pluginType": "purpur", "modType": "neoforge", "playerTab": "seen", "logLevel": "warn"})
 
 	// Values that a newer version stored, or an older one knew, aren't shown.
 	exec(t, db, `UPDATE user_settings SET settings = '{"theme":"sepia","clock":"12h","font":"large","timeZone":"Local"}' WHERE user_id = ?`, bob)
